@@ -859,54 +859,40 @@ class A2ACoordinator:
             if not self.external_registry_enabled:
                 return None
 
-            import httpx
-            from a2a.client import A2AClient
-            from a2a.types import MessageSendParams, SendMessageRequest
+            from a2a.client import create_client
+            from a2a.types import SendMessageRequest
 
-            # Create httpx client and SDK client for target agent
-            async with httpx.AsyncClient() as http_client:
-                client = A2AClient(httpx_client=http_client, url=target_agent_url)
+            from ...services.a2a import _sdk_helpers as sdk
 
-                # Convert message to SDK format
-                sdk_message = ModelsAdapter.muxi_to_sdk_message(
-                    message,
-                    message_id=f"{source_agent_id}_{int(time.time() * 1000)}",
-                    context=context,
-                )
+            # Build the 1.0-shape SendMessageRequest. The SDK handles HTTP
+            # transport internally via create_client.
+            sdk_message = ModelsAdapter.muxi_to_sdk_message(
+                message,
+                message_id=f"{source_agent_id}_{int(time.time() * 1000)}",
+                context=context,
+            )
+            request = SendMessageRequest(
+                message=sdk_message,
+                metadata=sdk.dict_to_struct({"source_agent_id": source_agent_id}),
+            )
 
-                # Create the params for the JSON-RPC request
-                params = MessageSendParams(
-                    message=sdk_message, metadata={"source_agent_id": source_agent_id}
-                )
-
-                # Create the JSON-RPC request
-                request = SendMessageRequest(id=f"req_{int(time.time() * 1000)}", params=params)
-
-                response = await client.send_message(request)
-
-                # Handle the response - it's a RootModel that contains either success or error
-                if response:
-                    # The response.root contains the actual response
-                    response_data = response.root if hasattr(response, "root") else response
-
-                    # Check if it's a success response
-                    if hasattr(response_data, "result"):
-                        result_data = response_data.result
-
-                        # Check if result is a Message
-                        if hasattr(result_data, "message_id"):
-                            # It's a Message
-                            muxi_message = ModelsAdapter.sdk_to_muxi_message(result_data)
-                            return muxi_message
-                        else:
-                            # It might be a Task or other type
-                            # For now, return a simple response
-                            return {"success": True, "type": "task", "data": str(result_data)}
-                    elif hasattr(response_data, "error"):
-                        # It's an error response
-                        return None
-
+            client = await create_client(target_agent_url)
+            try:
+                async for stream_response in client.send_message(request):
+                    payload = stream_response.WhichOneof("payload")
+                    if payload == "message":
+                        return ModelsAdapter.sdk_to_muxi_message(stream_response.message)
+                    if payload == "task":
+                        task = stream_response.task
+                        if task.history:
+                            return ModelsAdapter.sdk_to_muxi_message(task.history[-1])
+                        return {"success": True, "type": "task", "task_id": task.id}
                 return None
+            finally:
+                try:
+                    await client.close()
+                except Exception:
+                    pass
 
         except Exception as e:
             # Log error properly using observability

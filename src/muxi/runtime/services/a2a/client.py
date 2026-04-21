@@ -1,114 +1,82 @@
 """
-A2A SDK Client Wrapper
+A2A SDK Client Wrapper (a2a-sdk 1.0)
 
-This module provides the SDK client wrapper that handles all A2A protocol details
-using the official A2A SDK v0.3.0.
+Thin facade over a2a.client.create_client that MUXI agents use when they
+need to send A2A messages without going through the overlord's
+UnifiedA2AMessaging path. Most production traffic runs through
+UnifiedA2AMessaging + the registered AgentTransport in ClientFactory; this
+service survives for legacy call sites and for configuration-driven
+external registries.
+
+1.0 API shifts:
+  * `A2AClient` is gone. We create a fresh `Client` per send via
+    `create_client(url)` and close it immediately after.
+  * `MessageSendParams` is gone. We pass `message`, `metadata` directly on
+    `SendMessageRequest`.
+  * `Client.send_message` yields `StreamResponse` values; we consume the
+    first `message` payload for the sync-reply contract.
 """
+
+from __future__ import annotations
 
 import asyncio
 import threading
-from typing import Any, Dict, Optional, Union
+from typing import Any, Callable, Dict, Optional, Union
 
-from a2a.client import A2AClient
-from a2a.types import (
-    DataPart,
-    Message,
-    Role,
-    SendMessageRequest,
-    SendMessageResponse,
-    TextPart,
-)
-from nanoid import generate as generate_nanoid
+from a2a.types import Message, SendMessageRequest
 
+from ...utils.id_generator import generate_nanoid
 from .. import observability
+from . import _sdk_helpers as sdk
 
-# Singleton instance and lock for thread safety
+# Singleton instance and lock for thread safety.
 _a2a_service_instance = None
 _singleton_lock = threading.Lock()
 
 
 class A2AService:
-    """A2A Service Layer using SDK.
-
-    This service provides the abstraction between agents and the A2A SDK,
-    handling all protocol details and format conversions.
-    """
+    """MUXI-facing wrapper around the a2a-sdk 1.0 client surface."""
 
     def __new__(cls):
-        """Ensure singleton instance with thread safety."""
         global _a2a_service_instance
         if _a2a_service_instance is None:
             with _singleton_lock:
-                # Double-check pattern for thread safety
                 if _a2a_service_instance is None:
                     _a2a_service_instance = super(A2AService, cls).__new__(cls)
                     _a2a_service_instance._initialized = False
         return _a2a_service_instance
 
     def __init__(self):
-        """Initialize the A2A service with SDK client."""
         if self._initialized:
             return
-
-        self.sdk_client = None
-        self.httpx_client = None  # Store httpx client for proper cleanup
-        self._internal_handlers = {}
+        self._external_url: Optional[str] = None
+        self._internal_handlers: Dict[str, Callable] = {}
         self._initialized = True
 
     async def initialize(self, config: Optional[Dict[str, Any]] = None):
-        """Initialize the SDK client with configuration.
-
-        Args:
-            config: Optional configuration for SDK client
-        """
-        # Check if we need SDK (only for external A2A)
-        if config and (
-            config.get("outbound", {}).get("enabled") or config.get("inbound", {}).get("enabled")
-        ):
-            try:
-                # The A2A SDK requires an httpx client and either agent_card or url
-                import httpx
-
-                # Create httpx client with reasonable defaults and store it
-                self.httpx_client = httpx.AsyncClient(
-                    timeout=httpx.Timeout(30.0),
-                    follow_redirects=True,
-                )
-
-                # Get URL from config if available, safely checking for non-empty registries
-                registries = config.get("outbound", {}).get("registries", [])
-                url = registries[0] if registries else None
-
-                # Initialize SDK client with httpx client and url
-                if url:
-                    self.sdk_client = A2AClient(httpx_client=self.httpx_client, url=url)
-                    observability.observe(
-                        event_type=observability.SystemEvents.A2A_REGISTRY_CLIENT_INITIALIZED,
-                        level=observability.EventLevel.INFO,
-                        data={"url": url},
-                        description=f"A2A SDK client initialized with URL: {url}",
-                    )
-                else:
-                    # For now, skip SDK initialization if no URL provided
-                    self.sdk_client = None
-            except Exception as e:
-                observability.observe(
-                    event_type=observability.ErrorEvents.A2A_MESSAGE_HANDLING_FAILED,
-                    level=observability.EventLevel.ERROR,
-                    data={"error": str(e), "component": "a2a_sdk"},
-                    description=f"Failed to initialize A2A SDK client: {e}",
-                )
-                # Don't raise - internal A2A can still work
-                self.sdk_client = None
-        else:
-            # Internal-only A2A doesn't need SDK
+        """Record the first configured external registry URL, if any."""
+        if not config:
+            self._external_url = None
             observability.observe(
                 event_type=observability.SystemEvents.SERVICE_STARTED,
                 level=observability.EventLevel.INFO,
                 data={"service": "a2a", "mode": "internal_only"},
-                description="A2A service initialized for internal-only communication (no SDK needed)",
+                description="A2A service initialized for internal-only communication",
             )
-            self.sdk_client = None
+            return
+
+        if config.get("outbound", {}).get("enabled") or config.get("inbound", {}).get("enabled"):
+            registries = config.get("outbound", {}).get("registries", [])
+            self._external_url = registries[0] if registries else None
+            if self._external_url:
+                observability.observe(
+                    event_type=observability.SystemEvents.A2A_REGISTRY_CLIENT_INITIALIZED,
+                    level=observability.EventLevel.INFO,
+                    data={"url": self._external_url},
+                    description=f"A2A service registered registry URL: {self._external_url}",
+                )
+        else:
+            self._external_url = None
 
     async def send_message(
         self,
@@ -120,27 +88,13 @@ class A2AService:
         wait_for_response: bool = True,
         timeout: int = 30,
     ) -> Optional[Dict[str, Any]]:
-        """Send an A2A message using the SDK.
-
-        Args:
-            source_agent_id: ID of the sending agent
-            target_agent_id: ID of the target agent
-            message: Message content (string or dict)
-            message_type: Type of message (request, response, etc.)
-            context: Optional context data
-            wait_for_response: Whether to wait for a response
-            timeout: Timeout in seconds
-
-        Returns:
-            Response from target agent if wait_for_response is True, None otherwise
-        """
+        """Send an A2A message. Internal handlers dispatch in-memory; external
+        sends go through create_client."""
         start_time = asyncio.get_event_loop().time()
 
         try:
-            # Convert MUXI format to SDK format
             sdk_message = self._convert_to_sdk_message(message, source_agent_id, context)
 
-            # Check if internal or external routing
             if self._is_internal(target_agent_id):
                 observability.observe(
                     event_type=observability.ConversationEvents.A2A_MESSAGE_SENT,
@@ -157,7 +111,6 @@ class A2AService:
                     timeout,
                 )
 
-            # For external agents, check if SDK is initialized
             observability.observe(
                 event_type=observability.ConversationEvents.A2A_MESSAGE_SENT,
                 level=observability.EventLevel.DEBUG,
@@ -165,36 +118,26 @@ class A2AService:
                 description=f"External agent {target_agent_id} requested",
             )
 
-            if not self.sdk_client:
-                # External agents require the SDK client for proper routing
-                # There's no effective fallback since _try_find_handler only checks
-                # already registered handlers, which by definition won't include
-                # external agents
+            if not self._external_url:
                 raise RuntimeError(
                     f"Cannot route to external agent '{target_agent_id}': "
-                    "A2A SDK client not initialized"
+                    "A2A external registry URL not configured"
                 )
 
-            from a2a.types import MessageSendParams
-
-            params = MessageSendParams(
-                message=sdk_message,
-                metadata={"target_agent_id": target_agent_id},
+            result_message = await self._send_external(
+                sdk_message,
+                target_agent_id=target_agent_id,
+                timeout=timeout,
             )
 
-            request = SendMessageRequest(
-                id=generate_nanoid(),
-                params=params,
-            )
-
-            response: SendMessageResponse = await self.sdk_client.send_message(request)
-
-            # Track metrics
             duration = asyncio.get_event_loop().time() - start_time
             observability.observe(
                 event_type=observability.ConversationEvents.A2A_MESSAGE_SENT,
                 level=observability.EventLevel.INFO,
-                description=f"A2A message sent from {source_agent_id} to {target_agent_id} ({message_type})",
+                description=(
+                    f"A2A message sent from {source_agent_id} to "
+                    f"{target_agent_id} ({message_type})"
+                ),
                 data={
                     "source_agent_id": source_agent_id,
                     "target_agent_id": target_agent_id,
@@ -204,32 +147,18 @@ class A2AService:
                 },
             )
 
-            if wait_for_response:
-                try:
-                    # Attempt to access result attribute safely
-                    if response.root and response.root.result:
-                        # Convert SDK response back to MUXI format
-                        return self._convert_from_sdk_message(response.root.result)
-                except AttributeError:
-                    # No result attribute present, return None
-                    pass
-
+            if wait_for_response and result_message is not None:
+                return self._convert_from_sdk_message(result_message)
             return None
 
         except Exception as e:
-            observability.observe(
-                event_type=observability.ConversationEvents.A2A_MESSAGE_FAILED,
-                level=observability.EventLevel.ERROR,
-                data={"error": str(e)},
-                description=f"Error sending A2A message: {e}",
-            )
-
-            # Track error metrics
             duration = asyncio.get_event_loop().time() - start_time
             observability.observe(
                 event_type=observability.ConversationEvents.A2A_MESSAGE_FAILED,
                 level=observability.EventLevel.ERROR,
-                description=f"A2A message failed from {source_agent_id} to {target_agent_id}: {str(e)}",
+                description=(
+                    f"A2A message failed from {source_agent_id} to " f"{target_agent_id}: {str(e)}"
+                ),
                 data={
                     "source_agent_id": source_agent_id,
                     "target_agent_id": target_agent_id,
@@ -238,8 +167,40 @@ class A2AService:
                     "error": str(e),
                 },
             )
-
             raise
+
+    async def _send_external(
+        self,
+        sdk_message: Message,
+        *,
+        target_agent_id: str,
+        timeout: int,
+    ) -> Optional[Message]:
+        """Send a message to the configured external registry and return the first reply."""
+        from a2a.client import create_client
+
+        request = SendMessageRequest(
+            message=sdk_message,
+            metadata=sdk.dict_to_struct({"target_agent_id": target_agent_id}),
+        )
+
+        client = await create_client(
+            self._external_url,
+            resolver_http_kwargs={"timeout": float(timeout)},
+        )
+        try:
+            async for stream_response in client.send_message(request):
+                payload = stream_response.WhichOneof("payload")
+                if payload == "message":
+                    return stream_response.message
+                if payload == "task" and stream_response.task.history:
+                    return stream_response.task.history[-1]
+        finally:
+            try:
+                await client.close()
+            except Exception:
+                pass
+        return None
 
     async def handle_message(
         self,
@@ -250,21 +211,8 @@ class A2AService:
         context: Optional[Dict[str, Any]] = None,
         message_id: Optional[str] = None,
     ) -> Dict[str, Any]:
-        """Handle an incoming A2A message.
-
-        Args:
-            agent: The agent instance handling the message
-            source_agent_id: ID of the sending agent
-            message: Message content (string or dict)
-            message_type: Type of message (request, response, etc.)
-            context: Optional context data
-            message_id: Optional message ID for tracking
-
-        Returns:
-            Response to send back to the source agent
-        """
+        """Hand an incoming A2A message to the agent's generic handler."""
         try:
-            # Delegate to agent's existing handler
             return await agent._handle_generic_a2a_message(
                 source_agent_id,
                 message,
@@ -285,84 +233,51 @@ class A2AService:
                 "message": "Failed to handle A2A message",
             }
 
+    # ------------------------------------------------------------------
+    # MUXI <-> SDK conversion
+    # ------------------------------------------------------------------
+
     def _convert_to_sdk_message(
         self,
         message: Union[str, Dict[str, Any]],
         source_agent_id: str,
         context: Optional[Dict[str, Any]] = None,
     ) -> Message:
-        """Convert MUXI message format to SDK Message format.
-
-        Args:
-            message: MUXI format message
-            source_agent_id: ID of the sending agent
-            context: Optional context data
-
-        Returns:
-            SDK Message object
-        """
         parts = []
-
-        # Handle different message formats
         if isinstance(message, str):
-            # Simple text message
-            parts.append(TextPart(text=message, kind="text"))
+            parts.append(sdk.make_text_part(message))
         elif isinstance(message, dict):
-            # Check if it's already in parts format
             if "parts" in message:
                 for part in message["parts"]:
-                    if part["type"] == "TextPart":
-                        parts.append(TextPart(text=part["text"], kind="text"))
-                    elif part["type"] == "DataPart":
-                        parts.append(DataPart(data=part["data"], kind="data"))
+                    part_type = (part.get("type") or "").lower()
+                    if part_type in ("textpart", "text"):
+                        parts.append(sdk.make_text_part(part.get("text", "")))
+                    elif part_type in ("datapart", "data"):
+                        parts.append(sdk.make_data_part(part.get("data") or {}))
             else:
-                # Convert dict to data part
-                parts.append(DataPart(data=message, kind="data"))
+                parts.append(sdk.make_data_part(message))
+        if not parts:
+            parts.append(sdk.make_text_part(""))
 
-        # Create SDK Message
-        return Message(
+        return sdk.make_message(
             message_id=generate_nanoid(),
-            role=Role.user,
+            role=sdk.ROLE_USER,
             parts=parts,
-            metadata=context or {},
-            kind="message",
+            metadata=context,
         )
 
     def _convert_from_sdk_message(self, sdk_message: Message) -> Dict[str, Any]:
-        """Convert SDK Message to MUXI format.
-
-        Args:
-            sdk_message: SDK Message object
-
-        Returns:
-            MUXI format message dict
-        """
-        parts = []
-
-        for part in sdk_message.parts:
-            # SDK parts need to be dumped to access their fields
-            part_data = part.model_dump()
-            if part_data.get("kind") == "text":
-                parts.append({"type": "TextPart", "text": part_data.get("text")})
-            elif part_data.get("kind") == "data":
-                parts.append({"type": "DataPart", "data": part_data.get("data")})
-
         return {
-            "parts": parts,
+            "parts": sdk.parts_to_muxi_list(sdk_message.parts),
             "message_id": sdk_message.message_id,
-            "metadata": sdk_message.metadata,
+            "metadata": sdk.message_metadata(sdk_message),
         }
 
+    # ------------------------------------------------------------------
+    # Internal handler plumbing
+    # ------------------------------------------------------------------
+
     def _is_internal(self, target_agent_id: str) -> bool:
-        """Check if target agent is internal (same formation).
-
-        Args:
-            target_agent_id: ID of the target agent
-
-        Returns:
-            True if agent is internal, False otherwise
-        """
-        # Check if we have a handler registered for this agent
         return target_agent_id in self._internal_handlers
 
     async def _send_internal(
@@ -374,44 +289,21 @@ class A2AService:
         wait_for_response: bool,
         timeout: int,
     ) -> Optional[Dict[str, Any]]:
-        """Send message to internal agent.
-
-        Args:
-            source_agent_id: ID of the sending agent
-            target_agent_id: ID of the target agent
-            sdk_message: SDK Message object
-            message_type: Type of message
-            wait_for_response: Whether to wait for response
-            timeout: Timeout in seconds
-
-        Returns:
-            Response if wait_for_response is True, None otherwise
-        """
         handler = self._internal_handlers.get(target_agent_id)
         if not handler:
             raise ValueError(f"No handler registered for agent {target_agent_id}")
 
-        # Convert SDK message back to MUXI format for internal handling
         muxi_message = self._convert_from_sdk_message(sdk_message)
-
-        # Call the handler
         response = await handler(
             source_agent_id,
             muxi_message,
             message_type,
-            sdk_message.metadata,
+            sdk.message_metadata(sdk_message),
             sdk_message.message_id,
         )
-
         return response if wait_for_response else None
 
     def register_internal_handler(self, agent_id: str, handler):
-        """Register an internal message handler for an agent.
-
-        Args:
-            agent_id: ID of the agent
-            handler: Async function to handle messages
-        """
         self._internal_handlers[agent_id] = handler
         observability.observe(
             event_type=observability.SystemEvents.A2A_AGENT_REGISTERED,
@@ -421,35 +313,11 @@ class A2AService:
         )
 
     async def cleanup(self):
-        """Clean up resources, particularly the httpx client.
-
-        This method should be called when shutting down the A2A service
-        to properly close the httpx client and release resources.
-        """
-        if hasattr(self, "httpx_client") and self.httpx_client:
-            try:
-                await self.httpx_client.aclose()
-                self.httpx_client = None
-                observability.observe(
-                    event_type=observability.SystemEvents.A2A_HTTPX_CLEANUP,
-                    level=observability.EventLevel.DEBUG,
-                    data={"operation": "a2a_httpx_cleanup"},
-                    description="A2A service httpx client closed successfully",
-                )
-            except Exception as e:
-                observability.observe(
-                    event_type=observability.ErrorEvents.INTERNAL_ERROR,
-                    level=observability.EventLevel.ERROR,
-                    data={"error": str(e), "component": "a2a_httpx_cleanup"},
-                    description=f"Error closing httpx client: {e}",
-                )
-
-        # Clear SDK client reference
-        if self.sdk_client:
-            self.sdk_client = None
-            observability.observe(
-                event_type=observability.SystemEvents.OPERATION_COMPLETED,
-                level=observability.EventLevel.DEBUG,
-                data={"operation": "a2a_sdk_cleanup"},
-                description="A2A SDK client reference cleared",
-            )
+        """No persistent resources; retained for API compatibility."""
+        self._external_url = None
+        observability.observe(
+            event_type=observability.SystemEvents.OPERATION_COMPLETED,
+            level=observability.EventLevel.DEBUG,
+            data={"operation": "a2a_sdk_cleanup"},
+            description="A2A service cleanup completed",
+        )

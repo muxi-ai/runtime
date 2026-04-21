@@ -169,25 +169,34 @@ class A2AAuthManager:
 
     def create_scheme(self, auth_config: Dict[str, Any]) -> Optional[SecurityScheme]:
         """
-        Create an SDK security scheme from auth configuration.
+        Create an SDK security scheme descriptor from auth configuration.
 
-        Args:
-            auth_config: Authentication configuration dict
+        In a2a-sdk 1.0 the scheme types are protobuf messages that describe
+        WHERE a credential should be applied, not the credential itself:
 
-        Returns:
-            SDK SecurityScheme or None if auth type not supported
+          * APIKeySecurityScheme: (description, location, name)
+          * HTTPAuthSecurityScheme: (description, scheme, bearer_format)
+
+        Credentials are kept separately in `self._credentials` via
+        `add_credentials()` and applied through `apply_sdk_authentication`.
         """
         auth_type = auth_config.get("type")
 
         if auth_type == "api_key":
             return APIKeySecurityScheme(
-                api_key=auth_config["key"], header_name=auth_config.get("header", "X-API-Key")
+                name=auth_config.get("header", "X-API-Key"),
+                location="header",
+                description=auth_config.get("description", ""),
             )
         elif auth_type == "bearer":
-            return HTTPAuthSecurityScheme(scheme="bearer", token=auth_config["token"])
+            return HTTPAuthSecurityScheme(
+                scheme="bearer",
+                description=auth_config.get("description", ""),
+            )
         elif auth_type == "basic":
             return HTTPAuthSecurityScheme(
-                scheme="basic", username=auth_config["username"], password=auth_config["password"]
+                scheme="basic",
+                description=auth_config.get("description", ""),
             )
 
         return None
@@ -309,10 +318,15 @@ class A2AAuthManager:
             secret_value = await self.secrets_manager.get_secret(secret_name)
             if secret_value:
                 auth_type = config["auth_type"]
+                # Build the credentials dict first so the success observability
+                # event is emitted for every supported auth type (API_KEY and
+                # BEARER used to return before reaching the observe() below).
                 if auth_type == AuthType.API_KEY:
-                    return {"api_key": secret_value}
+                    credentials = {"api_key": secret_value}
                 elif auth_type == AuthType.BEARER:
-                    return {"token": secret_value}
+                    credentials = {"token": secret_value}
+                else:
+                    credentials = None
 
                 # Log successful credential load
                 observability.observe(
@@ -325,6 +339,9 @@ class A2AAuthManager:
                         "auth_type": auth_type.value,
                     },
                 )
+
+                if credentials is not None:
+                    return credentials
             else:
                 # Log missing credential
                 observability.observe(

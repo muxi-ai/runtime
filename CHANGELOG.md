@@ -2,7 +2,75 @@
 
 ## [unreleased]
 
-## v0.20260420.1
+## v0.20260421.0
+
+### Native migration to a2a-sdk 1.0
+
+`a2a-sdk 1.0.0` (released 2026-04-20) is a breaking rewrite of Google's Agent-to-Agent SDK. The top-level `A2AClient` helper is gone, enums moved to `SCREAMING_SNAKE_CASE`, `Part` types were flattened into a protobuf `oneof`, `AgentCard.url` was replaced by `supported_interfaces[]`, and `AgentCapabilities` became a fixed-field protobuf message (no per-capability metadata dict). v0.20260420.1 pinned `a2a-sdk<1.0` as an emergency stop; this release replaces every call site with the native 1.0 API. The migration touches 10 production files plus a new helpers module and is accompanied by a full unit + integration + e2e test harness.
+
+- **`services/a2a/_sdk_helpers.py` (new)** -- centralizes the protobuf glue so no other file has to know about it. Exports `make_text_part`, `make_data_part`, `make_message`, `parts_to_muxi_list`, `muxi_part_to_sdk`, `dict_to_struct`, plus constants for `Role`, `TaskState`, and the `Part.content` oneof. The 1.0 `Part.data` field requires `google.protobuf.Value(struct_value=Struct)` rather than a raw dict; `Message.metadata` accepts a `Struct` directly; `MessageToDict` is used for all SDK -> MUXI shape conversions. Every other A2A file now imports from this module instead of reimplementing the glue.
+- **`services/a2a/models_adapter.py` (rewrite)** -- the old `isinstance(part, TextPart)` / `.capabilities.items()` code silently returned empty parts against both 0.3 (RootModel-wrapped parts) and 1.0 (protobuf parts). Rewritten to route capability metadata through `AgentCard.skills[]` with tag-encoded metadata plus a `_muxi_metadata` sentinel skill for MUXI-specific extensions, and to derive `url` from `supported_interfaces[0].url`. This fixes three silent-failure modes documented as xfail markers in the test harness: the Part isinstance bug, the `AgentCapabilities` dict bug, and the per-capability metadata drop.
+- **`services/a2a/auth/outbound.py` (rewrite `create_scheme`)** -- `APIKeySecurityScheme` renamed its fields (`api_key`/`header_name` -> `name`/`location`). Credentials are no longer stored on the scheme object at all; the auth manager now keeps a `_credentials` side-map keyed by scheme id. `HTTPAuthSecurityScheme` is used for bearer auth with a fixed `scheme="bearer"`.
+- **`services/a2a/server.py` (rewrite)** -- the 1.0 SDK removed `SendMessageSuccessResponse` / `JSONRPCError` wrapper types in favor of a plain dict JSON-RPC envelope. Introduced `_jsonrpc_error` / `_jsonrpc_success` helpers and switched to dict-shape part parsing (`parts: [{"text": ...}]` rather than strict protobuf construction) to avoid 1.0's strict oneof validation rejecting incoming requests from older clients.
+- **`services/a2a/client.py` (rewrite)** -- `A2AClient` is gone. The `A2AService` facade now wraps `create_client(url)` for each call and iterates `async for StreamResponse in client.send_message(request)`, collecting payloads by oneof tag (`task` / `message` / `status_update` / `artifact_update`).
+- **`services/a2a/registry_client.py` (rewrite)** -- the previous health check used `A2AClient.send_message(health_check_message)` and inspected the error string for "method not allowed" / 405. Replaced with a plain `httpx.AsyncClient.get("/health", timeout=5)` that treats any <500 response as healthy (handles registries that don't implement `/health` but are otherwise reachable). The `sdk_clients` dict is kept as an empty `Dict[str, Any]` for API compatibility; registry traffic uses the shared httpx client directly.
+- **`services/a2a/agent_transport.py` (rewrite)** -- 1.0's `ClientTransport.send_message` takes `SendMessageRequest` and returns `SendMessageResponse` (non-streaming), not `MessageSendParams`. The AgentTransport now builds a `SendMessageResponse(message=reply)` after dispatching to the internal handler.
+- **`formation/overlord/a2a_messaging.py` (rewrite)** -- external routing now goes through `create_client(url)` + `async for StreamResponse`. Preserves the service-id matching logic that maps MUXI destinations to external registry endpoints. `a2a.client.middleware.ClientCallContext` moved to `a2a.client.ClientCallContext`.
+- **`formation/overlord/a2a_coordinator.py` (rewrite external-routing block)** -- mirrors the `a2a_messaging` pattern. Collects the first `message` or `task` payload from the StreamResponse iterator and returns early; ensures the client is closed in a `finally`. `SendMessageRequest` no longer accepts `id`/`params` fields — the request is built with `message=` and `metadata=` directly.
+- **`formation/overlord/overlord.py` (rewrite `_initialize_a2a_client_factory`)** -- `ClientFactory.register` now takes a `TransportProducer` callable of shape `(AgentCard, str, ClientConfig) -> ClientTransport` rather than a transport instance. The overlord wraps a singleton `AgentTransport` in a closure producer and also stores it on `self.agent_transport` so callers that need synchronous access (like `a2a_messaging._get_agent_transport`) don't have to go through the factory.
+- **Dependency pins (`pyproject.toml`)** -- `a2a-sdk>=1.0,<2.0`, and a new `protobuf>=5.29.5,<6` constraint. `protobuf 6.x`'s `json_format.MessageToDict` is incompatible with the Struct/Value shapes the SDK produces; pinning to `5.29.x` keeps the conversion path working until the ecosystem catches up.
+
+### Architectural Notes
+
+- **Protobuf glue lives in exactly one place.** `_sdk_helpers.py` is the canonical translation layer between MUXI's dict-shaped internal messages and the SDK's protobuf messages. Any new A2A code (registries, servers, clients, transports) must build messages through these helpers rather than touching protobuf construction directly. This contains the blast radius of any future SDK schema change to a single file.
+- **Capability metadata rides on `AgentCard.skills[]`.** SDK 1.0 made `AgentCapabilities` a fixed-field protobuf message (`streaming`, `push_notifications`, `extensions`, `extended_agent_card`); it no longer carries per-capability descriptions or arbitrary metadata. The adapter now serializes each MUXI `A2ACapability` as an `AgentSkill` (one skill per capability) with tag-encoded metadata (`muxi:meta=<json>`) and adds a `_muxi_metadata` sentinel skill for extensions that don't map onto `AgentSkill` directly. Round-trip preserves `name` / `description` / `enabled` / `metadata`.
+- **The `sdk_clients` dict is intentionally empty.** `RegistryClient` previously kept one `A2AClient` per registry; in 1.0 there is no persistent client shape — `create_client(url)` builds a fresh `Client` per call, which internally reuses the httpx connection pool for HTTP-transport registries. The `sdk_clients` attribute is preserved as `Dict[str, Any]` for API compatibility; callers iterating it get zero items, which is the correct no-op.
+- **Transport producers let the same AgentTransport back every `agent://` client.** `ClientFactory.register` takes a callable now instead of an instance. Rather than instantiating a new AgentTransport per create_client call, the producer closure captures the overlord's singleton and returns it verbatim — semantically equivalent to the old "register an instance" API, and the overlord keeps a direct reference for callers that don't want to go through ClientFactory at all.
+- **Health checks decoupled from the SDK.** The pre-migration health check used the A2A message protocol and inspected error strings for 405 to decide whether a registry was "healthy but not accepting messages". With the SDK-shaped health check removed, registries can evolve their health probe independently — a plain `GET /health` with the shared httpx client is faster, less brittle, and treats any <500 response as alive (so registries without a `/health` handler still count as reachable).
+- **No behavioural changes outside the SDK boundary.** All 10 production files were rewritten to preserve their existing public contracts. MUXI callers of `overlord.send_a2a_message` / `overlord.register_with_external_registry` / `A2AService.send_message` see the same inputs, outputs, and error semantics. The xfail markers in the Phase-1 test harness (documenting pre-existing silent-failure modes against 0.3) all flipped to XPASS against 1.0 and were removed — the rewrite fixes those bugs as a side effect rather than reproducing them.
+
+### Tests
+
+**New unit tests** (40 assertions across 3 files):
+
+- `tests/unit/test_a2a_messaging.py` (8 tests) -- validates `convert_from_internal_message` produces the `parts` shape MUXI expects, and that `convert_from_external_response` correctly unwraps text / data responses and wraps empty responses as errors.
+- `tests/unit/test_a2a_models_adapter.py` (8 tests, 3 xfail markers cleared) -- round-trips messages (text + data), round-trips AgentCards (scalar fields + capabilities), round-trips authentication, and asserts capability metadata is preserved through the skills[] encoding. The three xfail markers that previously documented the `isinstance(part, TextPart)` / `AgentCapabilities.items()` / per-capability metadata drop bugs are all cleared as XPASS.
+- `tests/unit/test_a2a_auth_outbound.py` (18 tests, 1 xfail marker cleared) -- validates `AuthCredentials` accepts / rejects expected shapes, validates `apply_authentication` injects the right header per auth type (API key custom header + default `X-API-Key`, bearer `Authorization`, basic-auth `base64(user:pass)`), validates `apply_sdk_authentication` is a noop when no scheme is registered, and validates `create_scheme` constructs `APIKeySecurityScheme` with 1.0's `name=`/`location=` fields.
+
+**New integration tests** (6 assertions, new `tests/integration/` package):
+
+- `tests/integration/test_a2a_server_roundtrip.py` -- boots an in-process `A2AServer` with a registered echo agent and exercises the HTTP surface: `/health`, `/agents`, legacy `POST /agents/{id}/message`, unknown-agent error path, and the 1.0-shape SDK request path with and without extracted text. The 1.0 SDK path's xfail marker (previously documenting the `sdk_to_muxi_message` silent-empty bug) is cleared as XPASS.
+
+**New e2e smokes** (2 tests, `e2e/tests/7_orchestration/`):
+
+- `test_7b1_a2a_internal_messaging.py` -- SDK-binding smoke against the 1.0 API. Asserts `a2a-sdk` reports version `1.0.0`, that string / dict / parts-dict all convert to `SDK Message` correctly, and that SDK -> MUXI round-trip recovers all parts. Finishes in <10s.
+- `test_7b2_a2a_external_messaging.py` -- boots `A2AServer` + echo agent in-process and walks the HTTP surface (`/health`, `/agents`, legacy POST, unknown-agent error). Finishes in <1s.
+
+**Formation swap** (1 e2e test unblocked):
+
+- `e2e/tests/7_orchestration/formations/formation-multi-agent-segregated/agents/project-manager.yaml` -- swapped Linear MCP (`https://mcp.linear.app/sse`) for the filesystem MCP (same pattern as the neighbouring `it-support` agent) so `test_7b1_internal_a2a.py` can run in environments without Linear credentials. The A2A delegation path (`it-support` -> `project-manager`) is preserved; only the downstream side-effect (Linear issue -> filesystem file) changed.
+
+### Validation
+
+- **Phase 1 unit + integration suite (`tests/unit/test_a2a_*.py` + `tests/integration/test_a2a_server_roundtrip.py`): 44/44 pass against `a2a-sdk==1.0.0`.** All 5 xfail markers (3 in models_adapter, 1 in auth_outbound, 1 in server_roundtrip) flipped to XPASS and were removed.
+- **Broader unit suite: 605 passed, 3 skipped, 1 pre-existing unrelated failure** (`tests/unit/rce/test_rce_client.py` asserts `client_version == '0.1.0'` but the runtime reports `0.20260308.2`; pre-dates this migration).
+- **A2A e2e sweep (5 tests): 5/5 pass** -- `test_7b1_a2a_internal_messaging.py` (6.6s), `test_7b1_internal_a2a.py` (25.3s, unblocked by Linear->filesystem swap), `test_7b2_a2a_external_messaging.py` (0.8s), `test_7b3_a2a_discovery.py` (22.4s), `test_19r1_a2a.py` (19.8s).
+- **Random e2e sample (20 tests across 11 areas): 20/20 pass** -- 1_foundation, 2_memory (3), 3_multimodal (5), 4_mcp (2), 7_orchestration (2, including the new a2a internal messaging smoke), 9_async, 11_formatting, 12_scheduling (2), 13_triggers, 18_observability, 21_skills.
+- **`scripts/validate_events.py`: 1206/1206 observe() calls validate (100%).**
+- **Lint: `black --check` clean across all 12 touched files.**
+
+### Breaking changes
+
+- **`a2a-sdk<1.0` is no longer supported.** Anyone pinning `a2a-sdk==0.3.x` alongside this runtime will get an `ImportError` at startup (`a2a.client.A2AClient` no longer exists). The new pin is `a2a-sdk>=1.0,<2.0`.
+- **`protobuf>=6.0` is incompatible with this runtime.** `google.protobuf.json_format.MessageToDict` in 6.x rejects the Struct shapes the SDK produces. The new pin is `protobuf>=5.29.5,<6`.
+- **`AgentCapabilities.items()` is no longer callable.** Any downstream code that treated MUXI's SDK AgentCard as having a dict-shaped `capabilities` field must now walk `AgentCard.skills[]` (preferred) or call `ModelsAdapter.sdk_to_muxi_agent_card(card).capabilities` to get the MUXI-shape dict back.
+- **`RegistryClient.sdk_clients` is always empty.** Code iterating it now gets zero items. External callers that want to speak A2A to a registry should build their own `create_client(url)` instance per call.
+
+### Known issues deferred to next release
+
+- **Per-request client construction overhead.** `create_client(url)` builds a fresh `Client` per `send_message` call, which internally reuses the shared httpx connection pool but re-resolves the agent card on every call. For hot-path external A2A traffic this may add 10-50ms per request depending on DNS + TLS cache state. If profiling shows this is a bottleneck, a future release can cache resolved `AgentCard` objects and reuse them across calls.
+- **`APIKeySecurityScheme.location` is always "header".** SDK 1.0 supports `location="query"` and `location="cookie"` but MUXI's `create_scheme` hardcodes header. If anyone needs query-string or cookie-based API keys, extend `create_scheme` accordingly.
+- **StreamResponse `status_update` and `artifact_update` payloads are dropped.** `a2a_messaging._send_external_message` and `a2a_coordinator` iterate the StreamResponse but only surface `message` and `task` payloads back to MUXI. Incremental status and artifact updates are ignored. Fine for request/response-style agents; future streaming agents will need richer handling.
 
 ## v0.20260420.1
 

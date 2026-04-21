@@ -80,8 +80,7 @@ import aiofiles
 import magic
 
 # Import OneLLM components
-from onellm import ChatCompletion, Embedding
-from onellm import init_cache as onellm_init_cache
+from onellm import ChatCompletion, Embedding, init_cache as onellm_init_cache
 from onellm.audio import AudioTranscription
 from onellm.config import set_api_key
 from onellm.errors import AuthenticationError, InvalidRequestError, RateLimitError

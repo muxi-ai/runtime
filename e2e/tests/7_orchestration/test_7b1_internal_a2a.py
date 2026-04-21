@@ -4,8 +4,11 @@ Test 7B1: Internal A2A Communication
 Migrated from: e2e/tests/7_orchestration/test_internal_a2a_communication.py
 
 Tests actual internal Agent-to-Agent communication by sending a request that requires
-collaboration between agents (system info collection + Linear issue creation).
+collaboration between agents (system info collection + filesystem issue-file creation).
 Validates that it-support delegates to project-manager via A2A.
+
+Historically this test used Linear MCP to create an issue; the formation now uses the
+filesystem MCP so the test can run without external network dependencies.
 """
 
 import asyncio
@@ -44,12 +47,15 @@ async def test_internal_a2a():
 
         # Test: Send request that requires A2A collaboration
         print("\n3. Sending request requiring A2A collaboration...")
-        print("   Request: Create Linear issue with system usage info")
-        print("   Expected: it-support gets system info → delegates to project-manager → Linear issue created")
+        print("   Request: Create an issue file with system usage info")
+        print(
+            "   Expected: it-support gets system info → delegates to project-manager "
+            "→ issue file written under /tmp/muxi-e2e-issues/"
+        )
 
         response = await asyncio.wait_for(
             overlord.chat(
-                message="create a linear issue with system usage info like cpu, memory, etc",
+                message="create an issue with system usage info like cpu, memory, etc",
                 user_id="test_user",
                 session_id="a2a_test",
                 stream=False
@@ -67,20 +73,23 @@ async def test_internal_a2a():
 
         print(f"\n   ✓ Response received ({len(content)} chars)")
 
-        # Check for Linear issue creation (evidence of A2A collaboration)
-        linear_indicators = ["linear", "issue", "created", "system usage"]
-        has_linear = sum(1 for ind in linear_indicators if ind in content.lower()) >= 2
+        # Check for issue creation (evidence of A2A collaboration). The
+        # formation now writes to the filesystem instead of Linear, but the
+        # semantic markers ("issue", "created", "system usage", "file") still
+        # indicate the it-support → project-manager delegation fired.
+        indicators = ["issue", "created", "system usage", "file", "wrote", "written"]
+        matches = sum(1 for ind in indicators if ind in content.lower())
 
-        if has_linear:
-            print("   ✅ Linear issue creation detected!")
+        if matches >= 2:
+            print("   Issue-file creation detected.")
             print("   A2A collaboration successful: it-support → project-manager")
-            checks_passed.append("A2A collaboration: Linear issue created")
+            checks_passed.append("A2A collaboration: issue file created")
             all_passed = True
         else:
-            print("   ⚠️  No clear Linear issue creation detected")
+            print("   No clear issue-file creation detected.")
             print("   Response preview:")
             print(f"   {content[:300]}...")
-            checks_passed.append("Response received but Linear creation unclear")
+            checks_passed.append("Response received but issue creation unclear")
             all_passed = True  # Don't fail - just log what happened
 
         # Cleanup
