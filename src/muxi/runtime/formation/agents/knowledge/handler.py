@@ -108,6 +108,10 @@ import numpy as np
 
 from ....services import observability
 
+# Shared embedding helper — single choke point for dim probing and embed
+# calls across the MUXI runtime (see services/memory/embedding.py).
+from ....services.memory.embedding import DEFAULT_EMBEDDING_MODEL, probe_dimension
+
 # Working memory integration
 from ....services.memory.working import WorkingMemory
 from ....utils.user_dirs import get_knowledge_dir
@@ -166,6 +170,15 @@ class KnowledgeHandler:
 
         # Store embedding function for later use
         self._generate_embeddings_fn = None
+
+        # Embedding-dim memoization cache (see ``_probe_embedding_dim``).
+        # Pre-populated from the ctor's ``embedding_dimension`` so consumers
+        # that resolve the dim ahead of construction (e.g. ``from_agent_config``
+        # which awaits ``probe_dimension`` before calling the ctor) short-
+        # circuit any lazy re-probe. Setting this to ``None`` forces a
+        # subsequent ``_probe_embedding_dim`` call to probe via the shared
+        # helper exactly once.
+        self._embedding_dim_cache: Optional[int] = embedding_dimension
 
         # Create cache directory if it doesn't exist
         os.makedirs(cache_dir, exist_ok=True)
@@ -231,6 +244,39 @@ class KnowledgeHandler:
                 max_memory_mb=5000,  # 5GB limit for document storage
                 fifo_interval_min=30,  # Less frequent cleanup for documents
             )
+
+    async def _probe_embedding_dim(self, model_slug: str) -> int:
+        """Probe and memoize the embedding dimension via the shared helper.
+
+        Delegates to :func:`muxi.runtime.services.memory.embedding.probe_dimension`
+        on first invocation and caches the result on the handler instance
+        (``self._embedding_dim_cache``). Subsequent calls return the cached
+        value without re-probing — the underlying OneLLM embed call is
+        therefore issued at most once per handler lifetime.
+
+        The handler previously relied on a static dim-map that required
+        updating every time a new embedding model was added. Live probing
+        through OneLLM keeps dim resolution consistent with the rest of
+        the runtime (long-term / working / SQLite memory all use the same
+        helper).
+
+        Parameters
+        ----------
+        model_slug:
+            Provider-prefixed model slug (e.g.
+            ``"local/nomic-ai/nomic-embed-text-v1.5"`` or
+            ``"openai/text-embedding-3-small"``) whose native dim should be
+            resolved.
+
+        Returns
+        -------
+        int
+            The native embedding dimension for ``model_slug``.
+        """
+        if self._embedding_dim_cache is not None:
+            return self._embedding_dim_cache
+        self._embedding_dim_cache = await probe_dimension(model_slug)
+        return self._embedding_dim_cache
 
     async def add_knowledge_source(self, source, generate_embeddings_fn: Optional[Callable] = None):
         """Add a knowledge source and process its content using hybrid architecture."""
@@ -671,23 +717,27 @@ class KnowledgeHandler:
 
         try:
             # Create handler with performance limits
-            # Resolve embedding dimension from formation config or kwargs
+            # Resolve embedding dimension via the shared helper
+            # (``probe_dimension``). Model slug selection order:
+            #   1. explicit ``embedding_dimension`` kwarg (dim already known)
+            #   2. formation_config's first ``llm.models[*].embedding`` entry
+            #   3. ``DEFAULT_EMBEDDING_MODEL`` (Nomic v1.5, 768-dim)
+            # The probe is memoized on the created handler via
+            # ``_embedding_dim_cache`` so any subsequent call to
+            # ``handler._probe_embedding_dim`` short-circuits without a
+            # second OneLLM round-trip.
             embedding_dim = kwargs.get("embedding_dimension")
             if embedding_dim is None:
+                model_slug: Optional[str] = None
                 if formation_config:
-                    # Try to get from formation's embedding model
-                    from ....services.memory.local_embeddings import resolve_embedding_dimension
-
                     models = formation_config.get("llm", {}).get("models", [])
                     for m in models:
                         if isinstance(m, dict) and "embedding" in m:
-                            embedding_dim = resolve_embedding_dimension(m["embedding"])
+                            model_slug = m["embedding"]
                             break
-                if embedding_dim is None:
-                    # Default to local embedding dimension
-                    from ....services.memory.local_embeddings import get_local_embedding_dimension
-
-                    embedding_dim = get_local_embedding_dimension()
+                if model_slug is None:
+                    model_slug = DEFAULT_EMBEDDING_MODEL
+                embedding_dim = await probe_dimension(model_slug)
 
             handler = cls(
                 agent_id_or_sources=agent_id,
