@@ -1,7 +1,7 @@
 # MUXI Runtime Architecture Analysis
 
 **Generated:** 2026-03-10
-**Last Updated:** 2026-04-17 (v0.20260417.2)
+**Last Updated:** 2026-04-21 (OneLLM 0.20260421.0 compatibility)
 **Codebase:** `/Users/ran/Projects/muxi/code/runtime`  
 **Scope:** 290 Python files, ~119K lines
 
@@ -733,7 +733,8 @@ If no embedding model configured, auto-falls back to local sentence-transformers
 Supports `local/` prefix in formation config for explicit model selection:
 ```python
 # Default fallback (no model configured): all-MiniLM-L6-v2, 384-dim
-# Explicit local model: "local/all-mpnet-base-v2", 768-dim
+# Explicit local model: "local/all-mpnet-base-v2", 768-dim (short form, MUXI alias)
+# Or full HF repo id: "local/sentence-transformers/all-mpnet-base-v2" (forward-compatible)
 # Resolution via: is_local_model(), resolve_embedding_dimension() in local_embeddings.py
 from sentence_transformers import SentenceTransformer
 model = SentenceTransformer('all-MiniLM-L6-v2')  # 384 dimensions (default)
@@ -778,13 +779,24 @@ Memory = get_memory_model(1536)
 
 | Model | Dim | Cost | Formation Config |
 |-------|-----|------|-----------------|
-| `local/all-MiniLM-L6-v2` | 384 | Free | Default (no model configured) |
-| `local/all-mpnet-base-v2` | 768 | Free | `embedding: "local/all-mpnet-base-v2"` |
+| `local/sentence-transformers/all-MiniLM-L6-v2` | 384 | Free | Default (no model configured) |
+| `local/sentence-transformers/all-mpnet-base-v2` | 768 | Free | `embedding: "local/sentence-transformers/all-mpnet-base-v2"` |
 | `openai/text-embedding-3-small` | 1536 | Paid | `embedding: "openai/text-embedding-3-small"` |
 
 When no embedding model is configured, both PostgreSQL and SQLite default to local
-embeddings (`all-MiniLM-L6-v2`, 384-dim). The `local/` prefix is resolved by helpers
-in `local_embeddings.py` (`is_local_model()`, `resolve_embedding_dimension()`).
+embeddings (`sentence-transformers/all-MiniLM-L6-v2`, 384-dim). The `local/` prefix is
+resolved by helpers in `local_embeddings.py` (`is_local_model()`,
+`resolve_embedding_dimension()`).
+
+**OneLLM Phase 2 compatibility note (2026-04-21):** OneLLM ≥ `0.20260421.0` dropped
+the short-name alias registry on its `local/` provider -- whatever follows `local/` is
+now passed straight to HuggingFace as a repo id. Short names like
+`local/all-MiniLM-L6-v2` (no org segment) **no longer resolve in OneLLM** and would
+raise `ResourceNotFoundError` if sent to it directly. They still work **inside MUXI**
+because `local_embeddings.py` intercepts and maps them (short name ↔ dimension) before
+the runtime ever calls OneLLM's embedding API. If you add a new code path that calls
+`onellm.Embedding.acreate(model="local/...")` directly, pass the **full HF repo id**
+(e.g. `local/sentence-transformers/all-MiniLM-L6-v2`).
 
 **Schema (per dimension):**
 ```python
@@ -2880,6 +2892,62 @@ The codebase is well-structured with clear separation of concerns, comprehensive
 ---
 
 ## Appendix: Lessons Learned (Updated During E2E Testing)
+
+### 2026-04-21: OneLLM 0.20260421.0 -- `local/` provider alias registry removed
+
+**Problem:** OneLLM's `local/` embedding provider used to ship a small curated alias
+table mapping short names (e.g. `all-MiniLM-L6-v2`) to full HuggingFace repo ids. As
+of OneLLM `0.20260421.0` that registry is gone -- whatever follows `local/` is passed
+straight to `huggingface_hub`. A bare `local/all-MiniLM-L6-v2` now raises
+`ResourceNotFoundError` at the HF layer.
+
+**Why MUXI runtime is unaffected (today):** `services/memory/local_embeddings.py`
+still owns the MUXI-side alias table (`AVAILABLE_LOCAL_MODELS`,
+`resolve_embedding_dimension()`). Formation config is resolved through that shim
+before reaching OneLLM, so short names like `local/all-mpnet-base-v2` keep working.
+The runtime picks `SentenceTransformer('<bare-name>')` directly for embedding
+generation and never hands the short name to OneLLM's `local/` provider.
+
+**Landmines for future work:**
+1. **Never call `onellm.Embedding.acreate(model="local/<short-name>")` directly.**
+   If you add a new code path that bypasses `local_embeddings.py` (e.g. a new RAG
+   pipeline, a new memory tier, a probe), use the full HF repo id:
+   `local/sentence-transformers/all-MiniLM-L6-v2`.
+2. **Adding a new local model requires two edits** (already tracked elsewhere in
+   this doc): `AVAILABLE_LOCAL_MODELS` in `local_embeddings.py` **and** the
+   Dockerfile pre-download line. With Phase 2 OneLLM, a third place -- anywhere you
+   hardcode a `local/<bare-name>` string for direct OneLLM calls -- also needs the
+   full HF repo id form.
+3. **Docker image size:** OneLLM's new `[cache]` extra drops `sentence-transformers`
+   and `torch`; installation footprint fell from ~1 GB to ~345 MB. MUXI runtime still
+   needs `sentence-transformers` directly (imported by `local_embeddings.py` and the
+   working-memory buffer), so we cannot rely on `onellm[cache]` alone for the
+   transitive dep. Either pin `sentence-transformers` explicitly in MUXI's own
+   requirements or add `onellm[cache,local-pytorch]` to the Dockerfile.
+
+**Other 0.20260421.0 changes worth remembering:**
+- New `pooling` kwarg on `Embedding.create()` (`"mean" | "cls" | "max"`,
+  ONNX-backend only). MUXI doesn't use it today; mean pooling is the default and
+  matches the old `SentenceTransformer.encode()` behaviour.
+- New extras: `onellm[local-gpu]` (CUDA ONNX), `onellm[local-pytorch]`
+  (sentence-transformers fallback).
+- HuggingFace failures from the `local/` provider now normalize to the standard
+  `onellm.errors` classes, so `fallback_models=["local/...", "openai/..."]`
+  chains work transparently. If we ever want a cloud fallback for the buffer
+  embedder, the wiring is now trivial.
+- Shared `Provider._read_response_body()` fixes non-JSON error bodies across all
+  aiohttp providers (OpenAI, Anthropic, Azure, Cohere, Google, Mistral, Vertex).
+  If you see fewer `aiohttp.ContentTypeError` surfacing in production logs, that's
+  why.
+
+**Files touched in the MUXI docs repo (not this runtime) to match:**
+- `docs/reference/memory.md`, `docs/reference/formation-schema.md`,
+  `docs/concepts/memory-system.md`, `docs/guides/add-memory.md`,
+  `docs/deep-dives/memory-internals.md` -- all switched to full HF repo ids in
+  their embedding examples so the docs stay correct even if the MUXI shim is ever
+  removed. `docs/changelog.md` (historical) was left alone.
+
+---
 
 ### 2026-01-28: API Key Flow for Embeddings
 
