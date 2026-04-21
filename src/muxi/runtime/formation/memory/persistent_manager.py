@@ -9,6 +9,7 @@ import inspect
 from typing import Any, Dict, List, Optional
 
 from ...services import observability
+from ...services.memory.embedding import embed
 
 
 class PersistentMemoryManager:
@@ -27,6 +28,64 @@ class PersistentMemoryManager:
             overlord: Reference to the overlord instance
         """
         self.overlord = overlord
+
+    async def _generate_query_embedding(
+        self,
+        memory_backend: Any,
+        query: str,
+    ) -> Optional[List[float]]:
+        """Generate a query embedding via the shared embedding helper.
+
+        Post-migration the memory backends (``LongTermMemory``,
+        ``WorkingMemory``, ``SQLiteMemory``) expose the embedding model
+        as a provider-prefixed *string* slug, not a provider object.
+        This method reads that slug from the backend and delegates
+        embedding generation to
+        :func:`muxi.runtime.services.memory.embedding.embed`, which
+        routes the call through OneLLM and returns a
+        ``list[list[float]]``.
+
+        The manager uses the returned vector in the multi-collection
+        search fallback path so the query is embedded once and reused
+        across per-collection ``search()`` calls, avoiding redundant
+        provider round-trips.
+
+        Parameters
+        ----------
+        memory_backend:
+            The memory backend instance (typically
+            ``self.overlord.long_term_memory``). The PRD prescribes
+            ``embedding_model_name`` as the public contract; this
+            method also reads the private ``_embedding_model_name``
+            used by the current memory backends so the migration
+            remains compatible with every in-tree consumer.
+        query:
+            The user query string to embed.
+
+        Returns
+        -------
+        list[float] | None
+            The query embedding vector, or ``None`` when the backend
+            exposes no usable model slug (e.g. a bespoke backend with
+            no embedding configuration). A ``None`` return is expected
+            by the caller — it simply omits ``query_embedding`` from
+            the subsequent per-collection search calls.
+        """
+        if memory_backend is None:
+            return None
+
+        # Prefer the PRD-prescribed public attribute; fall back to the
+        # private form published by the current memory backends.
+        model_name = getattr(memory_backend, "embedding_model_name", None)
+        if not isinstance(model_name, str) or not model_name:
+            model_name = getattr(memory_backend, "_embedding_model_name", None)
+        if not isinstance(model_name, str) or not model_name:
+            return None
+
+        vectors = await embed(model_name, query, task="search_query")
+        if not vectors:
+            return None
+        return vectors[0]
 
     async def add_to_long_term_memory(
         self,
@@ -198,27 +257,6 @@ class PersistentMemoryManager:
                 except (TypeError, ValueError):
                     return False
 
-            async def _generate_query_embedding():
-                model = None
-                if hasattr(memory_backend, "embedding_model"):
-                    try:
-                        model = memory_backend.embedding_model
-                    except Exception:
-                        model = None
-
-                if model is None and hasattr(memory_backend, "embedding_provider"):
-                    model = getattr(memory_backend, "embedding_provider", None)
-
-                if (
-                    model is None
-                    or not hasattr(model, "embed")
-                    or not hasattr(memory_backend, "_extract_embedding_from_response")
-                ):
-                    return None
-
-                embedding_response = await model.embed(query)
-                return memory_backend._extract_embedding_from_response(embedding_response)
-
             # Helper function to call the appropriate search method with correct parameters
             async def search_collection(
                 collection=None,
@@ -308,7 +346,10 @@ class PersistentMemoryManager:
                     query_embedding = None
                     if _supports_parameter(memory_backend.search, "query_embedding"):
                         try:
-                            query_embedding = await _generate_query_embedding()
+                            query_embedding = await self._generate_query_embedding(
+                                memory_backend=memory_backend,
+                                query=query,
+                            )
                         except Exception:
                             query_embedding = None
 

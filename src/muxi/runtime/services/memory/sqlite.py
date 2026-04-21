@@ -101,10 +101,10 @@ class SQLiteMemory(BaseMemory):
         self.default_collection = default_collection
         self.extensions_dir = extensions_dir
 
-        # Resolve the embedding model slug. The old dispatch that
-        # branched on ``is_local_model`` / accepted an LLM instance is
-        # gone — every caller passes a slug string, and embedding
-        # generation flows through the shared ``embedding.embed`` helper.
+        # Resolve the embedding model slug. The old local/cloud
+        # dispatch that accepted an LLM instance is gone — every caller
+        # passes a slug string, and embedding generation flows through
+        # the shared ``embedding.embed`` helper.
         if embedding_model is None:
             embedding_model = DEFAULT_EMBEDDING_MODEL
         if not isinstance(embedding_model, str):
