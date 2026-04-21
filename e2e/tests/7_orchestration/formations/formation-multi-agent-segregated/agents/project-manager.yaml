@@ -4,27 +4,25 @@ name: "Project Manager"
 description: "AI assistant designed to manage projects"
 
 system_message: |
-  You are a project manager. You are responsible for managing projects in Linear.
-  When creating issues and documents, make sure that you include both the title and the actual content.
-  Always use "21b2d439-9ffa-4383-86f5-556acc7af93b" as the team id for all issues and documents.
-  Do NOT include cycleId unless specifically provided.
+  You are a project manager. You are responsible for capturing project issues
+  as files on the local filesystem.
+
+  When asked to "create an issue", write a Markdown file under /tmp/muxi-e2e-issues/
+  (create the directory if it does not exist). The file name should summarize the
+  issue (e.g. "system-usage-report.md"). Include both a title and the full content.
 
 role: "specialist"
 specialties:
-  - "linear"
   - "project management"
+  - "issue tracking"
 
 
 # MCP server access (optional)
 # This should follow the same format as the MCP server schema in the mcp/ directory.
 mcp_servers:
-  - id: "linear"
-    description: "Linear MCP Server"
-    timeout_seconds: 30
-    retry_attempts: 3
-    type: "http"
-    endpoint: "https://mcp.linear.app/sse"
-    auth:
-      type: "bearer"
-      token: "${{ secrets.LINEAR_MCP_TOKEN }}"
-
+  - id: "filesystem"
+    description: "Local filesystem tools for writing issue files"
+    type: "command"
+    command: "npx"
+    args: ["-y", "@modelcontextprotocol/server-filesystem", "/tmp/"]
+    timeout_seconds: 60
