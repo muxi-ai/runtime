@@ -50,6 +50,67 @@ idempotency (VAL-SCHEMA-005), and cross-dimension search behavior
 (VAL-CROSS-006). 15 new unit tests lock in formation config slug validation
 (`tests/unit/test_formation_config_validation.py`).
 
+### Embedding platform: revision pinning + SIF deployment contract
+
+Building on the single-path helper work above, this release prepares the
+runtime for SIF-based deployment with a host-managed HuggingFace cache.
+
+**Slug-embedded revision pinning.** The embedding helper now accepts
+`local/<repo>:<revision>` notation — for example
+`local/nomic-ai/nomic-embed-text-v1.5:e04b7e4c5ea3e3d7e41e13d4c02fa5e29e0e3a0a`.
+The new `_parse_model_slug(slug)` function extracts `(model, revision)`
+and `embed()` / `probe_dimension()` forward the revision to OneLLM's
+`LocalProvider`, which in turn pins every downstream HuggingFace lookup
+(ONNX weights, PyTorch weights, tokenizer, config, max-length probe).
+OneLLM's LRU cache key is `(repo, revision)`, so a formation pinning one
+revision and another following `main` do not collide.
+
+Revision parsing is ONLY applied to `local/*` slugs. Cloud provider slugs
+may legitimately use `:` in model names (e.g. `ollama/llama2:7b` encodes
+a variant, not a revision) and pass through untouched. A trailing `:`
+with no revision fails fast with `InvalidRequestError` rather than
+resolving silently to `main` downstream.
+
+Requires `onellm[cache]>=0.20260422.1` — the pin bump in this release
+picks up OneLLM's upstream fix that threads `revision=` through every
+LocalProvider code path. 0.20260422.0 silently dropped the kwarg.
+
+**Host-managed HuggingFace cache (SIF deployment).** The runtime SIF no
+longer ships pre-downloaded model weights. Instead, `muxi-server`
+maintains `~/.muxi/server/cache` on the host (cross-platform, per-user)
+and bind-mounts it into the SIF at `/opt/hf-cache`. SIFs run with
+`HF_HUB_OFFLINE=1` and never reach the network; all `onellm download`
+calls happen on the host under the server's control.
+
+- `Dockerfile` (lean variant): the three pre-downloaded sentence-transformers
+  models (`paraphrase-multilingual-MiniLM-L12-v2`, `all-MiniLM-L6-v2`,
+  `all-mpnet-base-v2`) have been removed. The explicit torch CPU-wheel
+  install is also gone — `onellm[cache]` is ONNX-based and nothing else
+  in the dep tree pulls torch as a transitive.
+- `Dockerfile` (HF env vars): `HF_HUB_CACHE=/opt/hf-cache` is now set
+  alongside `HF_HOME=/opt/hf-cache`. Without the explicit `HF_HUB_CACHE`
+  setting, HuggingFace resolves it as `$HF_HOME/hub` — placing models at
+  `/opt/hf-cache/hub/models--*` instead of `/opt/hf-cache/models--*` and
+  breaking 1:1 alignment with the bind-mount. Setting both to the same
+  path flattens the layout. Tokenizer/datasets subcaches still land
+  inside the bind-mount (writable).
+- `Dockerfile.pytorch` (new): layered on top of the lean image, adds
+  CPU-only PyTorch plus the `onellm[cache,local-pytorch]` extra. Selected
+  via formation `muxi_runtime: "<version>:pytorch"` when the embedding
+  model lacks ONNX weights (e.g. Nomic v2 MoE).
+- `docker-entrypoint.sh` (cache assertion): when the SIF detects SIF
+  mode (`APPTAINER_CONTAINER` / `SINGULARITY_CONTAINER` / `MUXI_SIF_MODE`),
+  it now asserts at least one `models--*` directory exists under
+  `/opt/hf-cache` before launching the formation server. An empty cache
+  fails fast with an actionable error instead of surfacing a confusing
+  "model not found" from inside HuggingFace's offline resolver.
+
+These changes coordinate with parallel work in `muxi-server` (cache
+lifecycle commands, `onellm download` orchestration, bind-mount injection
+at launch) and `runtime-runner` (the Docker image that wraps Apptainer
+for SIF execution on non-Linux hosts, which forwards the bind-mount
+chain through a two-hop mount).
+
 ## v0.20260421.0
 
 ## v0.20260421.0

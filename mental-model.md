@@ -773,6 +773,48 @@ verbatim (Matryoshka truncation for Nomic v1.5 at 64–768), and raises
 `InvalidRequestError` on empty/whitespace-only input. See the module docstring
 in `services/memory/embedding.py` for the full contract.
 
+**Slug revision pinning (`local/<repo>:<revision>`):**
+Reproducible deployments can pin the HuggingFace git revision by embedding it
+in the slug:
+```yaml
+memory:
+  embedding:
+    model: "local/nomic-ai/nomic-embed-text-v1.5:e04b7e4c5ea3e3d7e41e13d4c02fa5e29e0e3a0a"
+```
+`<revision>` is a commit SHA, tag, or branch name — forwarded verbatim through
+OneLLM's `LocalProvider` to HuggingFace's `snapshot_download`, `hf_hub_download`,
+`SentenceTransformer`, `AutoTokenizer`, and `AutoConfig`. OneLLM's LRU cache
+key is `(repo, revision)`, so a formation pinning one revision and another
+following `main` do not collide. Revision parsing is only applied to `local/*`
+slugs — cloud providers (e.g. `ollama/llama2:7b` where `:7b` is a variant,
+not a revision) pass through untouched. A trailing `:` with no revision fails
+fast with `InvalidRequestError`.
+
+**Host-managed HuggingFace cache (SIF deployment):**
+As of 2026-04, the SIF runtime ships no pre-downloaded model weights. Model
+files live on the host at `~/.muxi/server/cache` (per-user, cross-platform)
+and are bind-mounted into the SIF at `/opt/hf-cache` by `muxi-server` at
+launch. SIFs run with `HF_HUB_OFFLINE=1` and never reach the network; all
+`onellm download` calls happen on the host under the server's control.
+
+Inside the SIF, both `HF_HOME` and `HF_HUB_CACHE` are set to `/opt/hf-cache`
+(same path) so models land flat at `/opt/hf-cache/models--*` without the
+extra `/hub` subdirectory HF would otherwise introduce via `HF_HUB_CACHE =
+$HF_HOME/hub`. This keeps the bind-mount path 1:1 with the model cache path.
+
+Two Docker variants produce two SIFs from the same codebase:
+- `Dockerfile` (lean, default) — ONNX runtime via `onellm[cache]`. No torch,
+  no sentence-transformers. Selected when the embedding model ships ONNX
+  weights (Nomic v1.5, most sentence-transformers models).
+- `Dockerfile.pytorch` — adds CPU PyTorch + `onellm[cache,local-pytorch]`
+  on top of the lean image. Selected via formation `muxi_runtime:
+  "<version>:pytorch"` when the model lacks ONNX weights (e.g. Nomic v2 MoE).
+
+`docker-entrypoint.sh` asserts `/opt/hf-cache` contains at least one
+`models--*` directory before launching the formation server — an empty
+cache fails fast with an actionable error instead of surfacing a confusing
+"model not found" from inside HuggingFace's offline resolver.
+
 **FIFO Cleanup:**
 Background task runs every `fifo_interval_min` (default: 5 minutes) to clean up old namespaces if memory exceeds `max_memory_mb` (default: 1000 MB).
 
@@ -818,8 +860,10 @@ Memory = get_memory_model(1536)
 
 All slugs are passed verbatim to OneLLM. The shared helper (`services/memory/embedding.py`)
 is the single choke point — there is no intermediate alias table. Adding a new local
-model only requires referencing its full HF repo id in formation config (and optionally
-pre-downloading it in the Dockerfile for warm-start latency).
+model only requires referencing its full HF repo id in formation config; `muxi-server`
+pre-populates the host cache at `~/.muxi/server/cache` via `onellm download` before
+the SIF launches (weights are no longer baked into the Dockerfile — see "Host-managed
+HuggingFace cache" above).
 
 **Schema (per dimension):**
 ```python
