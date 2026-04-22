@@ -36,7 +36,7 @@
 from enum import Enum
 from typing import Any, Dict, Optional, Union
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, ConfigDict, Field
 
 
 class FunctionCallModel(BaseModel):
@@ -48,20 +48,19 @@ class FunctionCallModel(BaseModel):
     to represent both agent-generated function calls and their results.
     """
 
-    name: str = Field(..., description="Function/tool name")
-    parameters: Dict[str, Any] = Field(..., description="Function/tool parameters")
-    output: Optional[Any] = Field(None, description="Function/tool output (when available)")
-
-    class Config:
-        """Pydantic configuration for the model."""
-
-        json_schema_extra = {
+    model_config = ConfigDict(
+        json_schema_extra={
             "example": {
                 "name": "get_weather",
                 "parameters": {"location": "New York", "unit": "celsius", "include_forecast": True},
                 "output": {"temperature": 22, "conditions": "Partly cloudy", "humidity": 65},
             }
         }
+    )
+
+    name: str = Field(..., description="Function/tool name")
+    parameters: Dict[str, Any] = Field(..., description="Function/tool parameters")
+    output: Optional[Any] = Field(None, description="Function/tool output (when available)")
 
 
 class ErrorCodes(int, Enum):
