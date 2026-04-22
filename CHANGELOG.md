@@ -100,6 +100,33 @@ calls happen on the host under the server's control.
   CPU-only PyTorch plus the `onellm[cache,local-pytorch]` extra. Selected
   via formation `muxi_runtime: "<version>:pytorch"` when the embedding
   model lacks ONNX weights (e.g. Nomic v2 MoE).
+- `Dockerfile.cuda` (new): GPU stack on top of the lean image. Uninstalls
+  the CPU-only faiss-cpu / faissx / onnxruntime wheels inherited from
+  the base, then installs `torch`/`torchvision` (CUDA 12.x wheels from
+  the default PyPI index on linux/amd64), `onellm[local-cuda,local-pytorch]`
+  (pulls onnxruntime-gpu, faiss-gpu-cu12, sentence-transformers), and
+  `faissx-gpu` (drop-in replacement for the faissx client with a
+  GPU-backed local FAISS). Build-time assertion verifies the
+  onnxruntime wheel has `CUDAExecutionProvider` compiled in. Selected
+  via formation `muxi_runtime: "<version>:cuda"` on hosts with NVIDIA
+  GPUs. The ~4–6 GB CUDA stack exceeds GitHub's 2 GB release upload
+  ceiling; distribution is via muxi-server's CDN rather than GitHub
+  releases. Linux x86_64 + CUDA 12.x only.
+- **pip extras mirror the Dockerfile matrix.** `pyproject.toml` now
+  declares `[pytorch]` and `[cuda]` optional-dependency extras so
+  operators can reproduce any variant's Python dependency set with a
+  single pip install:
+  ```
+  pip install muxi-runtime                   # default (lean, ONNX + CPU FAISS)
+  pip install 'muxi-runtime[pytorch]'        # CPU torch + sentence-transformers
+  pip install 'muxi-runtime[cuda]'           # GPU ONNX + GPU FAISS + CUDA torch
+  ```
+  The `[cuda]` extra conflicts with the core `faiss-cpu` and `faissx`
+  deps (each owns the same top-level module name as its GPU sibling);
+  `Dockerfile.cuda` handles the uninstall-then-reinstall sequence
+  automatically, and users installing through pip directly should run
+  `pip uninstall -y faiss-cpu faissx onnxruntime` before the extras
+  install.
 - `docker-entrypoint.sh` (cache assertion): when the SIF detects SIF
   mode (`APPTAINER_CONTAINER` / `SINGULARITY_CONTAINER` / `MUXI_SIF_MODE`),
   it now asserts at least one `models--*` directory exists under

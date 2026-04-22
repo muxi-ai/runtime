@@ -166,6 +166,54 @@ dependencies = [
 kafka = [
     "kafka-python>=2.0.0",  # Kafka streaming support for observability
 ]
+
+# ---------------------------------------------------------------------------
+# Runtime variants
+# ---------------------------------------------------------------------------
+# These extras mirror the Dockerfile matrix so operators can reproduce each
+# SIF's Python dependency set with a single pip install:
+#
+#   pip install muxi-runtime                  # default (lean, ONNX + CPU FAISS)
+#   pip install 'muxi-runtime[pytorch]'       # CPU torch + sentence-transformers
+#   pip install 'muxi-runtime[cuda]'          # GPU ONNX + GPU FAISS + CUDA torch
+#
+# Core deps (see [project.dependencies]) already carry the default variant:
+# onnxruntime (via onellm[cache]), faiss-cpu, faissx. The extras layer
+# variant-specific packages on top. Dockerfile.pytorch / Dockerfile.cuda
+# should be viewed as thin wrappers that install these extras after the
+# lean base image is built.
+# ---------------------------------------------------------------------------
+
+# PyTorch variant — adds sentence-transformers (via onellm[local-pytorch]) and
+# CPU-wheel torch/torchvision. Non-conflicting with core: faiss-cpu and the
+# onnxruntime CPU wheel from core still work alongside. Users who want the
+# CPU torch wheel specifically (vs. the default PyPI CUDA wheel on Linux
+# x86_64) should pass ``--index-url https://download.pytorch.org/whl/cpu``.
+pytorch = [
+    "onellm[cache,local-pytorch]>=0.20260422.3",
+    "torch>=2.0.0",
+    "torchvision>=0.15.0",
+]
+
+# CUDA variant — GPU stack. ⚠️ This extra CONFLICTS with the core `faiss-cpu`
+# and `faissx` dependencies (both own top-level module names that clash with
+# `faiss-gpu-cu12` / `faissx-gpu`). Pip will install both sides and the
+# last-imported wheel wins at runtime. To install cleanly via pip, run:
+#
+#     pip uninstall -y faiss-cpu faissx onnxruntime
+#     pip install 'muxi-runtime[cuda]'
+#
+# Dockerfile.cuda handles this automatically (see its Step 1 uninstall block).
+# Target: Linux + x86_64 + NVIDIA + CUDA 12.x only. On macOS/Windows or hosts
+# without CUDA drivers, ``faiss-gpu-cu12`` has no installable wheel and pip
+# will fail with a clear ``No matching distribution`` error.
+cuda = [
+    "onellm[local-cuda,local-pytorch]>=0.20260422.3",
+    "faissx-gpu>=0.20260422.2",
+    "torch>=2.0.0",
+    "torchvision>=0.15.0",
+]
+
 dev = [
     "pytest>=9.0.3",
     "pytest-asyncio>=0.21.0",
