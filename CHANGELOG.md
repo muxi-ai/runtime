@@ -71,9 +71,11 @@ a variant, not a revision) and pass through untouched. A trailing `:`
 with no revision fails fast with `InvalidRequestError` rather than
 resolving silently to `main` downstream.
 
-Requires `onellm[cache]>=0.20260422.1` — the pin bump in this release
+Requires `onellm[cache]>=0.20260422.3` — the pin bump in this release
 picks up OneLLM's upstream fix that threads `revision=` through every
-LocalProvider code path. 0.20260422.0 silently dropped the kwarg.
+LocalProvider code path (0.20260422.0 silently dropped the kwarg, fixed
+in 0.20260422.1) and the `local-cuda` extra that Dockerfile.cuda
+consumes (shipped in 0.20260422.3).
 
 **Host-managed HuggingFace cache (SIF deployment).** The runtime SIF no
 longer ships pre-downloaded model weights. Instead, `muxi-server`

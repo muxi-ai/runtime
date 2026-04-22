@@ -1,0 +1,91 @@
+# MUXI Runtime - CUDA variant
+# ============================================================================
+#
+# Inherits from the lean runtime image and swaps in the GPU stack:
+#   - PyTorch with CUDA 12.x (default PyPI wheels on linux/amd64)
+#   - onellm[local-cuda,local-pytorch] -> onnxruntime-gpu, faiss-gpu-cu12,
+#     transformers, numpy, sentence-transformers
+#   - faissx-gpu replacing faissx (GPU-enabled client for MUXI's FAISSx;
+#     drop-in API, swaps the local-mode FAISS backend to the CUDA build)
+#
+# When to use this variant:
+#   - Host has NVIDIA GPU + CUDA 12.x driver
+#   - Formations benefit from GPU-accelerated ONNX inference (large
+#     embedding models, batch workloads) OR run PyTorch-only embedding
+#     models that need GPU (e.g. Nomic v2 MoE on GPU)
+#   - Vector memory is in local mode (faissx.client local backend) on
+#     large working sets; remote-mode deployments get no benefit (the
+#     GPU path is in-process) but nothing is broken either.
+#
+# Platform: linux/amd64 + CUDA 12.x only. No macOS (no CUDA there) and
+# no ARM64 in this iteration (Jetson could work in principle but we
+# aren't publishing a Jetson-targeted SIF today).
+#
+# Size caveat: the CUDA stack (torch-cuda + onnxruntime-gpu + nvidia-*-cu12
+# transitives + faiss-gpu-cu12) totals 4-6 GB. SIF builds exceed the 2 GB
+# GitHub release upload ceiling. Distribution is via muxi-server's CDN
+# (not GitHub) so this is not a release blocker.
+#
+# Selected by muxi-server when the formation declares
+#   muxi_runtime: "<version>:cuda"
+#
+# ============================================================================
+
+ARG BASE_IMAGE=ghcr.io/muxi-ai/runtime
+ARG BASE_TAG=latest
+FROM ${BASE_IMAGE}:${BASE_TAG}
+
+LABEL maintainer="Ran Aroussi <ran@aroussi.com>"
+LABEL description="MUXI Runtime - CUDA variant with GPU ONNX, GPU FAISS, and CUDA PyTorch"
+LABEL muxi.runtime.variant="cuda"
+
+# Step 1: remove CPU-only installs inherited from the lean base.
+# These conflict with their GPU equivalents:
+#   - faiss-cpu   <-> faiss-gpu-cu12     (both own the `faiss` module)
+#   - faissx      <-> faissx-gpu         (both own `faissx.client`)
+#   - onnxruntime <-> onnxruntime-gpu    (conflict at import time; last-installed wins)
+RUN pip uninstall -y faiss-cpu faissx onnxruntime \
+ && rm -rf /root/.cache
+
+# Step 2: install the full CUDA stack.
+# - torch + torchvision from default PyPI serves CUDA 12.x wheels on
+#   linux/amd64 (unlike Dockerfile.pytorch which uses the CPU index URL).
+# - onellm[local-cuda,local-pytorch] (>=0.20260422.3): local-cuda pulls
+#   onnxruntime-gpu + faiss-gpu-cu12 + transformers + numpy; local-pytorch
+#   pulls sentence-transformers so PyTorch-only models run under the same
+#   image. We deliberately skip the `cache` extra because it would
+#   re-introduce the CPU-only onnxruntime and faiss-cpu wheels; local-cuda
+#   already provides the GPU replacements for every package that `cache`
+#   would ship.
+# - faissx-gpu: drop-in replacement for the faissx client; same public
+#   API (`from faissx import client`), zero runtime code changes. Its
+#   faiss-gpu-cu12 dep is already satisfied by local-cuda.
+RUN pip install --no-cache-dir torch torchvision \
+ && pip install --no-cache-dir "onellm[local-cuda,local-pytorch]>=0.20260422.3" \
+ && pip install --no-cache-dir "faissx-gpu>=0.20260422.2" \
+ && find /usr/local -name "*.pyc" -delete \
+ && find /usr/local -name "__pycache__" -type d -exec rm -rf {} + 2>/dev/null || true \
+ && rm -rf /root/.cache /tmp/*
+
+# Step 3: sanity-check imports. The build sandbox has no GPU, so we
+# cannot verify `torch.cuda.is_available()` at build time - actual device
+# detection happens at formation start. What we CAN verify is that each
+# module imports and that the onnxruntime build has the CUDAExecutionProvider
+# compiled in (a missing provider indicates a CPU-only wheel snuck in).
+RUN python -c "\
+import torch, onnxruntime as ort, sentence_transformers; \
+from faissx import client as _faissx_client; \
+providers = ort.get_available_providers(); \
+print(f'torch {torch.__version__} | ort {ort.__version__} providers={providers} | ' \
+      f'sentence-transformers {sentence_transformers.__version__} | faissx-gpu client OK'); \
+assert 'CUDAExecutionProvider' in providers, \
+    'onnxruntime-gpu missing CUDAExecutionProvider - wrong wheel installed'"
+
+# Inherited from the lean base (no override needed):
+#   - HF_HOME=/opt/hf-cache
+#   - HF_HUB_CACHE=/opt/hf-cache
+#   - PYTHONPATH, PYTHONDONTWRITEBYTECODE, PYTHONUNBUFFERED, LC_ALL, LANG
+#   - /opt/hf-cache stub directory
+#   - docker-entrypoint.sh + ENTRYPOINT (incl. SIF-mode HF_HUB_OFFLINE + cache assertion)
+#   - EXPOSE 8000, HEALTHCHECK
+#   - Source at /app, packages at /usr/local

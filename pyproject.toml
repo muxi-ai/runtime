@@ -77,7 +77,10 @@ dependencies = [
     "pdf2image>=1.16.0",  # Convert PDF pages to images (requires Poppler)
 
     # LLM Package
-    "onellm[cache]>=0.20260422.1",
+    # 0.20260422.3 adds the `local-cuda` extra (onnxruntime-gpu + faiss-gpu-cu12)
+    # used by Dockerfile.cuda, and completes the revision= plumbing for the
+    # local/<repo>:<revision> slug we consume in embedding.py.
+    "onellm[cache]>=0.20260422.3",
     "boto3>=1.26.0",  # AWS SDK for OneLLM Bedrock provider
     "google-cloud-aiplatform>=1.25.0",  # Google Cloud for OneLLM Vertex AI provider
 
