@@ -4,8 +4,13 @@
 
 set -e  # Exit on error
 
-# In SIF (Singularity) containers the filesystem is read-only.
-# Prevent HuggingFace from writing cache files; models are pre-downloaded at build time.
+# In SIF (Singularity / Apptainer) mode the runtime is sealed off from the
+# network. Model weights live on the HOST at ~/.muxi/server/cache and are
+# bind-mounted in at /opt/hf-cache by muxi-server. The SIF itself ships no
+# weights (see Dockerfile R3) — an empty /opt/hf-cache therefore guarantees
+# a runtime failure at the first embedding call. We fail fast here with an
+# actionable error instead of surfacing a confusing "model not found" from
+# inside the application later.
 if [ -n "$APPTAINER_CONTAINER" ] || [ -n "$SINGULARITY_CONTAINER" ] || [ "$MUXI_SIF_MODE" = "1" ]; then
     export HF_HUB_OFFLINE=1
     export TRANSFORMERS_OFFLINE=1
@@ -14,6 +19,37 @@ if [ -n "$APPTAINER_CONTAINER" ] || [ -n "$SINGULARITY_CONTAINER" ] || [ "$MUXI_
     # system libraries installed via apt-get in the Docker image (e.g. libpoppler,
     # libtesseract). Append the standard system paths so they remain discoverable.
     export LD_LIBRARY_PATH="${LD_LIBRARY_PATH}:/usr/lib:/usr/lib64:/usr/local/lib:/usr/lib/x86_64-linux-gnu:/usr/lib/aarch64-linux-gnu"
+
+    # Cache assertion: at least one ``models--*`` directory must be present.
+    # Using ``find`` rather than shell globbing keeps the check portable and
+    # avoids nullglob / literal-glob pitfalls.
+    model_count=$(find /opt/hf-cache -maxdepth 1 -name 'models--*' -type d 2>/dev/null | wc -l)
+    if [ "$model_count" -eq 0 ]; then
+        echo "======================================" >&2
+        echo "ERROR: HuggingFace cache is empty" >&2
+        echo "======================================" >&2
+        echo "" >&2
+        echo "The SIF runtime runs offline (HF_HUB_OFFLINE=1) and ships no" >&2
+        echo "embedding model weights. /opt/hf-cache must be populated by the" >&2
+        echo "host at launch time via bind-mount." >&2
+        echo "" >&2
+        echo "Expected: at least one models--* directory under /opt/hf-cache." >&2
+        echo "" >&2
+        echo "If launched via muxi-server, this indicates the host cache at" >&2
+        echo "~/.muxi/server/cache is empty. Populate it with:" >&2
+        echo "" >&2
+        echo "  HF_HUB_CACHE=~/.muxi/server/cache \\" >&2
+        echo "    HF_HOME=~/.muxi/server/cache \\" >&2
+        echo "    onellm download local/nomic-ai/nomic-embed-text-v1.5" >&2
+        echo "" >&2
+        echo "For ad-hoc apptainer runs, bind-mount the host cache yourself:" >&2
+        echo "" >&2
+        echo "  apptainer run \\" >&2
+        echo "    --bind \${HOME}/.muxi/server/cache:/opt/hf-cache \\" >&2
+        echo "    <sif-path> <formation-path>" >&2
+        echo "" >&2
+        exit 1
+    fi
 fi
 
 echo "======================================"
