@@ -8,7 +8,8 @@ Models:
 - ScheduledJob: Main table for storing scheduled tasks with execution tracking
 """
 
-from typing import Any, Dict
+from datetime import datetime, timezone
+from typing import Any, Dict, Optional
 
 from sqlalchemy import Boolean, Column, DateTime, ForeignKey, Index, Integer, String, Text
 
@@ -16,6 +17,24 @@ from ...datatypes.json_type import JSONType
 from ...utils.datetime_utils import utc_now_naive
 from ...utils.fastjson import json
 from ..db import AsyncModelMixin, Base
+
+
+def _serialize_scheduler_datetime(value: Any) -> Optional[str]:
+    """Serialize scheduler datetimes as explicit UTC ISO 8601 strings.
+
+    The scheduler stores timestamps in timezone-naive database columns for
+    compatibility, but semantically they are always UTC.  Emitting a timezone
+    suffix avoids ambiguous API payloads and keeps downstream parsers consistent.
+    """
+    if value is None:
+        return None
+    if not isinstance(value, datetime):
+        return None
+    if value.tzinfo is None:
+        value = value.replace(tzinfo=timezone.utc)
+    else:
+        value = value.astimezone(timezone.utc)
+    return value.isoformat().replace("+00:00", "Z")
 
 
 class ScheduledJobAudit(Base, AsyncModelMixin):
@@ -64,7 +83,7 @@ class ScheduledJobAudit(Base, AsyncModelMixin):
             "job_id": self.job_id,
             "user_id": self.user_id,
             "action": self.action,
-            "timestamp": self.timestamp.isoformat() if self.timestamp else None,
+            "timestamp": _serialize_scheduler_datetime(self.timestamp),
             "reason": self.reason,
         }
 
@@ -151,12 +170,12 @@ class ScheduledJob(Base, AsyncModelMixin):
             # Job type and scheduling
             "is_recurring": self.is_recurring,
             "cron_expression": self.cron_expression,
-            "scheduled_for": self.scheduled_for.isoformat() if self.scheduled_for else None,
+            "scheduled_for": _serialize_scheduler_datetime(self.scheduled_for),
             "exclusion_rules": self.exclusion_rules or [],
             "status": self.status,
-            "created_at": self.created_at.isoformat() if self.created_at else None,
-            "updated_at": self.updated_at.isoformat() if self.updated_at else None,
-            "last_run_at": self.last_run_at.isoformat() if self.last_run_at else None,
+            "created_at": _serialize_scheduler_datetime(self.created_at),
+            "updated_at": _serialize_scheduler_datetime(self.updated_at),
+            "last_run_at": _serialize_scheduler_datetime(self.last_run_at),
             "last_run_status": self.last_run_status,
             "last_run_failure_message": self.last_run_failure_message,
             "total_runs": self.total_runs,

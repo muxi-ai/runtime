@@ -2,6 +2,48 @@
 
 ## [unreleased]
 
+## v0.20260422.0
+
+### Scheduler Timestamp Timezone Hardening
+
+Recurring scheduled jobs could silently stop re-firing when the runtime compared a naive `last_run_at` from SQLAlchemy against a timezone-aware `scheduled_time` from croniter. Python raises `TypeError: can't compare offset-naive and offset-aware datetimes` for that mix, and `_is_recurring_job_due` caught every exception via a bare `except` and returned `False`, so the job looked "not due" forever. The same latent inconsistency affected the scheduler API's JSON payloads, which serialized UTC datetimes without a timezone suffix and left clients to guess whether the string was local or UTC.
+
+- **`services/scheduler/service.py` — shared UTC normalization helper.** New static method `SchedulerService._parse_scheduler_timestamp(timestamp_str)` replaces two copy-pasted `datetime.fromisoformat(...).replace("Z", "+00:00")` call sites. If the parsed value has no tzinfo (the shape SQLAlchemy returns for `DateTime` columns without `timezone=True`), the helper attaches `timezone.utc` before returning; already-aware inputs pass through unchanged. Applied to:
+    - `_should_execute_job` — previously parsed `job["last_run_at"]` raw and fed the naive result into `scheduled_time > last_run`, where `scheduled_time` is always aware (coming from `croniter.get_next(datetime)` seeded with an aware "now"). That comparison raised `TypeError`, got swallowed by `_is_recurring_job_due`'s broad exception handler, and caused the recurring job to appear not-due on every tick after its first run.
+    - `_is_onetime_job_due` — same failure mode for one-time jobs whose `scheduled_for` field came back naive.
+- **`services/scheduler/models.py` — canonical UTC `Z` ISO serialization.** New module-level helper `_serialize_scheduler_datetime(value)` returns `None` for `None` / non-datetime inputs, attaches `timezone.utc` for naive datetimes, converts aware datetimes to UTC, and emits ISO 8601 with a trailing `Z` (replacing `+00:00`). Applied to every datetime field in both `to_dict` implementations: `ScheduledJobAudit.timestamp`, and `ScheduledJob.scheduled_for` / `created_at` / `updated_at` / `last_run_at`. API consumers now get `"2026-04-22T09:18:00Z"` regardless of whether the column value was persisted naive.
+- **Type hygiene.** `create_job(exclusions=None)` and `complete_job_from_webhook(result=None, error=None)` annotated with `Optional[...]` for mypy strictness; `croniter` import carries `# type: ignore[import-untyped]` because the package does not ship `py.typed`.
+
+### Architectural Notes
+
+- **Scheduler timestamps are UTC by contract, naive by storage.** The scheduler's SQL columns are plain `DateTime` (no `timezone=True`), which is the existing cross-backend convention in this codebase (SQLite's `DATETIME` is strictly naive). This patch keeps that storage shape and localizes the UTC interpretation at the two edges that matter: on the way back in via `_parse_scheduler_timestamp` (due-check comparisons need aware vs aware), and on the way out via `_serialize_scheduler_datetime` (API clients need unambiguous strings). Neither helper changes what is written to the database.
+- **Silent exception swallowing is now less dangerous.** `_is_recurring_job_due` still has its outer `try / except Exception -> return False` safety net, but the specific failure it was hiding — naive-vs-aware comparison — cannot happen on the patched path. Any future regression in timestamp handling will surface through one of the narrowly scoped helpers and can be caught at review time rather than silently disabling a recurring schedule.
+
+### Tests
+
+**New unit tests** (`tests/unit/test_scheduler_datetime_handling.py`, 3 tests):
+
+- `test_parse_scheduler_timestamp_treats_naive_as_utc` — asserts the helper attaches `timezone.utc` when given a naive ISO string, preserves timezone on already-aware strings, and is safe with the `Z` suffix.
+- `test_should_execute_job_handles_naive_last_run_at` — reproduces the original regression against a mocked job row: naive `last_run_at`, aware `scheduled_time`, pre-patch would raise `TypeError` inside `_should_execute_job`; post-patch returns the correct boolean.
+- `test_serialize_scheduler_datetime_emits_utc_z` — asserts `None`, naive, and aware inputs all round-trip through the helper to a `Z`-suffixed ISO string (or `None`), covering both branches of `to_dict`.
+
+### Validation
+
+- **Unit suite: 612 passed, 3 skipped.** Full `tests/unit/` run clean; the 3 skips are pre-existing unrelated.
+- **Targeted scheduler datetime suite: 3/3 pass.**
+- **Scheduler e2e gate (15 scripts): 15/15 pass.** One pre-existing flake in `test_12a1_basic_scheduling.py` sub-case 2 was surfaced during this release's validation: the prompt "Schedule a meeting tomorrow at 3pm" was vague enough that `gpt-4o-mini` routed through the clarification system ("please provide details of the meeting…") instead of the scheduler. Reproduced on clean HEAD without this patch, so unrelated to the timezone fix. Tightened the test prompt to "Schedule a project review tomorrow at 3pm" — concrete enough to commit to a scheduled job while still exercising the one-off tomorrow-at-3pm path — matching the style of the two passing sub-cases in the same file.
+- **Random e2e sample (5 tests): 5/5 pass** — `19_api/test_19g1_memory_sessions.py`, `4_mcp/test_4b3_mcp_failure_handling.py`, `4_mcp/test_4d3_explicit.py`, `4_mcp/test_4d4_multiuser_isolation_simple.py`, `9_async/test_9c2_timeout_handling.py`.
+- **`black --check`, `ruff`, `mypy` — clean on touched files.**
+
+### Infrastructure
+
+- **E2E secrets fixture repair.** Six `runtime2/e2e/tests/**/.key` files had been auto-generated as stray regular files by `SecretsManager._load_or_create_master_key` during earlier test runs, producing random Fernet keys that could not decrypt the shared `e2e/assets/secrets.enc`. This blocked every formation load across the affected areas (`12_scheduling`, `19_api`, `1_foundation`, `2_memory`, `3_multimodal`, `21_skills`) with `cryptography.fernet.InvalidToken`. Replaced each with a symlink to `e2e/assets/.key` matching the relative-path style already used by the 36 working siblings. All 44 `key`/`secrets.enc` pairs in `runtime2/e2e` now decrypt. `.key` is in `.gitignore` so these symlinks are not tracked in git — fresh clones that do not rehydrate them via `../runtime` will need to recreate them (or the next test run will again auto-generate bad regular files).
+
+### No breaking changes
+
+- `to_dict` payload shapes gain a `Z` suffix on datetime fields where there was previously none (API strings now unambiguously denote UTC). Clients that were manually appending `Z` or parsing via `fromisoformat(...).replace("Z", "+00:00")` remain compatible.
+- No database schema change. Existing rows are interpreted as UTC without migration.
+
 ## v0.20260421.0
 
 ## v0.20260421.0

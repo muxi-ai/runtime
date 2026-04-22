@@ -24,12 +24,12 @@ import asyncio
 import signal
 import time
 import traceback
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from typing import Any, Dict, List, Optional
 
 import multitasking
 import pytz
-from croniter import croniter
+from croniter import croniter  # type: ignore[import-untyped]
 
 from ...datatypes.observability import InitEventFormatter
 from ...utils.datetime_utils import utc_now
@@ -455,7 +455,7 @@ class SchedulerService:
 
         try:
             # Parse the scheduled datetime (stored in UTC)
-            scheduled_for_utc = datetime.fromisoformat(scheduled_for_str.replace("Z", "+00:00"))
+            scheduled_for_utc = self._parse_scheduler_timestamp(scheduled_for_str)
 
             # Convert current time to UTC for comparison
             current_time_utc = current_time.astimezone(pytz.UTC)
@@ -490,10 +490,25 @@ class SchedulerService:
         if not job.get("last_run_at"):
             return True  # Never run before
 
-        last_run = datetime.fromisoformat(job["last_run_at"].replace("Z", "+00:00"))
+        last_run = self._parse_scheduler_timestamp(job["last_run_at"])
 
         # Don't run if we already executed this scheduled time
         return scheduled_time > last_run
+
+    @staticmethod
+    def _parse_scheduler_timestamp(timestamp_str: str) -> datetime:
+        """Parse scheduler timestamps as UTC when the stored value is naive.
+
+        Scheduler timestamps are currently persisted in ``timestamp without time zone``
+        columns, so values fetched back from SQLAlchemy may serialize without a timezone
+        suffix even though they semantically represent UTC.  Treating naive values as
+        UTC keeps recurring and one-time due checks stable while preserving support for
+        already-aware ISO 8601 inputs.
+        """
+        parsed = datetime.fromisoformat(timestamp_str.replace("Z", "+00:00"))
+        if parsed.tzinfo is None:
+            return parsed.replace(tzinfo=timezone.utc)
+        return parsed
 
     async def _check_exclusion_rules(self, job: Dict[str, Any], current_time: datetime) -> bool:
         """
@@ -873,7 +888,7 @@ class SchedulerService:
         title: str,
         original_prompt: str,
         schedule: str,
-        exclusions: List[str] = None,
+        exclusions: Optional[List[str]] = None,
     ) -> str:
         """
         Create a new scheduled job.
@@ -959,7 +974,11 @@ class SchedulerService:
         return job_id
 
     async def complete_job_from_webhook(
-        self, session_id: str, success: bool, result: str = None, error: str = None
+        self,
+        session_id: str,
+        success: bool,
+        result: Optional[str] = None,
+        error: Optional[str] = None,
     ) -> bool:
         """
         Called by webhook handler to complete a job execution.

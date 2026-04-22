@@ -39,7 +39,7 @@ async def test_basic_scheduling():
             },
             {
                 "name": "One-off Tomorrow Schedule",
-                "message": "Schedule a meeting tomorrow at 3pm",
+                "message": "Schedule a project review tomorrow at 3pm",
                 "expected": "scheduled successfully",
                 "type": "one-off"
             },
