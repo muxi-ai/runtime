@@ -4,8 +4,6 @@
 
 ## v0.20260422.0
 
-## v0.20260422.0
-
 ### Documented-Sentinel Recognition In Parameter Inference (Excel A1/B2 Regression From v0.20260421.0)
 
 Cell-specific Excel reads (A1, B2, ...) against the authenticated user's default OneDrive silently collapsed after `9f99e022` ("fail closed before invalid MCP execution"). The underlying bug is general, not OneDrive-specific: any planner output that passes a templated placeholder (`"{{...}}"`) to a parameter whose schema description already documents a valid sentinel value (e.g. `"use 'me' for the current user's drive"`, `"use 'root' for the default site"`, `"use 'primary' for the default calendar"`) was rejected by `_infer_tool_parameters`. The inference system prompt said "Do NOT invent placeholder/default values", which the LLM correctly read as a blanket prohibition on short sentinel strings — even when the sentinel was documented in the tool's own schema. Inference returned `{}`, the required-param repair path fired, LLM replan produced a same-signature plan, `_build_auto_discovery_repair_plan` inserted an unrelated discovery step without patching the failing parameter, and the one-shot `replan_attempted` guard blocked the second pass. The chain collapsed silently on every tool whose schema documented a sentinel.
