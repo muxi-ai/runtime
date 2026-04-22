@@ -1,0 +1,46 @@
+schema: "1.0.0"
+id: "memory-test-local-revision-pinned"
+description: "Formation for testing local/<repo>:<revision> slug notation — pins Nomic v1.5 to 'main'"
+
+runtime:
+  built_in_mcps: false
+
+overlord:
+  clarification:
+    enabled: false
+
+llm:
+  settings:
+    temperature: 0.7
+    max_tokens: 500
+  api_keys:
+    openai: "${{ secrets.OPENAI_API_KEY }}"
+  models:
+    - text: "openai/gpt-4o-mini"
+    # Revision pinning via the ':<revision>' suffix. OneLLM's LocalProvider
+    # forwards 'revision="main"' to huggingface_hub, which resolves the
+    # branch ref to a concrete commit SHA at fetch time. The slug round-
+    # trips through the memory layer verbatim, so the full ':main' is
+    # observable on the running memory instance.
+    - embedding: "local/nomic-ai/nomic-embed-text-v1.5:main"
+
+memory:
+  buffer:
+    size: 10
+    vector_search: false
+
+  persistent:
+    connection_string: "${{ secrets.POSTGRES_URI }}"
+    embedding_model: "local/nomic-ai/nomic-embed-text-v1.5:main"
+
+logging:
+  system:
+    level: "debug"
+    destination: "stdout"
+
+agents:
+  - id: "test-agent"
+    name: "Test Agent"
+    description: "Agent for testing revision-pinned local embeddings"
+    model: "openai/gpt-4o-mini"
+    system_message: "You are a helpful assistant. Remember what users tell you."
