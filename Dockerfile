@@ -23,13 +23,15 @@ RUN pip install --no-cache-dir uv
 # Copy dependency files
 COPY requirements.txt pyproject.toml setup.py ./
 
-# Install PyTorch CPU-only version first (avoids 4GB+ CUDA dependencies)
-# This must be done before other requirements to prevent CUDA version from being pulled
-RUN uv pip install --prefix=/install --no-cache \
-    torch torchvision torchaudio --index-url https://download.pytorch.org/whl/cpu
-
 # Install all dependencies to a temporary location
-# This includes compiling binary extensions
+# This includes compiling binary extensions.
+#
+# Note: the lean variant uses OneLLM's ``cache`` extra (ONNX-based), which
+# does NOT require PyTorch or sentence-transformers. The earlier explicit
+# ``pip install torch --index-url .../whl/cpu`` step has been removed
+# because nothing in the dep tree pulls torch as a transitive. The
+# ``pytorch`` variant (see Dockerfile.pytorch) layers torch + the
+# ``local-pytorch`` extra on top of this base.
 RUN uv pip install --prefix=/install --no-cache -r requirements.txt
 
 # Copy source and install MUXI
@@ -104,13 +106,25 @@ RUN find /usr/local -name "*.pyc" -delete \
     && find /usr/local -name "tests" -type d -not -path "*/numpy/_core/tests" -exec rm -rf {} + 2>/dev/null || true \
     && rm -rf /root/.cache /tmp/*
 
-# Pre-download the sentence-transformers model used by OneLLM cache.
-# Without this, the first formation startup downloads ~118MB from HuggingFace,
-# adding ~80s to cold-start time inside SIF containers.
-# Stored in /opt/hf-cache (not /root/.cache) because Singularity mounts the
-# host home directory over /root, hiding anything baked into the image there.
-ENV HF_HOME=/opt/hf-cache
-RUN python -c "from sentence_transformers import SentenceTransformer; SentenceTransformer('paraphrase-multilingual-MiniLM-L12-v2'); SentenceTransformer('all-MiniLM-L6-v2'); SentenceTransformer('all-mpnet-base-v2')"
+# HuggingFace cache paths: both HF_HOME and HF_HUB_CACHE point at the same
+# directory so models land flat at /opt/hf-cache/models--* (without the
+# /hub subdirectory HF would otherwise introduce via HF_HUB_CACHE=$HF_HOME/hub).
+# This flat layout matches the bind-mount target — muxi-server bind-mounts
+# ~/.muxi/server/cache (host) to /opt/hf-cache (container) at launch, and
+# the cache it populates on the host must align 1:1 with where HF reads.
+#
+# Model weights are NOT baked into this image. muxi-server populates the
+# host cache via `onellm download` and bind-mounts it in at runtime. The
+# previous pre-download of sentence-transformers models was removed because
+# (1) the lean variant has no sentence-transformers, and (2) baked models
+# contradict the host-managed cache contract.
+#
+# /opt/hf-cache is created as an empty stub so the bind-mount always has a
+# valid target. In the managed-container path the entrypoint asserts the
+# mount is non-empty before launching the runtime (see docker-entrypoint.sh).
+ENV HF_HOME=/opt/hf-cache \
+    HF_HUB_CACHE=/opt/hf-cache
+RUN mkdir -p /opt/hf-cache
 
 # Create necessary directories
 RUN mkdir -p /data /logs /formations ~/.muxi
