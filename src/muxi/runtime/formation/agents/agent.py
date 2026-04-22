@@ -8755,6 +8755,11 @@ Analyze the user's request and provide appropriate parameter values.
 Respond with ONLY a valid JSON object containing the parameter values.
 Example: {{"param1": "value1", "param2": 123}}
 
+Documented sentinel values are valid concrete values, not guesses. When a parameter's own Description text explicitly documents a sentinel (for example, "use 'me' for the current user", "pass 'root' for the default site", "use 'primary' for the default calendar"), emit that sentinel when BOTH of the following hold:
+  (1) the user's request did not identify a specific resource for this parameter, AND
+  (2) no prior step output supplies the real identifier.
+If the user named a specific resource, or a prior step already produced the real ID, do NOT apply the sentinel.
+
 If you cannot determine a value from context:
 - Do NOT invent placeholder/default values
 - Do NOT use empty strings, 0, false, or empty objects/lists to satisfy required parameters

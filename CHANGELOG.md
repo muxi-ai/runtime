@@ -140,7 +140,62 @@ at launch) and `runtime-runner` (the Docker image that wraps Apptainer
 for SIF execution on non-Linux hosts, which forwards the bind-mount
 chain through a two-hop mount).
 
-## v0.20260421.0
+## v0.20260422.0
+
+### Documented-Sentinel Recognition In Parameter Inference (Excel A1/B2 Regression From v0.20260421.0)
+
+Cell-specific Excel reads (A1, B2, ...) against the authenticated user's default OneDrive silently collapsed after `9f99e022` ("fail closed before invalid MCP execution"). The underlying bug is general, not OneDrive-specific: any planner output that passes a templated placeholder (`"{{...}}"`) to a parameter whose schema description already documents a valid sentinel value (e.g. `"use 'me' for the current user's drive"`, `"use 'root' for the default site"`, `"use 'primary' for the default calendar"`) was rejected by `_infer_tool_parameters`. The inference system prompt said "Do NOT invent placeholder/default values", which the LLM correctly read as a blanket prohibition on short sentinel strings — even when the sentinel was documented in the tool's own schema. Inference returned `{}`, the required-param repair path fired, LLM replan produced a same-signature plan, `_build_auto_discovery_repair_plan` inserted an unrelated discovery step without patching the failing parameter, and the one-shot `replan_attempted` guard blocked the second pass. The chain collapsed silently on every tool whose schema documented a sentinel.
+
+- **`src/muxi/runtime/formation/agents/agent.py` — extend the `_infer_tool_parameters` system prompt with a schema-driven "Documented sentinel values" rule.** The new block teaches the LLM that sentinels explicitly documented in a parameter's own Description text are valid concrete values, not guesses, and may be emitted when (1) the user's request did not identify a specific resource for that parameter AND (2) no prior step output supplies the real identifier. The rule is deliberately generic: no vendor name, no MCP name, and no parameter name is hardcoded in the prompt — the LLM reads the sentinel from the schema description the caller already passed in. The anti-guessing guardrails (`Do NOT invent placeholder/default values`, `Omit unresolved parameters`, `leave it unresolved rather than guessing`) remain verbatim for every other case. This upstream fix resolves the sentinel during the normal inference pass, so the required-param repair path never fires, `_build_auto_discovery_repair_plan` never needs to patch the failing step, and the `replan_attempted` guard stays unused — the collapse condition is removed at its source rather than patched inside a downstream repair builder.
+
+### Scheduler Timestamp Timezone Hardening
+
+Recurring scheduled jobs could silently stop re-firing when the runtime compared a naive `last_run_at` from SQLAlchemy against a timezone-aware `scheduled_time` from croniter. Python raises `TypeError: can't compare offset-naive and offset-aware datetimes` for that mix, and `_is_recurring_job_due` caught every exception via a bare `except` and returned `False`, so the job looked "not due" forever. The same latent inconsistency affected the scheduler API's JSON payloads, which serialized UTC datetimes without a timezone suffix and left clients to guess whether the string was local or UTC.
+
+- **`services/scheduler/service.py` — shared UTC normalization helper.** New static method `SchedulerService._parse_scheduler_timestamp(timestamp_str)` replaces two copy-pasted `datetime.fromisoformat(...).replace("Z", "+00:00")` call sites. If the parsed value has no tzinfo (the shape SQLAlchemy returns for `DateTime` columns without `timezone=True`), the helper attaches `timezone.utc` before returning; already-aware inputs pass through unchanged. Applied to:
+    - `_should_execute_job` — previously parsed `job["last_run_at"]` raw and fed the naive result into `scheduled_time > last_run`, where `scheduled_time` is always aware (coming from `croniter.get_next(datetime)` seeded with an aware "now"). That comparison raised `TypeError`, got swallowed by `_is_recurring_job_due`'s broad exception handler, and caused the recurring job to appear not-due on every tick after its first run.
+    - `_is_onetime_job_due` — same failure mode for one-time jobs whose `scheduled_for` field came back naive.
+- **`services/scheduler/models.py` — canonical UTC `Z` ISO serialization.** New module-level helper `_serialize_scheduler_datetime(value)` returns `None` for `None` / non-datetime inputs, attaches `timezone.utc` for naive datetimes, converts aware datetimes to UTC, and emits ISO 8601 with a trailing `Z` (replacing `+00:00`). Applied to every datetime field in both `to_dict` implementations: `ScheduledJobAudit.timestamp`, and `ScheduledJob.scheduled_for` / `created_at` / `updated_at` / `last_run_at`. API consumers now get `"2026-04-22T09:18:00Z"` regardless of whether the column value was persisted naive.
+- **Type hygiene.** `create_job(exclusions=None)` and `complete_job_from_webhook(result=None, error=None)` annotated with `Optional[...]` for mypy strictness; `croniter` import carries `# type: ignore[import-untyped]` because the package does not ship `py.typed`.
+
+### Architectural Notes
+
+- **Schema descriptions are contract, not documentation.** The parameter-inference prompt now treats the `description` field on every tool-parameter schema as an authoritative source for legal concrete values. Any MCP (Microsoft Graph, Google Workspace, Slack, custom tool servers, …) whose schema documents a sentinel now flows through inference without a runtime-code change. This is the opposite of the originally reported patch (which proposed hardcoding `driveId: "me"` into the auto-discovery repair builder): sentinel knowledge belongs to the schema author, not to the runtime.
+- **Safety for specific-resource scenarios.** The sentinel rule is guarded by two conditions the LLM can read from the prompt: the user did not name a specific resource AND no prior step output supplies the real identifier. Requests like "Read A1 from Book.xlsx in the Marketing team's drive" therefore continue to produce a discovery-first chain — the LLM sees "Marketing team's drive" in the user request and withholds the default. Prior-step IDs likewise win because completed-results context is part of the prompt context.
+- **No behavioural change to `_validate_tool_parameters` or repair paths.** Concrete sentinel strings (for example `"me"`, `"root"`, `"primary"`) are ordinary string values; none match `_is_placeholder_like_value`, none match `_is_sentinel_placeholder_value` (the auto-injected / from-server tokens), and all pass every post-9f99e022 fail-closed check unchanged. `_build_auto_discovery_repair_plan` is untouched.
+- **Scheduler timestamps are UTC by contract, naive by storage.** The scheduler's SQL columns are plain `DateTime` (no `timezone=True`), which is the existing cross-backend convention in this codebase (SQLite's `DATETIME` is strictly naive). This patch keeps that storage shape and localizes the UTC interpretation at the two edges that matter: on the way back in via `_parse_scheduler_timestamp` (due-check comparisons need aware vs aware), and on the way out via `_serialize_scheduler_datetime` (API clients need unambiguous strings). Neither helper changes what is written to the database.
+- **Silent exception swallowing is now less dangerous.** `_is_recurring_job_due` still has its outer `try / except Exception -> return False` safety net, but the specific failure it was hiding — naive-vs-aware comparison — cannot happen on the patched path. Any future regression in timestamp handling will surface through one of the narrowly scoped helpers and can be caught at review time rather than silently disabling a recurring schedule.
+
+### Tests
+
+**New unit tests** (5 total across two files):
+
+- `tests/unit/test_agent_planning_helpers.py`:
+    - `test_infer_tool_parameters_prompt_documents_schema_sentinel_rule` — runs `_infer_tool_parameters` against a tool schema whose parameter description documents a sentinel and a mocked LLM that returns the sentinel; asserts the return value is not dropped by the fail-closed validation, captures the system prompt from the mocked model, asserts the new generic "Documented sentinel values" rule is present, and asserts the prompt stays vendor-agnostic (no hardcoded `driveId` / `userId` / `Microsoft` / `Graph` tokens).
+    - `test_infer_tool_parameters_sentinel_values_survive_post_closed_checks` — pins that a short sentinel string (`"me"` as a concrete example) is neither placeholder-like nor a LLM-invented sentinel, and that `_get_unresolved_required_parameters` treats a step whose parameter resolves to the sentinel as fully resolved. Guards against future over-tightening of the placeholder scanners.
+- `tests/unit/test_scheduler_datetime_handling.py`:
+    - `test_parse_scheduler_timestamp_treats_naive_as_utc` — the helper attaches `timezone.utc` when given a naive ISO string, preserves timezone on already-aware strings, and is safe with the `Z` suffix.
+    - `test_should_execute_job_handles_naive_last_run_at` — reproduces the recurring-job regression against a mocked job row: naive `last_run_at`, aware `scheduled_time`, pre-patch would raise `TypeError` inside `_should_execute_job`; post-patch returns the correct boolean.
+    - `test_serialize_scheduler_datetime_emits_utc_z` — `None`, naive, and aware inputs all round-trip through the helper to a `Z`-suffixed ISO string (or `None`), covering both branches of `to_dict`.
+
+### Validation
+
+- **Unit suite: 614 passed, 3 skipped.** Full `tests/unit/` run clean; the 3 skips are pre-existing unrelated.
+- **Targeted suites: scheduler datetime 3/3 pass; inference sentinel 2/2 pass.**
+- **Scheduler e2e gate (15 scripts): 15/15 pass.** One pre-existing flake in `test_12a1_basic_scheduling.py` sub-case 2 was surfaced during this release's validation: the prompt "Schedule a meeting tomorrow at 3pm" was vague enough that `gpt-4o-mini` routed through the clarification system ("please provide details of the meeting…") instead of the scheduler. Reproduced on clean HEAD without this patch, so unrelated. Tightened the test prompt to "Schedule a project review tomorrow at 3pm" — concrete enough to commit to a scheduled job while still exercising the one-off tomorrow-at-3pm path — matching the style of the two passing sub-cases in the same file.
+- **Random e2e sample (5 tests): 5/5 pass** — `19_api/test_19g1_memory_sessions.py`, `4_mcp/test_4b3_mcp_failure_handling.py`, `4_mcp/test_4d3_explicit.py`, `4_mcp/test_4d4_multiuser_isolation_simple.py`, `9_async/test_9c2_timeout_handling.py`.
+- **`black --check`, `ruff`, `mypy` — clean on touched files.**
+- **E2E gate not rerun for the inference-sentinel prompt extension** — the change is a prompt-only addition with dedicated unit coverage; no structural code path was altered, so the scheduler and random e2e samples remain representative.
+
+### Infrastructure
+
+- **E2E secrets fixture repair.** Six `runtime2/e2e/tests/**/.key` files had been auto-generated as stray regular files by `SecretsManager._load_or_create_master_key` during earlier test runs, producing random Fernet keys that could not decrypt the shared `e2e/assets/secrets.enc`. This blocked every formation load across the affected areas (`12_scheduling`, `19_api`, `1_foundation`, `2_memory`, `3_multimodal`, `21_skills`) with `cryptography.fernet.InvalidToken`. Replaced each with a symlink to `e2e/assets/.key` matching the relative-path style already used by the 36 working siblings. All 44 `key`/`secrets.enc` pairs in `runtime2/e2e` now decrypt. `.key` is in `.gitignore` so these symlinks are not tracked in git — fresh clones that do not rehydrate them via `../runtime` will need to recreate them (or the next test run will again auto-generate bad regular files).
+
+### No breaking changes
+
+- Inference prompt gains a schema-driven sentinel rule; existing inference calls whose parameter schemas do not document a sentinel produce the same output they did before. The anti-guessing guardrails are preserved verbatim.
+- `to_dict` payload shapes gain a `Z` suffix on datetime fields where there was previously none (API strings now unambiguously denote UTC). Clients that were manually appending `Z` or parsing via `fromisoformat(...).replace("Z", "+00:00")` remain compatible.
+- No database schema change. Existing rows are interpreted as UTC without migration.
 
 ## v0.20260421.0
 

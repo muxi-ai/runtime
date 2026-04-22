@@ -4085,3 +4085,117 @@ def test_extract_field_values_from_text_section_separator_not_confused_with_pros
     # trailing period from "Narrative sentence without a label.").
     matches = Agent._extract_field_values_from_text(text, "body")
     assert all("Narrative sentence without a label" not in m for m in matches)
+
+
+# ---------------------------------------------------------------------------
+# v0.20260422.0 regression — schema-documented sentinel values must be
+# recognized as concrete values, not guesses.  Before this fix, tool-chains
+# whose planner emitted a placeholder for a parameter whose description
+# already documented a sentinel (e.g. "use 'me' for the current user's drive")
+# collapsed silently: inference refused to return the sentinel, required-param
+# repair fired, auto-discovery inserted an unrelated step without patching the
+# failing param, and the replan_attempted guard blocked the second pass.
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.asyncio
+async def test_infer_tool_parameters_prompt_documents_schema_sentinel_rule():
+    """The inference system prompt must teach the LLM that sentinel values
+    documented in a parameter's own Description text (e.g. "use 'me' for
+    the current user") are valid concrete values, not guesses.  The guard
+    must be generic (no hardcoded vendor / MCP / parameter names) AND keep
+    the anti-guessing rules intact for every other case.
+
+    Concrete regression case: a planner-emitted `driveId: {{DRIVE_ID}}`
+    whose schema description documents the `"me"` sentinel must be
+    resolvable by inference without an auto-discovery repair pass.
+    """
+    agent = object.__new__(Agent)
+    agent.agent_id = "test-agent"
+    agent.model = SimpleNamespace(chat=AsyncMock(return_value='{"driveId": "me"}'))
+
+    with patch("muxi.runtime.formation.agents.agent.observability.observe"):
+        result = await agent._infer_tool_parameters(
+            tool_name="ms365-mcp__get-drive-root-item",
+            required_params=["driveId"],
+            param_properties={
+                "driveId": {
+                    "type": "string",
+                    "description": "The drive id (use 'me' for the current user's drive)",
+                },
+            },
+            full_schema={
+                "type": "object",
+                "properties": {
+                    "driveId": {
+                        "type": "string",
+                        "description": "The drive id (use 'me' for the current user's drive)",
+                    },
+                },
+                "required": ["driveId"],
+            },
+            action_description="Get the root item of the user's OneDrive",
+            user_request="What's in cell A1 of Book.xlsx?",
+        )
+
+    assert result == {"driveId": "me"}
+
+    # The system prompt captured by the mock must carry the generic sentinel
+    # rule.  Inference calls model.chat with keyword args.
+    call = agent.model.chat.call_args
+    messages = call.kwargs.get("messages") or (call.args[0] if call.args else None)
+    assert messages is not None
+    system_prompt = messages[0]["content"]
+
+    # Generic framing — the guidance is schema-driven, not vendor-specific.
+    assert "Documented sentinel values" in system_prompt
+    assert "parameter's own Description" in system_prompt
+
+    # Scope the vendor-specificity check to ONLY the sentinel-rule block we
+    # added (the caller-provided tool schema legitimately contains parameter
+    # names and vendor-specific descriptions that we DO want echoed back to
+    # the LLM).  The sentinel block starts at "Documented sentinel values"
+    # and ends at the next blank line before the "If you cannot determine"
+    # section.
+    sentinel_block_start = system_prompt.index("Documented sentinel values")
+    sentinel_block_end = system_prompt.index("If you cannot determine", sentinel_block_start)
+    sentinel_block = system_prompt[sentinel_block_start:sentinel_block_end]
+
+    for vendor_token in ("driveId", "userId", "Microsoft", "Graph"):
+        assert vendor_token not in sentinel_block, (
+            f"sentinel-rule block must stay generic — found vendor-specific "
+            f"token '{vendor_token}' in the added instruction text"
+        )
+    # The anti-guessing guardrail is preserved verbatim for unrelated IDs.
+    assert "Do NOT invent placeholder/default values" in system_prompt
+    assert "leave it unresolved rather than guessing" in system_prompt
+
+
+@pytest.mark.asyncio
+async def test_infer_tool_parameters_sentinel_values_survive_post_closed_checks():
+    """A short concrete sentinel string like `"me"` must survive every
+    post-9f99e022 fail-closed guard so inference can return it as a real
+    value.  This pins the contract: `_is_placeholder_like_value`,
+    `_is_sentinel_placeholder_value`, and `_get_unresolved_required_parameters`
+    all agree the sentinel is resolved."""
+    agent = object.__new__(Agent)
+
+    # A real, concrete string value — not a placeholder token.
+    assert Agent._is_placeholder_like_value("me") is False
+    # Not one of the LLM-invented "please inject this" sentinels
+    # (auto-injected / from_server / etc.), so _merge_parameter_candidates
+    # does not discard it.
+    assert Agent._is_sentinel_placeholder_value("me") is False
+
+    # And the unresolved-required check agrees: a step whose parameter is
+    # `"me"` is treated as fully resolved, so no repair path fires.
+    unresolved = agent._get_unresolved_required_parameters(
+        parameters={"driveId": "me"},
+        required_params=["driveId"],
+        param_properties={"driveId": {"type": "string"}},
+        full_schema={
+            "required": ["driveId"],
+            "properties": {"driveId": {"type": "string"}},
+        },
+    )
+    assert unresolved == []
