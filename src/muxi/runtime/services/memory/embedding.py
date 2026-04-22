@@ -62,6 +62,20 @@ OneLLM returns an ``EmbeddingResponse`` **dataclass**
 (``resp["data"][0]["embedding"]``) — dataclasses do not implement
 ``__getitem__`` by default and the regression would surface only at
 runtime against the real OneLLM.
+
+Model slug revision pinning
+---------------------------
+``local/*`` slugs support a ``:<revision>`` suffix for pinning the
+HuggingFace git revision: ``local/nomic-ai/nomic-embed-text-v1.5:abc123``.
+``<revision>`` may be a commit SHA, tag, or branch name; it is forwarded
+verbatim to OneLLM's ``LocalProvider`` which passes it through to
+``huggingface_hub`` (``snapshot_download``, ``hf_hub_download``,
+``SentenceTransformer``, ``AutoTokenizer``, ``AutoConfig``). A slug
+without ``:<revision>`` resolves to ``main`` (back-compat).
+
+Cloud provider slugs are NOT parsed for revisions because model names
+legitimately contain ``:`` in some providers (e.g. ``ollama/llama2:7b``).
+They pass through to OneLLM untouched.
 """
 
 from __future__ import annotations
@@ -75,6 +89,54 @@ DEFAULT_EMBEDDING_MODEL = "local/nomic-ai/nomic-embed-text-v1.5"
 Chosen as the default local embedding model for MUXI. Multilingual
 deployments can opt into ``local/nomic-ai/nomic-embed-text-v2-moe``.
 """
+
+
+def _parse_model_slug(slug: str) -> tuple[str, str | None]:
+    """Split ``local/<repo>:<revision>`` notation into ``(model, revision)``.
+
+    Only ``local/*`` slugs are parsed — cloud providers may legitimately
+    use ``:`` in model names (e.g. ``ollama/llama2:7b``) and pass through
+    unchanged. A ``local/*`` slug without ``:`` also passes through with
+    ``revision=None`` (resolves to ``main`` downstream).
+
+    Parameters
+    ----------
+    slug:
+        Provider-prefixed model slug, optionally with ``:<revision>``
+        suffix for ``local/*`` slugs.
+
+    Returns
+    -------
+    tuple[str, str | None]
+        ``(model, revision)``. ``revision`` is ``None`` when no suffix
+        was present; otherwise it is the non-empty string after the
+        first ``:``.
+
+    Raises
+    ------
+    InvalidRequestError
+        If ``slug`` is not a non-empty string, or if a ``local/*`` slug
+        has a trailing ``:`` with no revision (e.g. ``"local/foo:"``).
+        Trailing ``:`` is rejected up front so operators get a clear
+        error instead of HuggingFace resolving the revision to ``main``
+        silently.
+    """
+    if not isinstance(slug, str) or not slug:
+        raise InvalidRequestError(
+            f"Embedding model slug must be a non-empty string, got {slug!r}"
+        )
+    if not slug.startswith("local/"):
+        return slug, None
+    if ":" not in slug:
+        return slug, None
+    model, _, revision = slug.partition(":")
+    if not revision:
+        raise InvalidRequestError(
+            f"Embedding model slug {slug!r} has a trailing ':' with no "
+            f"revision. Use 'local/<repo>:<revision>' (revision required) "
+            f"or 'local/<repo>' (defaults to 'main')."
+        )
+    return model, revision
 
 
 def _normalize_input(text_or_texts: str | list[str]) -> list[str]:
@@ -152,15 +214,26 @@ async def embed(
     """
     items = _normalize_input(input)
 
-    kwargs: dict[str, object] = {"model": model, "input": items}
+    # Support ``local/<repo>:<revision>`` slug notation transparently.
+    # Consumers continue to pass a single slug; the parser extracts the
+    # revision for the ``revision=`` kwarg that OneLLM's LocalProvider
+    # forwards to HuggingFace.
+    parsed_model, revision = _parse_model_slug(model)
+
+    kwargs: dict[str, object] = {"model": parsed_model, "input": items}
     if dimensions is not None:
         kwargs["dimensions"] = dimensions
     if pooling is not None:
         kwargs["pooling"] = pooling
     # Task-kwarg policy: only forward for local/* slugs. Cloud providers
     # do not understand the Nomic-style ``task`` convention.
-    if task is not None and model.startswith("local/"):
+    if task is not None and parsed_model.startswith("local/"):
         kwargs["task"] = task
+    # Forward a pinned revision to OneLLM only when the slug embedded one.
+    # ``None`` means "follow main" — omit the kwarg rather than sending
+    # ``revision=None`` so OneLLM's default path is taken.
+    if revision is not None:
+        kwargs["revision"] = revision
 
     response = await onellm.Embedding.acreate(**kwargs)
 
@@ -175,6 +248,15 @@ async def probe_dimension(model: str) -> int:
     Issues a single placeholder embedding call and reports
     ``len(resp.data[0].embedding)``. Consumers should memoize the result
     per-instance; this helper is stateless and probes on every call.
+
+    ``local/<repo>:<revision>`` slug notation is honored — the probe
+    fetches the exact revision the consumer will use for real embeds, so
+    dimension mismatches across revisions surface here rather than
+    silently when the first real embed runs.
     """
-    response = await onellm.Embedding.acreate(model=model, input=["probe"])
+    parsed_model, revision = _parse_model_slug(model)
+    kwargs: dict[str, object] = {"model": parsed_model, "input": ["probe"]}
+    if revision is not None:
+        kwargs["revision"] = revision
+    response = await onellm.Embedding.acreate(**kwargs)
     return len(response.data[0].embedding)

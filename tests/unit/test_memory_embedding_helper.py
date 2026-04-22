@@ -27,6 +27,7 @@ import pytest
 
 from muxi.runtime.services.memory.embedding import (
     DEFAULT_EMBEDDING_MODEL,
+    _parse_model_slug,
     embed,
     probe_dimension,
 )
@@ -212,3 +213,184 @@ async def test_probe_dimension_returns_length_of_first_embedding():
 
     assert dim == 768
     assert mock_acreate.await_count == 1
+
+
+# ---------------------------------------------------------------------------
+# Slug revision parsing: ``local/<repo>:<revision>`` notation
+# ---------------------------------------------------------------------------
+
+
+class TestParseModelSlug:
+    """Direct tests on the ``_parse_model_slug`` helper.
+
+    The parser is the single source of truth for translating slug notation
+    into an ``(model, revision)`` pair. Keeping tests direct (not via
+    ``embed()``) makes regressions easy to localize.
+    """
+
+    def test_local_slug_without_revision_returns_none(self):
+        assert _parse_model_slug("local/nomic-ai/nomic-embed-text-v1.5") == (
+            "local/nomic-ai/nomic-embed-text-v1.5",
+            None,
+        )
+
+    def test_local_slug_with_commit_sha(self):
+        assert _parse_model_slug("local/nomic-ai/nomic-embed-text-v1.5:abc123def") == (
+            "local/nomic-ai/nomic-embed-text-v1.5",
+            "abc123def",
+        )
+
+    def test_local_slug_with_tag(self):
+        assert _parse_model_slug("local/sentence-transformers/all-MiniLM-L6-v2:v1.0") == (
+            "local/sentence-transformers/all-MiniLM-L6-v2",
+            "v1.0",
+        )
+
+    def test_local_slug_with_branch_main_explicit(self):
+        """Explicit ``:main`` is valid — same as omitting the suffix, but
+        the explicit form may be preferred by config systems that always
+        serialize revisions for auditability."""
+        assert _parse_model_slug("local/foo/bar:main") == ("local/foo/bar", "main")
+
+    def test_local_slug_longer_repo_path(self):
+        """Repos with deeper paths still split on the first ``:`` only."""
+        assert _parse_model_slug("local/foo/bar/baz/qux:rev") == (
+            "local/foo/bar/baz/qux",
+            "rev",
+        )
+
+    def test_cloud_slug_with_colon_passes_through(self):
+        """``ollama/llama2:7b``-style cloud slugs use ``:`` for model
+        variants, not revisions. The parser must not strip them."""
+        assert _parse_model_slug("ollama/llama2:7b") == ("ollama/llama2:7b", None)
+
+    def test_openai_slug_passes_through(self):
+        assert _parse_model_slug("openai/text-embedding-3-small") == (
+            "openai/text-embedding-3-small",
+            None,
+        )
+
+    def test_local_slug_with_trailing_colon_raises(self):
+        """Trailing ``:`` with no revision is rejected up front with a
+        clear error rather than resolving silently to ``main`` downstream."""
+        from onellm.errors import InvalidRequestError
+
+        with pytest.raises(InvalidRequestError, match="trailing ':'"):
+            _parse_model_slug("local/nomic-ai/nomic-embed-text-v1.5:")
+
+    def test_empty_slug_raises(self):
+        from onellm.errors import InvalidRequestError
+
+        with pytest.raises(InvalidRequestError):
+            _parse_model_slug("")
+
+    def test_non_string_slug_raises(self):
+        from onellm.errors import InvalidRequestError
+
+        with pytest.raises(InvalidRequestError):
+            _parse_model_slug(None)  # type: ignore[arg-type]
+
+
+# ---------------------------------------------------------------------------
+# Revision forwarding through ``embed()`` and ``probe_dimension()``
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.asyncio
+async def test_embed_forwards_revision_from_slug():
+    """A ``local/<repo>:<revision>`` slug reaches OneLLM as ``model``
+    (without the suffix) + ``revision=`` kwarg. This is what makes
+    reproducible-deployment pinning actually reach HuggingFace."""
+    mock_acreate = AsyncMock(return_value=_mock_response([[0.1] * 768]))
+
+    with patch("onellm.Embedding.acreate", mock_acreate):
+        await embed("local/nomic-ai/nomic-embed-text-v1.5:abc123", "x")
+
+    _, kwargs = mock_acreate.call_args
+    assert kwargs["model"] == "local/nomic-ai/nomic-embed-text-v1.5"
+    assert kwargs["revision"] == "abc123"
+
+
+@pytest.mark.asyncio
+async def test_embed_omits_revision_when_slug_has_none():
+    """A plain ``local/<repo>`` slug (no ``:``) must NOT send
+    ``revision=None`` — OneLLM's default-path ("follow main") is taken
+    when the kwarg is absent entirely."""
+    mock_acreate = AsyncMock(return_value=_mock_response([[0.1] * 768]))
+
+    with patch("onellm.Embedding.acreate", mock_acreate):
+        await embed("local/nomic-ai/nomic-embed-text-v1.5", "x")
+
+    _, kwargs = mock_acreate.call_args
+    assert kwargs["model"] == "local/nomic-ai/nomic-embed-text-v1.5"
+    assert "revision" not in kwargs
+
+
+@pytest.mark.asyncio
+async def test_embed_ollama_style_colon_not_parsed_as_revision():
+    """``ollama/llama2:7b`` is a model variant, not a revision. The
+    slug must reach OneLLM intact; no ``revision=`` kwarg must appear."""
+    mock_acreate = AsyncMock(return_value=_mock_response([[0.1]]))
+
+    with patch("onellm.Embedding.acreate", mock_acreate):
+        await embed("ollama/llama2:7b", "x")
+
+    _, kwargs = mock_acreate.call_args
+    assert kwargs["model"] == "ollama/llama2:7b"
+    assert "revision" not in kwargs
+
+
+@pytest.mark.asyncio
+async def test_embed_forwards_revision_alongside_task_and_dimensions():
+    """Revision forwarding must not interfere with other kwargs on the
+    local/* path (task, dimensions, pooling). This exercises all of them
+    together to catch any kwarg-ordering bugs."""
+    mock_acreate = AsyncMock(return_value=_mock_response([[0.1] * 256]))
+
+    with patch("onellm.Embedding.acreate", mock_acreate):
+        await embed(
+            "local/nomic-ai/nomic-embed-text-v1.5:sha_abc",
+            "x",
+            task="search_document",
+            dimensions=256,
+            pooling="mean",
+        )
+
+    _, kwargs = mock_acreate.call_args
+    assert kwargs["model"] == "local/nomic-ai/nomic-embed-text-v1.5"
+    assert kwargs["revision"] == "sha_abc"
+    assert kwargs["task"] == "search_document"
+    assert kwargs["dimensions"] == 256
+    assert kwargs["pooling"] == "mean"
+
+
+@pytest.mark.asyncio
+async def test_probe_dimension_forwards_revision():
+    """Dimension probe must fetch the SAME revision the subsequent real
+    embeds will use — otherwise a revision with a different dim (e.g.
+    v1 vs v2 of the same repo) would probe one dim and embed another."""
+    mock_acreate = AsyncMock(return_value=_mock_response([[0.0] * 768]))
+
+    with patch("onellm.Embedding.acreate", mock_acreate):
+        dim = await probe_dimension("local/nomic-ai/nomic-embed-text-v1.5:pinned_sha")
+
+    _, kwargs = mock_acreate.call_args
+    assert kwargs["model"] == "local/nomic-ai/nomic-embed-text-v1.5"
+    assert kwargs["revision"] == "pinned_sha"
+    assert dim == 768
+
+
+@pytest.mark.asyncio
+async def test_embed_trailing_colon_slug_raises_before_onellm_call():
+    """A trailing-``:`` slug must fail fast in the helper — no OneLLM
+    call, no HuggingFace round-trip, no silent fallback to ``main``."""
+    from onellm.errors import InvalidRequestError
+
+    mock_acreate = AsyncMock(return_value=_mock_response([[0.0]]))
+
+    with patch("onellm.Embedding.acreate", mock_acreate):
+        with pytest.raises(InvalidRequestError, match="trailing ':'"):
+            await embed("local/nomic-ai/nomic-embed-text-v1.5:", "x")
+
+    # Critical: OneLLM must not have been called.
+    mock_acreate.assert_not_called()
