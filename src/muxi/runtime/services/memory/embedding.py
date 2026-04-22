@@ -122,9 +122,7 @@ def _parse_model_slug(slug: str) -> tuple[str, str | None]:
         silently.
     """
     if not isinstance(slug, str) or not slug:
-        raise InvalidRequestError(
-            f"Embedding model slug must be a non-empty string, got {slug!r}"
-        )
+        raise InvalidRequestError(f"Embedding model slug must be a non-empty string, got {slug!r}")
     if not slug.startswith("local/"):
         return slug, None
     if ":" not in slug:
