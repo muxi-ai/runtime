@@ -4085,3 +4085,93 @@ def test_extract_field_values_from_text_section_separator_not_confused_with_pros
     # trailing period from "Narrative sentence without a label.").
     matches = Agent._extract_field_values_from_text(text, "body")
     assert all("Narrative sentence without a label" not in m for m in matches)
+
+
+# ---------------------------------------------------------------------------
+# v0.20260422.1 regression — driveId repair-plan collapse after 9f99e022
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.asyncio
+async def test_infer_tool_parameters_prompt_documents_graph_me_sentinel():
+    """Regression for driveId repair-plan collapse: the inference prompt
+    must teach the LLM that `"me"` is a documented Microsoft Graph sentinel
+    (delegated single-user flows) rather than a guessed default. Without
+    this, inference returns {} for driveId on cell-specific Excel requests,
+    the required-param repair path fires, auto-discovery inserts contacts
+    without patching driveId, and the whole Excel chain collapses silently.
+    """
+    agent = object.__new__(Agent)
+    agent.agent_id = "ms365-assistant"
+    agent.model = SimpleNamespace(chat=AsyncMock(return_value='{"driveId": "me"}'))
+
+    with patch("muxi.runtime.formation.agents.agent.observability.observe"):
+        result = await agent._infer_tool_parameters(
+            tool_name="ms365-mcp__get-drive-root-item",
+            required_params=["driveId"],
+            param_properties={
+                "driveId": {
+                    "type": "string",
+                    "description": "The drive id (use 'me' for the current user's drive)",
+                },
+            },
+            full_schema={
+                "type": "object",
+                "properties": {
+                    "driveId": {
+                        "type": "string",
+                        "description": "The drive id (use 'me' for the current user's drive)",
+                    },
+                },
+                "required": ["driveId"],
+            },
+            action_description="Get the root item of the user's OneDrive",
+            user_request="What's in cell A1 of Book.xlsx?",
+        )
+
+    assert result == {"driveId": "me"}
+
+    # The prompt captured by the mock must contain the Graph sentinel guidance
+    # so the LLM can distinguish documented sentinels from guesses.  Inference
+    # calls model.chat with keyword args (messages=..., temperature=...).
+    call = agent.model.chat.call_args
+    messages = call.kwargs.get("messages") or (call.args[0] if call.args else None)
+    assert messages is not None
+    system_prompt = messages[0]["content"]
+    assert "Well-known sentinel values" in system_prompt
+    assert "Microsoft Graph" in system_prompt
+    assert '`"me"`' in system_prompt
+    assert "driveId" in system_prompt
+    assert "userId" in system_prompt
+    # The prompt must retain the anti-guessing guardrail so unrelated IDs
+    # are still left unresolved.
+    assert "Do NOT invent placeholder/default values" in system_prompt
+
+
+@pytest.mark.asyncio
+async def test_infer_tool_parameters_accepts_me_sentinel_as_resolved_value():
+    """`"me"` is a concrete string, so even under the post-9f99e022
+    fail-closed validation it must pass both the blank-value guard and
+    the placeholder-like-value guard. This test pins that contract:
+    inference returning `{"driveId": "me"}` flows through unchanged and
+    is not dropped as a sentinel placeholder."""
+    agent = object.__new__(Agent)
+
+    # `"me"` is a real value, not a placeholder.
+    assert Agent._is_placeholder_like_value("me") is False
+    # `"me"` is not one of the LLM-invented sentinel strings either
+    # (auto-injected / from_server / etc.), so merge does not discard it.
+    assert Agent._is_sentinel_placeholder_value("me") is False
+
+    # And the unresolved-required check must agree: a step whose driveId
+    # is "me" is considered fully resolved.
+    unresolved = agent._get_unresolved_required_parameters(
+        parameters={"driveId": "me"},
+        required_params=["driveId"],
+        param_properties={"driveId": {"type": "string"}},
+        full_schema={
+            "required": ["driveId"],
+            "properties": {"driveId": {"type": "string"}},
+        },
+    )
+    assert unresolved == []

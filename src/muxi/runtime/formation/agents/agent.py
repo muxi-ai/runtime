@@ -8755,6 +8755,9 @@ Analyze the user's request and provide appropriate parameter values.
 Respond with ONLY a valid JSON object containing the parameter values.
 Example: {{"param1": "value1", "param2": 123}}
 
+Well-known sentinel values (use when applicable; these are documented concrete values, not guesses):
+- Microsoft Graph / Microsoft 365 APIs: use `"me"` for `driveId`, `userId`, or similar "current user" identifiers in delegated single-user flows when the user's request did not name a specific drive / user / resource AND no prior step output supplies the identifier. Example: reading a cell from the authenticated user's default OneDrive -> `{{"driveId": "me"}}`. Do NOT use `"me"` when the user named a specific shared drive, mailbox, or site, or when a prior step already produced the real ID.
+
 If you cannot determine a value from context:
 - Do NOT invent placeholder/default values
 - Do NOT use empty strings, 0, false, or empty objects/lists to satisfy required parameters

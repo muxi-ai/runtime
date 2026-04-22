@@ -2,6 +2,37 @@
 
 ## [unreleased]
 
+## v0.20260422.1
+
+### DriveId Repair-Plan Collapse Fix (Excel A1/B2 Regression From v0.20260421.0)
+
+Reading a specific Excel cell (A1, B2, ...) against the authenticated user's default OneDrive regressed in `9f99e022` ("fail closed before invalid MCP execution"). The planner emits `get-drive-root-item` with `driveId: "{{DRIVE_ID}}"` for cell-specific queries; no prior step produces `DRIVE_ID` and `_infer_tool_parameters` was explicitly prompted to "not invent placeholder/default values", so it refused to return `"me"` — even though `"me"` is a documented Microsoft Graph sentinel for delegated single-user flows, not a guess. With inference returning `{}`, the required-param repair path fired, LLM replan produced a same-signature plan, `_build_auto_discovery_repair_plan` inserted an unrelated `list-outlook-contacts` discovery step without patching `driveId`, and the second execution pass was blocked by the one-shot `replan_attempted` guard — collapsing the whole Excel chain silently.
+
+- **`src/muxi/runtime/formation/agents/agent.py` — extend the `_infer_tool_parameters` system prompt with a "Well-known sentinel values" block.** The new block teaches the LLM to treat `"me"` as a valid concrete value for `driveId` / `userId` / similar "current user" identifiers under Microsoft Graph / Microsoft 365 delegated single-user flows, provided the user's request did not name a specific drive / user / resource and no prior step supplies the real ID. The anti-guessing guardrails (`Do NOT invent placeholder/default values`, `Omit unresolved parameters`, `leave it unresolved rather than guessing`) remain verbatim for every other case. This upstream fix resolves `driveId: "me"` during the normal inference pass, so the required-param repair path never fires, `_build_auto_discovery_repair_plan` never inserts a contacts step, and the `replan_attempted` guard stays unused — the collapse condition is removed at its source rather than patched inside a downstream repair builder.
+
+### Architectural Notes
+
+- **Why this fix is narrower than the originally reported patch.** The field-reported proposal patched `_build_auto_discovery_repair_plan` to hardcode `driveId: "me"` into the failing step's parameters whenever auto-discovery fired. That works but couples a domain-agnostic repair builder to Graph-specific strings and only covers `driveId`. Moving the sentinel knowledge into the parameter-inference prompt (a) generalizes to `userId`, `siteId`, and future Graph sentinels without new code paths, (b) fixes the problem upstream so neither repair builder nor `replan_attempted` interaction matters, and (c) keeps the runtime's structural code domain-agnostic. `_build_auto_discovery_repair_plan` is unchanged.
+- **Safety for specific-drive scenarios.** The sentinel guidance is phrased as a conditional ("use `"me"` only when the user did not name a specific drive / user / resource AND no prior step output supplies the identifier"). Requests like "Read A1 from Book.xlsx in the Marketing team's drive" keep producing a discovery-first chain because the LLM sees "Marketing team's drive" in the user request and withholds the `"me"` default. Prior-step driveIds likewise win because the LLM sees them in the completed-results context.
+- **No behavioural change to `_validate_tool_parameters` or repair paths.** `"me"` is a regular string value; it is not placeholder-like, not one of the LLM-invented sentinel strings (`auto-injected`, `from_server`, etc.), and passes every post-9f99e022 fail-closed check unchanged. Regression tests pin both properties.
+
+### Tests
+
+**New unit tests** (`tests/unit/test_agent_planning_helpers.py`, 2 tests):
+
+- `test_infer_tool_parameters_prompt_documents_graph_me_sentinel` — runs `_infer_tool_parameters` against a `ms365-mcp__get-drive-root-item` schema with a mocked LLM that returns `{"driveId": "me"}`; asserts the return value, and captures the system prompt from the mocked model to assert the new "Well-known sentinel values" block is present alongside the preserved anti-guessing guardrail.
+- `test_infer_tool_parameters_accepts_me_sentinel_as_resolved_value` — pins that `"me"` is neither placeholder-like nor a LLM-invented sentinel, and that `_get_unresolved_required_parameters` treats a `driveId: "me"` parameter as fully resolved. This guards against future over-tightening of the placeholder scanners.
+
+### Validation
+
+- **Unit suite: 614 passed, 3 skipped** (was 612 in v0.20260422.0 — the 2 new tests).
+- **`black --check`, `ruff`, `mypy` — clean on touched files.**
+- **E2E gate not rerun for this patch** — the change is a prompt extension with corresponding unit coverage; the scheduler e2e gate (15/15) from v0.20260422.0 is unaffected because no scheduler or repair-path code changed.
+
+### No breaking changes
+
+- Prompt addition only. Existing inference calls for non-Graph tools produce the same output they did before (the new block only applies when the LLM recognizes a Graph/M365 sentinel context). The anti-guessing guardrail is preserved verbatim.
+
 ## v0.20260422.0
 
 ### Scheduler Timestamp Timezone Hardening
