@@ -1,0 +1,82 @@
+{
+  "milestone": "consumer-migration",
+  "round": 1,
+  "status": "fail",
+  "validatorsRun": {
+    "test": {
+      "passed": false,
+      "command": "pytest tests/unit/ -v",
+      "exitCode": 1,
+      "summary": "641 passed, 1 failed, 3 skipped",
+      "failures": [
+        {
+          "nodeId": "tests/unit/test_memory_speedup.py::TestPersistentMemoryManagerSpeedups::test_reuses_query_embedding_when_backend_needs_collection_fallback",
+          "error": "AssertionError: assert 0 == 1 (backend.embedding_model.embed.await_count)",
+          "rootCause": "Test asserts the pre-migration provider-object contract (backend.embedding_model.embed.await_count). The m1-f8 migration moved persistent_manager.py off that contract onto the shared embed() helper, so the test mock is now never invoked.",
+          "isPreScheduled": true,
+          "scheduledFixFeature": "m2-f20-quality-gate",
+          "scheduledFixExcerpt": "Rewrite tests/unit/test_memory_speedup.py::TestPersistentMemoryManagerSpeedups::test_reuses_query_embedding_when_backend_needs_collection_fallback ... to publish the slug via the public `embedding_model_name` attribute and patch `muxi.runtime.formation.memory.persistent_manager.embed` to assert the shared helper is called — mirroring the pattern already used in tests/unit/test_persistent_manager_embedding.py. This test failure blocks VAL-QUALITY-001."
+        }
+      ]
+    },
+    "typecheck": {
+      "passed": false,
+      "command": "mypy src/muxi/runtime/",
+      "exitCode": 2,
+      "summary": "26 errors in 21 files (errors prevented further checking)",
+      "rootCause": "All 26 errors are pre-existing baseline issues: 25 are 'Library stubs not installed' for third-party deps (PyYAML, cachetools, croniter, aiofiles, requests, python-dateutil) and 1 is 'Source file found twice under different module names: runtime.datatypes.exceptions and src.muxi.runtime.datatypes.exceptions' — a mypy module-discovery configuration issue. None are milestone-1 regressions; they predate this mission and are environment/config problems, not code problems.",
+      "isPreExistingBaseline": true,
+      "notTrackedByValidationContract": true
+    },
+    "lint": {
+      "passed": true,
+      "command": "ruff check src/",
+      "exitCode": 0,
+      "summary": "All checks passed!"
+    },
+    "format": {
+      "passed": true,
+      "command": "black --check src/",
+      "exitCode": 0,
+      "summary": "300 files would be left unchanged"
+    },
+    "importOrder": {
+      "passed": true,
+      "command": "isort --check src/",
+      "exitCode": 0,
+      "summary": "No diffs reported"
+    }
+  },
+  "reviewsSummary": {
+    "total": 0,
+    "passed": 0,
+    "failed": 0,
+    "failedFeatures": [],
+    "note": "Per scrutiny-validator skill: 'If validators still fail... Do not proceed to feature review.' Feature reviews were SKIPPED. The orchestrator may re-run scrutiny after m2-f20 fixes the test (or the orchestrator may choose to accept the known pre-scheduled failure and trigger the scrutiny reviewers directly via a follow-up run)."
+  },
+  "blockingIssues": [
+    {
+      "featureId": "m2-f20-quality-gate (pre-scheduled)",
+      "severity": "blocking",
+      "description": "tests/unit/test_memory_speedup.py::TestPersistentMemoryManagerSpeedups::test_reuses_query_embedding_when_backend_needs_collection_fallback fails. Pre-scheduled fix: rewrite test to patch the shared helper via muxi.runtime.formation.memory.persistent_manager.embed (mirror pattern in tests/unit/test_persistent_manager_embedding.py). Orchestrator already owns this fix in m2-f20.",
+      "appliedFix": "None — would duplicate m2-f20 scope. Left for that feature."
+    }
+  ],
+  "knownBaselineIssues": [
+    {
+      "category": "typecheck",
+      "description": "26 mypy errors: 25 missing-type-stubs errors for third-party libs (PyYAML, cachetools, croniter, aiofiles, requests, python-dateutil) plus 1 'Source file found twice' error for runtime.datatypes.exceptions. Pre-existing baseline. Not covered by any VAL-QUALITY-* assertion (the contract uses ruff/black/isort/pytest)."
+    }
+  ],
+  "appliedUpdates": [],
+  "suggestedGuidanceUpdates": [
+    {
+      "target": "AGENTS.md",
+      "suggestion": "Note in the runtime-repo AGENTS.md (or mission AGENTS.md) that the mypy typecheck has a pre-existing baseline (missing type stubs + namespace duplication) and is not currently in the VAL-QUALITY-* contract. Either (a) add a pyproject.toml dev-dep install step for the missing stubs, or (b) explicitly list mypy as a non-blocking informational check. This prevents future scrutiny runs from flagging it as a regression.",
+      "evidence": "mypy src/muxi/runtime/ produced 26 errors on a clean milestone-1-complete tree; none relate to the embedding migration.",
+      "isSystemic": false
+    }
+  ],
+  "rejectedObservations": [],
+  "previousRound": null
+}
