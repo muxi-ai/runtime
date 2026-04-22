@@ -1,7 +1,7 @@
 # MUXI Runtime Architecture Analysis
 
 **Generated:** 2026-03-10
-**Last Updated:** 2026-04-21 (OneLLM 0.20260421.0 compatibility; planner fail-closed contract)
+**Last Updated:** 2026-04-22 (CUDA runtime variant; OneLLM `0.20260422.3` pin with `local-cuda` extra + revision-pinning plumbing)
 **Codebase:** `/Users/ran/Projects/muxi/code/runtime`  
 **Scope:** 290 Python files, ~119K lines
 
@@ -802,13 +802,42 @@ Inside the SIF, both `HF_HOME` and `HF_HUB_CACHE` are set to `/opt/hf-cache`
 extra `/hub` subdirectory HF would otherwise introduce via `HF_HUB_CACHE =
 $HF_HOME/hub`. This keeps the bind-mount path 1:1 with the model cache path.
 
-Two Docker variants produce two SIFs from the same codebase:
-- `Dockerfile` (lean, default) — ONNX runtime via `onellm[cache]`. No torch,
-  no sentence-transformers. Selected when the embedding model ships ONNX
-  weights (Nomic v1.5, most sentence-transformers models).
-- `Dockerfile.pytorch` — adds CPU PyTorch + `onellm[cache,local-pytorch]`
-  on top of the lean image. Selected via formation `muxi_runtime:
-  "<version>:pytorch"` when the model lacks ONNX weights (e.g. Nomic v2 MoE).
+Three Docker variants produce three SIFs from the same codebase (names match
+OneLLM's extras vocabulary — `cache` / `local-pytorch` / `local-cuda`):
+
+- `Dockerfile` (default, lean, ~500 MB) — ONNX Runtime via `onellm[cache]`.
+  No torch, no sentence-transformers. Selected when the embedding model
+  ships ONNX weights (Nomic v1.5, most sentence-transformers models). Any
+  host. `faissx` for the MUXI memory client's local backend (CPU FAISS).
+  Slug form: `muxi_runtime: "<version>"` (no suffix).
+- `Dockerfile.pytorch` (~1.3 GB) — adds CPU PyTorch + sentence-transformers
+  via `onellm[cache,local-pytorch]` on top of the lean image. Explicit
+  `--index-url https://download.pytorch.org/whl/cpu` keeps torch CPU-only
+  (default PyPI would pull the ~3 GB CUDA torch on linux/amd64). Selected
+  when the model lacks ONNX weights (e.g. Nomic v2 MoE). Any host. Slug:
+  `muxi_runtime: "<version>:pytorch"`.
+- `Dockerfile.cuda` (~4–6 GB) — swaps the CPU stack for the GPU stack:
+  `onellm[local-cuda,local-pytorch]` (onnxruntime-gpu + faiss-gpu-cu12 +
+  transformers + numpy + sentence-transformers), `faissx-gpu` as a drop-in
+  replacement for `faissx` (same `faissx.client` API, GPU-backed FAISS in
+  local mode), and CUDA 12.x `torch`/`torchvision` wheels from PyPI's
+  default index. A build-time assertion checks that the onnxruntime wheel
+  actually has `CUDAExecutionProvider` compiled in. Selected when the host
+  has an NVIDIA GPU and the workload benefits from GPU embedding or
+  in-process GPU vector ops. Slug: `muxi_runtime: "<version>:cuda"`.
+  Linux amd64 + NVIDIA + CUDA 12.x only. The CUDA stack exceeds GitHub's
+  2 GB release upload ceiling; distribution is via muxi-server's CDN
+  instead (the server no longer downloads SIFs from GitHub directly).
+
+Dockerfile.cuda inherits from the lean base and uninstalls the CPU-only
+faiss-cpu / faissx / onnxruntime wheels before installing their GPU
+equivalents — faiss-cpu and faiss-gpu-cu12 both own the top-level `faiss`
+module, so the uninstall step is required to avoid last-installed-wins
+import shadowing. `onellm[local-cuda]` provides `faiss-gpu-cu12` as a
+transitive; `faissx-gpu` (the MUXI client) then takes its slot cleanly.
+Runtime source code is unchanged — the swap is entirely at the packaged-
+dependency layer, and `services/memory/working.py` still imports
+`from faissx import client as faiss` regardless of which wheel is on disk.
 
 `docker-entrypoint.sh` asserts `/opt/hf-cache` contains at least one
 `models--*` directory before launching the formation server — an empty
