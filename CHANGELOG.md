@@ -2,38 +2,13 @@
 
 ## [unreleased]
 
-## v0.20260422.1
-
-### DriveId Repair-Plan Collapse Fix (Excel A1/B2 Regression From v0.20260421.0)
-
-Reading a specific Excel cell (A1, B2, ...) against the authenticated user's default OneDrive regressed in `9f99e022` ("fail closed before invalid MCP execution"). The planner emits `get-drive-root-item` with `driveId: "{{DRIVE_ID}}"` for cell-specific queries; no prior step produces `DRIVE_ID` and `_infer_tool_parameters` was explicitly prompted to "not invent placeholder/default values", so it refused to return `"me"` — even though `"me"` is a documented Microsoft Graph sentinel for delegated single-user flows, not a guess. With inference returning `{}`, the required-param repair path fired, LLM replan produced a same-signature plan, `_build_auto_discovery_repair_plan` inserted an unrelated `list-outlook-contacts` discovery step without patching `driveId`, and the second execution pass was blocked by the one-shot `replan_attempted` guard — collapsing the whole Excel chain silently.
-
-- **`src/muxi/runtime/formation/agents/agent.py` — extend the `_infer_tool_parameters` system prompt with a "Well-known sentinel values" block.** The new block teaches the LLM to treat `"me"` as a valid concrete value for `driveId` / `userId` / similar "current user" identifiers under Microsoft Graph / Microsoft 365 delegated single-user flows, provided the user's request did not name a specific drive / user / resource and no prior step supplies the real ID. The anti-guessing guardrails (`Do NOT invent placeholder/default values`, `Omit unresolved parameters`, `leave it unresolved rather than guessing`) remain verbatim for every other case. This upstream fix resolves `driveId: "me"` during the normal inference pass, so the required-param repair path never fires, `_build_auto_discovery_repair_plan` never inserts a contacts step, and the `replan_attempted` guard stays unused — the collapse condition is removed at its source rather than patched inside a downstream repair builder.
-
-### Architectural Notes
-
-- **Why this fix is narrower than the originally reported patch.** The field-reported proposal patched `_build_auto_discovery_repair_plan` to hardcode `driveId: "me"` into the failing step's parameters whenever auto-discovery fired. That works but couples a domain-agnostic repair builder to Graph-specific strings and only covers `driveId`. Moving the sentinel knowledge into the parameter-inference prompt (a) generalizes to `userId`, `siteId`, and future Graph sentinels without new code paths, (b) fixes the problem upstream so neither repair builder nor `replan_attempted` interaction matters, and (c) keeps the runtime's structural code domain-agnostic. `_build_auto_discovery_repair_plan` is unchanged.
-- **Safety for specific-drive scenarios.** The sentinel guidance is phrased as a conditional ("use `"me"` only when the user did not name a specific drive / user / resource AND no prior step output supplies the identifier"). Requests like "Read A1 from Book.xlsx in the Marketing team's drive" keep producing a discovery-first chain because the LLM sees "Marketing team's drive" in the user request and withholds the `"me"` default. Prior-step driveIds likewise win because the LLM sees them in the completed-results context.
-- **No behavioural change to `_validate_tool_parameters` or repair paths.** `"me"` is a regular string value; it is not placeholder-like, not one of the LLM-invented sentinel strings (`auto-injected`, `from_server`, etc.), and passes every post-9f99e022 fail-closed check unchanged. Regression tests pin both properties.
-
-### Tests
-
-**New unit tests** (`tests/unit/test_agent_planning_helpers.py`, 2 tests):
-
-- `test_infer_tool_parameters_prompt_documents_graph_me_sentinel` — runs `_infer_tool_parameters` against a `ms365-mcp__get-drive-root-item` schema with a mocked LLM that returns `{"driveId": "me"}`; asserts the return value, and captures the system prompt from the mocked model to assert the new "Well-known sentinel values" block is present alongside the preserved anti-guessing guardrail.
-- `test_infer_tool_parameters_accepts_me_sentinel_as_resolved_value` — pins that `"me"` is neither placeholder-like nor a LLM-invented sentinel, and that `_get_unresolved_required_parameters` treats a `driveId: "me"` parameter as fully resolved. This guards against future over-tightening of the placeholder scanners.
-
-### Validation
-
-- **Unit suite: 614 passed, 3 skipped** (was 612 in v0.20260422.0 — the 2 new tests).
-- **`black --check`, `ruff`, `mypy` — clean on touched files.**
-- **E2E gate not rerun for this patch** — the change is a prompt extension with corresponding unit coverage; the scheduler e2e gate (15/15) from v0.20260422.0 is unaffected because no scheduler or repair-path code changed.
-
-### No breaking changes
-
-- Prompt addition only. Existing inference calls for non-Graph tools produce the same output they did before (the new block only applies when the LLM recognizes a Graph/M365 sentinel context). The anti-guessing guardrail is preserved verbatim.
-
 ## v0.20260422.0
+
+### Documented-Sentinel Recognition In Parameter Inference (Excel A1/B2 Regression From v0.20260421.0)
+
+Cell-specific Excel reads (A1, B2, ...) against the authenticated user's default OneDrive silently collapsed after `9f99e022` ("fail closed before invalid MCP execution"). The underlying bug is general, not OneDrive-specific: any planner output that passes a templated placeholder (`"{{...}}"`) to a parameter whose schema description already documents a valid sentinel value (e.g. `"use 'me' for the current user's drive"`, `"use 'root' for the default site"`, `"use 'primary' for the default calendar"`) was rejected by `_infer_tool_parameters`. The inference system prompt said "Do NOT invent placeholder/default values", which the LLM correctly read as a blanket prohibition on short sentinel strings — even when the sentinel was documented in the tool's own schema. Inference returned `{}`, the required-param repair path fired, LLM replan produced a same-signature plan, `_build_auto_discovery_repair_plan` inserted an unrelated discovery step without patching the failing parameter, and the one-shot `replan_attempted` guard blocked the second pass. The chain collapsed silently on every tool whose schema documented a sentinel.
+
+- **`src/muxi/runtime/formation/agents/agent.py` — extend the `_infer_tool_parameters` system prompt with a schema-driven "Documented sentinel values" rule.** The new block teaches the LLM that sentinels explicitly documented in a parameter's own Description text are valid concrete values, not guesses, and may be emitted when (1) the user's request did not identify a specific resource for that parameter AND (2) no prior step output supplies the real identifier. The rule is deliberately generic: no vendor name, no MCP name, and no parameter name is hardcoded in the prompt — the LLM reads the sentinel from the schema description the caller already passed in. The anti-guessing guardrails (`Do NOT invent placeholder/default values`, `Omit unresolved parameters`, `leave it unresolved rather than guessing`) remain verbatim for every other case. This upstream fix resolves the sentinel during the normal inference pass, so the required-param repair path never fires, `_build_auto_discovery_repair_plan` never needs to patch the failing step, and the `replan_attempted` guard stays unused — the collapse condition is removed at its source rather than patched inside a downstream repair builder.
 
 ### Scheduler Timestamp Timezone Hardening
 
@@ -47,24 +22,32 @@ Recurring scheduled jobs could silently stop re-firing when the runtime compared
 
 ### Architectural Notes
 
+- **Schema descriptions are contract, not documentation.** The parameter-inference prompt now treats the `description` field on every tool-parameter schema as an authoritative source for legal concrete values. Any MCP (Microsoft Graph, Google Workspace, Slack, custom tool servers, …) whose schema documents a sentinel now flows through inference without a runtime-code change. This is the opposite of the originally reported patch (which proposed hardcoding `driveId: "me"` into the auto-discovery repair builder): sentinel knowledge belongs to the schema author, not to the runtime.
+- **Safety for specific-resource scenarios.** The sentinel rule is guarded by two conditions the LLM can read from the prompt: the user did not name a specific resource AND no prior step output supplies the real identifier. Requests like "Read A1 from Book.xlsx in the Marketing team's drive" therefore continue to produce a discovery-first chain — the LLM sees "Marketing team's drive" in the user request and withholds the default. Prior-step IDs likewise win because completed-results context is part of the prompt context.
+- **No behavioural change to `_validate_tool_parameters` or repair paths.** Concrete sentinel strings (for example `"me"`, `"root"`, `"primary"`) are ordinary string values; none match `_is_placeholder_like_value`, none match `_is_sentinel_placeholder_value` (the auto-injected / from-server tokens), and all pass every post-9f99e022 fail-closed check unchanged. `_build_auto_discovery_repair_plan` is untouched.
 - **Scheduler timestamps are UTC by contract, naive by storage.** The scheduler's SQL columns are plain `DateTime` (no `timezone=True`), which is the existing cross-backend convention in this codebase (SQLite's `DATETIME` is strictly naive). This patch keeps that storage shape and localizes the UTC interpretation at the two edges that matter: on the way back in via `_parse_scheduler_timestamp` (due-check comparisons need aware vs aware), and on the way out via `_serialize_scheduler_datetime` (API clients need unambiguous strings). Neither helper changes what is written to the database.
 - **Silent exception swallowing is now less dangerous.** `_is_recurring_job_due` still has its outer `try / except Exception -> return False` safety net, but the specific failure it was hiding — naive-vs-aware comparison — cannot happen on the patched path. Any future regression in timestamp handling will surface through one of the narrowly scoped helpers and can be caught at review time rather than silently disabling a recurring schedule.
 
 ### Tests
 
-**New unit tests** (`tests/unit/test_scheduler_datetime_handling.py`, 3 tests):
+**New unit tests** (5 total across two files):
 
-- `test_parse_scheduler_timestamp_treats_naive_as_utc` — asserts the helper attaches `timezone.utc` when given a naive ISO string, preserves timezone on already-aware strings, and is safe with the `Z` suffix.
-- `test_should_execute_job_handles_naive_last_run_at` — reproduces the original regression against a mocked job row: naive `last_run_at`, aware `scheduled_time`, pre-patch would raise `TypeError` inside `_should_execute_job`; post-patch returns the correct boolean.
-- `test_serialize_scheduler_datetime_emits_utc_z` — asserts `None`, naive, and aware inputs all round-trip through the helper to a `Z`-suffixed ISO string (or `None`), covering both branches of `to_dict`.
+- `tests/unit/test_agent_planning_helpers.py`:
+    - `test_infer_tool_parameters_prompt_documents_schema_sentinel_rule` — runs `_infer_tool_parameters` against a tool schema whose parameter description documents a sentinel and a mocked LLM that returns the sentinel; asserts the return value is not dropped by the fail-closed validation, captures the system prompt from the mocked model, asserts the new generic "Documented sentinel values" rule is present, and asserts the prompt stays vendor-agnostic (no hardcoded `driveId` / `userId` / `Microsoft` / `Graph` tokens).
+    - `test_infer_tool_parameters_sentinel_values_survive_post_closed_checks` — pins that a short sentinel string (`"me"` as a concrete example) is neither placeholder-like nor a LLM-invented sentinel, and that `_get_unresolved_required_parameters` treats a step whose parameter resolves to the sentinel as fully resolved. Guards against future over-tightening of the placeholder scanners.
+- `tests/unit/test_scheduler_datetime_handling.py`:
+    - `test_parse_scheduler_timestamp_treats_naive_as_utc` — the helper attaches `timezone.utc` when given a naive ISO string, preserves timezone on already-aware strings, and is safe with the `Z` suffix.
+    - `test_should_execute_job_handles_naive_last_run_at` — reproduces the recurring-job regression against a mocked job row: naive `last_run_at`, aware `scheduled_time`, pre-patch would raise `TypeError` inside `_should_execute_job`; post-patch returns the correct boolean.
+    - `test_serialize_scheduler_datetime_emits_utc_z` — `None`, naive, and aware inputs all round-trip through the helper to a `Z`-suffixed ISO string (or `None`), covering both branches of `to_dict`.
 
 ### Validation
 
-- **Unit suite: 612 passed, 3 skipped.** Full `tests/unit/` run clean; the 3 skips are pre-existing unrelated.
-- **Targeted scheduler datetime suite: 3/3 pass.**
-- **Scheduler e2e gate (15 scripts): 15/15 pass.** One pre-existing flake in `test_12a1_basic_scheduling.py` sub-case 2 was surfaced during this release's validation: the prompt "Schedule a meeting tomorrow at 3pm" was vague enough that `gpt-4o-mini` routed through the clarification system ("please provide details of the meeting…") instead of the scheduler. Reproduced on clean HEAD without this patch, so unrelated to the timezone fix. Tightened the test prompt to "Schedule a project review tomorrow at 3pm" — concrete enough to commit to a scheduled job while still exercising the one-off tomorrow-at-3pm path — matching the style of the two passing sub-cases in the same file.
+- **Unit suite: 614 passed, 3 skipped.** Full `tests/unit/` run clean; the 3 skips are pre-existing unrelated.
+- **Targeted suites: scheduler datetime 3/3 pass; inference sentinel 2/2 pass.**
+- **Scheduler e2e gate (15 scripts): 15/15 pass.** One pre-existing flake in `test_12a1_basic_scheduling.py` sub-case 2 was surfaced during this release's validation: the prompt "Schedule a meeting tomorrow at 3pm" was vague enough that `gpt-4o-mini` routed through the clarification system ("please provide details of the meeting…") instead of the scheduler. Reproduced on clean HEAD without this patch, so unrelated. Tightened the test prompt to "Schedule a project review tomorrow at 3pm" — concrete enough to commit to a scheduled job while still exercising the one-off tomorrow-at-3pm path — matching the style of the two passing sub-cases in the same file.
 - **Random e2e sample (5 tests): 5/5 pass** — `19_api/test_19g1_memory_sessions.py`, `4_mcp/test_4b3_mcp_failure_handling.py`, `4_mcp/test_4d3_explicit.py`, `4_mcp/test_4d4_multiuser_isolation_simple.py`, `9_async/test_9c2_timeout_handling.py`.
 - **`black --check`, `ruff`, `mypy` — clean on touched files.**
+- **E2E gate not rerun for the inference-sentinel prompt extension** — the change is a prompt-only addition with dedicated unit coverage; no structural code path was altered, so the scheduler and random e2e samples remain representative.
 
 ### Infrastructure
 
@@ -72,10 +55,9 @@ Recurring scheduled jobs could silently stop re-firing when the runtime compared
 
 ### No breaking changes
 
+- Inference prompt gains a schema-driven sentinel rule; existing inference calls whose parameter schemas do not document a sentinel produce the same output they did before. The anti-guessing guardrails are preserved verbatim.
 - `to_dict` payload shapes gain a `Z` suffix on datetime fields where there was previously none (API strings now unambiguously denote UTC). Clients that were manually appending `Z` or parsing via `fromisoformat(...).replace("Z", "+00:00")` remain compatible.
 - No database schema change. Existing rows are interpreted as UTC without migration.
-
-## v0.20260421.0
 
 ## v0.20260421.0
 
