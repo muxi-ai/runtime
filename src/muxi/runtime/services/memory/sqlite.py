@@ -178,16 +178,26 @@ class SQLiteMemory(BaseMemory):
             return probed
 
     def _create_memories_table(self) -> None:
-        """Create the dim-specific ``memories_{dim}`` table.
+        """Create the dim-specific ``memories_{dim}`` table and its companions.
 
-        Vectors are stored as BLOB (the helper packs float32 bytes on
-        write). Idempotent via ``IF NOT EXISTS`` so re-opening a DB that
-        already has the table (e.g. the pre-created ``memories_1536``
-        from ``init_schema_sqlite.sql``) is a no-op.
+        Creates the memory table (BLOB-packed float32 embeddings), the
+        five secondary indexes, the FTS5 virtual table, and the FTS
+        sync + updated_at triggers. Mirrors the pre-created ``memories_{dim}``
+        tables from ``migrations/init_schema_sqlite.sql`` so that a
+        runtime-created dim (any dim outside the pre-baked
+        ``{384, 768, 1024, 1536, 3072}`` set) ends up with the same
+        feature set.
+
+        All statements use ``IF NOT EXISTS`` so re-opening a DB that
+        already has the table (the common case on the pre-baked dims)
+        is a safe no-op.
         """
         assert self.memories_table is not None, "_ensure_dim must set memories_table first"
+        table = self.memories_table
+        fts = f"{table}_fts"
+        # Core memories table
         self.conn.execute(f"""
-            CREATE TABLE IF NOT EXISTS {self.memories_table} (
+            CREATE TABLE IF NOT EXISTS {table} (
                 id TEXT PRIMARY KEY,
                 user_id INTEGER NOT NULL,
                 collection TEXT NOT NULL,
@@ -198,6 +208,58 @@ class SQLiteMemory(BaseMemory):
                 updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
                 FOREIGN KEY (user_id) REFERENCES users(id)
             )
+            """)
+        # Secondary indexes (match init_schema_sqlite.sql)
+        self.conn.execute(f"CREATE INDEX IF NOT EXISTS idx_{table}_user_id ON {table}(user_id)")
+        self.conn.execute(
+            f"CREATE INDEX IF NOT EXISTS idx_{table}_collection ON {table}(collection)"
+        )
+        self.conn.execute(
+            f"CREATE INDEX IF NOT EXISTS idx_{table}_created_at ON {table}(created_at)"
+        )
+        self.conn.execute(
+            f"CREATE INDEX IF NOT EXISTS idx_{table}_updated_at ON {table}(updated_at)"
+        )
+        self.conn.execute(
+            f"CREATE INDEX IF NOT EXISTS idx_{table}_user_created_at "
+            f"ON {table}(user_id, created_at)"
+        )
+        # FTS5 virtual table + sync triggers (full-text search parity
+        # with the PostgreSQL GIN index on the equivalent dim table).
+        self.conn.execute(f"""
+            CREATE VIRTUAL TABLE IF NOT EXISTS {fts} USING fts5(
+                text,
+                content='{table}',
+                content_rowid='rowid'
+            )
+            """)
+        self.conn.execute(f"""
+            CREATE TRIGGER IF NOT EXISTS {table}_fts_insert
+            AFTER INSERT ON {table} BEGIN
+                INSERT INTO {fts}(rowid, text) VALUES (new.rowid, new.text);
+            END
+            """)
+        self.conn.execute(f"""
+            CREATE TRIGGER IF NOT EXISTS {table}_fts_delete
+            AFTER DELETE ON {table} BEGIN
+                DELETE FROM {fts} WHERE rowid = old.rowid;
+            END
+            """)
+        self.conn.execute(f"""
+            CREATE TRIGGER IF NOT EXISTS {table}_fts_update
+            AFTER UPDATE ON {table} BEGIN
+                DELETE FROM {fts} WHERE rowid = old.rowid;
+                INSERT INTO {fts}(rowid, text) VALUES (new.rowid, new.text);
+            END
+            """)
+        # updated_at trigger (parity with init_schema_sqlite.sql).
+        self.conn.execute(f"""
+            CREATE TRIGGER IF NOT EXISTS trigger_update_{table}_updated_at
+            AFTER UPDATE ON {table}
+            FOR EACH ROW
+            BEGIN
+                UPDATE {table} SET updated_at = CURRENT_TIMESTAMP WHERE id = NEW.id;
+            END
             """)
         self.conn.commit()
 

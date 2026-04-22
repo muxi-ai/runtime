@@ -25,12 +25,15 @@ this helper additionally rejects whitespace-only strings for consistency.
 
 ``dimensions`` that exceed native model dim
 -------------------------------------------
-``dimensions`` is forwarded as-is to OneLLM. If the requested value
-exceeds the provider's native dimensionality (e.g. requesting
-``dimensions=4096`` from Nomic v1.5 whose native dim is 768), the
-provider raises a clear error. The helper does NOT silently clamp. This
-keeps the failure mode explicit instead of hiding a silent Matryoshka
-misconfiguration.
+``dimensions`` is forwarded as-is to OneLLM. When the requested value
+EXCEEDS the provider's native dimensionality (e.g. requesting
+``dimensions=4096`` from Nomic v1.5 whose native dim is 768), OneLLM's
+``LocalProvider`` clamps silently to the native dim and returns the
+full-length vector. The helper does not intercept this — callers that
+want a hard error on Matryoshka misconfiguration should probe
+``probe_dimension(model)`` first and validate against it. Requests for
+``dimensions <= native`` are honored exactly (Matryoshka truncation +
+re-normalization).
 
 ``task`` kwarg policy
 ---------------------

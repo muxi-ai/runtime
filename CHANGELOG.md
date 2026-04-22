@@ -2,6 +2,54 @@
 
 ## [unreleased]
 
+### Embedding platform: single-path helper, Nomic v1.5 default
+
+The MUXI runtime now routes every embedding call through a single shared helper
+(`services/memory/embedding.py`) that wraps `onellm.Embedding.acreate`. The old
+`local_embeddings.py` alias shim (short-name → dimension map, direct
+`SentenceTransformer` instantiation) has been removed. Long-term memory, working
+memory, SQLite memory, fusion engine, SOP coordinator, and knowledge handler all
+flow through `embed()` / `probe_dimension()` in the helper.
+
+**Default embedding model changed** to `local/nomic-ai/nomic-embed-text-v1.5`
+(768-dim, 8k context, Matryoshka 64–768, Apache-2.0). Previous default was the
+384-dim sentence-transformers MiniLM. Multilingual deployments can opt into
+`local/nomic-ai/nomic-embed-text-v2-moe`. Cloud providers (`openai/*`,
+`cohere/*`) continue to work unchanged; the helper strips `task` for cloud slugs
+so consumers can pass it unconditionally.
+
+**BREAKING**: Formation configs that reference short-name local aliases
+(e.g. `local/all-mpnet-base-v2`) will no longer resolve. The short-name
+registry was removed upstream in OneLLM `0.20260421.0` and the runtime-side
+shim that previously papered over that is gone. Migrate formation configs
+to full HF repo ids:
+
+- `local/all-MiniLM-L6-v2` → `local/sentence-transformers/all-MiniLM-L6-v2`
+  (or prefer the new default `local/nomic-ai/nomic-embed-text-v1.5`)
+- `local/all-mpnet-base-v2` → `local/sentence-transformers/all-mpnet-base-v2`
+  (or the new default)
+
+No database migration is required for existing `memories_1536` data (OpenAI
+users are unaffected). Switching from MiniLM 384-dim to Nomic v1.5 768-dim
+requires either (a) re-embedding via `scripts/migrate_embeddings.py`, or (b)
+explicitly configuring the old model in formation YAML.
+
+**Schema additions**: `memories_384`, `memories_768`, `memories_1024`,
+`memories_3072` tables are now pre-created by `init_schema.sql` (PostgreSQL +
+pgvector/ivfflat) and `init_schema_sqlite.sql` (SQLite + FTS5 + triggers), so
+formations using any of these dims work on a fresh DB without runtime DDL.
+Re-applying the schema to a populated `memories_1536` database is idempotent
+and non-destructive.
+
+**New tests**: 7 integration test files under `tests/integration/` cover the
+helper's error contract (empty input, invalid slug), Matryoshka truncation,
+multilingual retrieval (Nomic v2 MoE, environment-gated), long-input
+truncation behavior, OpenAI regression (VAL-INTEG-003/VAL-CROSS-004), the
+`task`-stripping policy for cloud slugs (VAL-HELPER-012), schema upgrade
+idempotency (VAL-SCHEMA-005), and cross-dimension search behavior
+(VAL-CROSS-006). 15 new unit tests lock in formation config slug validation
+(`tests/unit/test_formation_config_validation.py`).
+
 ## v0.20260421.0
 
 ## v0.20260421.0

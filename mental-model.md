@@ -755,18 +755,23 @@ async def search(self, query: str, limit: int = 5, recency_bias: float = 0.3):
     return sorted_results[:limit]
 ```
 
-**Local Embeddings Fallback:**
-If no embedding model configured, auto-falls back to local sentence-transformers.
-Supports `local/` prefix in formation config for explicit model selection:
-```python
-# Default fallback (no model configured): all-MiniLM-L6-v2, 384-dim
-# Explicit local model: "local/all-mpnet-base-v2", 768-dim (short form, MUXI alias)
-# Or full HF repo id: "local/sentence-transformers/all-mpnet-base-v2" (forward-compatible)
-# Resolution via: is_local_model(), resolve_embedding_dimension() in local_embeddings.py
-from sentence_transformers import SentenceTransformer
-model = SentenceTransformer('all-MiniLM-L6-v2')  # 384 dimensions (default)
-# or: SentenceTransformer('all-mpnet-base-v2')    # 768 dimensions (higher quality)
+**Local Embeddings (default):**
+MUXI defaults to `local/nomic-ai/nomic-embed-text-v1.5` (768-dim, 8k context,
+Apache-2.0). Every consumer routes through the single shared helper
+`services/memory/embedding.py` (`embed()` / `probe_dimension()`), which delegates
+to `onellm.Embedding.acreate`. No alias shim, no short-name registry — formation
+config must use full HF repo ids:
+```yaml
+memory:
+  embedding:
+    model: "local/nomic-ai/nomic-embed-text-v1.5"   # default (may be omitted)
+    # or: "local/nomic-ai/nomic-embed-text-v2-moe"  # multilingual MoE
+    # or: "openai/text-embedding-3-small"           # cloud (1536-dim)
 ```
+The helper strips `task` for cloud slugs automatically, forwards `dimensions`
+verbatim (Matryoshka truncation for Nomic v1.5 at 64–768), and raises
+`InvalidRequestError` on empty/whitespace-only input. See the module docstring
+in `services/memory/embedding.py` for the full contract.
 
 **FIFO Cleanup:**
 Background task runs every `fifo_interval_min` (default: 5 minutes) to clean up old namespaces if memory exceeds `max_memory_mb` (default: 1000 MB).
@@ -802,28 +807,19 @@ def get_memory_model(dimension: int):
 Memory = get_memory_model(1536)
 ```
 
-**Three Embedding Tiers:**
+**Embedding Model Tiers (use full HF repo ids):**
 
-| Model | Dim | Cost | Formation Config |
-|-------|-----|------|-----------------|
-| `local/sentence-transformers/all-MiniLM-L6-v2` | 384 | Free | Default (no model configured) |
-| `local/sentence-transformers/all-mpnet-base-v2` | 768 | Free | `embedding: "local/sentence-transformers/all-mpnet-base-v2"` |
-| `openai/text-embedding-3-small` | 1536 | Paid | `embedding: "openai/text-embedding-3-small"` |
+| Model | Dim | Cost | Notes |
+|-------|-----|------|-------|
+| `local/nomic-ai/nomic-embed-text-v1.5` | 768 (Matryoshka 64–768) | Free | **Default.** Apache-2.0, 8k context, ONNX. |
+| `local/nomic-ai/nomic-embed-text-v2-moe` | 768 | Free | Apache-2.0, multilingual (100+ languages), MoE. |
+| `openai/text-embedding-3-small` | 1536 | Paid | Cloud, regression-tested. |
+| `openai/text-embedding-3-large` | 3072 | Paid | Cloud, higher quality. |
 
-When no embedding model is configured, both PostgreSQL and SQLite default to local
-embeddings (`sentence-transformers/all-MiniLM-L6-v2`, 384-dim). The `local/` prefix is
-resolved by helpers in `local_embeddings.py` (`is_local_model()`,
-`resolve_embedding_dimension()`).
-
-**OneLLM Phase 2 compatibility note (2026-04-21):** OneLLM ≥ `0.20260421.0` dropped
-the short-name alias registry on its `local/` provider -- whatever follows `local/` is
-now passed straight to HuggingFace as a repo id. Short names like
-`local/all-MiniLM-L6-v2` (no org segment) **no longer resolve in OneLLM** and would
-raise `ResourceNotFoundError` if sent to it directly. They still work **inside MUXI**
-because `local_embeddings.py` intercepts and maps them (short name ↔ dimension) before
-the runtime ever calls OneLLM's embedding API. If you add a new code path that calls
-`onellm.Embedding.acreate(model="local/...")` directly, pass the **full HF repo id**
-(e.g. `local/sentence-transformers/all-MiniLM-L6-v2`).
+All slugs are passed verbatim to OneLLM. The shared helper (`services/memory/embedding.py`)
+is the single choke point — there is no intermediate alias table. Adding a new local
+model only requires referencing its full HF repo id in formation config (and optionally
+pre-downloading it in the Dockerfile for warm-start latency).
 
 **Schema (per dimension):**
 ```python
