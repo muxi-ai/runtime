@@ -223,8 +223,8 @@ class LongTermMemory:
     for durable, scalable memory storage with rich filtering capabilities and
     collection-based organization.
 
-    When no embedding model is configured, automatically falls back to local
-    sentence-transformer embeddings (all-MiniLM-L6-v2, 384 dimensions).
+    When no embedding model is configured, automatically falls back to
+    ``local/nomic-ai/nomic-embed-text-v1.5`` (768 dimensions, Apache-2.0).
     """
 
     def __init__(

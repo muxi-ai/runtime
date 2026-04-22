@@ -329,15 +329,19 @@ class SQLiteMemory(BaseMemory):
                 " pip install muxi-extensions-sqlite-vec"
             )
 
-        # Create tables
+        # Create tables. Keep the schema identical to
+        # migrations/init_schema_sqlite.sql so a DB seeded by the migration
+        # and then opened by the runtime has the same constraints either
+        # way (CREATE TABLE IF NOT EXISTS skips ALTER, so divergence here
+        # silently produced weaker-or-stronger uniqueness depending on
+        # which path created the table first).
         conn.execute("""
             CREATE TABLE IF NOT EXISTS users (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
                 public_id TEXT NOT NULL UNIQUE,
                 formation_id TEXT NOT NULL,
                 created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-                updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-                UNIQUE(public_id, formation_id)
+                updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
             )
         """)
 

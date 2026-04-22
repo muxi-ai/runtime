@@ -120,8 +120,12 @@ CREATE INDEX IF NOT EXISTS idx_memories_384_created_at ON memories_384(created_a
 CREATE INDEX IF NOT EXISTS idx_memories_384_updated_at ON memories_384(updated_at);
 CREATE INDEX IF NOT EXISTS idx_memories_384_user_created_at ON memories_384(user_id, created_at);
 CREATE INDEX IF NOT EXISTS idx_memories_384_text_gin ON memories_384 USING gin(to_tsvector('english', text));
+-- ivfflat uses vector_l2_ops to match the runtime's l2_distance() search path
+-- (LongTermMemory.search / search_by_embedding). pgvector will not use a
+-- cosine-ops index for an L2 query, so mismatching here silently forces a
+-- sequential scan and regresses search latency at scale.
 CREATE INDEX IF NOT EXISTS memories_384_embedding_idx ON memories_384
-USING ivfflat (embedding vector_cosine_ops) WITH (lists = 100);
+USING ivfflat (embedding vector_l2_ops) WITH (lists = 100);
 
 -- memories_768 -------------------------------------------------------
 -- DEFAULT dim: Nomic v1.5, Nomic v2 MoE, all-mpnet, GTE.
@@ -142,8 +146,9 @@ CREATE INDEX IF NOT EXISTS idx_memories_768_created_at ON memories_768(created_a
 CREATE INDEX IF NOT EXISTS idx_memories_768_updated_at ON memories_768(updated_at);
 CREATE INDEX IF NOT EXISTS idx_memories_768_user_created_at ON memories_768(user_id, created_at);
 CREATE INDEX IF NOT EXISTS idx_memories_768_text_gin ON memories_768 USING gin(to_tsvector('english', text));
+-- See memories_384: runtime uses l2_distance, so the ANN index must be vector_l2_ops.
 CREATE INDEX IF NOT EXISTS memories_768_embedding_idx ON memories_768
-USING ivfflat (embedding vector_cosine_ops) WITH (lists = 100);
+USING ivfflat (embedding vector_l2_ops) WITH (lists = 100);
 
 -- memories_1024 ------------------------------------------------------
 CREATE TABLE IF NOT EXISTS memories_1024 (
@@ -163,8 +168,9 @@ CREATE INDEX IF NOT EXISTS idx_memories_1024_created_at ON memories_1024(created
 CREATE INDEX IF NOT EXISTS idx_memories_1024_updated_at ON memories_1024(updated_at);
 CREATE INDEX IF NOT EXISTS idx_memories_1024_user_created_at ON memories_1024(user_id, created_at);
 CREATE INDEX IF NOT EXISTS idx_memories_1024_text_gin ON memories_1024 USING gin(to_tsvector('english', text));
+-- See memories_384: runtime uses l2_distance, so the ANN index must be vector_l2_ops.
 CREATE INDEX IF NOT EXISTS memories_1024_embedding_idx ON memories_1024
-USING ivfflat (embedding vector_cosine_ops) WITH (lists = 100);
+USING ivfflat (embedding vector_l2_ops) WITH (lists = 100);
 
 -- memories_1536 ------------------------------------------------------
 -- OpenAI ada-002, text-embedding-3-small.
@@ -186,9 +192,9 @@ CREATE INDEX IF NOT EXISTS idx_memories_1536_updated_at ON memories_1536(updated
 CREATE INDEX IF NOT EXISTS idx_memories_1536_user_created_at ON memories_1536(user_id, created_at);
 CREATE INDEX IF NOT EXISTS idx_memories_1536_text_gin ON memories_1536 USING gin(to_tsvector('english', text));
 
--- Vector similarity index
+-- Vector similarity index -- vector_l2_ops to match runtime l2_distance().
 CREATE INDEX IF NOT EXISTS memories_1536_embedding_idx ON memories_1536
-USING ivfflat (embedding vector_cosine_ops) WITH (lists = 100);
+USING ivfflat (embedding vector_l2_ops) WITH (lists = 100);
 
 -- memories_3072 ------------------------------------------------------
 -- OpenAI text-embedding-3-large.
@@ -209,8 +215,9 @@ CREATE INDEX IF NOT EXISTS idx_memories_3072_created_at ON memories_3072(created
 CREATE INDEX IF NOT EXISTS idx_memories_3072_updated_at ON memories_3072(updated_at);
 CREATE INDEX IF NOT EXISTS idx_memories_3072_user_created_at ON memories_3072(user_id, created_at);
 CREATE INDEX IF NOT EXISTS idx_memories_3072_text_gin ON memories_3072 USING gin(to_tsvector('english', text));
+-- See memories_384: runtime uses l2_distance, so the ANN index must be vector_l2_ops.
 CREATE INDEX IF NOT EXISTS memories_3072_embedding_idx ON memories_3072
-USING ivfflat (embedding vector_cosine_ops) WITH (lists = 100);
+USING ivfflat (embedding vector_l2_ops) WITH (lists = 100);
 
 -- Credentials table
 CREATE TABLE IF NOT EXISTS credentials (
@@ -313,8 +320,21 @@ COMMENT ON TABLE memories_1024 IS 'Stores vector embeddings and text content for
 COMMENT ON TABLE memories_1536 IS 'Stores vector embeddings and text content for semantic search (1536-dim: OpenAI ada-002, text-embedding-3-small)';
 COMMENT ON TABLE memories_3072 IS 'Stores vector embeddings and text content for semantic search (3072-dim: OpenAI text-embedding-3-large)';
 COMMENT ON TABLE users IS 'Multi-user support with formation isolation';
+
+-- Column comments are identical across all memories_* tables (schema is
+-- a straight copy parameterized on dimension). Documenting each one so
+-- psql \d, information_schema, and pgAdmin surface the same guidance no
+-- matter which dim is active.
+COMMENT ON COLUMN memories_384.collection IS 'Collection name for organizing memories (e.g., preferences, user_identity, activities)';
+COMMENT ON COLUMN memories_384.meta_data IS 'Additional metadata stored as JSON';
+COMMENT ON COLUMN memories_768.collection IS 'Collection name for organizing memories (e.g., preferences, user_identity, activities)';
+COMMENT ON COLUMN memories_768.meta_data IS 'Additional metadata stored as JSON';
+COMMENT ON COLUMN memories_1024.collection IS 'Collection name for organizing memories (e.g., preferences, user_identity, activities)';
+COMMENT ON COLUMN memories_1024.meta_data IS 'Additional metadata stored as JSON';
 COMMENT ON COLUMN memories_1536.collection IS 'Collection name for organizing memories (e.g., preferences, user_identity, activities)';
 COMMENT ON COLUMN memories_1536.meta_data IS 'Additional metadata stored as JSON';
+COMMENT ON COLUMN memories_3072.collection IS 'Collection name for organizing memories (e.g., preferences, user_identity, activities)';
+COMMENT ON COLUMN memories_3072.meta_data IS 'Additional metadata stored as JSON';
 
 -- =====================================================================
 -- GRANTS

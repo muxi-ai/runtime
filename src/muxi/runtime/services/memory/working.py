@@ -109,8 +109,8 @@ class WorkingMemory:
     - Local mode: Uses local FAISS for in-memory vector storage
     - Remote mode: Connects to remote FAISS/FAISSx server for distributed vector storage
 
-    When no embedding model is configured, automatically falls back to local
-    sentence-transformer embeddings (all-MiniLM-L6-v2, 384 dimensions).
+    When no embedding model is configured, automatically falls back to
+    ``local/nomic-ai/nomic-embed-text-v1.5`` (768 dimensions, Apache-2.0).
     """
 
     # Namespaces excluded from FIFO cleanup
