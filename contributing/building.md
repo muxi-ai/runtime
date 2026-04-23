@@ -24,11 +24,11 @@ All build scripts are in `scripts/build/`:
 
 MUXI Runtime ships three image variants:
 
-| Variant | Dockerfile | Description | Status |
-|---------|------------|-------------|--------|
-| `default` | `Dockerfile` | Lean runtime (~2.4 GB) | Stable |
-| `pytorch` | `Dockerfile.pytorch` | Adds CPU-only PyTorch on top of `default` | Stable |
-| `cuda` | `Dockerfile.cuda` | GPU-accelerated (CUDA 12, NVIDIA-only, `linux/amd64`) | **Experimental** |
+| Variant | Dockerfile | SIF size | Description | Status |
+|---------|------------|----------|-------------|--------|
+| `default` | `Dockerfile` | ~600 MB | Lean base runtime; covers the vast majority of use cases | Stable |
+| `pytorch` | `Dockerfile.pytorch` | larger | Adds CPU-only PyTorch for local embedding models without ONNX exports | Stable |
+| `cuda` | `Dockerfile.cuda` | largest | ONNX + PyTorch local models, FAISS-GPU for faster vector ops; NVIDIA-only, `linux/amd64` | **Experimental** |
 
 ### Build a Variant
 

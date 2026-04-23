@@ -112,14 +112,22 @@ asyncio.run(main())
 
 MUXI Runtime ships three image variants. All support `linux/amd64` and `linux/arm64` (except CUDA).
 
-| Variant | Description | Status |
-|---------|-------------|--------|
-| `default` | Lean runtime (~2.4 GB) | Stable |
-| `pytorch` | Adds CPU-only PyTorch on top of `default` | Stable |
-| `cuda` | GPU-accelerated (CUDA 12, NVIDIA-only, `linux/amd64`) | **Experimental** |
+**Most users should use the base variant.** The PyTorch and CUDA variants exist for specific embedding workloads described below.
+
+| Variant | SIF size | Description | Status |
+|---------|----------|-------------|--------|
+| `default` (base) | ~600 MB | Lean runtime — covers the vast majority of use cases | Stable |
+| `pytorch` | larger | Adds CPU-only PyTorch for local embedding models that lack ONNX exports | Stable |
+| `cuda` | largest | GPU-accelerated: ONNX and PyTorch local models + FAISS-GPU for faster vector ops | **Experimental** |
+
+**When to use each variant:**
+
+- **`default`** — the right choice for almost everyone. Uses ONNX-based local embedding models (fast, lightweight) and CPU FAISS.
+- **`pytorch`** — only needed when you want to run a local embedding model that does not have an ONNX export and therefore requires the full PyTorch runtime.
+- **`cuda`** — recommended for production workloads running on servers with NVIDIA GPUs. Supports both ONNX and PyTorch local models, and ships with FAISS-GPU for significantly faster vector similarity operations.
 
 ```bash
-# Build the default variant
+# Build the default (base) variant
 ./scripts/build/runtime.sh
 
 # Build the PyTorch variant (requires default built first)
