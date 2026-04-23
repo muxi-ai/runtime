@@ -80,6 +80,15 @@ from .embedding import DEFAULT_EMBEDDING_MODEL, embed, probe_dimension
 # Set multitasking to thread mode for shared memory access
 multitasking.set_engine("thread")
 
+# Spawn @multitasking.task workers as daemon threads. The FIFO cleanup
+# task below is a `while True: time.sleep(...)` worker that never
+# terminates on its own; without daemon=True, Python waits for it at
+# interpreter exit and processes that instantiate WorkingMemory (unit
+# tests, CLI scripts, graceful-shutdown paths) hang indefinitely.
+# The SIGINT handler below remains as a belt-and-suspenders for
+# interactive Ctrl+C even though daemon threads die with the process.
+multitasking.set_daemon(True)
+
 # Kill all tasks on ctrl-c for clean shutdown
 # Only register signal handlers in main thread to avoid errors in tests
 try:

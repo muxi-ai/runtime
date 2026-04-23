@@ -154,7 +154,7 @@ dependencies = [
     "PyJWT>=2.12.0",  # CVE-2026-32597: accepts unknown crit headers; fixed in 2.12.0
     "pyasn1>=0.6.3",  # CVE-2026-30922: unbounded recursion DoS; fixed in 0.6.3
     "msgpack>=1.0.0",  # Message pack format for observability
-    "multitasking>=0.0.11",  # Multi-threading utilities
+    "multitasking>=0.0.13",  # Multi-threading utilities; >=0.0.13 required for set_daemon() opt-in (prevents interpreter-exit hang on long-lived @task workers)
     "nanoid>=2.0.0",  # Nano ID generation
     "pytz>=2023.3",  # Timezone support for scheduler
     "requests>=2.33.0",  # HTTP client (used in observability)

@@ -87,6 +87,12 @@ from ...utils.security import redact_sensitive_content
 # Set multitasking to thread mode for shared memory access
 multitasking.set_engine("thread")
 
+# Spawn @multitasking.task workers as daemon threads so fire-and-forget
+# observability emitters (see `_emit_in_background` below) never block
+# interpreter exit on graceful shutdown or test teardown. Requires
+# multitasking>=0.0.13; older versions hardcoded daemon=False and will hang.
+multitasking.set_daemon(True)
+
 
 # PII Redaction Helper
 def _redact_data_recursive(obj: Any) -> Any:
