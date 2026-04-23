@@ -112,7 +112,16 @@ def get_embedder(model_name: str, api_key: Optional[str] = None):
     from muxi.runtime.services.memory.embedding import embed
 
     async def _embed(text: str) -> List[float]:
-        vectors = await embed(model_name, text)
+        # Stored memories are indexed with ``task="search_document"`` at
+        # write time (see ``services/memory/working.py`` and ``long_term.py``);
+        # matching search queries use ``task="search_query"``. For
+        # asymmetric-task models like Nomic v1.5 these prefixes project
+        # the vectors into distinct subspaces, so re-embedding without
+        # the document task would land migrated rows in a taskless
+        # subspace and silently degrade retrieval quality after
+        # migration. Pin the task here to preserve subspace alignment
+        # with freshly stored memories.
+        vectors = await embed(model_name, text, task="search_document")
         return vectors[0]
 
     return _embed
