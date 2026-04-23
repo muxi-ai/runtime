@@ -84,9 +84,96 @@ CREATE INDEX IF NOT EXISTS idx_user_identifiers_lookup ON user_identifiers(ident
 CREATE INDEX IF NOT EXISTS idx_user_identifiers_user_id ON user_identifiers(user_id);
 CREATE INDEX IF NOT EXISTS idx_user_identifiers_formation_id ON user_identifiers(formation_id);
 
--- Memories table (dimension-specific: memories_384, memories_768, memories_1536, etc.)
--- The runtime creates the table matching the configured embedding model's dimension.
--- This schema uses 1536 (OpenAI text-embedding-3-small) as the default example.
+-- =====================================================================
+-- Memories tables - one per common embedding dimension
+-- =====================================================================
+-- The runtime writes to the table matching the configured embedding
+-- model's dimension. Tables for all common dims are pre-created so
+-- first-write latency is predictable and no DDL is needed on the hot
+-- path. Exotic dims fall back to runtime CREATE TABLE via
+-- services/memory/sqlite.py::_create_memories_table and the PostgreSQL
+-- equivalents, which remain idempotent via IF NOT EXISTS.
+--
+-- Dimension -> typical producer:
+--   384  - legacy MiniLM (read-only support for re-embed migration)
+--   768  - Nomic v1.5 (DEFAULT), Nomic v2 MoE, all-mpnet, GTE
+--   1024 - Arctic Embed L v2.0, bge-m3, Cohere v3
+--   1536 - OpenAI ada-002, text-embedding-3-small
+--   3072 - OpenAI text-embedding-3-large
+-- =====================================================================
+
+-- memories_384 -------------------------------------------------------
+CREATE TABLE IF NOT EXISTS memories_384 (
+    id VARCHAR(21) PRIMARY KEY DEFAULT nanoid(),
+    user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    text TEXT NOT NULL,
+    embedding vector(384),
+    meta_data JSONB NOT NULL DEFAULT '{}'::jsonb,
+    collection VARCHAR(255) NOT NULL DEFAULT 'default',
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE INDEX IF NOT EXISTS idx_memories_384_user_id ON memories_384(user_id);
+CREATE INDEX IF NOT EXISTS idx_memories_384_collection ON memories_384(collection);
+CREATE INDEX IF NOT EXISTS idx_memories_384_created_at ON memories_384(created_at);
+CREATE INDEX IF NOT EXISTS idx_memories_384_updated_at ON memories_384(updated_at);
+CREATE INDEX IF NOT EXISTS idx_memories_384_user_created_at ON memories_384(user_id, created_at);
+CREATE INDEX IF NOT EXISTS idx_memories_384_text_gin ON memories_384 USING gin(to_tsvector('english', text));
+-- ivfflat uses vector_l2_ops to match the runtime's l2_distance() search path
+-- (LongTermMemory.search / search_by_embedding). pgvector will not use a
+-- cosine-ops index for an L2 query, so mismatching here silently forces a
+-- sequential scan and regresses search latency at scale.
+CREATE INDEX IF NOT EXISTS memories_384_embedding_idx ON memories_384
+USING ivfflat (embedding vector_l2_ops) WITH (lists = 100);
+
+-- memories_768 -------------------------------------------------------
+-- DEFAULT dim: Nomic v1.5, Nomic v2 MoE, all-mpnet, GTE.
+CREATE TABLE IF NOT EXISTS memories_768 (
+    id VARCHAR(21) PRIMARY KEY DEFAULT nanoid(),
+    user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    text TEXT NOT NULL,
+    embedding vector(768),
+    meta_data JSONB NOT NULL DEFAULT '{}'::jsonb,
+    collection VARCHAR(255) NOT NULL DEFAULT 'default',
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE INDEX IF NOT EXISTS idx_memories_768_user_id ON memories_768(user_id);
+CREATE INDEX IF NOT EXISTS idx_memories_768_collection ON memories_768(collection);
+CREATE INDEX IF NOT EXISTS idx_memories_768_created_at ON memories_768(created_at);
+CREATE INDEX IF NOT EXISTS idx_memories_768_updated_at ON memories_768(updated_at);
+CREATE INDEX IF NOT EXISTS idx_memories_768_user_created_at ON memories_768(user_id, created_at);
+CREATE INDEX IF NOT EXISTS idx_memories_768_text_gin ON memories_768 USING gin(to_tsvector('english', text));
+-- See memories_384: runtime uses l2_distance, so the ANN index must be vector_l2_ops.
+CREATE INDEX IF NOT EXISTS memories_768_embedding_idx ON memories_768
+USING ivfflat (embedding vector_l2_ops) WITH (lists = 100);
+
+-- memories_1024 ------------------------------------------------------
+CREATE TABLE IF NOT EXISTS memories_1024 (
+    id VARCHAR(21) PRIMARY KEY DEFAULT nanoid(),
+    user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    text TEXT NOT NULL,
+    embedding vector(1024),
+    meta_data JSONB NOT NULL DEFAULT '{}'::jsonb,
+    collection VARCHAR(255) NOT NULL DEFAULT 'default',
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE INDEX IF NOT EXISTS idx_memories_1024_user_id ON memories_1024(user_id);
+CREATE INDEX IF NOT EXISTS idx_memories_1024_collection ON memories_1024(collection);
+CREATE INDEX IF NOT EXISTS idx_memories_1024_created_at ON memories_1024(created_at);
+CREATE INDEX IF NOT EXISTS idx_memories_1024_updated_at ON memories_1024(updated_at);
+CREATE INDEX IF NOT EXISTS idx_memories_1024_user_created_at ON memories_1024(user_id, created_at);
+CREATE INDEX IF NOT EXISTS idx_memories_1024_text_gin ON memories_1024 USING gin(to_tsvector('english', text));
+-- See memories_384: runtime uses l2_distance, so the ANN index must be vector_l2_ops.
+CREATE INDEX IF NOT EXISTS memories_1024_embedding_idx ON memories_1024
+USING ivfflat (embedding vector_l2_ops) WITH (lists = 100);
+
+-- memories_1536 ------------------------------------------------------
+-- OpenAI ada-002, text-embedding-3-small.
 CREATE TABLE IF NOT EXISTS memories_1536 (
     id VARCHAR(21) PRIMARY KEY DEFAULT nanoid(),
     user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
@@ -105,9 +192,54 @@ CREATE INDEX IF NOT EXISTS idx_memories_1536_updated_at ON memories_1536(updated
 CREATE INDEX IF NOT EXISTS idx_memories_1536_user_created_at ON memories_1536(user_id, created_at);
 CREATE INDEX IF NOT EXISTS idx_memories_1536_text_gin ON memories_1536 USING gin(to_tsvector('english', text));
 
--- Vector similarity index
-CREATE INDEX IF NOT EXISTS memories_1536_embedding_idx ON memories_1536
-USING ivfflat (embedding vector_cosine_ops) WITH (lists = 100);
+-- Vector similarity index -- vector_l2_ops to match runtime l2_distance().
+--
+-- UPGRADE PATH: Pre-migration databases created this index with
+-- `vector_cosine_ops`, but the runtime now uses `l2_distance()`
+-- (see `services/memory/long_term.py`). pgvector will NOT use a
+-- cosine-ops index for an L2 query and silently falls back to a
+-- sequential scan at search time -- a hard perf regression on any
+-- non-trivial `memories_1536` table.
+--
+-- `CREATE INDEX IF NOT EXISTS` alone cannot fix this: if the index
+-- name already exists (with the wrong ops class), the statement is
+-- a no-op. We therefore DROP the index first so the CREATE always
+-- lands the correct l2-ops variant. For fresh installs the DROP is
+-- a no-op; for existing installs it rebuilds once and then stays
+-- correct on every subsequent re-apply.
+--
+-- This drop+create is scoped to `memories_1536` only because it is
+-- the single dimension table that existed in older schemas with the
+-- wrong ops class. The other dimension tables (384 / 768 / 1024 /
+-- 3072) were introduced in the embedding-platform migration and
+-- have no pre-existing installations to upgrade, so they keep the
+-- cheaper `CREATE INDEX IF NOT EXISTS` form.
+DROP INDEX IF EXISTS memories_1536_embedding_idx;
+CREATE INDEX memories_1536_embedding_idx ON memories_1536
+USING ivfflat (embedding vector_l2_ops) WITH (lists = 100);
+
+-- memories_3072 ------------------------------------------------------
+-- OpenAI text-embedding-3-large.
+CREATE TABLE IF NOT EXISTS memories_3072 (
+    id VARCHAR(21) PRIMARY KEY DEFAULT nanoid(),
+    user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    text TEXT NOT NULL,
+    embedding vector(3072),
+    meta_data JSONB NOT NULL DEFAULT '{}'::jsonb,
+    collection VARCHAR(255) NOT NULL DEFAULT 'default',
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE INDEX IF NOT EXISTS idx_memories_3072_user_id ON memories_3072(user_id);
+CREATE INDEX IF NOT EXISTS idx_memories_3072_collection ON memories_3072(collection);
+CREATE INDEX IF NOT EXISTS idx_memories_3072_created_at ON memories_3072(created_at);
+CREATE INDEX IF NOT EXISTS idx_memories_3072_updated_at ON memories_3072(updated_at);
+CREATE INDEX IF NOT EXISTS idx_memories_3072_user_created_at ON memories_3072(user_id, created_at);
+CREATE INDEX IF NOT EXISTS idx_memories_3072_text_gin ON memories_3072 USING gin(to_tsvector('english', text));
+-- See memories_384: runtime uses l2_distance, so the ANN index must be vector_l2_ops.
+CREATE INDEX IF NOT EXISTS memories_3072_embedding_idx ON memories_3072
+USING ivfflat (embedding vector_l2_ops) WITH (lists = 100);
 
 -- Credentials table
 CREATE TABLE IF NOT EXISTS credentials (
@@ -204,10 +336,27 @@ EXECUTE FUNCTION update_scheduled_jobs_updated_at();
 -- =====================================================================
 
 COMMENT ON TABLE scheduled_job_audit IS 'Audit trail for scheduled job lifecycle events. Does not track executions.';
-COMMENT ON TABLE memories_1536 IS 'Stores vector embeddings and text content for semantic search (1536-dim)';
+COMMENT ON TABLE memories_384 IS 'Stores vector embeddings and text content for semantic search (384-dim legacy MiniLM)';
+COMMENT ON TABLE memories_768 IS 'Stores vector embeddings and text content for semantic search (768-dim: Nomic v1.5 default, Nomic v2 MoE)';
+COMMENT ON TABLE memories_1024 IS 'Stores vector embeddings and text content for semantic search (1024-dim: Arctic, bge-m3, Cohere v3)';
+COMMENT ON TABLE memories_1536 IS 'Stores vector embeddings and text content for semantic search (1536-dim: OpenAI ada-002, text-embedding-3-small)';
+COMMENT ON TABLE memories_3072 IS 'Stores vector embeddings and text content for semantic search (3072-dim: OpenAI text-embedding-3-large)';
 COMMENT ON TABLE users IS 'Multi-user support with formation isolation';
+
+-- Column comments are identical across all memories_* tables (schema is
+-- a straight copy parameterized on dimension). Documenting each one so
+-- psql \d, information_schema, and pgAdmin surface the same guidance no
+-- matter which dim is active.
+COMMENT ON COLUMN memories_384.collection IS 'Collection name for organizing memories (e.g., preferences, user_identity, activities)';
+COMMENT ON COLUMN memories_384.meta_data IS 'Additional metadata stored as JSON';
+COMMENT ON COLUMN memories_768.collection IS 'Collection name for organizing memories (e.g., preferences, user_identity, activities)';
+COMMENT ON COLUMN memories_768.meta_data IS 'Additional metadata stored as JSON';
+COMMENT ON COLUMN memories_1024.collection IS 'Collection name for organizing memories (e.g., preferences, user_identity, activities)';
+COMMENT ON COLUMN memories_1024.meta_data IS 'Additional metadata stored as JSON';
 COMMENT ON COLUMN memories_1536.collection IS 'Collection name for organizing memories (e.g., preferences, user_identity, activities)';
 COMMENT ON COLUMN memories_1536.meta_data IS 'Additional metadata stored as JSON';
+COMMENT ON COLUMN memories_3072.collection IS 'Collection name for organizing memories (e.g., preferences, user_identity, activities)';
+COMMENT ON COLUMN memories_3072.meta_data IS 'Additional metadata stored as JSON';
 
 -- =====================================================================
 -- GRANTS

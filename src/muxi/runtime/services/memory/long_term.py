@@ -29,6 +29,7 @@
 # scalability, and performance are important requirements.
 # =============================================================================
 
+import asyncio
 import time
 from typing import Any, Dict, List, Optional, Tuple, Union
 
@@ -54,7 +55,7 @@ from ...utils.datetime_utils import utc_now_naive
 from ...utils.id_generator import get_default_nanoid
 from .. import observability
 from ..db import AsyncModelMixin, Base, DatabaseManager
-from ..llm import LLM
+from .embedding import DEFAULT_EMBEDDING_MODEL, embed, probe_dimension
 
 # Memory collection definitions for organizing long-term storage
 MEMORY_COLLECTIONS = {
@@ -222,69 +223,73 @@ class LongTermMemory:
     for durable, scalable memory storage with rich filtering capabilities and
     collection-based organization.
 
-    When no embedding model is configured, automatically falls back to local
-    sentence-transformer embeddings (all-MiniLM-L6-v2, 384 dimensions).
+    When no embedding model is configured, automatically falls back to
+    ``local/nomic-ai/nomic-embed-text-v1.5`` (768 dimensions, Apache-2.0).
     """
 
     def __init__(
         self,
         db_manager: DatabaseManager,
         formation_id: str,
-        dimension: int = 1536,  # Default dimension for OpenAI embeddings
+        dimension: int = 1536,  # Provisional dim hint; real dim is probed lazily.
         default_collection: str = "default",
-        embedding_model: Optional[Union[LLM, str]] = None,
+        embedding_model: Optional[str] = None,
     ):
         """
         Initialize a LongTermMemory instance for persistent semantic memory storage.
 
-        Sets up database connections, determines multi-user mode,
-        creates necessary tables, and ensures default user and collection
-        exist in single-user mode. Supports configuration of vector dimension,
-        default collection, and optional embedding model.
+        Sets up database connections, determines multi-user mode, and
+        ensures the default user exists in single-user mode. The embedding
+        dimension is **probed lazily** on the first embed operation via
+        :func:`services.memory.embedding.probe_dimension`; construction
+        does NOT invoke OneLLM.
 
-        If no embedding model is provided, uses local sentence-transformer
-        embeddings (all-MiniLM-L6-v2) as a fallback.
+        Parameters
+        ----------
+        db_manager:
+            Database manager wrapping the SQLAlchemy engine / sessionmaker.
+        formation_id:
+            Formation identifier used for user isolation.
+        dimension:
+            Provisional dimension hint used to register an initial ORM
+            model for the ``memories_{dim}`` table. Replaced on first
+            embed op once the real dim is probed. Defaults to ``1536``
+            (OpenAI) for backwards compatibility; the value becomes
+            irrelevant once :meth:`_ensure_dim` resolves the real dim.
+        default_collection:
+            Default collection name for memory operations.
+        embedding_model:
+            Provider-prefixed embedding model slug (e.g.
+            ``"local/nomic-ai/nomic-embed-text-v1.5"``,
+            ``"openai/text-embedding-3-small"``). When ``None``, defaults
+            to :data:`~services.memory.embedding.DEFAULT_EMBEDDING_MODEL`.
         """
         self.default_collection = default_collection
         self.formation_id = formation_id
 
-        # Model can be either an LLM instance or a model name string (lazy loading)
-        self._embedding_model = None
-        self._embedding_model_name = None
-        self._local_model_name: Optional[str] = None
-        self._use_local_embeddings = False
-        self._local_embedding_logged = False
+        # Store the slug (string only). The old dispatch that accepted an
+        # LLM instance is gone — every caller passes a slug, and embedding
+        # generation flows through the shared ``embedding.embed`` helper.
+        if embedding_model is None:
+            embedding_model = DEFAULT_EMBEDDING_MODEL
+        if not isinstance(embedding_model, str):
+            raise TypeError(
+                "LongTermMemory(embedding_model=...) must be a provider-prefixed "
+                f"slug string, got {type(embedding_model).__name__}"
+            )
+        self._embedding_model_name: str = embedding_model
 
-        if embedding_model:
-            if isinstance(embedding_model, str):
-                from .local_embeddings import (
-                    is_local_model,
-                    resolve_embedding_dimension,
-                    resolve_local_model_name,
-                )
+        # Lazy-dim: populated on first ``_ensure_dim()`` call, never in ctor.
+        self._dimension: Optional[int] = None
+        self._dim_lock = asyncio.Lock()
 
-                if is_local_model(embedding_model):
-                    self._use_local_embeddings = True
-                    self._local_model_name = resolve_local_model_name(embedding_model)
-                    self.dimension = resolve_embedding_dimension(embedding_model)
-                else:
-                    # API model name — will create LLM instance lazily
-                    self._embedding_model_name = embedding_model
-                    self.dimension = resolve_embedding_dimension(embedding_model)
-            else:
-                # Assume it's an LLM instance
-                self._embedding_model = embedding_model
-                self.dimension = dimension
-        else:
-            # No embedding model configured - use local fallback
-            self._use_local_embeddings = True
-            from .local_embeddings import get_local_embedding_dimension
-
-            self._local_model_name = None  # uses default
-            self.dimension = get_local_embedding_dimension()
-
-        # Resolve the ORM model for this dimension
-        self.MemoryModel = get_memory_model(self.dimension)
+        # Provisional ORM model for the ``memories_{dim}`` table. The
+        # ``get_memory_model`` factory is a pure Python class builder (no
+        # DB or network access), so constructing it here does NOT violate
+        # the "no OneLLM calls in ctor" contract. When ``_ensure_dim``
+        # resolves the real dim, ``self.MemoryModel`` is replaced.
+        self.dimension = dimension
+        self.MemoryModel = get_memory_model(dimension)
 
         # Use provided database manager
         self.db_manager = db_manager
@@ -305,59 +310,48 @@ class LongTermMemory:
             self._ensure_default_user()
 
     @property
-    def embedding_model(self):
-        """Get the embedding model, creating it lazily if needed.
+    def embedding_model_name(self) -> str:
+        """Public accessor for the configured embedding model slug.
 
-        If no API-based embedding model is configured, returns a LocalEmbeddingProvider
-        that uses sentence-transformers for local embedding generation.
+        Exposes the provider-prefixed slug string (e.g.
+        ``"local/nomic-ai/nomic-embed-text-v1.5"``,
+        ``"openai/text-embedding-3-small"``) used by this memory
+        instance for embedding generation. External consumers
+        (``persistent_manager.py``, etc.) should read this public
+        property instead of reaching into the private
+        ``_embedding_model_name`` attribute.
         """
-        # Check if we should use local embeddings
-        if self._use_local_embeddings:
-            if self._embedding_model is None:
-                from .local_embeddings import LOCAL_EMBEDDING_MODEL_NAME, LocalEmbeddingProvider
+        return self._embedding_model_name
 
-                model_name = getattr(self, "_local_model_name", None) or LOCAL_EMBEDDING_MODEL_NAME
-                self._embedding_model = LocalEmbeddingProvider(model_name=model_name)
+    async def _ensure_dim(self) -> int:
+        """Probe the embedding dimension exactly once and memoize it.
 
-                # Log once about using local embeddings
-                if not self._local_embedding_logged:
-                    observability.observe(
-                        event_type=observability.ConversationEvents.REQUEST_PROCESSING,
-                        level=observability.EventLevel.INFO,
-                        data={
-                            "embedding_model": "all-MiniLM-L6-v2",
-                            "dimension": self.dimension,
-                            "type": "local_fallback",
-                        },
-                        description=(
-                            "Using local embedding model (all-MiniLM-L6-v2). "
-                            "For better quality, configure: llm.models.embedding"
-                        ),
-                    )
-                    self._local_embedding_logged = True
-            return self._embedding_model
+        On first invocation this calls
+        :func:`services.memory.embedding.probe_dimension` for the
+        configured model slug, stores the result on ``self._dimension``,
+        and refreshes ``self.MemoryModel`` / ``self.dimension`` so the
+        correct ``memories_{dim}`` ORM binding is used for subsequent
+        operations.
 
-        # API-based embedding model
-        if self._embedding_model is None and self._embedding_model_name:
-            # Create LLM instance lazily
-            try:
-                from ..llm import LLM as LLMClass
+        Concurrent callers are serialized by ``self._dim_lock`` so only
+        a single underlying ``probe_dimension`` call is issued even when
+        multiple coroutines hit this method simultaneously on a fresh
+        instance.
+        """
+        if self._dimension is not None:
+            return self._dimension
 
-                self._embedding_model = LLMClass(model=self._embedding_model_name)
-            except Exception as e:
-                observability.observe(
-                    event_type=observability.ErrorEvents.LLM_INITIALIZATION_FAILED,
-                    level=observability.EventLevel.ERROR,
-                    data={
-                        "model_name": self._embedding_model_name,
-                        "error": str(e),
-                    },
-                    description=f"Failed to create LLM instance for embeddings: {e}",
-                )
-                # Clear the model name to prevent repeated initialization attempts
-                self._embedding_model_name = None
-                raise ValueError(f"Failed to initialize embedding model: {e}")
-        return self._embedding_model
+        async with self._dim_lock:
+            # Re-check under the lock — another coroutine may have probed
+            # while we were queued on ``acquire``.
+            if self._dimension is not None:
+                return self._dimension
+
+            probed = await probe_dimension(self._embedding_model_name)
+            self._dimension = probed
+            self.dimension = probed
+            self.MemoryModel = get_memory_model(probed)
+            return probed
 
     def _ensure_pgvector_extension(self) -> None:
         """
@@ -637,13 +631,18 @@ class LongTermMemory:
         if metadata is None:
             metadata = {}
 
-        # Generate embedding if not provided
+        # Generate embedding if not provided.
+        # Write paths use ``task="search_document"`` — the Nomic-style
+        # prefix marks these inputs as corpus documents; the helper strips
+        # the kwarg for cloud providers that don't honor it.
         if embedding is None:
-            if not self.embedding_model:
-                raise ValueError("No embedding model available for generating embeddings")
-            embedding_response = await self.embedding_model.embed(content)
-            # Extract the actual embedding vector from the response
-            embedding = self._extract_embedding_from_response(embedding_response)
+            await self._ensure_dim()
+            vectors = await embed(
+                self._embedding_model_name,
+                content,
+                task="search_document",
+            )
+            embedding = vectors[0]
 
         # Insert into database using async method
         memory_id = await self._add_internal_async(
@@ -829,13 +828,18 @@ class LongTermMemory:
             description="Long-term memory search started",
         )
 
-        # Generate embedding if not provided
+        # Generate embedding if not provided.
+        # Search paths use ``task="search_query"`` — the Nomic-style
+        # prefix marks these inputs as retrieval queries; the helper
+        # strips the kwarg for cloud providers that don't honor it.
         if query_embedding is None:
-            if not self.embedding_model:
-                raise ValueError("No embedding model available for generating embeddings")
-            embedding_response = await self.embedding_model.embed(query)
-            # Extract the actual embedding vector from the response
-            query_embedding = self._extract_embedding_from_response(embedding_response)
+            await self._ensure_dim()
+            vectors = await embed(
+                self._embedding_model_name,
+                query,
+                task="search_query",
+            )
+            query_embedding = vectors[0]
 
         # Search in database using async method
         results = await self._search_internal_async(

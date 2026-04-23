@@ -44,6 +44,13 @@ from .rewriter import PromptRewriter
 
 # Configure multitasking
 multitasking.set_engine("thread")
+# Spawn @multitasking.task workers as daemon threads so the
+# `process_due_jobs_continuously` worker below — a `while not stopped:`
+# infinite loop that only exits when the service stop flag is set — does
+# not block interpreter exit on abrupt shutdown, test teardown, or
+# SIGTERM. Requires multitasking>=0.0.13; older versions hardcoded
+# daemon=False and will hang.
+multitasking.set_daemon(True)
 # Only register signal handlers in main thread to avoid errors in tests
 try:
     signal.signal(signal.SIGINT, multitasking.killall)

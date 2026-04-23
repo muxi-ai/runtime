@@ -14,6 +14,19 @@ from typing import TYPE_CHECKING, Any, Dict, List, Optional, Tuple
 
 from ...utils.fastjson import json
 from .. import observability
+from ..memory.embedding import (
+    DEFAULT_EMBEDDING_MODEL,
+    DEFAULT_EMBEDDING_MODEL_NATIVE_DIM,
+    embed,
+)
+
+# Target dimension for fusion fallback embeddings. Imported from
+# ``embedding.py`` rather than hardcoded so a future change to
+# ``DEFAULT_EMBEDDING_MODEL`` that updates its paired native-dim
+# constant automatically propagates here. This closes the drift gap
+# flagged in review: previously a bare ``768`` had to be hand-edited
+# in lockstep with the default-model swap.
+_FUSION_EMBED_DIM = DEFAULT_EMBEDDING_MODEL_NATIVE_DIM
 
 if TYPE_CHECKING:
     from ...services.llm import LLM
@@ -252,22 +265,24 @@ Analyze and provide as JSON:
     async def _generate_embedding(self, text: str) -> List[float]:
         """Generate semantic embedding for text.
 
-        Uses the LLM's embedding capability if available, otherwise falls back
-        to local sentence-transformer embeddings (all-MiniLM-L6-v2, 384 dimensions).
+        Uses the LLM's embedding capability if available, otherwise routes
+        through the shared embedding helper
+        (``services/memory/embedding.py``) using ``DEFAULT_EMBEDDING_MODEL``
+        (``local/nomic-ai/nomic-embed-text-v1.5``, 768-dim). If the helper
+        path itself fails — network outage, missing local model weights,
+        etc. — falls back to ``_generate_semantic_fallback_embedding`` so
+        fusion never hard-fails on embedding unavailability.
         """
         try:
             # Use LLM to generate embedding if available
             if hasattr(self.llm, "get_embedding"):
                 return await self.llm.get_embedding(text)
-            else:
-                # Fallback: Use local sentence-transformer model
-                try:
-                    from ..memory.local_embeddings import get_local_embedding_async
 
-                    return await get_local_embedding_async(text)
-                except ImportError:
-                    # If sentence-transformers not available, use linguistic fallback
-                    return self._generate_semantic_fallback_embedding(text)
+            # Shared-helper path — single choke point for every MUXI
+            # embedding call. Returns list[list[float]] (one vector per
+            # input string); we unpack the first element.
+            vectors = await embed(DEFAULT_EMBEDDING_MODEL, text)
+            return vectors[0]
 
         except Exception as e:
             observability.observe(
@@ -280,13 +295,9 @@ Analyze and provide as JSON:
                 },
                 description="Embedding generation failed in multimodal fusion",
             )
-            # Try local embeddings as last resort
-            try:
-                from ..memory.local_embeddings import get_local_embedding
-
-                return get_local_embedding(text)
-            except Exception:
-                return [0.0] * 384  # Zero embedding as final fallback (384 for local model)
+            # Last-resort fallback: statistical features rather than a
+            # zero vector, keeping cross-modal attention meaningful.
+            return self._generate_semantic_fallback_embedding(text)
 
     def _generate_semantic_fallback_embedding(self, text: str) -> List[float]:
         """
@@ -443,6 +454,26 @@ Analyze and provide as JSON:
         magnitude = math.sqrt(sum(x * x for x in embedding))
         if magnitude > 0:
             embedding = [x / magnitude for x in embedding]
+
+        # Pad trailing dims to match the primary-path embedding dimension
+        # (``DEFAULT_EMBEDDING_MODEL``, see ``_FUSION_EMBED_DIM``). Padding
+        # here is purely a shape-compatibility measure — it prevents
+        # downstream storage / cross-modal attention from silently
+        # dropping or skewing the result when the fallback path is taken.
+        #
+        # Caveat: the runtime's memory search path uses L2 distance (see
+        # ``LongTermMemory.search`` / ``search_by_embedding``), so when a
+        # padded fallback vector is compared against a real Nomic v1.5
+        # vector whose dims 512..767 are non-zero, those dims contribute
+        # ``sum(n_i^2)`` to the L2 distance — systematically inflating
+        # the distance vs. a same-band real vector. Recall against real
+        # memory content is therefore degraded whenever this fallback
+        # fires. This is an already-last-resort path (we only reach it
+        # when both LLM embedding and the shared embed helper failed),
+        # but callers should not treat fallback vectors as semantically
+        # interchangeable with primary-path vectors.
+        if len(embedding) < _FUSION_EMBED_DIM:
+            embedding.extend([0.0] * (_FUSION_EMBED_DIM - len(embedding)))
 
         return embedding
 

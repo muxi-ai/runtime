@@ -391,12 +391,17 @@ def _initialize_buffer_memory(formation, buffer_config: Dict[str, Any]) -> None:
         # Get formation_id from formation instance
         formation_id = getattr(formation, "formation_id", "default-formation")
 
-        # Create buffer memory instance (model=None → local embeddings)
+        # Create buffer memory instance. Passing ``embedding_model=None``
+        # defers to ``WorkingMemory``'s DEFAULT_EMBEDDING_MODEL — the
+        # post-migration contract is a string slug, never an LLM-like
+        # provider object. The legacy ``model=`` kwarg was removed in
+        # the embedding-platform migration; ``embedding_model=`` is the
+        # only accepted name and ``None`` is its default.
         formation._buffer_memory = WorkingMemory(
             formation_id=formation_id,
             max_size=size,
             buffer_multiplier=multiplier,
-            model=None,
+            embedding_model=None,
             mode=mode,
             remote=remote_config.model_dump() if remote_config and mode == "remote" else None,
         )
@@ -1035,11 +1040,17 @@ async def initialize_buffer_memory(formation, overlord, buffer_config: Dict[str,
         mode = config.mode
         remote_config = config.remote
 
-        # Get embedding model for vector search if enabled
-        embedding_model = None
+        # Get embedding model for vector search if enabled. The overlord
+        # returns an LLM-like object here; WorkingMemory now requires a
+        # provider-prefixed string slug, so we extract ``.model_name``
+        # at the call site and forward the string only.
+        embedding_model_slug: Optional[str] = None
         if vector_search:
             try:
-                embedding_model = await overlord.get_model_for_capability("embedding")
+                embedding_model_obj = await overlord.get_model_for_capability("embedding")
+                embedding_model_slug = getattr(embedding_model_obj, "model_name", None)
+                if not isinstance(embedding_model_slug, str) or not embedding_model_slug:
+                    embedding_model_slug = None
             except Exception as e:
                 observability.observe(
                     event_type=observability.ErrorEvents.EMBEDDINGS_GENERATION_FAILED,
@@ -1049,13 +1060,14 @@ async def initialize_buffer_memory(formation, overlord, buffer_config: Dict[str,
                 )
                 vector_search = False
 
-        # Create buffer memory instance
+        # Create buffer memory instance. ``embedding_model`` is the
+        # string slug (or ``None`` to fall back to the helper's default).
         buffer_memory = WorkingMemory(
             formation_id=overlord.formation_id,
             max_size=size,
             buffer_multiplier=multiplier,
             dimension=dimension,
-            model=embedding_model,
+            embedding_model=embedding_model_slug,
             mode=mode,
             remote=remote_config.model_dump() if remote_config and mode == "remote" else None,
         )
@@ -1168,8 +1180,16 @@ async def initialize_persistent_memory(
                 )
                 return
 
-        # Get embedding model
+        # Get embedding model. The overlord returns an LLM-like object;
+        # memory backends now require a provider-prefixed string slug.
+        # Prefer the explicit slug from config; fall back to the slug
+        # attached to the LLM instance via ``.model_name``.
         embedding_model = await _get_embedding_model(overlord, embedding_model_name)
+        embedding_model_slug: Optional[str] = embedding_model_name
+        if not isinstance(embedding_model_slug, str) or not embedding_model_slug:
+            embedding_model_slug = getattr(embedding_model, "model_name", None)
+            if not isinstance(embedding_model_slug, str) or not embedding_model_slug:
+                embedding_model_slug = None
 
         # Extract and validate statement timeout once for reuse across all database manager branches
         statement_timeout = _validate_query_timeout(persistent_config)
@@ -1203,11 +1223,13 @@ async def initialize_persistent_memory(
             formation._db_manager = db_manager
             overlord.db_manager = db_manager
 
-            # Create LongTermMemory using the shared DatabaseManager
+            # Create LongTermMemory using the shared DatabaseManager.
+            # ``embedding_model`` is the provider-prefixed slug string;
+            # ``None`` falls back to the helper's default.
             long_term_memory = LongTermMemory(
                 db_manager=db_manager,
                 formation_id=overlord.formation_id,
-                embedding_model=embedding_model,
+                embedding_model=embedding_model_slug,
             )
 
             # Create Memobase with the LongTermMemory instance
@@ -1235,7 +1257,7 @@ async def initialize_persistent_memory(
             sqlite_memory = SQLiteMemory(
                 db_path=db_path,
                 formation_id=overlord.formation_id,
-                embedding_model=embedding_model_name or embedding_model,
+                embedding_model=embedding_model_slug,
             )
 
             # Store on both formation and overlord
@@ -1246,10 +1268,6 @@ async def initialize_persistent_memory(
             db_manager = get_database_manager(connection_string, statement_timeout)
             formation._db_manager = db_manager
             overlord.db_manager = db_manager
-
-            # Set the embedding provider after initialization
-            if embedding_model:
-                sqlite_memory._embedding_provider = embedding_model
 
             # Initialize required collections
             await overlord._initialize_collections()

@@ -81,13 +81,23 @@ class MultiCollectionBackend:
 
 
 class FallbackBackend:
-    def __init__(self, collection_scores=None):
-        self.embedding_model = SimpleNamespace(embed=AsyncMock(return_value=[0.1, 0.2, 0.3]))
+    """Backend without the ``collections`` parameter on search().
+
+    Post-migration this backend publishes its embedding model via the
+    public ``embedding_model_name`` attribute (string slug) so the
+    manager's ``_generate_query_embedding`` path embeds the query once
+    (via the shared helper) and reuses the vector across per-collection
+    ``search()`` calls.
+    """
+
+    def __init__(
+        self,
+        collection_scores=None,
+        embedding_model_name: str = "local/nomic-ai/nomic-embed-text-v1.5",
+    ):
+        self.embedding_model_name = embedding_model_name
         self.search_calls = []
         self.collection_scores = collection_scores or {}
-
-    def _extract_embedding_from_response(self, embedding_response):
-        return embedding_response
 
     async def search(
         self,
@@ -168,21 +178,44 @@ class TestPersistentMemoryManagerSpeedups:
 
     @pytest.mark.asyncio
     async def test_reuses_query_embedding_when_backend_needs_collection_fallback(self):
+        """Query is embedded once via the shared helper and reused across collections.
+
+        Post-m1-f8/m1-f10 the manager reads ``embedding_model_name``
+        from the backend (string slug, not provider object) and
+        delegates to ``muxi.runtime.formation.memory.persistent_manager.embed``
+        (the shared helper imported at module scope). Patching that
+        symbol verifies the helper is invoked exactly once and both
+        per-collection search calls receive the same precomputed
+        vector.
+        """
         backend = FallbackBackend()
         overlord = SimpleNamespace(long_term_memory=backend, is_multi_user=True)
         manager = PersistentMemoryManager(overlord)
 
-        await manager.search_long_term_memory(
-            query="What is my current user profile?",
-            k=3,
-            user_id="tester",
-            collections=["preferences", "user_identity"],
-        )
+        expected_vector = [0.1, 0.2, 0.3]
 
-        assert backend.embedding_model.embed.await_count == 1
+        with patch(
+            "muxi.runtime.formation.memory.persistent_manager.embed",
+            new_callable=AsyncMock,
+            return_value=[expected_vector],
+        ) as mock_embed:
+            await manager.search_long_term_memory(
+                query="What is my current user profile?",
+                k=3,
+                user_id="tester",
+                collections=["preferences", "user_identity"],
+            )
+
+        assert mock_embed.await_count == 1
+        # Helper invoked with the slug + query and ``task="search_query"``.
+        call = mock_embed.call_args
+        slug = call.args[0] if call.args else call.kwargs.get("model")
+        assert slug == "local/nomic-ai/nomic-embed-text-v1.5"
+        assert call.kwargs.get("task") == "search_query"
+
         assert len(backend.search_calls) == 2
-        assert backend.search_calls[0]["query_embedding"] == [0.1, 0.2, 0.3]
-        assert backend.search_calls[1]["query_embedding"] == [0.1, 0.2, 0.3]
+        assert backend.search_calls[0]["query_embedding"] == expected_vector
+        assert backend.search_calls[1]["query_embedding"] == expected_vector
 
     @pytest.mark.asyncio
     async def test_resorts_unified_multi_collection_results_by_score_and_top_k(self):

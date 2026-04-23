@@ -31,7 +31,7 @@ class TaskSpecification(BaseModel):
     id: str = Field(..., description="Unique task identifier")
     description: str = Field(..., description="Human-readable task description")
     required_capabilities: List[str] = Field(
-        ..., min_items=1, description="Capabilities an agent must have to execute this task"
+        ..., min_length=1, description="Capabilities an agent must have to execute this task"
     )
     expected_outputs: List[Dict[str, str]] = Field(
         default_factory=list,

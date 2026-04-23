@@ -1,0 +1,62 @@
+# MUXI Runtime - PyTorch variant
+# ============================================================================
+#
+# Inherits from the lean runtime image and layers on:
+#   - PyTorch (CPU-only wheels, no CUDA bloat)
+#   - onellm[local-pytorch] extra -> sentence-transformers backend
+#
+# When to use this variant:
+#   - Your formation's embedding model does not ship ONNX weights.
+#     Example: local/nomic-ai/nomic-embed-text-v2-moe (Mixture-of-Experts,
+#     PyTorch-only as of 2026-04).
+#   - You need SentenceTransformer's specific pooling / normalization
+#     semantics and ONNX equivalents are not acceptable.
+#
+# When NOT to use this variant:
+#   - Your formation uses Nomic v1.5 or any ONNX-native model. The lean
+#     variant runs ONNX via onnxruntime — faster start, smaller image,
+#     no torch footprint.
+#
+# Selected by muxi-server when the formation declares
+#   muxi_runtime: "<version>:pytorch"
+# The server resolves that slug to the SIF built from this Dockerfile.
+#
+# ============================================================================
+
+ARG BASE_IMAGE=ghcr.io/muxi-ai/runtime
+ARG BASE_TAG=latest
+FROM ${BASE_IMAGE}:${BASE_TAG}
+
+LABEL maintainer="Ran Aroussi <ran@aroussi.com>"
+LABEL description="MUXI Runtime - PyTorch variant with sentence-transformers backend"
+LABEL muxi.runtime.variant="pytorch"
+
+# Install PyTorch CPU-only FIRST, before letting onellm[local-pytorch] resolve
+# sentence-transformers. Without this, pip/uv would happily pull the default
+# CUDA-enabled torch wheels (~4GB of NVIDIA libs) as a transitive dep. The
+# CPU-only index URL is the documented way to avoid that bloat.
+#
+# --no-cache-dir keeps the image size down; torch wheels are large and the
+# pip cache would nearly double the layer size if retained.
+RUN pip install --no-cache-dir \
+        --index-url https://download.pytorch.org/whl/cpu \
+        --extra-index-url https://pypi.org/simple \
+        torch torchvision \
+ && pip install --no-cache-dir "onellm[cache,local-pytorch]>=0.20260422.3" \
+ && find /usr/local -name "*.pyc" -delete \
+ && find /usr/local -name "__pycache__" -type d -exec rm -rf {} + 2>/dev/null || true \
+ && rm -rf /root/.cache /tmp/*
+
+# Sanity check: sentence-transformers and torch both import. Fails the build
+# early rather than at first runtime embed if a dep resolution went sideways.
+RUN python -c "import torch, sentence_transformers; \
+    print(f'torch {torch.__version__} | sentence-transformers {sentence_transformers.__version__}')"
+
+# Inherited from the lean base (no override needed):
+#   - HF_HOME=/opt/hf-cache
+#   - HF_HUB_CACHE=/opt/hf-cache
+#   - PYTHONPATH, PYTHONDONTWRITEBYTECODE, PYTHONUNBUFFERED, LC_ALL, LANG
+#   - /opt/hf-cache stub directory
+#   - docker-entrypoint.sh + ENTRYPOINT
+#   - EXPOSE 8000, HEALTHCHECK
+#   - Source at /app, packages at /usr/local

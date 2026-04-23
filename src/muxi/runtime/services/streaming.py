@@ -16,6 +16,12 @@ import multitasking
 # Set multitasking to thread mode for shared memory access
 multitasking.set_engine("thread")
 
+# Spawn @multitasking.task workers as daemon threads so fire-and-forget
+# event emitters (see `_emit_in_background` below) never block interpreter
+# exit on process shutdown or test teardown. Requires multitasking>=0.0.13;
+# older versions hardcoded daemon=False and will hang on exit.
+multitasking.set_daemon(True)
+
 # Kill all tasks on ctrl-c for clean shutdown
 # Only register signal handlers in main thread to avoid errors in tests
 try:

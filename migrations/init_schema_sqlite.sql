@@ -58,9 +58,138 @@ CREATE TABLE IF NOT EXISTS collections (
 CREATE INDEX IF NOT EXISTS idx_collections_user_id ON collections(user_id);
 CREATE INDEX IF NOT EXISTS idx_collections_name ON collections(name);
 
--- Memories table (dimension-specific: memories_384, memories_768, memories_1536, etc.)
--- The runtime creates the table matching the configured embedding model's dimension.
--- This schema uses 1536 (OpenAI text-embedding-3-small) as the default example.
+-- =====================================================================
+-- Memories tables - one per common embedding dimension
+-- =====================================================================
+-- SQLite has no native vector type, so embeddings are stored as BLOB
+-- (packed float32 bytes). Each dim has its own table plus FTS5
+-- virtual table + sync triggers so full-text search works uniformly.
+--
+-- Dimension -> typical producer:
+--   384  - legacy MiniLM (read-only support for re-embed migration)
+--   768  - Nomic v1.5 (DEFAULT), Nomic v2 MoE, all-mpnet, GTE
+--   1024 - Arctic Embed L v2.0, bge-m3, Cohere v3
+--   1536 - OpenAI ada-002, text-embedding-3-small
+--   3072 - OpenAI text-embedding-3-large
+-- =====================================================================
+
+-- memories_384 -------------------------------------------------------
+CREATE TABLE IF NOT EXISTS memories_384 (
+    id TEXT PRIMARY KEY,
+    user_id INTEGER NOT NULL,
+    collection TEXT NOT NULL DEFAULT 'default',
+    text TEXT NOT NULL,
+    embedding BLOB NOT NULL,
+    metadata TEXT,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
+);
+
+CREATE INDEX IF NOT EXISTS idx_memories_384_user_id ON memories_384(user_id);
+CREATE INDEX IF NOT EXISTS idx_memories_384_collection ON memories_384(collection);
+CREATE INDEX IF NOT EXISTS idx_memories_384_created_at ON memories_384(created_at);
+CREATE INDEX IF NOT EXISTS idx_memories_384_updated_at ON memories_384(updated_at);
+CREATE INDEX IF NOT EXISTS idx_memories_384_user_created_at ON memories_384(user_id, created_at);
+
+CREATE VIRTUAL TABLE IF NOT EXISTS memories_384_fts USING fts5(
+    text,
+    content='memories_384',
+    content_rowid='rowid'
+);
+
+CREATE TRIGGER IF NOT EXISTS memories_384_fts_insert AFTER INSERT ON memories_384 BEGIN
+    INSERT INTO memories_384_fts(rowid, text) VALUES (new.rowid, new.text);
+END;
+
+CREATE TRIGGER IF NOT EXISTS memories_384_fts_delete AFTER DELETE ON memories_384 BEGIN
+    DELETE FROM memories_384_fts WHERE rowid = old.rowid;
+END;
+
+CREATE TRIGGER IF NOT EXISTS memories_384_fts_update AFTER UPDATE ON memories_384 BEGIN
+    DELETE FROM memories_384_fts WHERE rowid = old.rowid;
+    INSERT INTO memories_384_fts(rowid, text) VALUES (new.rowid, new.text);
+END;
+
+-- memories_768 -------------------------------------------------------
+-- DEFAULT dim: Nomic v1.5, Nomic v2 MoE, all-mpnet, GTE.
+CREATE TABLE IF NOT EXISTS memories_768 (
+    id TEXT PRIMARY KEY,
+    user_id INTEGER NOT NULL,
+    collection TEXT NOT NULL DEFAULT 'default',
+    text TEXT NOT NULL,
+    embedding BLOB NOT NULL,
+    metadata TEXT,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
+);
+
+CREATE INDEX IF NOT EXISTS idx_memories_768_user_id ON memories_768(user_id);
+CREATE INDEX IF NOT EXISTS idx_memories_768_collection ON memories_768(collection);
+CREATE INDEX IF NOT EXISTS idx_memories_768_created_at ON memories_768(created_at);
+CREATE INDEX IF NOT EXISTS idx_memories_768_updated_at ON memories_768(updated_at);
+CREATE INDEX IF NOT EXISTS idx_memories_768_user_created_at ON memories_768(user_id, created_at);
+
+CREATE VIRTUAL TABLE IF NOT EXISTS memories_768_fts USING fts5(
+    text,
+    content='memories_768',
+    content_rowid='rowid'
+);
+
+CREATE TRIGGER IF NOT EXISTS memories_768_fts_insert AFTER INSERT ON memories_768 BEGIN
+    INSERT INTO memories_768_fts(rowid, text) VALUES (new.rowid, new.text);
+END;
+
+CREATE TRIGGER IF NOT EXISTS memories_768_fts_delete AFTER DELETE ON memories_768 BEGIN
+    DELETE FROM memories_768_fts WHERE rowid = old.rowid;
+END;
+
+CREATE TRIGGER IF NOT EXISTS memories_768_fts_update AFTER UPDATE ON memories_768 BEGIN
+    DELETE FROM memories_768_fts WHERE rowid = old.rowid;
+    INSERT INTO memories_768_fts(rowid, text) VALUES (new.rowid, new.text);
+END;
+
+-- memories_1024 ------------------------------------------------------
+CREATE TABLE IF NOT EXISTS memories_1024 (
+    id TEXT PRIMARY KEY,
+    user_id INTEGER NOT NULL,
+    collection TEXT NOT NULL DEFAULT 'default',
+    text TEXT NOT NULL,
+    embedding BLOB NOT NULL,
+    metadata TEXT,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
+);
+
+CREATE INDEX IF NOT EXISTS idx_memories_1024_user_id ON memories_1024(user_id);
+CREATE INDEX IF NOT EXISTS idx_memories_1024_collection ON memories_1024(collection);
+CREATE INDEX IF NOT EXISTS idx_memories_1024_created_at ON memories_1024(created_at);
+CREATE INDEX IF NOT EXISTS idx_memories_1024_updated_at ON memories_1024(updated_at);
+CREATE INDEX IF NOT EXISTS idx_memories_1024_user_created_at ON memories_1024(user_id, created_at);
+
+CREATE VIRTUAL TABLE IF NOT EXISTS memories_1024_fts USING fts5(
+    text,
+    content='memories_1024',
+    content_rowid='rowid'
+);
+
+CREATE TRIGGER IF NOT EXISTS memories_1024_fts_insert AFTER INSERT ON memories_1024 BEGIN
+    INSERT INTO memories_1024_fts(rowid, text) VALUES (new.rowid, new.text);
+END;
+
+CREATE TRIGGER IF NOT EXISTS memories_1024_fts_delete AFTER DELETE ON memories_1024 BEGIN
+    DELETE FROM memories_1024_fts WHERE rowid = old.rowid;
+END;
+
+CREATE TRIGGER IF NOT EXISTS memories_1024_fts_update AFTER UPDATE ON memories_1024 BEGIN
+    DELETE FROM memories_1024_fts WHERE rowid = old.rowid;
+    INSERT INTO memories_1024_fts(rowid, text) VALUES (new.rowid, new.text);
+END;
+
+-- memories_1536 ------------------------------------------------------
+-- OpenAI ada-002, text-embedding-3-small.
 CREATE TABLE IF NOT EXISTS memories_1536 (
     id TEXT PRIMARY KEY,
     user_id INTEGER NOT NULL,
@@ -98,6 +227,45 @@ END;
 CREATE TRIGGER IF NOT EXISTS memories_1536_fts_update AFTER UPDATE ON memories_1536 BEGIN
     DELETE FROM memories_1536_fts WHERE rowid = old.rowid;
     INSERT INTO memories_1536_fts(rowid, text) VALUES (new.rowid, new.text);
+END;
+
+-- memories_3072 ------------------------------------------------------
+-- OpenAI text-embedding-3-large.
+CREATE TABLE IF NOT EXISTS memories_3072 (
+    id TEXT PRIMARY KEY,
+    user_id INTEGER NOT NULL,
+    collection TEXT NOT NULL DEFAULT 'default',
+    text TEXT NOT NULL,
+    embedding BLOB NOT NULL,
+    metadata TEXT,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
+);
+
+CREATE INDEX IF NOT EXISTS idx_memories_3072_user_id ON memories_3072(user_id);
+CREATE INDEX IF NOT EXISTS idx_memories_3072_collection ON memories_3072(collection);
+CREATE INDEX IF NOT EXISTS idx_memories_3072_created_at ON memories_3072(created_at);
+CREATE INDEX IF NOT EXISTS idx_memories_3072_updated_at ON memories_3072(updated_at);
+CREATE INDEX IF NOT EXISTS idx_memories_3072_user_created_at ON memories_3072(user_id, created_at);
+
+CREATE VIRTUAL TABLE IF NOT EXISTS memories_3072_fts USING fts5(
+    text,
+    content='memories_3072',
+    content_rowid='rowid'
+);
+
+CREATE TRIGGER IF NOT EXISTS memories_3072_fts_insert AFTER INSERT ON memories_3072 BEGIN
+    INSERT INTO memories_3072_fts(rowid, text) VALUES (new.rowid, new.text);
+END;
+
+CREATE TRIGGER IF NOT EXISTS memories_3072_fts_delete AFTER DELETE ON memories_3072 BEGIN
+    DELETE FROM memories_3072_fts WHERE rowid = old.rowid;
+END;
+
+CREATE TRIGGER IF NOT EXISTS memories_3072_fts_update AFTER UPDATE ON memories_3072 BEGIN
+    DELETE FROM memories_3072_fts WHERE rowid = old.rowid;
+    INSERT INTO memories_3072_fts(rowid, text) VALUES (new.rowid, new.text);
 END;
 
 -- Credentials table
@@ -201,11 +369,39 @@ BEGIN
     UPDATE collections SET updated_at = CURRENT_TIMESTAMP WHERE id = NEW.id;
 END;
 
+CREATE TRIGGER IF NOT EXISTS trigger_update_memories_384_updated_at
+AFTER UPDATE ON memories_384
+FOR EACH ROW
+BEGIN
+    UPDATE memories_384 SET updated_at = CURRENT_TIMESTAMP WHERE id = NEW.id;
+END;
+
+CREATE TRIGGER IF NOT EXISTS trigger_update_memories_768_updated_at
+AFTER UPDATE ON memories_768
+FOR EACH ROW
+BEGIN
+    UPDATE memories_768 SET updated_at = CURRENT_TIMESTAMP WHERE id = NEW.id;
+END;
+
+CREATE TRIGGER IF NOT EXISTS trigger_update_memories_1024_updated_at
+AFTER UPDATE ON memories_1024
+FOR EACH ROW
+BEGIN
+    UPDATE memories_1024 SET updated_at = CURRENT_TIMESTAMP WHERE id = NEW.id;
+END;
+
 CREATE TRIGGER IF NOT EXISTS trigger_update_memories_1536_updated_at
 AFTER UPDATE ON memories_1536
 FOR EACH ROW
 BEGIN
     UPDATE memories_1536 SET updated_at = CURRENT_TIMESTAMP WHERE id = NEW.id;
+END;
+
+CREATE TRIGGER IF NOT EXISTS trigger_update_memories_3072_updated_at
+AFTER UPDATE ON memories_3072
+FOR EACH ROW
+BEGIN
+    UPDATE memories_3072 SET updated_at = CURRENT_TIMESTAMP WHERE id = NEW.id;
 END;
 
 CREATE TRIGGER IF NOT EXISTS trigger_update_credentials_updated_at

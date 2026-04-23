@@ -71,14 +71,16 @@ dependencies = [
     "beautifulsoup4>=4.12.0",  # HTML parsing and validation
     "nltk>=3.8.0",  # Natural language processing for chunking
     "spacy>=3.8.0",  # Advanced NLP for semantic chunking (compatible with NumPy 2.x)
-    "sentence-transformers>=2.2.0",  # Embedding generation for semantic search
 
     # Image processing dependencies
     "Pillow>=12.2.0",  # PIL/Pillow for image processing
     "pdf2image>=1.16.0",  # Convert PDF pages to images (requires Poppler)
 
     # LLM Package
-    "onellm[cache]>=0.20260415.0",
+    # 0.20260422.3 adds the `local-cuda` extra (onnxruntime-gpu + faiss-gpu-cu12)
+    # used by Dockerfile.cuda, and completes the revision= plumbing for the
+    # local/<repo>:<revision> slug we consume in embedding.py.
+    "onellm[cache]>=0.20260422.3",
     "boto3>=1.26.0",  # AWS SDK for OneLLM Bedrock provider
     "google-cloud-aiplatform>=1.25.0",  # Google Cloud for OneLLM Vertex AI provider
 
@@ -152,7 +154,7 @@ dependencies = [
     "PyJWT>=2.12.0",  # CVE-2026-32597: accepts unknown crit headers; fixed in 2.12.0
     "pyasn1>=0.6.3",  # CVE-2026-30922: unbounded recursion DoS; fixed in 0.6.3
     "msgpack>=1.0.0",  # Message pack format for observability
-    "multitasking>=0.0.11",  # Multi-threading utilities
+    "multitasking>=0.0.13",  # Multi-threading utilities; >=0.0.13 required for set_daemon() opt-in (prevents interpreter-exit hang on long-lived @task workers)
     "nanoid>=2.0.0",  # Nano ID generation
     "pytz>=2023.3",  # Timezone support for scheduler
     "requests>=2.33.0",  # HTTP client (used in observability)
@@ -164,10 +166,59 @@ dependencies = [
 kafka = [
     "kafka-python>=2.0.0",  # Kafka streaming support for observability
 ]
+
+# ---------------------------------------------------------------------------
+# Runtime variants
+# ---------------------------------------------------------------------------
+# These extras mirror the Dockerfile matrix so operators can reproduce each
+# SIF's Python dependency set with a single pip install:
+#
+#   pip install muxi-runtime                  # default (lean, ONNX + CPU FAISS)
+#   pip install 'muxi-runtime[pytorch]'       # CPU torch + sentence-transformers
+#   pip install 'muxi-runtime[cuda]'          # GPU ONNX + GPU FAISS + CUDA torch
+#
+# Core deps (see [project.dependencies]) already carry the default variant:
+# onnxruntime (via onellm[cache]), faiss-cpu, faissx. The extras layer
+# variant-specific packages on top. Dockerfile.pytorch / Dockerfile.cuda
+# should be viewed as thin wrappers that install these extras after the
+# lean base image is built.
+# ---------------------------------------------------------------------------
+
+# PyTorch variant — adds sentence-transformers (via onellm[local-pytorch]) and
+# CPU-wheel torch/torchvision. Non-conflicting with core: faiss-cpu and the
+# onnxruntime CPU wheel from core still work alongside. Users who want the
+# CPU torch wheel specifically (vs. the default PyPI CUDA wheel on Linux
+# x86_64) should pass ``--index-url https://download.pytorch.org/whl/cpu``.
+pytorch = [
+    "onellm[cache,local-pytorch]>=0.20260422.3",
+    "torch>=2.0.0",
+    "torchvision>=0.15.0",
+]
+
+# CUDA variant — GPU stack. ⚠️ This extra CONFLICTS with the core `faiss-cpu`
+# and `faissx` dependencies (both own top-level module names that clash with
+# `faiss-gpu-cu12` / `faissx-gpu`). Pip will install both sides and the
+# last-imported wheel wins at runtime. To install cleanly via pip, run:
+#
+#     pip uninstall -y faiss-cpu faissx onnxruntime
+#     pip install 'muxi-runtime[cuda]'
+#
+# Dockerfile.cuda handles this automatically (see its Step 1 uninstall block).
+# Target: Linux + x86_64 + NVIDIA + CUDA 12.x only. On macOS/Windows or hosts
+# without CUDA drivers, ``faiss-gpu-cu12`` has no installable wheel and pip
+# will fail with a clear ``No matching distribution`` error.
+cuda = [
+    "onellm[local-cuda,local-pytorch]>=0.20260422.3",
+    "faissx-gpu>=0.20260422.2",
+    "torch>=2.0.0",
+    "torchvision>=0.15.0",
+]
+
 dev = [
     "pytest>=9.0.3",
     "pytest-asyncio>=0.21.0",
     "pytest-cov>=4.0.0",
+    "pytest-timeout>=2.3.0",  # per-test timeout so a hanging test fails fast in CI instead of consuming the 6h job budget
     "black>=26.3.1",
     "isort>=5.12.0",
     "mypy>=1.0.0",
@@ -213,6 +264,7 @@ exclude = '''
 [tool.isort]
 profile = "black"
 line_length = 100
+combine_as_imports = true
 
 [tool.mypy]
 python_version = "3.10"

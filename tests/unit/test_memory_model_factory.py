@@ -1,8 +1,22 @@
-"""Unit tests for dynamic memory model factory and dimension resolution."""
+"""Unit tests for the dynamic memory-model factory.
+
+After the embedding-platform migration, the legacy dimension resolvers
+are gone — dimension resolution now flows through the shared helper at
+``services.memory.embedding.probe_dimension``, covered by
+``tests/unit/test_memory_embedding_helper.py`` and the lazy-dim consumer
+test modules.
+
+What remains worth asserting here is the ``get_memory_model`` ORM
+factory itself — it is the piece that binds each embedding dimension to
+a dedicated ``memories_{dim}`` table and is exercised indirectly by
+every memory consumer. These tests stay deliberately focused on the
+factory's pure-Python behavior (table naming, instance caching, column
+shape, backwards-compatible alias).
+"""
 
 
 class TestMemoryModelFactory:
-    """Tests for get_memory_model() factory function."""
+    """Tests for ``get_memory_model()`` factory function."""
 
     def test_creates_correct_tablename(self):
         from muxi.runtime.services.memory.long_term import get_memory_model
@@ -47,46 +61,8 @@ class TestMemoryModelFactory:
         }
 
 
-class TestLocalModelResolution:
-    """Tests for local/ prefix model name resolution."""
-
-    def test_is_local_model(self):
-        from muxi.runtime.services.memory.local_embeddings import is_local_model
-
-        assert is_local_model("local/all-MiniLM-L6-v2")
-        assert is_local_model("local/all-mpnet-base-v2")
-        assert is_local_model("all-MiniLM-L6-v2")  # bare name in registry
-        assert not is_local_model("openai/text-embedding-3-small")
-        assert not is_local_model("anthropic/some-model")
-
-    def test_resolve_local_model_name(self):
-        from muxi.runtime.services.memory.local_embeddings import resolve_local_model_name
-
-        assert resolve_local_model_name("local/all-mpnet-base-v2") == "all-mpnet-base-v2"
-        assert resolve_local_model_name("all-MiniLM-L6-v2") == "all-MiniLM-L6-v2"
-
-    def test_resolve_embedding_dimension_local(self):
-        from muxi.runtime.services.memory.local_embeddings import resolve_embedding_dimension
-
-        assert resolve_embedding_dimension("local/all-MiniLM-L6-v2") == 384
-        assert resolve_embedding_dimension("local/all-mpnet-base-v2") == 768
-        assert resolve_embedding_dimension("local/paraphrase-multilingual-MiniLM-L12-v2") == 384
-
-    def test_resolve_embedding_dimension_api(self):
-        from muxi.runtime.services.memory.local_embeddings import resolve_embedding_dimension
-
-        assert resolve_embedding_dimension("openai/text-embedding-3-small") == 1536
-        assert resolve_embedding_dimension("openai/text-embedding-3-large") == 3072
-        assert resolve_embedding_dimension("openai/text-embedding-ada-002") == 1536
-
-    def test_resolve_embedding_dimension_unknown_defaults_1536(self):
-        from muxi.runtime.services.memory.local_embeddings import resolve_embedding_dimension
-
-        assert resolve_embedding_dimension("unknown/model") == 1536
-
-
 class TestDimensionTiers:
-    """Tests for the three embedding dimension tiers."""
+    """Tests that the three embedding dimension tiers yield distinct tables."""
 
     def test_all_three_tiers_create_distinct_tables(self):
         from muxi.runtime.services.memory.long_term import get_memory_model
@@ -97,18 +73,3 @@ class TestDimensionTiers:
             get_memory_model(1536).__tablename__,
         }
         assert tables == {"memories_384", "memories_768", "memories_1536"}
-
-    def test_available_local_models(self):
-        from muxi.runtime.services.memory.local_embeddings import AVAILABLE_LOCAL_MODELS
-
-        assert "all-MiniLM-L6-v2" in AVAILABLE_LOCAL_MODELS
-        assert AVAILABLE_LOCAL_MODELS["all-MiniLM-L6-v2"]["dimension"] == 384
-
-        assert "all-mpnet-base-v2" in AVAILABLE_LOCAL_MODELS
-        assert AVAILABLE_LOCAL_MODELS["all-mpnet-base-v2"]["dimension"] == 768
-
-    def test_api_embedding_dimensions(self):
-        from muxi.runtime.services.memory.local_embeddings import API_EMBEDDING_DIMENSIONS
-
-        assert API_EMBEDDING_DIMENSIONS["openai/text-embedding-3-small"] == 1536
-        assert API_EMBEDDING_DIMENSIONS["openai/text-embedding-3-large"] == 3072

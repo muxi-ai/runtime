@@ -34,18 +34,17 @@
 # Example usage:
 #
 #   # Create buffer memory with semantic search (local mode)
-#   model = OpenAIModel(model="text-embedding-3-small")
 #   buffer = WorkingMemory(
-#       max_size=10,              # Context window size
-#       buffer_multiplier=10,     # Total capacity = 10 × 10 = 100
-#       model=model               # For generating embeddings
+#       max_size=10,                # Context window size
+#       buffer_multiplier=10,       # Total capacity = 10 x 10 = 100
+#       embedding_model="openai/text-embedding-3-small",
 #   )
 #
 #   # Create buffer memory with remote FAISS/FAISSx server
 #   buffer = WorkingMemory(
 #       max_size=10,
 #       buffer_multiplier=10,
-#       model=model,
+#       embedding_model="openai/text-embedding-3-small",
 #       mode="remote",
 #       remote={
 #           "url": "tcp://localhost:45678",
@@ -65,6 +64,7 @@
 # and comprehensive error handling for production-grade reliability.
 # =============================================================================
 
+import asyncio
 import collections
 import signal
 import time
@@ -75,10 +75,19 @@ import numpy as np
 from faissx import client as faiss
 
 from .. import observability
-from ..llm import LLM
+from .embedding import DEFAULT_EMBEDDING_MODEL, embed, probe_dimension
 
 # Set multitasking to thread mode for shared memory access
 multitasking.set_engine("thread")
+
+# Spawn @multitasking.task workers as daemon threads. The FIFO cleanup
+# task below is a `while True: time.sleep(...)` worker that never
+# terminates on its own; without daemon=True, Python waits for it at
+# interpreter exit and processes that instantiate WorkingMemory (unit
+# tests, CLI scripts, graceful-shutdown paths) hang indefinitely.
+# The SIGINT handler below remains as a belt-and-suspenders for
+# interactive Ctrl+C even though daemon threads die with the process.
+multitasking.set_daemon(True)
 
 # Kill all tasks on ctrl-c for clean shutdown
 # Only register signal handlers in main thread to avoid errors in tests
@@ -109,8 +118,8 @@ class WorkingMemory:
     - Local mode: Uses local FAISS for in-memory vector storage
     - Remote mode: Connects to remote FAISS/FAISSx server for distributed vector storage
 
-    When no embedding model is configured, automatically falls back to local
-    sentence-transformer embeddings (all-MiniLM-L6-v2, 384 dimensions).
+    When no embedding model is configured, automatically falls back to
+    ``local/nomic-ai/nomic-embed-text-v1.5`` (768 dimensions, Apache-2.0).
     """
 
     # Namespaces excluded from FIFO cleanup
@@ -126,28 +135,39 @@ class WorkingMemory:
         formation_id: str,
         max_size: int = 10,
         buffer_multiplier: int = 10,
-        dimension: int = 1536,
-        model=None,
+        dimension: int = 768,
         mode: str = "local",
         remote: Optional[Dict[str, Any]] = None,
         max_memory_mb: int = 1000,
         fifo_interval_min: int = 5,
         api_key: Optional[str] = None,
+        embedding_model: Optional[str] = None,
     ):
         """
         Initialize working memory with vector search capabilities.
 
+        The embedding dimension is **probed lazily** on the first embed
+        operation via
+        :func:`services.memory.embedding.probe_dimension`; construction
+        does NOT invoke OneLLM. ``dimension`` is retained as a
+        provisional hint used to size the initial FAISS index — it is
+        replaced on first ``_ensure_dim()`` call once the real dim is
+        known.
+
         Args:
-            formation_id: The formation ID for scoping data
+            formation_id: The formation ID for scoping data.
             max_size: The context window size - number of recent messages to include
                 when retrieving by recency. Default is 10.
             buffer_multiplier: Multiplier to determine total buffer capacity.
                 Total capacity = max_size × buffer_multiplier. Default is 10.
-            dimension: Dimension of embedding vectors. Default is 1536, which matches
-                OpenAI's text-embedding-3-small model.
-            model: Optional language model instance for generating embeddings.
-                Must have an async embed(text) method. If None, vector search
-                will be disabled and only recency-based retrieval will be used.
+            dimension: Provisional FAISS index dimension hint. Replaced on
+                first ``_ensure_dim()`` once the real dim is probed from
+                the embedding provider. Default is 768 (Nomic v1.5).
+            embedding_model: Provider-prefixed embedding model slug
+                (e.g. ``"local/nomic-ai/nomic-embed-text-v1.5"``,
+                ``"openai/text-embedding-3-small"``). When ``None``,
+                defaults to
+                :data:`~services.memory.embedding.DEFAULT_EMBEDDING_MODEL`.
             mode: FAISS mode - "local" for in-memory storage or "remote" for
                 server-based storage. Default is "local".
             remote: Remote server configuration when mode is "remote". Should contain:
@@ -156,6 +176,10 @@ class WorkingMemory:
                 - tenant: Optional tenant ID for multi-tenancy
             max_memory_mb: Maximum memory usage in MB for FIFO cleanup. Default is 1000.
             fifo_interval_min: Minimum interval in minutes for FIFO cleanup. Default is 5.
+            api_key: Retained for backwards compatibility with legacy
+                callers that passed it alongside ``model``. The helper
+                delegates authentication to OneLLM's own provider config
+                — this kwarg is no longer consulted here.
         """
         # Formation ID for scoping
         self.formation_id = formation_id
@@ -173,40 +197,31 @@ class WorkingMemory:
         self.remote = remote or {}
         self.has_vector_search = True
 
-        # Model can be either an LLM instance or a model name string
-        self._model = None
-        self._model_name = None
+        # ``api_key`` is preserved on the instance for backwards
+        # compatibility with callers that reference it. The new embed
+        # path routes through OneLLM which owns provider auth.
         self._model_api_key = api_key
-        self._use_local_embeddings = False
-        self._local_embedding_logged = False
 
-        if model:
-            if isinstance(model, str):
-                from .local_embeddings import (
-                    is_local_model,
-                    resolve_embedding_dimension,
-                    resolve_local_model_name,
-                )
+        # Resolve the embedding model slug. The old dispatch that
+        # accepted an LLM instance (or a local/API branch) is gone --
+        # every caller passes a slug string, and embedding generation
+        # flows through the shared :func:`embed` helper.
+        if embedding_model is None:
+            embedding_model = DEFAULT_EMBEDDING_MODEL
+        if not isinstance(embedding_model, str):
+            raise TypeError(
+                "WorkingMemory(embedding_model=...) must be a "
+                f"provider-prefixed slug string, got {type(embedding_model).__name__}"
+            )
+        self._embedding_model_name: str = embedding_model
 
-                if is_local_model(model):
-                    self._use_local_embeddings = True
-                    self._local_model_name = resolve_local_model_name(model)
-                    self.dimension = resolve_embedding_dimension(model)
-                else:
-                    # API model name — will create LLM instance lazily
-                    self._model_name = model
-                    self.dimension = resolve_embedding_dimension(model)
-            else:
-                # Assume it's an LLM instance
-                self._model = model
-                self.dimension = dimension
-        else:
-            # No embedding model configured - use local fallback
-            self._use_local_embeddings = True
-            self._local_model_name = None  # uses default
-            from .local_embeddings import get_local_embedding_dimension
-
-            self.dimension = get_local_embedding_dimension()
+        # Lazy-dim: populated on first ``_ensure_dim()`` call, never in
+        # ctor. ``self.dimension`` keeps a provisional FAISS index dim so
+        # the index can be constructed before the real dim is known; it
+        # is replaced under the lock once ``probe_dimension`` resolves.
+        self._dimension: Optional[int] = None
+        self._dim_lock = asyncio.Lock()
+        self.dimension = dimension
 
         # Configure FAISS for remote mode (FAISSx-specific)
         if mode == "remote" and self.remote:
@@ -218,7 +233,10 @@ class WorkingMemory:
         elif mode != "local" and mode != "remote":
             raise ValueError(f"Invalid mode: {mode}. Must be 'local' or 'remote'")
 
-        # Initialize vector storage
+        # Initialize vector storage with the provisional dim. The
+        # index will be rebuilt in-place the first time ``_ensure_dim``
+        # resolves a different real dim; this is safe because no vectors
+        # have been added yet.
         self.index = faiss.IndexFlatL2(self.dimension)
         self.index_mapping = {}  # Maps buffer indices to FAISS indices
         self.index_count = 0  # Counter for FAISS indices
@@ -231,60 +249,57 @@ class WorkingMemory:
         # Start the background FIFO cleanup task
         fifo_cleanup_task(self)
 
-    @property
-    def model(self):
-        """Get the model, creating it lazily if needed.
+    async def _ensure_dim(self) -> int:
+        """Probe the embedding dimension exactly once and memoize it.
 
-        If no API-based embedding model is configured, returns a LocalEmbeddingProvider
-        that uses sentence-transformers for local embedding generation.
+        On first invocation this calls
+        :func:`services.memory.embedding.probe_dimension` for the
+        configured model slug, stores the result on ``self._dimension``,
+        and — if the probed dim differs from the provisional hint used
+        to build the initial FAISS index — rebuilds ``self.index`` at
+        the correct dimensionality. Rebuilding is safe here because
+        ``_ensure_dim`` is always invoked before the first embed
+        operation, so the index is guaranteed to be empty.
+
+        Concurrent callers are serialized by ``self._dim_lock`` so only
+        a single underlying ``probe_dimension`` call is issued even
+        when multiple coroutines hit this method simultaneously on a
+        fresh instance.
         """
-        # Check if we should use local embeddings
-        if self._use_local_embeddings:
-            if self._model is None:
-                from .local_embeddings import LOCAL_EMBEDDING_MODEL_NAME, LocalEmbeddingProvider
+        if self._dimension is not None:
+            return self._dimension
 
-                model_name = getattr(self, "_local_model_name", None) or LOCAL_EMBEDDING_MODEL_NAME
-                self._model = LocalEmbeddingProvider(model_name=model_name)
+        async with self._dim_lock:
+            # Re-check under the lock — another coroutine may have
+            # probed while we were queued on ``acquire``.
+            if self._dimension is not None:
+                return self._dimension
 
-                # Log once about using local embeddings
-                if not self._local_embedding_logged:
-                    observability.observe(
-                        event_type=observability.ConversationEvents.REQUEST_PROCESSING,
-                        level=observability.EventLevel.INFO,
-                        data={
-                            "embedding_model": "all-MiniLM-L6-v2",
-                            "dimension": self.dimension,
-                            "type": "local_fallback",
-                        },
-                        description=(
-                            "Using local embedding model for buffer memory (all-MiniLM-L6-v2). "
-                            "For better quality, configure: llm.models.embedding"
-                        ),
-                    )
-                    self._local_embedding_logged = True
-            return self._model
+            probed = await probe_dimension(self._embedding_model_name)
+            if probed != self.dimension:
+                self.dimension = probed
+                # Safe rebuild: no embedded items exist yet before the
+                # first ``_ensure_dim`` call.
+                self.index = faiss.IndexFlatL2(self.dimension)
+                self.index_mapping = {}
+                self.index_count = 0
+                self.needs_rebuild = False
+            self._dimension = probed
+            return probed
 
-        # API-based embedding model
-        if self._model is None and self._model_name:
-            # Create LLM instance lazily
-            # Note: This is synchronous creation, which should work for most cases
-            # If async is needed, the model creation should happen in add/search methods
-            try:
-                self._model = LLM(model=self._model_name, api_key=self._model_api_key)
-            except Exception as e:
-                observability.observe(
-                    event_type=observability.ErrorEvents.LLM_INITIALIZATION_FAILED,
-                    level=observability.EventLevel.WARNING,
-                    data={
-                        "model_name": self._model_name,
-                        "error": str(e),
-                    },
-                    description=f"Failed to create LLM instance for embeddings: {e}",
-                )
-                # Disable vector search if model creation fails
-                self._model_name = None
-                self.has_vector_search = False
-        return self._model
+    @property
+    def embedding_model_name(self) -> str:
+        """Public accessor for the configured embedding model slug.
+
+        Exposes the provider-prefixed slug string (e.g.
+        ``"local/nomic-ai/nomic-embed-text-v1.5"``,
+        ``"openai/text-embedding-3-small"``) used by this memory
+        instance for embedding generation. External consumers
+        (``sops.py``, ``persistent_manager.py``, etc.) should read this
+        public property instead of reaching into the private
+        ``_embedding_model_name`` attribute.
+        """
+        return self._embedding_model_name
 
     async def add(
         self, text: str, metadata: Optional[Dict[str, Any]] = None, namespace: str = "buffer"
@@ -320,21 +335,20 @@ class WorkingMemory:
             "namespace": namespace,
         }
 
-        # Generate embedding if model is available and text is not empty
-        if self.model and text and text.strip():
+        # Generate embedding if a model slug is configured and text is
+        # not empty. Write paths use ``task="search_document"`` — the
+        # Nomic-style prefix marks the input as a corpus document. The
+        # helper strips the kwarg for cloud providers that don't honor
+        # it, so this call site is provider-agnostic.
+        if self._embedding_model_name and text and text.strip():
             try:
-                # Generate embedding for the text
-                embedding = await self.model.embed(text)
-
-                # Handle different response types from LLM.embed()
-                if hasattr(embedding, "embedding"):
-                    embedding_vector = embedding.embedding
-                elif hasattr(embedding, "data") and len(embedding.data) > 0:
-                    embedding_vector = embedding.data[0].embedding
-                elif isinstance(embedding, list):
-                    embedding_vector = embedding
-                else:
-                    embedding_vector = list(embedding)
+                await self._ensure_dim()
+                vectors = await embed(
+                    self._embedding_model_name,
+                    text,
+                    task="search_document",
+                )
+                embedding_vector = vectors[0]
 
                 item["embedding"] = embedding_vector
 
@@ -365,7 +379,7 @@ class WorkingMemory:
         self.buffer.append(item)
 
         # Check if we need to rebuild the index (buffer is full and items were removed)
-        if len(self.buffer) == self.buffer_size and self.model:
+        if len(self.buffer) == self.buffer_size and self._embedding_model_name:
             self.needs_rebuild = True
 
     def _rebuild_index(self) -> None:
@@ -376,7 +390,7 @@ class WorkingMemory:
         is full and new items have displaced old ones. It ensures the vector search
         stays in sync with the actual buffer contents.
         """
-        if not self.model:
+        if not self._embedding_model_name:
             return
 
         # Create a new index with the same dimension
@@ -475,7 +489,7 @@ class WorkingMemory:
                 self.buffer = new_buffer
 
                 # Rebuild the index after removing items
-                if self.model:
+                if self._embedding_model_name:
                     self._rebuild_index()
 
             # NEW: KV Store cleanup
@@ -665,13 +679,13 @@ class WorkingMemory:
                 "session_id": session_id,
                 "session_bias": session_bias,
                 "buffer_size": len(self.buffer),
-                "has_vector_search": self.model is not None,
+                "has_vector_search": self._embedding_model_name is not None,
             },
             description="Working memory search started",
         )
 
         # If we don't have a model, return most recent messages
-        if not self.model:
+        if not self._embedding_model_name:
             # Fall back to recency search when no embedding model is available
             observability.observe(
                 event_type=observability.ConversationEvents.MEMORY_WORKING_RETRIEVED,
@@ -710,20 +724,19 @@ class WorkingMemory:
         if self.needs_rebuild:
             self._rebuild_index()
 
-        # Generate a query vector if not provided
+        # Generate a query vector if not provided. Search paths use
+        # ``task="search_query"`` — the Nomic-style prefix marks the
+        # input as a retrieval query; the helper strips the kwarg for
+        # cloud providers that don't honor it.
         if query_vector is None:
             try:
-                query_embedding = await self.model.embed(query)
-
-                # Handle different response types
-                if hasattr(query_embedding, "embedding"):
-                    query_vector = query_embedding.embedding
-                elif hasattr(query_embedding, "data") and len(query_embedding.data) > 0:
-                    query_vector = query_embedding.data[0].embedding
-                elif isinstance(query_embedding, list):
-                    query_vector = query_embedding
-                else:
-                    query_vector = list(query_embedding)
+                await self._ensure_dim()
+                vectors = await embed(
+                    self._embedding_model_name,
+                    query,
+                    task="search_query",
+                )
+                query_vector = vectors[0]
 
             except Exception as e:
                 # Log embedding generation failure and fallback
@@ -1076,6 +1089,22 @@ class WorkingMemory:
 
         # Add to FAISS index directly if vector search is enabled
         if self.has_vector_search:
+            # Resolve the real embedding dim before the first FAISS
+            # write. Without this, a WorkingMemory built with a
+            # provisional hint (e.g. default 768) and a model whose
+            # true dim differs (e.g. 1536 for text-embedding-3-small)
+            # raises a shape mismatch on self.index.add(), which the
+            # broad except below silently swallows — the item lands
+            # in self.buffer but never in FAISS. A later add() or
+            # search() triggers _ensure_dim and rebuilds the index
+            # at the correct dim, but these early items are not
+            # re-indexed and their vector recall is permanently
+            # degraded. Calling _ensure_dim first makes the
+            # "safe rebuild: no embedded items exist yet" invariant
+            # in _ensure_dim actually hold regardless of which
+            # writer (add vs add_with_embedding) wins the race to
+            # the first insert.
+            await self._ensure_dim()
             try:
                 if isinstance(embedding, list):
                     embedding_np = np.array([embedding], dtype=np.float32)
@@ -1217,7 +1246,7 @@ class WorkingMemory:
             self.buffer.append(item)
 
         # Mark index for rebuild if we have vector search
-        if self.model and messages_to_load:
+        if self._embedding_model_name and messages_to_load:
             self.needs_rebuild = True
 
         return {
@@ -1297,7 +1326,7 @@ class WorkingMemory:
             "buffer_capacity": self.buffer_size,
             "context_window_size": self.max_size,
             "has_vector_search": self.has_vector_search,
-            "model_available": self.model is not None,
+            "model_available": self._embedding_model_name is not None,
         }
 
         if self.has_vector_search:

@@ -1,7 +1,7 @@
 # MUXI Runtime Architecture Analysis
 
 **Generated:** 2026-03-10
-**Last Updated:** 2026-04-21 (OneLLM 0.20260421.0 compatibility; planner fail-closed contract)
+**Last Updated:** 2026-04-22 (CUDA runtime variant; OneLLM `0.20260422.3` pin with `local-cuda` extra + revision-pinning plumbing)
 **Codebase:** `/Users/ran/Projects/muxi/code/runtime`  
 **Scope:** 290 Python files, ~119K lines
 
@@ -755,18 +755,94 @@ async def search(self, query: str, limit: int = 5, recency_bias: float = 0.3):
     return sorted_results[:limit]
 ```
 
-**Local Embeddings Fallback:**
-If no embedding model configured, auto-falls back to local sentence-transformers.
-Supports `local/` prefix in formation config for explicit model selection:
-```python
-# Default fallback (no model configured): all-MiniLM-L6-v2, 384-dim
-# Explicit local model: "local/all-mpnet-base-v2", 768-dim (short form, MUXI alias)
-# Or full HF repo id: "local/sentence-transformers/all-mpnet-base-v2" (forward-compatible)
-# Resolution via: is_local_model(), resolve_embedding_dimension() in local_embeddings.py
-from sentence_transformers import SentenceTransformer
-model = SentenceTransformer('all-MiniLM-L6-v2')  # 384 dimensions (default)
-# or: SentenceTransformer('all-mpnet-base-v2')    # 768 dimensions (higher quality)
+**Local Embeddings (default):**
+MUXI defaults to `local/nomic-ai/nomic-embed-text-v1.5` (768-dim, 8k context,
+Apache-2.0). Every consumer routes through the single shared helper
+`services/memory/embedding.py` (`embed()` / `probe_dimension()`), which delegates
+to `onellm.Embedding.acreate`. No alias shim, no short-name registry — formation
+config must use full HF repo ids:
+```yaml
+memory:
+  embedding:
+    model: "local/nomic-ai/nomic-embed-text-v1.5"   # default (may be omitted)
+    # or: "local/nomic-ai/nomic-embed-text-v2-moe"  # multilingual MoE
+    # or: "openai/text-embedding-3-small"           # cloud (1536-dim)
 ```
+The helper strips `task` for cloud slugs automatically, forwards `dimensions`
+verbatim (Matryoshka truncation for Nomic v1.5 at 64–768), and raises
+`InvalidRequestError` on empty/whitespace-only input. See the module docstring
+in `services/memory/embedding.py` for the full contract.
+
+**Slug revision pinning (`local/<repo>:<revision>`):**
+Reproducible deployments can pin the HuggingFace git revision by embedding it
+in the slug:
+```yaml
+memory:
+  embedding:
+    model: "local/nomic-ai/nomic-embed-text-v1.5:e04b7e4c5ea3e3d7e41e13d4c02fa5e29e0e3a0a"
+```
+`<revision>` is a commit SHA, tag, or branch name — forwarded verbatim through
+OneLLM's `LocalProvider` to HuggingFace's `snapshot_download`, `hf_hub_download`,
+`SentenceTransformer`, `AutoTokenizer`, and `AutoConfig`. OneLLM's LRU cache
+key is `(repo, revision)`, so a formation pinning one revision and another
+following `main` do not collide. Revision parsing is only applied to `local/*`
+slugs — cloud providers (e.g. `ollama/llama2:7b` where `:7b` is a variant,
+not a revision) pass through untouched. A trailing `:` with no revision fails
+fast with `InvalidRequestError`.
+
+**Host-managed HuggingFace cache (SIF deployment):**
+As of 2026-04, the SIF runtime ships no pre-downloaded model weights. Model
+files live on the host at `~/.muxi/server/cache` (per-user, cross-platform)
+and are bind-mounted into the SIF at `/opt/hf-cache` by `muxi-server` at
+launch. SIFs run with `HF_HUB_OFFLINE=1` and never reach the network; all
+`onellm download` calls happen on the host under the server's control.
+
+Inside the SIF, both `HF_HOME` and `HF_HUB_CACHE` are set to `/opt/hf-cache`
+(same path) so models land flat at `/opt/hf-cache/models--*` without the
+extra `/hub` subdirectory HF would otherwise introduce via `HF_HUB_CACHE =
+$HF_HOME/hub`. This keeps the bind-mount path 1:1 with the model cache path.
+
+Three Docker variants produce three SIFs from the same codebase (names match
+OneLLM's extras vocabulary — `cache` / `local-pytorch` / `local-cuda`):
+
+- `Dockerfile` (default, lean, ~500 MB) — ONNX Runtime via `onellm[cache]`.
+  No torch, no sentence-transformers. Selected when the embedding model
+  ships ONNX weights (Nomic v1.5, most sentence-transformers models). Any
+  host. `faissx` for the MUXI memory client's local backend (CPU FAISS).
+  Slug form: `muxi_runtime: "<version>"` (no suffix).
+- `Dockerfile.pytorch` (~1.3 GB) — adds CPU PyTorch + sentence-transformers
+  via `onellm[cache,local-pytorch]` on top of the lean image. Explicit
+  `--index-url https://download.pytorch.org/whl/cpu` keeps torch CPU-only
+  (default PyPI would pull the ~3 GB CUDA torch on linux/amd64). Selected
+  when the model lacks ONNX weights (e.g. Nomic v2 MoE). Any host. Slug:
+  `muxi_runtime: "<version>:pytorch"`.
+- `Dockerfile.cuda` (~4–6 GB) — swaps the CPU stack for the GPU stack:
+  `onellm[local-cuda,local-pytorch]` (onnxruntime-gpu + faiss-gpu-cu12 +
+  transformers + numpy + sentence-transformers), `faissx-gpu` as a drop-in
+  replacement for `faissx` (same `faissx.client` API, GPU-backed FAISS in
+  local mode), and CUDA 12.x `torch`/`torchvision` wheels from PyPI's
+  default index. A build-time assertion checks that the onnxruntime wheel
+  actually has `CUDAExecutionProvider` compiled in. Selected when the host
+  has an NVIDIA GPU and the workload benefits from GPU embedding or
+  in-process GPU vector ops. Slug: `muxi_runtime: "<version>:cuda"`.
+  Linux amd64 + NVIDIA + CUDA 12.x only. The CUDA stack exceeds GitHub's
+  2 GB release upload ceiling; distribution is via muxi-server's CDN
+  instead (the server no longer downloads SIFs from GitHub directly).
+
+Dockerfile.cuda inherits from the lean base and uninstalls the CPU-only
+faiss-cpu / faissx / onnxruntime wheels before installing their GPU
+equivalents — faiss-cpu and faiss-gpu-cu12 both own the top-level `faiss`
+module, so the uninstall step is required to avoid last-installed-wins
+import shadowing. `onellm[local-cuda]` provides `faiss-gpu-cu12` as a
+transitive; `faissx-gpu` (the MUXI client) then takes its slot cleanly.
+Runtime source code is unchanged — the swap is entirely at the packaged-
+dependency layer, and `services/memory/working.py` still imports
+`from faissx import client as faiss` regardless of which wheel is on disk.
+
+`docker-entrypoint.sh` asserts `/opt/hf-cache` contains at least one
+`models--*` directory before launching the formation server — an empty
+cache fails fast with an actionable error instead of surfacing a confusing
+"model not found" from inside HuggingFace's offline resolver.
 
 **FIFO Cleanup:**
 Background task runs every `fifo_interval_min` (default: 5 minutes) to clean up old namespaces if memory exceeds `max_memory_mb` (default: 1000 MB).
@@ -802,28 +878,21 @@ def get_memory_model(dimension: int):
 Memory = get_memory_model(1536)
 ```
 
-**Three Embedding Tiers:**
+**Embedding Model Tiers (use full HF repo ids):**
 
-| Model | Dim | Cost | Formation Config |
-|-------|-----|------|-----------------|
-| `local/sentence-transformers/all-MiniLM-L6-v2` | 384 | Free | Default (no model configured) |
-| `local/sentence-transformers/all-mpnet-base-v2` | 768 | Free | `embedding: "local/sentence-transformers/all-mpnet-base-v2"` |
-| `openai/text-embedding-3-small` | 1536 | Paid | `embedding: "openai/text-embedding-3-small"` |
+| Model | Dim | Cost | Notes |
+|-------|-----|------|-------|
+| `local/nomic-ai/nomic-embed-text-v1.5` | 768 (Matryoshka 64–768) | Free | **Default.** Apache-2.0, 8k context, ONNX. |
+| `local/nomic-ai/nomic-embed-text-v2-moe` | 768 | Free | Apache-2.0, multilingual (100+ languages), MoE. |
+| `openai/text-embedding-3-small` | 1536 | Paid | Cloud, regression-tested. |
+| `openai/text-embedding-3-large` | 3072 | Paid | Cloud, higher quality. |
 
-When no embedding model is configured, both PostgreSQL and SQLite default to local
-embeddings (`sentence-transformers/all-MiniLM-L6-v2`, 384-dim). The `local/` prefix is
-resolved by helpers in `local_embeddings.py` (`is_local_model()`,
-`resolve_embedding_dimension()`).
-
-**OneLLM Phase 2 compatibility note (2026-04-21):** OneLLM ≥ `0.20260421.0` dropped
-the short-name alias registry on its `local/` provider -- whatever follows `local/` is
-now passed straight to HuggingFace as a repo id. Short names like
-`local/all-MiniLM-L6-v2` (no org segment) **no longer resolve in OneLLM** and would
-raise `ResourceNotFoundError` if sent to it directly. They still work **inside MUXI**
-because `local_embeddings.py` intercepts and maps them (short name ↔ dimension) before
-the runtime ever calls OneLLM's embedding API. If you add a new code path that calls
-`onellm.Embedding.acreate(model="local/...")` directly, pass the **full HF repo id**
-(e.g. `local/sentence-transformers/all-MiniLM-L6-v2`).
+All slugs are passed verbatim to OneLLM. The shared helper (`services/memory/embedding.py`)
+is the single choke point — there is no intermediate alias table. Adding a new local
+model only requires referencing its full HF repo id in formation config; `muxi-server`
+pre-populates the host cache at `~/.muxi/server/cache` via `onellm download` before
+the SIF launches (weights are no longer baked into the Dockerfile — see "Host-managed
+HuggingFace cache" above).
 
 **Schema (per dimension):**
 ```python
@@ -906,8 +975,8 @@ async def search(
 ```
 
 **Gotchas:**
-- Uses **cosine distance** for similarity (pgvector operator: `<=>`)
-- Index created with: `CREATE INDEX ON memories_{dim} USING ivfflat (embedding vector_cosine_ops)`
+- Uses **L2 distance** for similarity via pgvector (SQLAlchemy: `embedding.l2_distance(query_embedding)`; pgvector operator `<->`). Embedding models used by the runtime (Nomic v1.5, OpenAI text-embedding-3-*) return unit-length vectors, so L2 and cosine rank results identically while keeping the index, the query, and the ORM column on a single operator class.
+- ANN index is created with `vector_l2_ops` to match the runtime query path — see `migrations/init_schema.sql` (`CREATE INDEX ... USING ivfflat (embedding vector_l2_ops) WITH (lists = 100)`). pgvector will not use a cosine-ops index for an L2 query (or vice versa), so mismatching the ANN operator class with the runtime distance function silently forces a sequential scan and regresses search latency at scale.
 - Query timeout configurable via `query_timeout_seconds` (default: 30s)
 - All queries inside `LongTermMemory` use `self.MemoryModel` (set in `__init__`), NOT the global `Memory` alias
 - Result rows from `select(self.MemoryModel, distance)` use `result[0].field` (index-based access) since dynamic class names vary
