@@ -1,8 +1,8 @@
 # Changelog
 
-## v0.20260423.3
+## [unreleased]
 
-## v0.20260423.0-v0.20260423.2
+## v0.20260423.0-v0.20260423.3
 
 ### Runtime image + SIF packaging
 
