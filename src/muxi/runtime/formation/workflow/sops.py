@@ -46,15 +46,29 @@ class OneLLMEmbeddingAdapter:
         """
         self.model_name = model_name
 
-    async def generate_embeddings(self, texts: list[str]) -> list[list[float]]:
+    async def generate_embeddings(
+        self, texts: list[str], *, task: str | None = None
+    ) -> list[list[float]]:
         """Return embedding vectors for ``texts`` via the shared helper.
 
         Delegates to :func:`services.memory.embedding.embed`, which
         handles provider routing, ``task`` kwarg stripping for cloud
         models, and ``EmbeddingResponse`` dataclass unpacking. The
         returned list has one vector per input string, preserving order.
+
+        Parameters
+        ----------
+        texts:
+            Strings to embed. One vector is returned per input, in order.
+        task:
+            Optional Nomic-style task prefix. Callers should pass
+            ``"search_document"`` at write time and ``"search_query"``
+            at query time so that, for asymmetric-task models like
+            Nomic v1.5, stored vectors and query vectors land in the
+            same subspace. No-op for cloud providers (stripped by the
+            shared ``embed`` helper).
         """
-        return await embed(self.model_name, texts)
+        return await embed(self.model_name, texts, task=task)
 
 
 class SOPSystem:
@@ -646,8 +660,13 @@ class SOPSystem:
 
                 # Generate embedding using adapter's async interface since we're in async context
                 try:
-                    # Use batch method for single text (it handles both single and batch)
-                    embeddings = await embedding_model.generate_embeddings([searchable_text])
+                    # Use batch method for single text (it handles both single and batch).
+                    # Stored SOP content uses ``task="search_document"`` so that, for
+                    # asymmetric-task models like Nomic v1.5, it lands in the same
+                    # subspace as ``search_query`` vectors issued at search time below.
+                    embeddings = await embedding_model.generate_embeddings(
+                        [searchable_text], task="search_document"
+                    )
                     if not embeddings or len(embeddings) == 0:
                         # Skip if no embedding generated
                         continue
@@ -698,8 +717,14 @@ class SOPSystem:
 
         # Use WorkingMemory if available
         if working_memory and embedding_model:
-            # Generate embedding for the task description using adapter's consistent interface
-            embeddings = await embedding_model.generate_embeddings([task_description])
+            # Generate embedding for the task description using adapter's consistent
+            # interface. Use ``task="search_query"`` to match the indexing task
+            # used by ``_ensure_indexed`` above (``search_document``) — for
+            # asymmetric-task models like Nomic v1.5 both sides of the comparison
+            # must share the same task family to land in the same subspace.
+            embeddings = await embedding_model.generate_embeddings(
+                [task_description], task="search_query"
+            )
             query_embedding = embeddings[0] if embeddings else None
 
             # Search using WorkingMemory

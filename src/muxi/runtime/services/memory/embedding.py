@@ -186,9 +186,15 @@ async def embed(
         A single string or a list of strings to embed. A single string is
         normalized to ``[input]`` before being forwarded.
     dimensions:
-        Optional Matryoshka truncation target. Forwarded as-is; values
-        above the model's native dim surface a provider error rather than
-        being silently clamped.
+        Optional Matryoshka truncation target. Forwarded as-is to
+        OneLLM. Values ``<= native`` are honored exactly (Matryoshka
+        truncation + re-normalization). Values that EXCEED the model's
+        native dim are **silently clamped** by OneLLM's ``LocalProvider``
+        and return a full native-length vector, NOT a provider error.
+        Callers that want a hard failure on over-sized requests must
+        probe ``probe_dimension(model)`` first and guard on the result
+        themselves. See the module-level "``dimensions`` that exceed
+        native model dim" section for the full rationale.
     task:
         Optional Nomic-style task prefix (``"search_document"``,
         ``"search_query"``, ``"classification"``, ``"clustering"``). Only
