@@ -193,7 +193,29 @@ CREATE INDEX IF NOT EXISTS idx_memories_1536_user_created_at ON memories_1536(us
 CREATE INDEX IF NOT EXISTS idx_memories_1536_text_gin ON memories_1536 USING gin(to_tsvector('english', text));
 
 -- Vector similarity index -- vector_l2_ops to match runtime l2_distance().
-CREATE INDEX IF NOT EXISTS memories_1536_embedding_idx ON memories_1536
+--
+-- UPGRADE PATH: Pre-migration databases created this index with
+-- `vector_cosine_ops`, but the runtime now uses `l2_distance()`
+-- (see `services/memory/long_term.py`). pgvector will NOT use a
+-- cosine-ops index for an L2 query and silently falls back to a
+-- sequential scan at search time -- a hard perf regression on any
+-- non-trivial `memories_1536` table.
+--
+-- `CREATE INDEX IF NOT EXISTS` alone cannot fix this: if the index
+-- name already exists (with the wrong ops class), the statement is
+-- a no-op. We therefore DROP the index first so the CREATE always
+-- lands the correct l2-ops variant. For fresh installs the DROP is
+-- a no-op; for existing installs it rebuilds once and then stays
+-- correct on every subsequent re-apply.
+--
+-- This drop+create is scoped to `memories_1536` only because it is
+-- the single dimension table that existed in older schemas with the
+-- wrong ops class. The other dimension tables (384 / 768 / 1024 /
+-- 3072) were introduced in the embedding-platform migration and
+-- have no pre-existing installations to upgrade, so they keep the
+-- cheaper `CREATE INDEX IF NOT EXISTS` form.
+DROP INDEX IF EXISTS memories_1536_embedding_idx;
+CREATE INDEX memories_1536_embedding_idx ON memories_1536
 USING ivfflat (embedding vector_l2_ops) WITH (lists = 100);
 
 -- memories_3072 ------------------------------------------------------
