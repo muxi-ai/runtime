@@ -1,5 +1,13 @@
-# MUXI Runtime - CUDA variant
+# MUXI Runtime - CUDA variant (EXPERIMENTAL)
 # ============================================================================
+#
+# Status: experimental. Only buildable on linux/amd64 with NVIDIA tooling;
+# not exercised in the macOS dev loop, not smoke-tested against live GPUs
+# in CI at the time of the 0.20260422.x cut. Treat this variant as a
+# preview — the image produces, but the full runtime path (CUDA torch +
+# faiss-gpu + onnxruntime-gpu inside a SIF) has not been end-to-end
+# validated. Use the pytorch variant for CPU knowledge workloads until
+# this variant graduates.
 #
 # Inherits from the lean runtime image and swaps in the GPU stack:
 #   - PyTorch with CUDA 12.x (default PyPI wheels on linux/amd64)
