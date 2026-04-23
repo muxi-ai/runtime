@@ -25,9 +25,9 @@
 #     large working sets; remote-mode deployments get no benefit (the
 #     GPU path is in-process) but nothing is broken either.
 #
-# Platform: linux/amd64 + CUDA 12.x only. No macOS (no CUDA there) and
-# no ARM64 in this iteration (Jetson could work in principle but we
-# aren't publishing a Jetson-targeted SIF today).
+# Platforms: linux/amd64 (CUDA GPU support) and linux/arm64 (e.g. Jetson / Graviton).
+# No macOS (no CUDA driver there). On arm64 hosts without a CUDA GPU, CUDA-specific
+# libraries install but fall back to CPU execution at runtime.
 #
 # Size caveat: the CUDA stack (torch-cuda + onnxruntime-gpu + nvidia-*-cu12
 # transitives + faiss-gpu-cu12) totals 4-6 GB. SIF builds exceed the 2 GB

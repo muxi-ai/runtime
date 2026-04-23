@@ -5,14 +5,31 @@
 #
 # STEP ORDER:
 #   1. version job: calculate version, commit .version + rename CHANGELOG [unreleased] → v<version>
-#   2. docker-amd64, docker-arm64, pypi jobs: build + publish (parallel)
-#   3. docker-manifest job: create multi-arch manifest
-#   4. sif-amd64, sif-arm64 jobs: convert Docker images to SIF (parallel)
-#   5. github-release job: create GitHub Release + git tag + upload SIF files
+#   2. docker-{base,pytorch,cuda}-{amd64,arm64} jobs: build + push arch-specific images (parallel)
+#      pypi job: build + publish (parallel)
+#   3. docker-{base,pytorch,cuda}-manifest jobs: create multi-arch manifests
+#   4. sif-{base,pytorch,cuda}-{amd64,arm64} jobs: convert to SIF (6 artifacts, parallel)
+#   5. github-release job: create GitHub Release + git tag + upload all 6 SIF files
 #   6. merge-back job: merge main → develop, then add fresh CHANGELOG [unreleased] on develop
 #
+# SIF artifact matrix (3 variants × 2 platforms = 6 artifacts per release):
+#   muxi-runtime-<v>-linux-amd64.sif          base    amd64
+#   muxi-runtime-<v>-linux-arm64.sif          base    arm64
+#   muxi-runtime-<v>-pytorch-linux-amd64.sif  pytorch amd64
+#   muxi-runtime-<v>-pytorch-linux-arm64.sif  pytorch arm64
+#   muxi-runtime-<v>-cuda-linux-amd64.sif     cuda    amd64  (experimental)
+#   muxi-runtime-<v>-cuda-linux-arm64.sif     cuda    arm64  (experimental)
+#
+# Docker image tags:
+#   ghcr.io/muxi-ai/runtime:v<version>           base multi-arch
+#   ghcr.io/muxi-ai/runtime:latest               base multi-arch
+#   ghcr.io/muxi-ai/runtime:v<version>-pytorch   pytorch multi-arch
+#   ghcr.io/muxi-ai/runtime:latest-pytorch       pytorch multi-arch
+#   ghcr.io/muxi-ai/runtime:v<version>-cuda      cuda multi-arch (experimental)
+#   ghcr.io/muxi-ai/runtime:latest-cuda          cuda multi-arch (experimental)
+#
 # Tag is created by github-release (softprops/action-gh-release) AFTER
-# Docker/PyPI/SIF builds succeed, so a failed build won't leave a dangling tag.
+# all builds succeed, so a failed build won't leave a dangling tag.
 #
 # VERSION FORMAT (ScalVer):
 #   MAJOR.YYYYMMDD.PATCH
@@ -185,7 +202,189 @@ jobs:
           provenance: false
           sbom: false
 
-  # ===== Create Multi-Arch Manifest =====
+  # ===== Docker Build PyTorch (AMD64) =====
+  docker-pytorch-amd64:
+    runs-on: ubuntu-latest
+    needs: [version, docker-amd64]
+    permissions:
+      contents: read
+      packages: write
+
+    steps:
+      - name: Free disk space
+        run: |
+          sudo rm -rf /usr/share/dotnet /opt/ghc /usr/local/share/boost /usr/local/lib/android
+          df -h
+
+      - name: Checkout
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        with:
+          ref: ${{ needs.version.outputs.sha }}
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@4d04d5d9486b7bd6fa91e7baf45bbb4f8b9deedd # v4.0.0
+
+      - name: Log in to GHCR
+        uses: docker/login-action@4907a6ddec9925e35a0a9e82d7399ccc52663121 # v4.1.0
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Build and push pytorch (amd64)
+        uses: docker/build-push-action@bcafcacb16a39f128d818304e6c9c0c18556b85f # v5
+        with:
+          context: .
+          file: ./Dockerfile.pytorch
+          push: true
+          tags: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:v${{ needs.version.outputs.version }}-pytorch-amd64
+          platforms: linux/amd64
+          build-args: |
+            BASE_IMAGE=${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}
+            BASE_TAG=v${{ needs.version.outputs.version }}-amd64
+          cache-from: type=gha,scope=pytorch-amd64
+          cache-to: type=gha,mode=max,scope=pytorch-amd64
+          provenance: false
+          sbom: false
+
+  # ===== Docker Build PyTorch (ARM64) =====
+  docker-pytorch-arm64:
+    runs-on: ubuntu-24.04-arm
+    needs: [version, docker-arm64]
+    permissions:
+      contents: read
+      packages: write
+
+    steps:
+      - name: Free disk space
+        run: |
+          sudo rm -rf /usr/share/dotnet /opt/ghc /usr/local/share/boost
+          df -h
+
+      - name: Checkout
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        with:
+          ref: ${{ needs.version.outputs.sha }}
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@4d04d5d9486b7bd6fa91e7baf45bbb4f8b9deedd # v4.0.0
+
+      - name: Log in to GHCR
+        uses: docker/login-action@4907a6ddec9925e35a0a9e82d7399ccc52663121 # v4.1.0
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Build and push pytorch (arm64)
+        uses: docker/build-push-action@bcafcacb16a39f128d818304e6c9c0c18556b85f # v5
+        with:
+          context: .
+          file: ./Dockerfile.pytorch
+          push: true
+          tags: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:v${{ needs.version.outputs.version }}-pytorch-arm64
+          platforms: linux/arm64
+          build-args: |
+            BASE_IMAGE=${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}
+            BASE_TAG=v${{ needs.version.outputs.version }}-arm64
+          cache-from: type=gha,scope=pytorch-arm64
+          cache-to: type=gha,mode=max,scope=pytorch-arm64
+          provenance: false
+          sbom: false
+
+  # ===== Docker Build CUDA (AMD64, experimental) =====
+  docker-cuda-amd64:
+    runs-on: ubuntu-latest
+    needs: [version, docker-amd64]
+    permissions:
+      contents: read
+      packages: write
+
+    steps:
+      - name: Free disk space
+        run: |
+          sudo rm -rf /usr/share/dotnet /opt/ghc /usr/local/share/boost /usr/local/lib/android
+          sudo rm -rf /usr/share/swift /usr/local/julia* /opt/hostedtoolcache
+          sudo apt-get clean
+          df -h
+
+      - name: Checkout
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        with:
+          ref: ${{ needs.version.outputs.sha }}
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@4d04d5d9486b7bd6fa91e7baf45bbb4f8b9deedd # v4.0.0
+
+      - name: Log in to GHCR
+        uses: docker/login-action@4907a6ddec9925e35a0a9e82d7399ccc52663121 # v4.1.0
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Build and push cuda (amd64)
+        uses: docker/build-push-action@bcafcacb16a39f128d818304e6c9c0c18556b85f # v5
+        with:
+          context: .
+          file: ./Dockerfile.cuda
+          push: true
+          tags: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:v${{ needs.version.outputs.version }}-cuda-amd64
+          platforms: linux/amd64
+          build-args: |
+            BASE_IMAGE=${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}
+            BASE_TAG=v${{ needs.version.outputs.version }}-amd64
+          cache-from: type=gha,scope=cuda-amd64
+          cache-to: type=gha,mode=max,scope=cuda-amd64
+          provenance: false
+          sbom: false
+
+  # ===== Docker Build CUDA (ARM64, experimental) =====
+  docker-cuda-arm64:
+    runs-on: ubuntu-24.04-arm
+    needs: [version, docker-arm64]
+    permissions:
+      contents: read
+      packages: write
+
+    steps:
+      - name: Free disk space
+        run: |
+          sudo rm -rf /usr/share/dotnet /opt/ghc /usr/local/share/boost
+          df -h
+
+      - name: Checkout
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        with:
+          ref: ${{ needs.version.outputs.sha }}
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@4d04d5d9486b7bd6fa91e7baf45bbb4f8b9deedd # v4.0.0
+
+      - name: Log in to GHCR
+        uses: docker/login-action@4907a6ddec9925e35a0a9e82d7399ccc52663121 # v4.1.0
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Build and push cuda (arm64)
+        uses: docker/build-push-action@bcafcacb16a39f128d818304e6c9c0c18556b85f # v5
+        with:
+          context: .
+          file: ./Dockerfile.cuda
+          push: true
+          tags: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:v${{ needs.version.outputs.version }}-cuda-arm64
+          platforms: linux/arm64
+          build-args: |
+            BASE_IMAGE=${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}
+            BASE_TAG=v${{ needs.version.outputs.version }}-arm64
+          cache-from: type=gha,scope=cuda-arm64
+          cache-to: type=gha,mode=max,scope=cuda-arm64
+          provenance: false
+          sbom: false
+
+  # ===== Create Multi-Arch Manifest (base) =====
   docker-manifest:
     runs-on: ubuntu-latest
     needs: [version, docker-amd64, docker-arm64]
@@ -218,6 +417,74 @@ jobs:
             ${IMAGE}:${VERSION}-arm64
 
           echo "Created multi-arch manifests for ${VERSION} and latest"
+
+  # ===== Create Multi-Arch Manifest (pytorch) =====
+  docker-pytorch-manifest:
+    runs-on: ubuntu-latest
+    needs: [version, docker-pytorch-amd64, docker-pytorch-arm64]
+    permissions:
+      contents: read
+      packages: write
+
+    steps:
+      - name: Log in to GHCR
+        uses: docker/login-action@4907a6ddec9925e35a0a9e82d7399ccc52663121 # v4.1.0
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@4d04d5d9486b7bd6fa91e7baf45bbb4f8b9deedd # v4.0.0
+
+      - name: Create and push pytorch manifest
+        run: |
+          VERSION="v${{ needs.version.outputs.version }}"
+          IMAGE="${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}"
+
+          docker buildx imagetools create -t ${IMAGE}:${VERSION}-pytorch \
+            ${IMAGE}:${VERSION}-pytorch-amd64 \
+            ${IMAGE}:${VERSION}-pytorch-arm64
+
+          docker buildx imagetools create -t ${IMAGE}:latest-pytorch \
+            ${IMAGE}:${VERSION}-pytorch-amd64 \
+            ${IMAGE}:${VERSION}-pytorch-arm64
+
+          echo "Created pytorch manifests for ${VERSION}-pytorch and latest-pytorch"
+
+  # ===== Create Multi-Arch Manifest (cuda, experimental) =====
+  docker-cuda-manifest:
+    runs-on: ubuntu-latest
+    needs: [version, docker-cuda-amd64, docker-cuda-arm64]
+    permissions:
+      contents: read
+      packages: write
+
+    steps:
+      - name: Log in to GHCR
+        uses: docker/login-action@4907a6ddec9925e35a0a9e82d7399ccc52663121 # v4.1.0
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@4d04d5d9486b7bd6fa91e7baf45bbb4f8b9deedd # v4.0.0
+
+      - name: Create and push cuda manifest
+        run: |
+          VERSION="v${{ needs.version.outputs.version }}"
+          IMAGE="${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}"
+
+          docker buildx imagetools create -t ${IMAGE}:${VERSION}-cuda \
+            ${IMAGE}:${VERSION}-cuda-amd64 \
+            ${IMAGE}:${VERSION}-cuda-arm64
+
+          docker buildx imagetools create -t ${IMAGE}:latest-cuda \
+            ${IMAGE}:${VERSION}-cuda-amd64 \
+            ${IMAGE}:${VERSION}-cuda-arm64
+
+          echo "Created cuda manifests for ${VERSION}-cuda and latest-cuda"
 
   # ===== PyPI Publish =====
   pypi:
@@ -324,10 +591,166 @@ jobs:
           name: sif-arm64
           path: muxi-runtime-${{ needs.version.outputs.version }}-linux-arm64.sif
 
+  # ===== Build SIF Images (pytorch) =====
+  sif-pytorch-amd64:
+    runs-on: ubuntu-latest
+    needs: [version, docker-pytorch-manifest]
+    permissions:
+      contents: read
+      packages: read
+
+    steps:
+      - name: Free disk space
+        run: |
+          sudo rm -rf /usr/share/dotnet /opt/ghc /usr/local/share/boost /usr/local/lib/android
+          sudo rm -rf /usr/share/swift /usr/local/julia* /opt/hostedtoolcache
+          sudo apt-get clean
+          df -h
+
+      - name: Install Apptainer
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y software-properties-common
+          sudo add-apt-repository -y ppa:apptainer/ppa
+          sudo apt-get update
+          sudo apt-get install -y apptainer
+
+      - name: Log in to GHCR
+        uses: docker/login-action@4907a6ddec9925e35a0a9e82d7399ccc52663121 # v4.1.0
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Build SIF from Docker (pytorch amd64)
+        run: |
+          VERSION="v${{ needs.version.outputs.version }}"
+          apptainer build muxi-runtime-${{ needs.version.outputs.version }}-pytorch-linux-amd64.sif \
+            docker://${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:${VERSION}-pytorch-amd64
+
+      - name: Upload SIF artifact
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v4
+        with:
+          name: sif-pytorch-amd64
+          path: muxi-runtime-${{ needs.version.outputs.version }}-pytorch-linux-amd64.sif
+
+  sif-pytorch-arm64:
+    runs-on: ubuntu-24.04-arm
+    needs: [version, docker-pytorch-manifest]
+    permissions:
+      contents: read
+      packages: read
+
+    steps:
+      - name: Install Apptainer
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y software-properties-common
+          sudo add-apt-repository -y ppa:apptainer/ppa
+          sudo apt-get update
+          sudo apt-get install -y apptainer
+
+      - name: Log in to GHCR
+        uses: docker/login-action@4907a6ddec9925e35a0a9e82d7399ccc52663121 # v4.1.0
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Build SIF from Docker (pytorch arm64)
+        run: |
+          VERSION="v${{ needs.version.outputs.version }}"
+          apptainer build muxi-runtime-${{ needs.version.outputs.version }}-pytorch-linux-arm64.sif \
+            docker://${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:${VERSION}-pytorch-arm64
+
+      - name: Upload SIF artifact
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v4
+        with:
+          name: sif-pytorch-arm64
+          path: muxi-runtime-${{ needs.version.outputs.version }}-pytorch-linux-arm64.sif
+
+  # ===== Build SIF Images (cuda, experimental) =====
+  sif-cuda-amd64:
+    runs-on: ubuntu-latest
+    needs: [version, docker-cuda-manifest]
+    permissions:
+      contents: read
+      packages: read
+
+    steps:
+      - name: Free disk space
+        run: |
+          sudo rm -rf /usr/share/dotnet /opt/ghc /usr/local/share/boost /usr/local/lib/android
+          sudo rm -rf /usr/share/swift /usr/local/julia* /opt/hostedtoolcache
+          sudo apt-get clean
+          df -h
+
+      - name: Install Apptainer
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y software-properties-common
+          sudo add-apt-repository -y ppa:apptainer/ppa
+          sudo apt-get update
+          sudo apt-get install -y apptainer
+
+      - name: Log in to GHCR
+        uses: docker/login-action@4907a6ddec9925e35a0a9e82d7399ccc52663121 # v4.1.0
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Build SIF from Docker (cuda amd64)
+        run: |
+          VERSION="v${{ needs.version.outputs.version }}"
+          apptainer build muxi-runtime-${{ needs.version.outputs.version }}-cuda-linux-amd64.sif \
+            docker://${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:${VERSION}-cuda-amd64
+
+      - name: Upload SIF artifact
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v4
+        with:
+          name: sif-cuda-amd64
+          path: muxi-runtime-${{ needs.version.outputs.version }}-cuda-linux-amd64.sif
+
+  sif-cuda-arm64:
+    runs-on: ubuntu-24.04-arm
+    needs: [version, docker-cuda-manifest]
+    permissions:
+      contents: read
+      packages: read
+
+    steps:
+      - name: Install Apptainer
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y software-properties-common
+          sudo add-apt-repository -y ppa:apptainer/ppa
+          sudo apt-get update
+          sudo apt-get install -y apptainer
+
+      - name: Log in to GHCR
+        uses: docker/login-action@4907a6ddec9925e35a0a9e82d7399ccc52663121 # v4.1.0
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Build SIF from Docker (cuda arm64)
+        run: |
+          VERSION="v${{ needs.version.outputs.version }}"
+          apptainer build muxi-runtime-${{ needs.version.outputs.version }}-cuda-linux-arm64.sif \
+            docker://${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:${VERSION}-cuda-arm64
+
+      - name: Upload SIF artifact
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v4
+        with:
+          name: sif-cuda-arm64
+          path: muxi-runtime-${{ needs.version.outputs.version }}-cuda-linux-arm64.sif
+
   # ===== GitHub Release =====
   github-release:
     runs-on: ubuntu-latest
-    needs: [version, docker-manifest, pypi, sif-amd64, sif-arm64]
+    needs: [version, docker-manifest, pypi, sif-amd64, sif-arm64, sif-pytorch-amd64, sif-pytorch-arm64, sif-cuda-amd64, sif-cuda-arm64]
     permissions:
       contents: write
 
@@ -338,6 +761,9 @@ jobs:
           pattern: sif-*
           merge-multiple: true
 
+      - name: List SIF files
+        run: ls -lh *.sif
+
       - name: Create GitHub Release
         uses: softprops/action-gh-release@b4309332981a82ec1c5618f44dd2e27cc8bfbfda # v3.0.0
         with:
@@ -346,6 +772,10 @@ jobs:
           files: |
             muxi-runtime-${{ needs.version.outputs.version }}-linux-amd64.sif
             muxi-runtime-${{ needs.version.outputs.version }}-linux-arm64.sif
+            muxi-runtime-${{ needs.version.outputs.version }}-pytorch-linux-amd64.sif
+            muxi-runtime-${{ needs.version.outputs.version }}-pytorch-linux-arm64.sif
+            muxi-runtime-${{ needs.version.outputs.version }}-cuda-linux-amd64.sif
+            muxi-runtime-${{ needs.version.outputs.version }}-cuda-linux-arm64.sif
           body: |
             ## MUXI Runtime v${{ needs.version.outputs.version }}
 
@@ -353,9 +783,16 @@ jobs:
 
             **Docker:** `docker pull ghcr.io/muxi-ai/runtime:v${{ needs.version.outputs.version }}`
 
-            **SIF (Singularity/Apptainer):**
-            - `muxi-runtime-${{ needs.version.outputs.version }}-linux-amd64.sif`
-            - `muxi-runtime-${{ needs.version.outputs.version }}-linux-arm64.sif`
+            **SIF (Singularity/Apptainer):** 6 artifacts u2014 3 variants u00d7 2 platforms
+
+            | File | Variant | Arch |
+            |------|---------|------|
+            | `muxi-runtime-${{ needs.version.outputs.version }}-linux-amd64.sif` | base | amd64 |
+            | `muxi-runtime-${{ needs.version.outputs.version }}-linux-arm64.sif` | base | arm64 |
+            | `muxi-runtime-${{ needs.version.outputs.version }}-pytorch-linux-amd64.sif` | pytorch | amd64 |
+            | `muxi-runtime-${{ needs.version.outputs.version }}-pytorch-linux-arm64.sif` | pytorch | arm64 |
+            | `muxi-runtime-${{ needs.version.outputs.version }}-cuda-linux-amd64.sif` | cuda (experimental) | amd64 |
+            | `muxi-runtime-${{ needs.version.outputs.version }}-cuda-linux-arm64.sif` | cuda (experimental) | arm64 |
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
