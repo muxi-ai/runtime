@@ -92,16 +92,13 @@ jobs:
           docker run --rm --entrypoint python muxi-runtime:test -c "from muxi.runtime import __version__; print(f'MUXI Runtime v{__version__}')"
 
       - name: Build pytorch Docker image
-        uses: docker/build-push-action@bcafcacb16a39f128d818304e6c9c0c18556b85f # v5
-        with:
-          context: .
-          file: ./Dockerfile.pytorch
-          push: false
-          load: true
-          tags: muxi-runtime:test-pytorch
-          build-args: |
-            BASE_IMAGE=muxi-runtime
-            BASE_TAG=test
+        run: |
+          docker build \
+            --file ./Dockerfile.pytorch \
+            --build-arg BASE_IMAGE=muxi-runtime \
+            --build-arg BASE_TAG=test \
+            --tag muxi-runtime:test-pytorch \
+            .
 
       - name: Test pytorch Docker image
         run: |
