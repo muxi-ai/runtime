@@ -83,8 +83,10 @@ pytest tests/unit -v
 # Integration tests
 pytest tests/integration -v
 
-# E2E tests (requires API keys)
-pytest e2e/tests -v
+# E2E tests (standalone scripts, not pytest)
+cd e2e && python run_all_tests.py          # full suite
+cd e2e && python run_random_tests.py 10    # random sample
+cd e2e/tests/<area> && python test_<name>.py  # single test
 ```
 
 ## Project Structure

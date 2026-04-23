@@ -31,7 +31,7 @@ export OPENAI_API_KEY="sk-..."
 **Test endpoints:**
 ```bash
 # Health check
-curl http://localhost:8000/health
+curl http://localhost:8000/v1/health
 
 # Server info
 curl http://localhost:8000/
@@ -45,14 +45,17 @@ open http://localhost:8000/docs
 ### 2. Build Docker Image
 
 ```bash
-# Build the image
-docker build -t muxi-runtime:test .
+# Build the default image
+./scripts/build/runtime.sh
+
+# Or build a specific variant
+./scripts/build/runtime.sh --variant pytorch
 
 # Check image size
-docker images muxi-runtime:test
+docker images muxi-runtime
 ```
 
-**Expected image size:** ~500MB (optimized multi-stage build)
+**Expected image size:** ~2.4 GB (default), larger for pytorch/cuda variants
 
 ---
 
@@ -101,7 +104,7 @@ docker run -it --rm \
 
 ```bash
 # Health check
-curl http://localhost:8000/health
+curl http://localhost:8000/v1/health
 
 # Get server status
 curl http://localhost:8000/
@@ -237,7 +240,7 @@ deploy:
 The container includes a health check:
 ```bash
 # Docker will automatically check
-curl -f http://localhost:8000/health
+curl -f http://localhost:8000/v1/health
 ```
 
 ---

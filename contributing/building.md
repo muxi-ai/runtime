@@ -6,7 +6,7 @@ Guide for building MUXI Runtime artifacts (Docker images, SIF containers, PyPI p
 
 - Docker (for Docker and SIF builds)
 - Python 3.10+ (for PyPI builds)
-- Singularity/Apptainer (for SIF builds, Linux only)
+- Apptainer or Singularity (for SIF builds; optional — `sif.sh` falls back to a Docker-wrapped converter)
 
 ## Build Scripts
 
@@ -14,38 +14,53 @@ All build scripts are in `scripts/build/`:
 
 | Script | Purpose |
 |--------|---------|
-| `docker.sh` | Build Docker images |
-| `sif.sh` | Convert Docker image to SIF |
-| `runtime.sh` | Build runtime wheel |
+| `runtime.sh` | Build versioned Docker images (all variants) |
+| `sif.sh` | Convert Docker image to SIF (all variants) |
+| `docker.sh` | Legacy helper for dev/production images |
 | `package.sh` | Build PyPI package |
 | `publish.sh` | Publish to PyPI |
 
 ## Docker Images
 
-### Build Development Image
+MUXI Runtime ships three image variants:
+
+| Variant | Dockerfile | Description | Status |
+|---------|------------|-------------|--------|
+| `default` | `Dockerfile` | Lean runtime (~2.4 GB) | Stable |
+| `pytorch` | `Dockerfile.pytorch` | Adds CPU-only PyTorch on top of `default` | Stable |
+| `cuda` | `Dockerfile.cuda` | GPU-accelerated (CUDA 12, NVIDIA-only, `linux/amd64`) | **Experimental** |
+
+### Build a Variant
 
 ```bash
-./scripts/build/docker.sh
+# Default variant
+./scripts/build/runtime.sh
+
+# PyTorch variant (build default first)
+./scripts/build/runtime.sh --variant pytorch
+
+# CUDA variant — experimental, linux/amd64 + NVIDIA tooling required
+./scripts/build/runtime.sh --variant cuda
 ```
 
-### Build Production Image
+### Cross-Platform Builds
 
 ```bash
-./scripts/build/docker.sh --production
+./scripts/build/runtime.sh --platform linux/amd64
+./scripts/build/runtime.sh --platform linux/arm64
+./scripts/build/runtime.sh --platform linux/amd64 --variant pytorch
 ```
 
-### Build for Specific Architecture
-
-```bash
-./scripts/build/docker.sh --arch linux/arm64
-./scripts/build/docker.sh --arch linux/amd64
-```
+> **Note:** The `cuda` variant only builds on `linux/amd64`. It requires NVIDIA tooling
+> and `nvidia-container-toolkit`. It is not tested in CI against live GPUs.
 
 ### Image Tags
 
-- `muxi-runtime:latest` - Development image
-- `muxi-runtime:production` - Production image with optimizations
-- `muxi-runtime:{version}` - Version-tagged images
+Each build produces two tags:
+- `muxi-runtime:{version}` — version-pinned (e.g. `muxi-runtime:0.20260422.0`)
+- `muxi-runtime:latest` — floating alias
+
+Variant builds append a suffix: `muxi-runtime:{version}-pytorch`, `muxi-runtime:{version}-cuda`.
 
 ## SIF Containers
 
@@ -54,25 +69,41 @@ SIF (Singularity Image Format) containers are used by MUXI Server for isolated f
 ### Convert Docker to SIF
 
 ```bash
-# Build Docker image first
-./scripts/build/docker.sh
-
-# Convert to SIF
+# Build Docker image first, then convert
+./scripts/build/runtime.sh
 ./scripts/build/sif.sh
-```
 
-### Build for Specific Architecture
+# With a specific variant
+./scripts/build/runtime.sh --variant pytorch
+./scripts/build/sif.sh --variant pytorch
 
-```bash
-./scripts/build/sif.sh --arch arm64
+# Force target architecture
 ./scripts/build/sif.sh --arch amd64
+./scripts/build/sif.sh --arch arm64 --variant pytorch
 ```
+
+If `apptainer` or `singularity` is not installed locally, `sif.sh` automatically falls back
+to the Docker-wrapped `ghcr.io/muxi-ai/runtime-runner` converter.
+
+> **Platform guidance:** On macOS and Windows the correct SIF arch is always `linux-amd64`
+> regardless of host CPU (Rosetta / Hyper-V handles the translation). `linux-arm64` SIFs
+> only apply on native arm64 Linux hosts (e.g. AWS Graviton).
 
 ### Output
 
 SIF files are created in `sif-builds/` with naming convention:
+
 ```
-muxi-runtime-{version}-linux-{arch}.sif
+muxi-runtime-{version}-linux-{arch}.sif          # default
+muxi-runtime-{version}-pytorch-linux-{arch}.sif  # pytorch
+muxi-runtime-{version}-cuda-linux-{arch}.sif     # cuda (experimental)
+```
+
+Each build also writes a `latest` alias:
+
+```
+muxi-runtime-latest-linux-{arch}.sif
+muxi-runtime-latest-pytorch-linux-{arch}.sif
 ```
 
 ## PyPI Package

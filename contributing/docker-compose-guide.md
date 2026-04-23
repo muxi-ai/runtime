@@ -58,7 +58,7 @@ docker-compose up -d muxi
 
 ```bash
 # Check health
-curl http://localhost:8000/health
+curl http://localhost:8000/v1/health
 
 # Run a formation (if server mode is enabled)
 # Access: http://localhost:8000
@@ -188,7 +188,7 @@ echo "your formation YAML" > formations/test.yaml
 docker-compose up muxi
 
 # 4. Access
-curl http://localhost:8000/health
+curl http://localhost:8000/v1/health
 ```
 
 **Best For:**
@@ -216,7 +216,7 @@ docker-compose ps
 docker-compose logs muxi-production
 
 # 4. Access
-curl http://localhost:8001/health
+curl http://localhost:8001/v1/health
 ```
 
 **Best For:**
@@ -431,7 +431,7 @@ docker-compose logs --since 2024-10-29T10:00:00 muxi
 docker-compose ps
 
 # Manual health check
-curl http://localhost:8000/health
+curl http://localhost:8000/v1/health
 
 # Detailed status
 docker inspect muxi-runtime | grep -A 10 Health

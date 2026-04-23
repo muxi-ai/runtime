@@ -25,12 +25,14 @@ Formation API Server (localhost:PORT)
 Server expects versioned SIF files with platform suffixes:
 
 ```
-muxi-runtime-{version}-{platform}.sif
+muxi-runtime-{version}-linux-{arch}.sif          # default
+muxi-runtime-{version}-pytorch-linux-{arch}.sif  # pytorch
+muxi-runtime-{version}-cuda-linux-{arch}.sif     # cuda (experimental)
 
 Examples:
-  muxi-runtime-0.2025.0-linux-amd64.sif
-  muxi-runtime-0.2025.0-linux-arm64.sif
-  muxi-runtime-0.2025.0-darwin-arm64.sif
+  muxi-runtime-0.20260422.0-linux-amd64.sif
+  muxi-runtime-0.20260422.0-linux-arm64.sif
+  muxi-runtime-0.20260422.0-pytorch-linux-amd64.sif
 ```
 
 ### Storage Location
@@ -44,24 +46,31 @@ Examples:
 
 ### Building SIF Files
 
-**On Linux (Native):**
 ```bash
-# In runtime repository
-./build-runtime.sh                    # Build Docker image
-./build-sif.sh                        # Convert to SIF
-# Creates: muxi-runtime-0.2025.0-linux-amd64.sif
+# In runtime repository (works on Linux and macOS)
+./scripts/build/runtime.sh            # Build Docker image (default variant)
+./scripts/build/sif.sh                # Convert to SIF
+# Creates: sif-builds/muxi-runtime-{version}-linux-amd64.sif
 ```
 
-**On macOS (Docker-wrapped Singularity):**
+`sif.sh` detects `apptainer` or `singularity` automatically. If neither is installed locally
+(typical on macOS), it falls back to the Docker-wrapped `ghcr.io/muxi-ai/runtime-runner`
+converter — no manual `docker save` required.
+
+**Variant-aware builds:**
 ```bash
-./build-runtime.sh                    # Build Docker image
-docker save muxi-runtime:0.2025.0 -o muxi-runtime-0.2025.0.tar
-docker run --rm --privileged \
-  -v $(pwd):/work -w /work \
-  quay.io/singularity/singularity:latest \
-  build muxi-runtime-0.2025.0-darwin-arm64.sif \
-  docker-archive://muxi-runtime-0.2025.0.tar
+./scripts/build/runtime.sh --variant pytorch && ./scripts/build/sif.sh --variant pytorch
+./scripts/build/runtime.sh --variant cuda   && ./scripts/build/sif.sh --variant cuda    # experimental
 ```
+
+**Force architecture:**
+```bash
+./scripts/build/runtime.sh --platform linux/amd64
+./scripts/build/sif.sh --arch amd64
+```
+
+> On macOS and Windows the correct SIF arch is always `linux-amd64` regardless of host CPU.
+> `linux-arm64` SIFs only apply on native arm64 Linux hosts (e.g. AWS Graviton).
 
 ## Formation Directory Structure
 
@@ -92,25 +101,28 @@ Server manages formations with version directories:
 ### Phase 2 Command (YAML-based formations)
 
 ```bash
-singularity exec \
+apptainer exec --writable-tmpfs \
   --bind {formation-dir}/current:/formation \
-  ~/.muxi/server/runtimes/muxi-runtime-{version}-{platform}.sif \
-  python -m muxi.utils.run_formation \
+  ~/.muxi/server/runtimes/muxi-runtime-{version}-linux-{arch}.sif \
+  python -m muxi.runtime.utils.run_formation \
   /formation/formation.afs \
   --port {allocated-port} \
   --host 127.0.0.1
 ```
 
+`--writable-tmpfs` is required because the SIF rootfs is read-only; without it the
+runtime fails when trying to create `~/.muxi/default/memory`.
+
 ### Detailed Example
 
 ```bash
-# Formation: my-chatbot (version: 0.2025.0)
+# Formation: my-chatbot (version: 0.20260422.0)
 # Allocated port: 8001
 
-singularity exec \
+apptainer exec --writable-tmpfs \
   --bind ~/.muxi/server/formations/my-chatbot/current:/formation \
-  ~/.muxi/server/runtimes/muxi-runtime-0.2025.0-linux-amd64.sif \
-  python -m muxi.utils.run_formation \
+  ~/.muxi/server/runtimes/muxi-runtime-0.20260422.0-linux-amd64.sif \
+  python -m muxi.runtime.utils.run_formation \
   /formation/formation.afs \
   --port 8001 \
   --host 127.0.0.1
@@ -131,7 +143,7 @@ singularity exec \
   --env HOST=127.0.0.1 \
   --bind ~/.muxi/server/formations/my-chatbot/current:/formation \
   ~/.muxi/server/runtimes/muxi-runtime-0.2025.0-linux-amd64.sif \
-  python -m muxi.utils.run_formation /formation/formation.afs
+  python -m muxi.runtime.utils.run_formation /formation/formation.afs
 ```
 
 **Recommendation:** Use CLI args for explicitness and debuggability.
@@ -190,7 +202,7 @@ When a formation is deployed:
 ### Required Arguments
 
 ```bash
-python -m muxi.utils.run_formation <formation-path>
+python -m muxi.runtime.utils.run_formation <formation-path>
 ```
 
 - `formation-path`: Absolute path to formation.afs file
@@ -248,7 +260,7 @@ singularity exec \
   --bind /tmp:/tmp \                   # Explicit temp binding
   --bind {formation-dir}:/formation \  # Only formation access
   {sif-path} \
-  python -m muxi.utils.run_formation /formation/formation.afs
+  python -m muxi.runtime.utils.run_formation /formation/formation.afs
 ```
 
 ## Server Code Integration
@@ -277,11 +289,11 @@ func (pm *ProcessManager) SpawnFormation(formation *Formation) error {
         "formation.afs",
     )
 
-    // 4. Build Singularity command
-    cmd := exec.Command("singularity", "exec",
+    // 4. Build Apptainer command (--writable-tmpfs required: SIF rootfs is read-only)
+    cmd := exec.Command("apptainer", "exec", "--writable-tmpfs",
         "--bind", fmt.Sprintf("%s:/formation", filepath.Dir(formationPath)),
         sifPath,
-        "python", "-m", "muxi.utils.run_formation",
+        "python", "-m", "muxi.runtime.utils.run_formation",
         "/formation/formation.afs",
         "--port", fmt.Sprintf("%d", formation.Port),
         "--host", "127.0.0.1",
@@ -303,11 +315,12 @@ func (pm *ProcessManager) SpawnFormation(formation *Formation) error {
 
 ### Health Check
 
-After spawning, server should wait for formation to be ready:
+After spawning, server should wait for formation to be ready. The health endpoint is
+mounted under the `/v1` prefix:
 
 ```go
 func (pm *ProcessManager) WaitForFormationReady(formation *Formation) error {
-    url := fmt.Sprintf("http://127.0.0.1:%d/", formation.Port)
+    url := fmt.Sprintf("http://127.0.0.1:%d/v1/health", formation.Port)
 
     for i := 0; i < 30; i++ {  // 30 second timeout
         resp, err := http.Get(url)
@@ -329,18 +342,18 @@ func (pm *ProcessManager) WaitForFormationReady(formation *Formation) error {
 ```bash
 # Build Docker image
 cd /path/to/runtime
-./build-runtime.sh
+./scripts/build/runtime.sh
 
 # Test directly
 docker run --rm \
   -v /path/to/formation:/formation:ro \
   -e PORT=8000 -e HOST=0.0.0.0 \
   -p 8000:8000 \
-  muxi-runtime:0.2025.0 \
+  muxi-runtime:latest \
   /formation/formation.afs
 
 # Access endpoints
-curl http://localhost:8000/                # Status: "Up"
+curl http://localhost:8000/v1/health       # Health check
 curl http://localhost:8000/docs            # Swagger UI
 ```
 
@@ -348,21 +361,21 @@ curl http://localhost:8000/docs            # Swagger UI
 
 ```bash
 # Convert to SIF
-./build-sif.sh
+./scripts/build/sif.sh
 
-# Test SIF directly
-singularity exec \
+# Test SIF directly (--writable-tmpfs required: SIF rootfs is read-only)
+apptainer exec --writable-tmpfs \
   --bind /path/to/formation:/formation \
-  muxi-runtime-0.2025.0-linux-amd64.sif \
-  python -m muxi.utils.run_formation \
+  sif-builds/muxi-runtime-latest-linux-amd64.sif \
+  python -m muxi.runtime.utils.run_formation \
   /formation/formation.afs \
   --port 8000 --host 127.0.0.1 &
 
-# Wait for startup
-sleep 15
+# Wait for startup (~60s on first boot)
+sleep 60
 
 # Test endpoints
-curl http://127.0.0.1:8000/               # Status: "Up"
+curl http://127.0.0.1:8000/v1/health      # Health check
 curl http://127.0.0.1:8000/docs           # Swagger UI
 ```
 
@@ -405,11 +418,11 @@ if !exists(sifPath) {
 ### 3. Formation Spawning
 
 ```bash
-# Server spawns formation
-singularity exec \
+# Server spawns formation (--writable-tmpfs required: SIF rootfs is read-only)
+apptainer exec --writable-tmpfs \
   --bind ~/.muxi/server/formations/my-chatbot/current:/formation \
   ~/.muxi/server/runtimes/muxi-runtime-0.2025.0-linux-amd64.sif \
-  python -m muxi.utils.run_formation \
+  python -m muxi.runtime.utils.run_formation \
   /formation/formation.afs \
   --port 8001 \
   --host 127.0.0.1
@@ -439,14 +452,14 @@ runtime 0.2025.0 not found at ~/.muxi/server/runtimes/muxi-runtime-0.2025.0-linu
 
 **Solution:**
 ```bash
-# Download/build the runtime
+# Build the runtime for the required version
 cd /path/to/runtime
 git checkout v0.2025.0
-./build-runtime.sh
-./build-sif.sh
+./scripts/build/runtime.sh
+./scripts/build/sif.sh
 
 # Copy to server
-cp muxi-runtime-0.2025.0-linux-amd64.sif ~/.muxi/server/runtimes/
+cp sif-builds/muxi-runtime-0.2025.0-linux-amd64.sif ~/.muxi/server/runtimes/
 ```
 
 ### Formation Fails to Start
@@ -502,10 +515,10 @@ Formations shipped with `app.py` containing FastAPI server code.
 
 ```go
 // NEW CODE
-cmd := exec.Command("singularity", "exec",
+cmd := exec.Command("apptainer", "exec", "--writable-tmpfs",
     "--bind", formationDir + ":/formation",
     sifPath,
-    "python", "-m", "muxi.utils.run_formation",
+    "python", "-m", "muxi.runtime.utils.run_formation",
     "/formation/formation.afs",
     "--port", port,
     "--host", "127.0.0.1",
@@ -552,13 +565,14 @@ if hasAppPy(formationDir) {
 # List available runtimes
 ls ~/.muxi/server/runtimes/muxi-runtime-*
 
-# Spawn formation
-singularity exec --bind {formation-dir}:/formation {sif-path} \
-  python -m muxi.utils.run_formation /formation/formation.afs \
+# Spawn formation (--writable-tmpfs required: SIF rootfs is read-only)
+apptainer exec --writable-tmpfs \
+  --bind {formation-dir}:/formation {sif-path} \
+  python -m muxi.runtime.utils.run_formation /formation/formation.afs \
   --port {port} --host 127.0.0.1
 
 # Health check
-curl http://127.0.0.1:{port}/
+curl http://127.0.0.1:{port}/v1/health
 
 # View formation logs
 tail -f ~/.muxi/server/logs/formation-{id}.log

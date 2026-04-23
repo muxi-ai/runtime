@@ -108,6 +108,45 @@ async def main():
 asyncio.run(main())
 ```
 
+## Docker Images
+
+MUXI Runtime ships three image variants. All support `linux/amd64` and `linux/arm64` (except CUDA).
+
+| Variant | Description | Status |
+|---------|-------------|--------|
+| `default` | Lean runtime (~2.4 GB) | Stable |
+| `pytorch` | Adds CPU-only PyTorch on top of `default` | Stable |
+| `cuda` | GPU-accelerated (CUDA 12, NVIDIA-only, `linux/amd64`) | **Experimental** |
+
+```bash
+# Build the default variant
+./scripts/build/runtime.sh
+
+# Build the PyTorch variant (requires default built first)
+./scripts/build/runtime.sh --variant pytorch
+
+# Build the CUDA variant (experimental, linux/amd64 + NVIDIA tooling required)
+./scripts/build/runtime.sh --variant cuda
+
+# Cross-compile for a specific platform
+./scripts/build/runtime.sh --platform linux/amd64 --variant pytorch
+```
+
+### SIF (Singularity/Apptainer)
+
+Each variant can be converted to a `.sif` artifact for use with MUXI Server:
+
+```bash
+./scripts/build/sif.sh                        # default
+./scripts/build/sif.sh --variant pytorch
+./scripts/build/sif.sh --variant cuda         # experimental
+./scripts/build/sif.sh --arch amd64           # force architecture
+```
+
+> **Note:** On macOS and Windows the correct SIF architecture is always `linux-amd64`, regardless of host CPU. `linux-arm64` SIFs only apply on native arm64 Linux hosts (e.g. AWS Graviton).
+>
+> **CUDA variant is experimental.** It has not been end-to-end validated against live GPUs in CI and only builds on `linux/amd64` hosts with NVIDIA tooling.
+
 ## Development
 
 ```bash
@@ -115,10 +154,14 @@ git clone https://github.com/muxi-ai/runtime
 cd runtime
 pip install -e ".[dev]"
 
-# Run tests
+# Unit and integration tests
 pytest tests/unit -v
 pytest tests/integration -v
-pytest e2e/tests -v
+
+# E2E tests (standalone scripts, not pytest)
+cd e2e && python run_all_tests.py          # full suite
+cd e2e && python run_random_tests.py 10    # random sample
+cd e2e/tests/<area> && python test_<name>.py  # single test
 ```
 
 See [contributing/README.md](contributing/README.md) for contributor documentation.
