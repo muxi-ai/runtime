@@ -2,6 +2,8 @@
 
 ## [unreleased]
 
+## v0.20260423.0
+
 ### Runtime image + SIF packaging
 
 - **Dockerfile `HEALTHCHECK` now probes the real health path.** The formation API
