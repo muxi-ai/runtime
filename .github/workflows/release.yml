@@ -783,7 +783,7 @@ jobs:
 
             **Docker:** `docker pull ghcr.io/muxi-ai/runtime:v${{ needs.version.outputs.version }}`
 
-            **SIF (Singularity/Apptainer):** 6 artifacts u2014 3 variants u00d7 2 platforms
+            **SIF (Singularity/Apptainer):** 6 artifacts — 3 variants × 2 platforms
 
             | File | Variant | Arch |
             |------|---------|------|
