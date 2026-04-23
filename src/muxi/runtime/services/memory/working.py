@@ -1089,6 +1089,22 @@ class WorkingMemory:
 
         # Add to FAISS index directly if vector search is enabled
         if self.has_vector_search:
+            # Resolve the real embedding dim before the first FAISS
+            # write. Without this, a WorkingMemory built with a
+            # provisional hint (e.g. default 768) and a model whose
+            # true dim differs (e.g. 1536 for text-embedding-3-small)
+            # raises a shape mismatch on self.index.add(), which the
+            # broad except below silently swallows — the item lands
+            # in self.buffer but never in FAISS. A later add() or
+            # search() triggers _ensure_dim and rebuilds the index
+            # at the correct dim, but these early items are not
+            # re-indexed and their vector recall is permanently
+            # degraded. Calling _ensure_dim first makes the
+            # "safe rebuild: no embedded items exist yet" invariant
+            # in _ensure_dim actually hold regardless of which
+            # writer (add vs add_with_embedding) wins the race to
+            # the first insert.
+            await self._ensure_dim()
             try:
                 if isinstance(embedding, list):
                     embedding_np = np.array([embedding], dtype=np.float32)
