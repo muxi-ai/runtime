@@ -4,7 +4,7 @@
 # Status: experimental. Only buildable on linux/amd64 with NVIDIA tooling;
 # not exercised in the macOS dev loop, not smoke-tested against live GPUs
 # in CI at the time of the 0.20260422.x cut. Treat this variant as a
-# preview — the image produces, but the full runtime path (CUDA torch +
+# preview -- the image produces, but the full runtime path (CUDA torch +
 # faiss-gpu + onnxruntime-gpu inside a SIF) has not been end-to-end
 # validated. Use the pytorch variant for CPU knowledge workloads until
 # this variant graduates.
@@ -47,45 +47,48 @@ LABEL maintainer="Ran Aroussi <ran@aroussi.com>"
 LABEL description="MUXI Runtime - CUDA variant with GPU ONNX, GPU FAISS, and CUDA PyTorch"
 LABEL muxi.runtime.variant="cuda"
 
-# Step 1: remove CPU-only installs inherited from the lean base.
-# These conflict with their GPU equivalents:
-#   - faiss-cpu   <-> faiss-gpu-cu12     (both own the `faiss` module)
-#   - faissx      <-> faissx-gpu         (both own `faissx.client`)
-#   - onnxruntime <-> onnxruntime-gpu    (conflict at import time; last-installed wins)
-RUN pip uninstall -y faiss-cpu faissx onnxruntime \
- && rm -rf /root/.cache
+# Steps 1+2: arch-aware GPU stack installation.
+#
+# onnxruntime-gpu and faiss-gpu-cu12 only publish amd64 wheels.
+# On arm64 (Graviton / Jetson) we keep the CPU onnxruntime and faiss-cpu
+# from the base image; PyTorch installs CPU-only wheels.
+#
+# amd64:
+#   - uninstall CPU onnxruntime/faiss/faissx (conflict with GPU equivalents)
+#   - torch+torchvision: default PyPI index (CUDA 12.x wheels)
+#   - onellm[local-cuda,local-pytorch]: onnxruntime-gpu, faiss-gpu-cu12,
+#     sentence-transformers, transformers, numpy
+#   - faissx-gpu: drop-in for faissx client (uses faiss-gpu-cu12 locally)
+#
+# arm64:
+#   - keep CPU onnxruntime + faiss-cpu (no GPU wheels on arm64)
+#   - torch+torchvision: CPU-only wheels from PyTorch index
+#   - onellm[local-pytorch]: sentence-transformers, transformers, numpy
+#   - keep faissx CPU client
+RUN ARCH="$(uname -m)" && \
+    if [ "$ARCH" = "x86_64" ]; then \
+        pip uninstall -y faiss-cpu faissx onnxruntime && \
+        pip install --no-cache-dir torch torchvision && \
+        pip install --no-cache-dir "onellm[local-cuda,local-pytorch]>=0.20260422.3" && \
+        pip install --no-cache-dir "faissx-gpu>=0.20260422.2"; \
+    else \
+        pip install --no-cache-dir torch torchvision \
+            --index-url https://download.pytorch.org/whl/cpu && \
+        pip install --no-cache-dir "onellm[local-pytorch]>=0.20260422.3"; \
+    fi && \
+    find /usr/local -name "*.pyc" -delete && \
+    find /usr/local -name "__pycache__" -type d -exec rm -rf {} + 2>/dev/null || true && \
+    rm -rf /root/.cache /tmp/*
 
-# Step 2: install the full CUDA stack.
-# - torch + torchvision from default PyPI serves CUDA 12.x wheels on
-#   linux/amd64 (unlike Dockerfile.pytorch which uses the CPU index URL).
-# - onellm[local-cuda,local-pytorch] (>=0.20260422.3): local-cuda pulls
-#   onnxruntime-gpu + faiss-gpu-cu12 + transformers + numpy; local-pytorch
-#   pulls sentence-transformers so PyTorch-only models run under the same
-#   image. We deliberately skip the `cache` extra because it would
-#   re-introduce the CPU-only onnxruntime and faiss-cpu wheels; local-cuda
-#   already provides the GPU replacements for every package that `cache`
-#   would ship.
-# - faissx-gpu: drop-in replacement for the faissx client; same public
-#   API (`from faissx import client`), zero runtime code changes. Its
-#   faiss-gpu-cu12 dep is already satisfied by local-cuda.
-RUN pip install --no-cache-dir torch torchvision \
- && pip install --no-cache-dir "onellm[local-cuda,local-pytorch]>=0.20260422.3" \
- && pip install --no-cache-dir "faissx-gpu>=0.20260422.2" \
- && find /usr/local -name "*.pyc" -delete \
- && find /usr/local -name "__pycache__" -type d -exec rm -rf {} + 2>/dev/null || true \
- && rm -rf /root/.cache /tmp/*
-
-# Step 3: sanity-check imports. The build sandbox has no GPU, so we
-# cannot verify `torch.cuda.is_available()` or CUDAExecutionProvider at
-# build time — actual device detection happens at formation start.
-# We verify that each package imports cleanly and log which ort providers
-# are available (CPU-only is expected here; CUDA shows up at runtime).
+# Step 3: sanity-check imports (no GPU at build time on either arch).
 RUN python -c "\
-import torch, onnxruntime as ort, sentence_transformers; \
+import torch, sentence_transformers; \
 from faissx import client as _faissx_client; \
-providers = ort.get_available_providers(); \
-print(f'torch {torch.__version__} | ort {ort.__version__} providers={providers} | ' \
-      f'sentence-transformers {sentence_transformers.__version__} | faissx-gpu client OK')"
+print(f'torch {torch.__version__} | sentence-transformers {sentence_transformers.__version__} | faissx client OK'); \
+try: \
+    import onnxruntime as ort; print(f'ort {ort.__version__} providers={ort.get_available_providers()}'); \
+except ImportError: \
+    print('onnxruntime not installed on this arch (expected on arm64)')"
 
 # Inherited from the lean base (no override needed):
 #   - HF_HOME=/opt/hf-cache
