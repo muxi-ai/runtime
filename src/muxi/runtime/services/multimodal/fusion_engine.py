@@ -16,6 +16,12 @@ from ...utils.fastjson import json
 from .. import observability
 from ..memory.embedding import DEFAULT_EMBEDDING_MODEL, embed
 
+# Target dimension for fusion fallback embeddings. Matches
+# ``DEFAULT_EMBEDDING_MODEL`` (Nomic v1.5, 768-dim) so fallback vectors
+# are shape-compatible with primary-path vectors in downstream storage
+# and cross-modal attention. Update together when swapping models.
+_FUSION_EMBED_DIM = 768
+
 if TYPE_CHECKING:
     from ...services.llm import LLM
 
@@ -442,6 +448,16 @@ Analyze and provide as JSON:
         magnitude = math.sqrt(sum(x * x for x in embedding))
         if magnitude > 0:
             embedding = [x / magnitude for x in embedding]
+
+        # Pad trailing dims to match the primary-path embedding dimension
+        # (``DEFAULT_EMBEDDING_MODEL``, see ``_FUSION_EMBED_DIM``). Zeros
+        # don't affect unit-length magnitude or cosine similarity on the
+        # already-populated 0..511 semantic-feature bands, and they keep
+        # the vector shape-compatible with Nomic v1.5 so downstream
+        # storage / cross-modal attention does not silently drop or skew
+        # the result when the fallback path is taken.
+        if len(embedding) < _FUSION_EMBED_DIM:
+            embedding.extend([0.0] * (_FUSION_EMBED_DIM - len(embedding)))
 
         return embedding
 

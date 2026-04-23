@@ -118,7 +118,13 @@ class DocumentAwareBufferMemory:
             "max_size",
             "buffer_multiplier",
             "embedding_model_name",
-            "vector_dimension",
+            # ``WorkingMemory`` stores the embedding dimension on
+            # ``self.dimension`` (see ``services/memory/working.py``);
+            # the legacy ``vector_dimension`` name is only used at the
+            # config / validation layer. Keep the copy list aligned
+            # with the runtime attribute so the ``hasattr`` guard
+            # below actually finds it.
+            "dimension",
             "mode",
             "remote",
             "max_memory_mb",
