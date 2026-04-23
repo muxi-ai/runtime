@@ -145,10 +145,10 @@ if ! docker image inspect "$IMAGE_TAG" >/dev/null 2>&1; then
 fi
 
 echo "💾 Exporting Docker image to tarball..."
-docker save "$IMAGE_TAG" -o "$TARBALL"
-# Ensure the tarball (up to ~830 MB for pytorch) is removed on any exit
-# path, not just the explicit `rm "$TARBALL"` after a successful conversion.
+# Register cleanup before docker save so a partial tarball from a mid-write
+# failure (e.g. ENOSPC on an ~830 MB pytorch image) is also removed.
 trap 'rm -f "$TARBALL"' EXIT
+docker save "$IMAGE_TAG" -o "$TARBALL"
 echo "   ✓ Created $TARBALL"
 echo ""
 

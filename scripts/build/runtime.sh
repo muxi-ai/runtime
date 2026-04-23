@@ -109,15 +109,26 @@ LATEST_TAG="${IMAGE_NAME}:latest${TAG_SUFFIX}"
 BUILD_DATE=$(date -u +'%Y-%m-%dT%H:%M:%SZ')
 VCS_REF=$(git rev-parse --short HEAD 2>/dev/null || echo "unknown")
 
-if [ "$VARIANT" != "default" ] && ! docker image inspect "${IMAGE_NAME}:${VERSION}" >/dev/null 2>&1; then
-    echo "❌ Error: base image ${IMAGE_NAME}:${VERSION} not found"
-    echo ""
-    echo "Build the lean/default image first:"
-    echo "   ./scripts/build/runtime.sh"
-    if [ -n "$PLATFORM" ]; then
+if [ "$VARIANT" != "default" ]; then
+    BASE_ARCH=$(docker image inspect "${IMAGE_NAME}:${VERSION}" \
+        --format '{{.Architecture}}' 2>/dev/null || echo "")
+    if [ -z "$BASE_ARCH" ]; then
+        echo "❌ Error: base image ${IMAGE_NAME}:${VERSION} not found"
+        echo ""
+        echo "Build the lean/default image first:"
+        echo "   ./scripts/build/runtime.sh"
+        if [ -n "$PLATFORM" ]; then
+            echo "   ./scripts/build/runtime.sh --platform $PLATFORM"
+        fi
+        exit 1
+    fi
+    TARGET_ARCH="${PLATFORM##*/}"   # e.g. linux/amd64 → amd64
+    if [ -n "$TARGET_ARCH" ] && [ "$BASE_ARCH" != "$TARGET_ARCH" ]; then
+        echo "⚠️  Warning: base image is $BASE_ARCH but target platform is $TARGET_ARCH."
+        echo "   The build may pull the wrong base or fail. Rebuild the default image"
+        echo "   with the correct platform first:"
         echo "   ./scripts/build/runtime.sh --platform $PLATFORM"
     fi
-    exit 1
 fi
 
 echo "📦 Configuration:"
