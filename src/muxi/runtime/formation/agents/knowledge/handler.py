@@ -233,12 +233,22 @@ class KnowledgeHandler:
 
         # Ensure we have WorkingMemory for document storage
         if not self.working_memory:
+            # NOTE: The knowledge handler provides pre-computed vectors via
+            # ``add_with_embedding`` and never routes writes through
+            # WorkingMemory's embed path, so we intentionally omit
+            # ``embedding_model=``. WorkingMemory falls back to
+            # ``DEFAULT_EMBEDDING_MODEL`` internally (see
+            # ``services/memory/working.py``); the default slug is never
+            # exercised here because every knowledge-source write carries
+            # its own vector. Passing ``model=None`` (the legacy pre-
+            # migration kwarg) would raise ``TypeError`` — the new
+            # kwarg is ``embedding_model=`` and ``None`` is already the
+            # default, so there is nothing to pass.
             self.working_memory = WorkingMemory(
                 formation_id=self.formation_id,
                 max_size=2000,  # Large context window for documents
                 buffer_multiplier=20,  # 40,000 total capacity for documents
                 dimension=self.embedding_dimension,
-                model=None,  # We provide embeddings directly via add_with_embedding
                 mode=self.mode,
                 remote=self.remote,
                 max_memory_mb=5000,  # 5GB limit for document storage

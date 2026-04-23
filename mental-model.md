@@ -975,8 +975,8 @@ async def search(
 ```
 
 **Gotchas:**
-- Uses **cosine distance** for similarity (pgvector operator: `<=>`)
-- Index created with: `CREATE INDEX ON memories_{dim} USING ivfflat (embedding vector_cosine_ops)`
+- Uses **L2 distance** for similarity via pgvector (SQLAlchemy: `embedding.l2_distance(query_embedding)`; pgvector operator `<->`). Embedding models used by the runtime (Nomic v1.5, OpenAI text-embedding-3-*) return unit-length vectors, so L2 and cosine rank results identically while keeping the index, the query, and the ORM column on a single operator class.
+- ANN index is created with `vector_l2_ops` to match the runtime query path — see `migrations/init_schema.sql` (`CREATE INDEX ... USING ivfflat (embedding vector_l2_ops) WITH (lists = 100)`). pgvector will not use a cosine-ops index for an L2 query (or vice versa), so mismatching the ANN operator class with the runtime distance function silently forces a sequential scan and regresses search latency at scale.
 - Query timeout configurable via `query_timeout_seconds` (default: 30s)
 - All queries inside `LongTermMemory` use `self.MemoryModel` (set in `__init__`), NOT the global `Memory` alias
 - Result rows from `select(self.MemoryModel, distance)` use `result[0].field` (index-based access) since dynamic class names vary
