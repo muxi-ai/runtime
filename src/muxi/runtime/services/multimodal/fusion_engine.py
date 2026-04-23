@@ -14,13 +14,19 @@ from typing import TYPE_CHECKING, Any, Dict, List, Optional, Tuple
 
 from ...utils.fastjson import json
 from .. import observability
-from ..memory.embedding import DEFAULT_EMBEDDING_MODEL, embed
+from ..memory.embedding import (
+    DEFAULT_EMBEDDING_MODEL,
+    DEFAULT_EMBEDDING_MODEL_NATIVE_DIM,
+    embed,
+)
 
-# Target dimension for fusion fallback embeddings. Matches
-# ``DEFAULT_EMBEDDING_MODEL`` (Nomic v1.5, 768-dim) so fallback vectors
-# are shape-compatible with primary-path vectors in downstream storage
-# and cross-modal attention. Update together when swapping models.
-_FUSION_EMBED_DIM = 768
+# Target dimension for fusion fallback embeddings. Imported from
+# ``embedding.py`` rather than hardcoded so a future change to
+# ``DEFAULT_EMBEDDING_MODEL`` that updates its paired native-dim
+# constant automatically propagates here. This closes the drift gap
+# flagged in review: previously a bare ``768`` had to be hand-edited
+# in lockstep with the default-model swap.
+_FUSION_EMBED_DIM = DEFAULT_EMBEDDING_MODEL_NATIVE_DIM
 
 if TYPE_CHECKING:
     from ...services.llm import LLM

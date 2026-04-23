@@ -90,6 +90,14 @@ Chosen as the default local embedding model for MUXI. Multilingual
 deployments can opt into ``local/nomic-ai/nomic-embed-text-v2-moe``.
 """
 
+DEFAULT_EMBEDDING_MODEL_NATIVE_DIM = 768
+"""Native (pre-Matryoshka-truncation) output dimension of
+``DEFAULT_EMBEDDING_MODEL``. Exported so downstream modules
+(e.g. ``services.multimodal.fusion_engine``) that need to produce
+shape-compatible fallback vectors can depend on a single source of
+truth instead of copy-pasting the magic number. Update *together*
+with ``DEFAULT_EMBEDDING_MODEL`` when swapping defaults."""
+
 
 def _parse_model_slug(slug: str) -> tuple[str, str | None]:
     """Split ``local/<repo>:<revision>`` notation into ``(model, revision)``.
@@ -163,13 +171,13 @@ def _normalize_input(text_or_texts: str | list[str]) -> list[str]:
 
 async def embed(
     model: str,
-    input: str | list[str],
+    texts: str | list[str],
     *,
     dimensions: int | None = None,
     task: str | None = None,
     pooling: str | None = None,
 ) -> list[list[float]]:
-    """Generate embedding vectors for ``input`` using ``model``.
+    """Generate embedding vectors for ``texts`` using ``model``.
 
     This is the single embedding entry point used by every MUXI memory
     and non-memory consumer. It forwards optional kwargs to
@@ -182,9 +190,10 @@ async def embed(
         Provider-prefixed model slug (e.g.
         ``"local/nomic-ai/nomic-embed-text-v1.5"`` or
         ``"openai/text-embedding-3-small"``).
-    input:
+    texts:
         A single string or a list of strings to embed. A single string is
-        normalized to ``[input]`` before being forwarded.
+        normalized to ``[texts]`` before being forwarded. Named ``texts``
+        rather than ``input`` to avoid shadowing the Python builtin.
     dimensions:
         Optional Matryoshka truncation target. Forwarded as-is to
         OneLLM. Values ``<= native`` are honored exactly (Matryoshka
@@ -214,9 +223,9 @@ async def embed(
     Raises
     ------
     InvalidRequestError
-        If ``input`` is empty or whitespace-only.
+        If ``texts`` is empty or whitespace-only.
     """
-    items = _normalize_input(input)
+    items = _normalize_input(texts)
 
     # Support ``local/<repo>:<revision>`` slug notation transparently.
     # Consumers continue to pass a single slug; the parser extracts the
