@@ -144,8 +144,13 @@ ENV LANG=C.UTF-8
 EXPOSE 8000
 
 # Health check
-HEALTHCHECK --interval=30s --timeout=10s --start-period=30s --retries=3 \
-    CMD curl -f http://localhost:8000/health || exit 1
+# The formation API mounts the health router under the /v1 prefix
+# (see formation/server/server.py: `include_router(health_router, prefix="/v1")`),
+# so /health alone returns 404 and marks the container unhealthy. Probe
+# the real path instead. --start-period covers the Formation init window
+# (observed ~4s default variant, ~25s pytorch variant under cold imports).
+HEALTHCHECK --interval=30s --timeout=10s --start-period=60s --retries=3 \
+    CMD curl -fsS http://localhost:8000/v1/health || exit 1
 
 # Use entrypoint script
 ENTRYPOINT ["docker-entrypoint.sh"]

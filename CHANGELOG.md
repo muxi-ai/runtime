@@ -2,6 +2,45 @@
 
 ## [unreleased]
 
+### Runtime image + SIF packaging
+
+- **Dockerfile `HEALTHCHECK` now probes the real health path.** The formation API
+  mounts the health router under the `/v1` prefix (see
+  `formation/server/server.py`: `include_router(health_router, prefix="/v1")`),
+  so the previous `curl http://localhost:8000/health` probe returned 404 on every
+  boot and Docker reported the container as `unhealthy` forever. Probe is now
+  `curl -fsS http://localhost:8000/v1/health`. `--start-period` bumped from 30s
+  to 60s to cover cold-boot formation init (observed ~4s default, ~25s pytorch
+  under emulated amd64). Variant Dockerfiles inherit the fix via `FROM`.
+  Observed starting → healthy transition in ~110s under macOS/Rosetta on the
+  default variant (6 probes fail during start-period, which is expected and
+  does not count as a failing streak).
+- **`scripts/build/runtime.sh` and `scripts/build/sif.sh` are now variant-aware.**
+  Both scripts accept `--variant default|pytorch|cuda` and `--arch amd64|arm64`,
+  detect `apptainer` before `singularity` in the conversion path, read version
+  from `src/muxi/runtime/.version`, use the correct
+  `python -m muxi.runtime.utils.run_formation` module path in docs, and suffix
+  SIF filenames by variant so default/pytorch/cuda builds do not collide in
+  `sif-builds/`.
+- **SIF "Test the SIF" help corrected.** `--writable-tmpfs` is now documented as
+  required (SIF rootfs is read-only by design; without tmpfs the runtime fails
+  at `mkdir /root/.muxi/default/memory`). Both Option A (native apptainer) and
+  Option B (docker-wrapped via `runtime-runner`) are shown, and the health
+  check example uses `/v1/health` to match the HEALTHCHECK fix above.
+- **Platform guidance clarified.** Upstream Apptainer/Singularity publishes
+  linux/amd64 binaries only, so on macOS and Windows the correct SIF arch is
+  always `linux-amd64` regardless of host CPU — Rosetta (Apple Silicon) or
+  Hyper-V (Windows) handles the translation. `linux-arm64` SIFs only make
+  sense on a native arm64 Linux host with a self-built arm64 Apptainer (e.g.
+  AWS Graviton). `sif.sh` emits an early warning when it detects an arm64
+  build that will not be executable on a macOS/Windows host.
+- **CUDA variant marked EXPERIMENTAL.** `Dockerfile.cuda` now carries a
+  preview status note in its header. `scripts/build/runtime.sh` echoes the
+  experimental warning before starting a CUDA build. The image can be built
+  on linux/amd64 hosts with NVIDIA tooling, but the full runtime path
+  (CUDA torch + faiss-gpu + onnxruntime-gpu inside a SIF) has not been
+  end-to-end validated against live GPUs in CI.
+
 ### Embedding platform: single-path helper, Nomic v1.5 default
 
 The MUXI runtime now routes every embedding call through a single shared helper
