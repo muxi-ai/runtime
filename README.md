@@ -87,7 +87,16 @@ muxi dev
 ### Embedding directly
 
 ```bash
+# Base install (covers almost all use cases)
 pip install muxi-runtime
+
+# PyTorch variant — for local embedding models without an ONNX export
+pip install 'muxi-runtime[pytorch]'
+
+# CUDA variant — GPU-accelerated ONNX/PyTorch models + FAISS-GPU (NVIDIA only)
+# Must uninstall CPU-only packages first to avoid conflicts:
+pip uninstall -y faiss-cpu faissx onnxruntime
+pip install 'muxi-runtime[cuda]'
 ```
 
 ```python
