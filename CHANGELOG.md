@@ -2,7 +2,9 @@
 
 ## [unreleased]
 
-## v0.20260423.0
+## v0.20260423.5
+
+## v0.20260423.0-v0.20260423.3
 
 ### Runtime image + SIF packaging
 
