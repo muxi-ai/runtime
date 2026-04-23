@@ -81,14 +81,10 @@ RUN ARCH="$(uname -m)" && \
     rm -rf /root/.cache /tmp/*
 
 # Step 3: sanity-check imports (no GPU at build time on either arch).
-RUN python -c "\
-import torch, sentence_transformers; \
-from faissx import client as _faissx_client; \
-print(f'torch {torch.__version__} | sentence-transformers {sentence_transformers.__version__} | faissx client OK'); \
-try: \
-    import onnxruntime as ort; print(f'ort {ort.__version__} providers={ort.get_available_providers()}'); \
-except ImportError: \
-    print('onnxruntime not installed on this arch (expected on arm64)')"
+# onnxruntime may not be present on arm64 (no GPU wheels); check it
+# separately so the core import verification still runs.
+RUN python -c "import torch, sentence_transformers; from faissx import client; print(f'torch {torch.__version__} | st {sentence_transformers.__version__} | faissx OK')" \
+ && python -c "exec(\"try:\\n import onnxruntime as ort\\n print(f'ort {ort.__version__} providers={ort.get_available_providers()}')\\nexcept ImportError:\\n print('onnxruntime not installed (expected on arm64)')\")"
 
 # Inherited from the lean base (no override needed):
 #   - HF_HOME=/opt/hf-cache
