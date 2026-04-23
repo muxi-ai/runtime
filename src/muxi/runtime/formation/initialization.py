@@ -394,7 +394,9 @@ def _initialize_buffer_memory(formation, buffer_config: Dict[str, Any]) -> None:
         # Create buffer memory instance. Passing ``embedding_model=None``
         # defers to ``WorkingMemory``'s DEFAULT_EMBEDDING_MODEL — the
         # post-migration contract is a string slug, never an LLM-like
-        # provider object. ``model=`` is kept only as a legacy alias.
+        # provider object. The legacy ``model=`` kwarg was removed in
+        # the embedding-platform migration; ``embedding_model=`` is the
+        # only accepted name and ``None`` is its default.
         formation._buffer_memory = WorkingMemory(
             formation_id=formation_id,
             max_size=size,

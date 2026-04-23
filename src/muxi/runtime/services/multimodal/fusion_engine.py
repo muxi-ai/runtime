@@ -450,12 +450,22 @@ Analyze and provide as JSON:
             embedding = [x / magnitude for x in embedding]
 
         # Pad trailing dims to match the primary-path embedding dimension
-        # (``DEFAULT_EMBEDDING_MODEL``, see ``_FUSION_EMBED_DIM``). Zeros
-        # don't affect unit-length magnitude or cosine similarity on the
-        # already-populated 0..511 semantic-feature bands, and they keep
-        # the vector shape-compatible with Nomic v1.5 so downstream
-        # storage / cross-modal attention does not silently drop or skew
-        # the result when the fallback path is taken.
+        # (``DEFAULT_EMBEDDING_MODEL``, see ``_FUSION_EMBED_DIM``). Padding
+        # here is purely a shape-compatibility measure — it prevents
+        # downstream storage / cross-modal attention from silently
+        # dropping or skewing the result when the fallback path is taken.
+        #
+        # Caveat: the runtime's memory search path uses L2 distance (see
+        # ``LongTermMemory.search`` / ``search_by_embedding``), so when a
+        # padded fallback vector is compared against a real Nomic v1.5
+        # vector whose dims 512..767 are non-zero, those dims contribute
+        # ``sum(n_i^2)`` to the L2 distance — systematically inflating
+        # the distance vs. a same-band real vector. Recall against real
+        # memory content is therefore degraded whenever this fallback
+        # fires. This is an already-last-resort path (we only reach it
+        # when both LLM embedding and the shared embed helper failed),
+        # but callers should not treat fallback vectors as semantically
+        # interchangeable with primary-path vectors.
         if len(embedding) < _FUSION_EMBED_DIM:
             embedding.extend([0.0] * (_FUSION_EMBED_DIM - len(embedding)))
 
