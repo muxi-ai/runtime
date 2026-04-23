@@ -76,17 +76,10 @@ jobs:
           pytest tests/unit -v --tb=short -x
 
       - name: Run integration tests
-        # TEMPORARILY DISABLED — diagnostic for CI hang on feature/embeddings.
-        # The new integration tests (tests/integration/test_memory_*) call
-        # probe_dimension/embed against `local/nomic-ai/nomic-embed-text-v1.5`
-        # which triggers a ~275 MB HuggingFace download on first use. CI has
-        # no warm HF cache; the download stalls inside urllib3's C extension;
-        # pytest-timeout's thread method cannot deliver a TimeoutError into
-        # a C-stuck thread, so pytest waits forever (until the 6h GH job cap).
-        # Re-enable after switching the integration suite to OpenAI embeddings
-        # (cheap, fast, real timeout) or after adding an HF cache pre-warm
-        # step + a `timeout 600` shell wall-clock guard.
         run: |
-          echo "Integration tests temporarily disabled (see comment in ci.yml)."
-          echo "This confirms whether the integration step is the sole CI hang."
+          if [ -n "$(find tests/integration -name 'test_*.py' 2>/dev/null)" ]; then
+            pytest tests/integration -v --tb=short -x
+          else
+            echo "No integration tests found, skipping"
+          fi
         continue-on-error: true  # Integration tests may need external services
