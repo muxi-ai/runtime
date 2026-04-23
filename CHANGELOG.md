@@ -1,6 +1,6 @@
 # Changelog
 
-## [unreleased]
+## v0.20260423.1
 
 ## v0.20260423.0
 
