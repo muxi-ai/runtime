@@ -12,17 +12,13 @@
 #   5. github-release job: create GitHub Release + git tag + upload all 6 SIF files
 #   6. merge-back job: merge main → develop, then add fresh CHANGELOG [unreleased] on develop
 #
-# SIF artifact matrix (2 variants × 2 platforms = 4 artifacts per release):
-#   muxi-runtime-<v>-linux-amd64.sif          base    amd64
-#   muxi-runtime-<v>-linux-arm64.sif          base    arm64
-#   muxi-runtime-<v>-pytorch-linux-amd64.sif  pytorch amd64
-#   muxi-runtime-<v>-pytorch-linux-arm64.sif  pytorch arm64
-#
-# CUDA SIFs disabled: the amd64 CUDA SIF exceeds GitHub's 2 GB release
-# asset limit. Docker images are still built and pushed to GHCR.
-# Re-enable SIF jobs + release upload once a CDN distribution path is in place.
-#   muxi-runtime-<v>-cuda-linux-amd64.sif     cuda    amd64  (disabled)
-#   muxi-runtime-<v>-cuda-linux-arm64.sif     cuda    arm64  (disabled)
+# SIF artifact matrix (3 variants x 2 platforms = 6 artifacts per release):
+#   muxi-runtime-<v>-linux-amd64.sif          base    amd64   GH Release + S3
+#   muxi-runtime-<v>-linux-arm64.sif          base    arm64   GH Release + S3
+#   muxi-runtime-<v>-pytorch-linux-amd64.sif  pytorch amd64   GH Release + S3
+#   muxi-runtime-<v>-pytorch-linux-arm64.sif  pytorch arm64   GH Release + S3
+#   muxi-runtime-<v>-cuda-linux-amd64.sif     cuda    amd64   S3 only (>2 GB)
+#   muxi-runtime-<v>-cuda-linux-arm64.sif     cuda    arm64   S3 only (>2 GB)
 #
 # Docker image tags:
 #   ghcr.io/muxi-ai/runtime:v<version>           base multi-arch
@@ -592,6 +588,16 @@ jobs:
           name: sif-amd64
           path: muxi-runtime-${{ needs.version.outputs.version }}-linux-amd64.sif
 
+      - name: Upload to S3
+        run: |
+          pip install awscli
+          aws s3 cp muxi-runtime-${{ needs.version.outputs.version }}-linux-amd64.sif \
+            s3://${{ secrets.MUXI_S3_BUCKET }}/runtime/${{ needs.version.outputs.version }}/muxi-runtime-${{ needs.version.outputs.version }}-linux-amd64.sif
+        env:
+          AWS_ACCESS_KEY_ID: ${{ secrets.MUXI_S3_ACCESS_KEY }}
+          AWS_SECRET_ACCESS_KEY: ${{ secrets.MUXI_S3_SECRET_KEY }}
+          AWS_ENDPOINT_URL: ${{ secrets.MUXI_S3_ENDPOINT }}
+
   sif-arm64:
     runs-on: ubuntu-24.04-arm
     needs: [version, docker-manifest]
@@ -626,6 +632,16 @@ jobs:
         with:
           name: sif-arm64
           path: muxi-runtime-${{ needs.version.outputs.version }}-linux-arm64.sif
+
+      - name: Upload to S3
+        run: |
+          pip install awscli
+          aws s3 cp muxi-runtime-${{ needs.version.outputs.version }}-linux-arm64.sif \
+            s3://${{ secrets.MUXI_S3_BUCKET }}/runtime/${{ needs.version.outputs.version }}/muxi-runtime-${{ needs.version.outputs.version }}-linux-arm64.sif
+        env:
+          AWS_ACCESS_KEY_ID: ${{ secrets.MUXI_S3_ACCESS_KEY }}
+          AWS_SECRET_ACCESS_KEY: ${{ secrets.MUXI_S3_SECRET_KEY }}
+          AWS_ENDPOINT_URL: ${{ secrets.MUXI_S3_ENDPOINT }}
 
   # ===== Build SIF Images (pytorch) =====
   sif-pytorch-amd64:
@@ -670,6 +686,16 @@ jobs:
           name: sif-pytorch-amd64
           path: muxi-runtime-${{ needs.version.outputs.version }}-pytorch-linux-amd64.sif
 
+      - name: Upload to S3
+        run: |
+          pip install awscli
+          aws s3 cp muxi-runtime-${{ needs.version.outputs.version }}-pytorch-linux-amd64.sif \
+            s3://${{ secrets.MUXI_S3_BUCKET }}/runtime/${{ needs.version.outputs.version }}/muxi-runtime-${{ needs.version.outputs.version }}-pytorch-linux-amd64.sif
+        env:
+          AWS_ACCESS_KEY_ID: ${{ secrets.MUXI_S3_ACCESS_KEY }}
+          AWS_SECRET_ACCESS_KEY: ${{ secrets.MUXI_S3_SECRET_KEY }}
+          AWS_ENDPOINT_URL: ${{ secrets.MUXI_S3_ENDPOINT }}
+
   sif-pytorch-arm64:
     runs-on: ubuntu-24.04-arm
     needs: [version, docker-pytorch-manifest]
@@ -705,18 +731,110 @@ jobs:
           name: sif-pytorch-arm64
           path: muxi-runtime-${{ needs.version.outputs.version }}-pytorch-linux-arm64.sif
 
-  # ===== CUDA SIF builds disabled =====
-  # The CUDA amd64 SIF exceeds GitHub's 2 GB release asset limit.
-  # Docker images are still built and pushed to GHCR (no size limit there).
-  # Re-enable these jobs once a CDN/self-hosted distribution path exists.
-  #
-  # sif-cuda-amd64: ...
-  # sif-cuda-arm64: ...
+      - name: Upload to S3
+        run: |
+          pip install awscli
+          aws s3 cp muxi-runtime-${{ needs.version.outputs.version }}-pytorch-linux-arm64.sif \
+            s3://${{ secrets.MUXI_S3_BUCKET }}/runtime/${{ needs.version.outputs.version }}/muxi-runtime-${{ needs.version.outputs.version }}-pytorch-linux-arm64.sif
+        env:
+          AWS_ACCESS_KEY_ID: ${{ secrets.MUXI_S3_ACCESS_KEY }}
+          AWS_SECRET_ACCESS_KEY: ${{ secrets.MUXI_S3_SECRET_KEY }}
+          AWS_ENDPOINT_URL: ${{ secrets.MUXI_S3_ENDPOINT }}
+
+  # ===== Build SIF Images (cuda, experimental — S3 only, too large for GitHub Releases) =====
+  sif-cuda-amd64:
+    runs-on: ubuntu-latest
+    needs: [version, docker-cuda-manifest]
+    permissions:
+      contents: read
+      packages: read
+
+    steps:
+      - name: Free disk space
+        run: |
+          sudo rm -rf /usr/share/dotnet /opt/ghc /usr/local/share/boost /usr/local/lib/android
+          sudo rm -rf /usr/share/swift /usr/local/julia* /opt/hostedtoolcache
+          sudo apt-get clean
+          df -h
+
+      - name: Install Apptainer
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y software-properties-common
+          sudo add-apt-repository -y ppa:apptainer/ppa
+          sudo apt-get update
+          sudo apt-get install -y apptainer
+
+      - name: Log in to GHCR
+        uses: docker/login-action@4907a6ddec9925e35a0a9e82d7399ccc52663121 # v4.1.0
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Build SIF from Docker (cuda amd64)
+        run: |
+          VERSION="v${{ needs.version.outputs.version }}"
+          apptainer build muxi-runtime-${{ needs.version.outputs.version }}-cuda-linux-amd64.sif \
+            docker://${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:${VERSION}-cuda-amd64
+          ls -lh *.sif
+
+      - name: Upload to S3
+        run: |
+          pip install awscli
+          aws s3 cp muxi-runtime-${{ needs.version.outputs.version }}-cuda-linux-amd64.sif \
+            s3://${{ secrets.MUXI_S3_BUCKET }}/runtime/${{ needs.version.outputs.version }}/muxi-runtime-${{ needs.version.outputs.version }}-cuda-linux-amd64.sif
+        env:
+          AWS_ACCESS_KEY_ID: ${{ secrets.MUXI_S3_ACCESS_KEY }}
+          AWS_SECRET_ACCESS_KEY: ${{ secrets.MUXI_S3_SECRET_KEY }}
+          AWS_ENDPOINT_URL: ${{ secrets.MUXI_S3_ENDPOINT }}
+
+  sif-cuda-arm64:
+    runs-on: ubuntu-24.04-arm
+    needs: [version, docker-cuda-manifest]
+    permissions:
+      contents: read
+      packages: read
+
+    steps:
+      - name: Install Apptainer
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y software-properties-common
+          sudo add-apt-repository -y ppa:apptainer/ppa
+          sudo apt-get update
+          sudo apt-get install -y apptainer
+
+      - name: Log in to GHCR
+        uses: docker/login-action@4907a6ddec9925e35a0a9e82d7399ccc52663121 # v4.1.0
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Build SIF from Docker (cuda arm64)
+        run: |
+          VERSION="v${{ needs.version.outputs.version }}"
+          apptainer build muxi-runtime-${{ needs.version.outputs.version }}-cuda-linux-arm64.sif \
+            docker://${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:${VERSION}-cuda-arm64
+          ls -lh *.sif
+
+      - name: Upload to S3
+        run: |
+          pip install awscli
+          aws s3 cp muxi-runtime-${{ needs.version.outputs.version }}-cuda-linux-arm64.sif \
+            s3://${{ secrets.MUXI_S3_BUCKET }}/runtime/${{ needs.version.outputs.version }}/muxi-runtime-${{ needs.version.outputs.version }}-cuda-linux-arm64.sif
+        env:
+          AWS_ACCESS_KEY_ID: ${{ secrets.MUXI_S3_ACCESS_KEY }}
+          AWS_SECRET_ACCESS_KEY: ${{ secrets.MUXI_S3_SECRET_KEY }}
+          AWS_ENDPOINT_URL: ${{ secrets.MUXI_S3_ENDPOINT }}
 
   # ===== GitHub Release =====
+  # Base and pytorch SIFs are uploaded as GitHub Release assets (<2 GB each).
+  # CUDA SIFs go to S3 only (exceed GitHub's 2 GB limit).
   github-release:
     runs-on: ubuntu-latest
-    needs: [version, docker-manifest, pypi, sif-amd64, sif-arm64, sif-pytorch-amd64, sif-pytorch-arm64]
+    needs: [version, docker-manifest, pypi, sif-amd64, sif-arm64, sif-pytorch-amd64, sif-pytorch-arm64, sif-cuda-amd64, sif-cuda-arm64]
     permissions:
       contents: write
 
@@ -747,16 +865,18 @@ jobs:
 
             **Docker:** `docker pull ghcr.io/muxi-ai/runtime:v${{ needs.version.outputs.version }}`
 
-            **SIF (Singularity/Apptainer):**
+            **SIF (Singularity/Apptainer):** 6 artifacts -- 3 variants x 2 platforms
 
-            | File | Variant | Arch |
-            |------|---------|------|
-            | `muxi-runtime-${{ needs.version.outputs.version }}-linux-amd64.sif` | base | amd64 |
-            | `muxi-runtime-${{ needs.version.outputs.version }}-linux-arm64.sif` | base | arm64 |
-            | `muxi-runtime-${{ needs.version.outputs.version }}-pytorch-linux-amd64.sif` | pytorch | amd64 |
-            | `muxi-runtime-${{ needs.version.outputs.version }}-pytorch-linux-arm64.sif` | pytorch | arm64 |
+            | File | Variant | Arch | Location |
+            |------|---------|------|----------|
+            | `muxi-runtime-${{ needs.version.outputs.version }}-linux-amd64.sif` | base | amd64 | attached |
+            | `muxi-runtime-${{ needs.version.outputs.version }}-linux-arm64.sif` | base | arm64 | attached |
+            | `muxi-runtime-${{ needs.version.outputs.version }}-pytorch-linux-amd64.sif` | pytorch | amd64 | attached |
+            | `muxi-runtime-${{ needs.version.outputs.version }}-pytorch-linux-arm64.sif` | pytorch | arm64 | attached |
+            | `muxi-runtime-${{ needs.version.outputs.version }}-cuda-linux-amd64.sif` | cuda (experimental) | amd64 | S3 |
+            | `muxi-runtime-${{ needs.version.outputs.version }}-cuda-linux-arm64.sif` | cuda (experimental) | arm64 | S3 |
 
-            **CUDA variant:** Docker images available on GHCR (`ghcr.io/muxi-ai/runtime:v${{ needs.version.outputs.version }}-cuda`). CUDA SIFs exceed GitHub's 2 GB release asset limit and are not attached here.
+            CUDA SIFs exceed GitHub's 2 GB release asset limit and are distributed via S3. All 6 SIFs are also mirrored to S3.
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 

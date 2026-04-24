@@ -1,7 +1,7 @@
 # Build SIF artifacts from existing GHCR Docker images and upload to S3.
 #
 # Manual trigger only. Converts Docker images already pushed to GHCR
-# into SIF files and uploads them to s3://<bucket>/runtime/releases/<version>/.
+# into SIF files and uploads them to s3://<bucket>/runtime/<version>/.
 #
 # This workflow does NOT build Docker images or bump versions — it
 # assumes the images already exist in GHCR from a prior release run.
@@ -77,7 +77,7 @@ jobs:
         run: |
           pip install awscli
           aws s3 cp muxi-runtime-${{ inputs.version }}-linux-amd64.sif \
-            s3://${{ secrets.MUXI_S3_BUCKET }}/runtime/releases/${{ inputs.version }}/muxi-runtime-${{ inputs.version }}-linux-amd64.sif
+            s3://${{ secrets.MUXI_S3_BUCKET }}/runtime/${{ inputs.version }}/muxi-runtime-${{ inputs.version }}-linux-amd64.sif
         env:
           AWS_ACCESS_KEY_ID: ${{ secrets.MUXI_S3_ACCESS_KEY }}
           AWS_SECRET_ACCESS_KEY: ${{ secrets.MUXI_S3_SECRET_KEY }}
@@ -116,7 +116,7 @@ jobs:
         run: |
           pip install awscli
           aws s3 cp muxi-runtime-${{ inputs.version }}-linux-arm64.sif \
-            s3://${{ secrets.MUXI_S3_BUCKET }}/runtime/releases/${{ inputs.version }}/muxi-runtime-${{ inputs.version }}-linux-arm64.sif
+            s3://${{ secrets.MUXI_S3_BUCKET }}/runtime/${{ inputs.version }}/muxi-runtime-${{ inputs.version }}-linux-arm64.sif
         env:
           AWS_ACCESS_KEY_ID: ${{ secrets.MUXI_S3_ACCESS_KEY }}
           AWS_SECRET_ACCESS_KEY: ${{ secrets.MUXI_S3_SECRET_KEY }}
@@ -162,7 +162,7 @@ jobs:
         run: |
           pip install awscli
           aws s3 cp muxi-runtime-${{ inputs.version }}-pytorch-linux-amd64.sif \
-            s3://${{ secrets.MUXI_S3_BUCKET }}/runtime/releases/${{ inputs.version }}/muxi-runtime-${{ inputs.version }}-pytorch-linux-amd64.sif
+            s3://${{ secrets.MUXI_S3_BUCKET }}/runtime/${{ inputs.version }}/muxi-runtime-${{ inputs.version }}-pytorch-linux-amd64.sif
         env:
           AWS_ACCESS_KEY_ID: ${{ secrets.MUXI_S3_ACCESS_KEY }}
           AWS_SECRET_ACCESS_KEY: ${{ secrets.MUXI_S3_SECRET_KEY }}
@@ -201,7 +201,7 @@ jobs:
         run: |
           pip install awscli
           aws s3 cp muxi-runtime-${{ inputs.version }}-pytorch-linux-arm64.sif \
-            s3://${{ secrets.MUXI_S3_BUCKET }}/runtime/releases/${{ inputs.version }}/muxi-runtime-${{ inputs.version }}-pytorch-linux-arm64.sif
+            s3://${{ secrets.MUXI_S3_BUCKET }}/runtime/${{ inputs.version }}/muxi-runtime-${{ inputs.version }}-pytorch-linux-arm64.sif
         env:
           AWS_ACCESS_KEY_ID: ${{ secrets.MUXI_S3_ACCESS_KEY }}
           AWS_SECRET_ACCESS_KEY: ${{ secrets.MUXI_S3_SECRET_KEY }}
@@ -247,7 +247,7 @@ jobs:
         run: |
           pip install awscli
           aws s3 cp muxi-runtime-${{ inputs.version }}-cuda-linux-amd64.sif \
-            s3://${{ secrets.MUXI_S3_BUCKET }}/runtime/releases/${{ inputs.version }}/muxi-runtime-${{ inputs.version }}-cuda-linux-amd64.sif
+            s3://${{ secrets.MUXI_S3_BUCKET }}/runtime/${{ inputs.version }}/muxi-runtime-${{ inputs.version }}-cuda-linux-amd64.sif
         env:
           AWS_ACCESS_KEY_ID: ${{ secrets.MUXI_S3_ACCESS_KEY }}
           AWS_SECRET_ACCESS_KEY: ${{ secrets.MUXI_S3_SECRET_KEY }}
@@ -286,7 +286,7 @@ jobs:
         run: |
           pip install awscli
           aws s3 cp muxi-runtime-${{ inputs.version }}-cuda-linux-arm64.sif \
-            s3://${{ secrets.MUXI_S3_BUCKET }}/runtime/releases/${{ inputs.version }}/muxi-runtime-${{ inputs.version }}-cuda-linux-arm64.sif
+            s3://${{ secrets.MUXI_S3_BUCKET }}/runtime/${{ inputs.version }}/muxi-runtime-${{ inputs.version }}-cuda-linux-arm64.sif
         env:
           AWS_ACCESS_KEY_ID: ${{ secrets.MUXI_S3_ACCESS_KEY }}
           AWS_SECRET_ACCESS_KEY: ${{ secrets.MUXI_S3_SECRET_KEY }}
@@ -302,7 +302,7 @@ jobs:
         run: |
           echo "SIF to S3 — version ${{ inputs.version }}, variants: ${{ inputs.variants }}"
           echo ""
-          echo "S3 path: s3://<bucket>/runtime/releases/${{ inputs.version }}/"
+          echo "S3 path: s3://<bucket>/runtime/${{ inputs.version }}/"
           echo ""
           echo "Job results:"
           echo "  base-amd64:    ${{ needs.sif-base-amd64.result }}"
