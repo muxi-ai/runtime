@@ -1,7 +1,7 @@
 # MUXI Runtime Architecture Analysis
 
 **Generated:** 2026-03-10
-**Last Updated:** 2026-04-22 (CUDA runtime variant; OneLLM `0.20260422.3` pin with `local-cuda` extra + revision-pinning plumbing)
+**Last Updated:** 2026-04-24 (6-SIF release matrix, S3 distribution for CUDA SIFs, arch-aware CUDA Dockerfile)
 **Codebase:** `/Users/ran/Projects/muxi/code/runtime`  
 **Scope:** 290 Python files, ~119K lines
 
@@ -816,18 +816,20 @@ OneLLM's extras vocabulary — `cache` / `local-pytorch` / `local-cuda`):
   (default PyPI would pull the ~3 GB CUDA torch on linux/amd64). Selected
   when the model lacks ONNX weights (e.g. Nomic v2 MoE). Any host. Slug:
   `muxi_runtime: "<version>:pytorch"`.
-- `Dockerfile.cuda` (~4–6 GB) — swaps the CPU stack for the GPU stack:
-  `onellm[local-cuda,local-pytorch]` (onnxruntime-gpu + faiss-gpu-cu12 +
-  transformers + numpy + sentence-transformers), `faissx-gpu` as a drop-in
-  replacement for `faissx` (same `faissx.client` API, GPU-backed FAISS in
-  local mode), and CUDA 12.x `torch`/`torchvision` wheels from PyPI's
-  default index. A build-time assertion checks that the onnxruntime wheel
-  actually has `CUDAExecutionProvider` compiled in. Selected when the host
-  has an NVIDIA GPU and the workload benefits from GPU embedding or
-  in-process GPU vector ops. Slug: `muxi_runtime: "<version>:cuda"`.
-  Linux amd64 + NVIDIA + CUDA 12.x only. The CUDA stack exceeds GitHub's
-  2 GB release upload ceiling; distribution is via muxi-server's CDN
-  instead (the server no longer downloads SIFs from GitHub directly).
+- `Dockerfile.cuda` (~4–6 GB) — arch-aware GPU stack. On amd64: uninstalls
+  CPU onnxruntime/faiss-cpu/faissx, installs `onellm[local-cuda,local-pytorch]`
+  (onnxruntime-gpu + faiss-gpu-cu12 + transformers + numpy + sentence-transformers),
+  `faissx-gpu` (drop-in for `faissx.client`, GPU-backed FAISS in local mode),
+  and CUDA 12.x `torch`/`torchvision` from default PyPI. On arm64: keeps CPU
+  onnxruntime + faiss-cpu (no GPU wheels published for arm64), installs CPU-only
+  torch via `--index-url https://download.pytorch.org/whl/cpu` plus
+  `onellm[local-pytorch]`. Build-time sanity check verifies imports but does
+  not assert CUDAExecutionProvider (no GPU available in CI runners). Selected
+  when the host has an NVIDIA GPU and the workload benefits from GPU embedding
+  or in-process GPU vector ops. Slug: `muxi_runtime: "<version>:cuda"`.
+  CUDA SIFs exceed GitHub's 2 GB release asset limit; they are uploaded to
+  S3 (`s3://<bucket>/runtime/<version>/`) by CI. Base and pytorch SIFs go
+  to both GitHub Releases and S3.
 
 Dockerfile.cuda inherits from the lean base and uninstalls the CPU-only
 faiss-cpu / faissx / onnxruntime wheels before installing their GPU
@@ -3370,71 +3372,85 @@ os._exit(result)
 
 ### 2026-02-01: CI/CD Pipeline Fixes & SIF Builds
 
-**Release workflow structure (release.yml):**
+**Release workflow structure (release.yml) — updated 2026-04-24:**
 ```yaml
 # STEP ORDER:
 #   1. version job: calculate version, commit .version + CHANGELOG
-#   2. docker-amd64, docker-arm64, pypi jobs: build + publish (parallel)
-#   3. docker-manifest job: create multi-arch manifest
-#   4. sif-amd64, sif-arm64 jobs: convert Docker images to SIF (parallel)
-#   5. github-release job: create GitHub Release + git tag + upload SIF files
+#   2. docker-{base,pytorch,cuda}-{amd64,arm64} + pypi jobs (parallel)
+#   3. docker-{base,pytorch,cuda}-manifest jobs: multi-arch manifests
+#      docker-retag-latest job: re-pushes base :latest tag last so GHCR
+#      shows the base image as the default package
+#   4. sif-{base,pytorch,cuda}-{amd64,arm64} jobs: convert to SIF (6 total)
+#      all 6 upload to S3 (s3://<bucket>/runtime/<version>/)
+#      base+pytorch also upload as GitHub Release assets (<2 GB each)
+#      cuda SIFs go to S3 only (exceed GitHub's 2 GB asset limit)
+#   5. github-release job: create release + tag + attach base/pytorch SIFs
 #   6. merge-back job: merge main → develop
 ```
 
-**Major fix: AMD64 Docker image bloat (4.5GB → 800MB SIF)**
+**SIF artifact matrix (3 variants x 2 platforms = 6 per release):**
+```
+muxi-runtime-<v>-linux-amd64.sif          base     GH Release + S3
+muxi-runtime-<v>-linux-arm64.sif          base     GH Release + S3
+muxi-runtime-<v>-pytorch-linux-amd64.sif  pytorch  GH Release + S3
+muxi-runtime-<v>-pytorch-linux-arm64.sif  pytorch  GH Release + S3
+muxi-runtime-<v>-cuda-linux-amd64.sif     cuda     S3 only (>2 GB)
+muxi-runtime-<v>-cuda-linux-arm64.sif     cuda     S3 only (>2 GB)
+```
 
-Root cause: PyTorch on AMD64 defaults to CUDA version with 4GB+ NVIDIA libraries:
-- `nvidia-curand-cu12`
-- `nvidia-cublas-cu12`
-- `nvidia-cudnn-cu12`
-- etc.
+**Docker image tags on GHCR:**
+```
+ghcr.io/muxi-ai/runtime:v<version>           base (default)
+ghcr.io/muxi-ai/runtime:latest               base (default)
+ghcr.io/muxi-ai/runtime:v<version>-pytorch   pytorch
+ghcr.io/muxi-ai/runtime:latest-pytorch       pytorch
+ghcr.io/muxi-ai/runtime:v<version>-cuda      cuda (experimental)
+ghcr.io/muxi-ai/runtime:latest-cuda          cuda (experimental)
+```
 
-ARM64 doesn't have this issue (no CUDA support).
+**S3 distribution (DigitalOcean Spaces):**
+All 6 SIFs upload to `s3://<bucket>/runtime/<version>/`. Secrets:
+`MUXI_S3_BUCKET`, `MUXI_S3_ACCESS_KEY`, `MUXI_S3_SECRET_KEY`, `MUXI_S3_ENDPOINT`.
+Uses `awscli` with S3-compatible endpoint.
+
+**Manual SIF-to-S3 workflow (sif-to-s3.yml):**
+`workflow_dispatch` trigger for testing or re-uploading SIFs for existing versions.
+Inputs: `version` (string) and `variants` (all/base/pytorch/cuda). Converts GHCR
+Docker images to SIF and uploads to S3 without bumping versions.
+
+**RC workflow (rc.yml):**
+Runs on push to `rc` branch. Builds base + pytorch Docker images (pytorch uses
+`docker build` directly, not `docker/build-push-action`, because buildx can't
+see locally loaded images).
+
+**Major fix: AMD64 Docker image bloat (4.5GB to ~600MB SIF)**
+
+Root cause: PyTorch on AMD64 defaults to CUDA version with 4GB+ NVIDIA libraries.
 
 **Fix in Dockerfile:**
 ```dockerfile
 # Install PyTorch CPU-only version first (avoids 4GB+ CUDA dependencies)
 RUN uv pip install --prefix=/install --no-cache \
     torch torchvision torchaudio --index-url https://download.pytorch.org/whl/cpu
-
-# Then install rest of requirements
-RUN uv pip install --prefix=/install --no-cache -r requirements.txt
 ```
 
-**Results:**
-| Metric | Before | After |
-|--------|--------|-------|
-| AMD64 Docker image | 4.5GB+ | 2.81GB |
-| AMD64 SIF file | 4.5GB (over 2GB limit) | 814MB |
-| AMD64 build time | 35 min | 5 min |
-| ARM64 SIF file | 714MB | 714MB |
-
-**Other CI/CD fixes:**
-1. Removed redundant `tag` job - `softprops/action-gh-release` already creates tag
-2. Removed OpenSSF Scorecard workflow - incompatible with private repos
-3. Added disk cleanup to `sif-amd64` job - prevented "no space left on device"
-4. Disabled `provenance: false` and `sbom: false` in Docker builds - reduces overhead
-5. Replaced slow `jlumbroso/free-disk-space` action with simple `rm -rf` (~13 min saved)
-
-**SIF filename format (expected by muxi-server):**
-```
-muxi-runtime-{version}-linux-amd64.sif
-muxi-runtime-{version}-linux-arm64.sif
-
-# Download URL:
-https://github.com/muxi-ai/runtime/releases/download/v{version}/muxi-runtime-{version}-linux-{arch}.sif
-```
-
-**Local testing setup:**
-- `act` tool for running GitHub Actions locally
-- `Dockerfile.ci-test` for local CI environment simulation
-- `dive` tool for analyzing Docker layer sizes
+**CUDA Dockerfile arch-awareness (2026-04-24):**
+`Dockerfile.cuda` uses `uname -m` at build time to conditionally install GPU
+wheels (amd64) or CPU fallbacks (arm64). `onnxruntime-gpu` and `faiss-gpu-cu12`
+have no arm64 wheels on PyPI. Sanity check uses `try/except` via `exec()` for
+onnxruntime since `python -c` cannot handle compound statements.
 
 **Key learnings:**
 - Always check platform-specific dependencies (CUDA on AMD64)
 - Use CPU-only PyTorch for container images unless GPU required
-- SIF compression ratio is roughly 3:1 (2.8GB Docker → 800MB SIF)
-- GitHub release assets have 2GB limit
+- SIF compression ratio is roughly 3:1 (2.8GB Docker to ~600MB SIF)
+- GitHub release assets have hard 2GB per-file limit (all plans, not configurable)
+- GHCR shows whichever tag was pushed last as "Latest" — re-push base :latest
+  after variant manifests to keep base as the default package page
+- `docker/build-push-action` uses a separate buildx builder that cannot resolve
+  locally loaded images (use `docker build` directly for local-base-image builds)
+- `python -c` with Dockerfile line continuations collapses to one line; compound
+  statements (try/except) need `exec()` or a separate script
 - Before pushing release commits, inspect `origin/<branch>..HEAD` for sensitive files:
   deleting a private document in a later commit does not stop it from becoming public if an
   earlier unpushed commit already contains it
