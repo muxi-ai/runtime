@@ -880,6 +880,18 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
+      - name: Upload latest.txt to S3
+        run: |
+          pip install awscli
+          echo "${{ needs.version.outputs.version }}" > latest.txt
+          aws s3 cp latest.txt \
+            "s3://${{ secrets.MUXI_S3_BUCKET }}/runtime/latest.txt" \
+            --acl public-read --content-type text/plain
+        env:
+          AWS_ACCESS_KEY_ID: ${{ secrets.MUXI_S3_ACCESS_KEY }}
+          AWS_SECRET_ACCESS_KEY: ${{ secrets.MUXI_S3_SECRET_KEY }}
+          AWS_ENDPOINT_URL: ${{ secrets.MUXI_S3_ENDPOINT }}
+
   # ===== Merge Back to Develop =====
   merge-back:
     runs-on: ubuntu-latest
