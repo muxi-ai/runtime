@@ -490,6 +490,38 @@ jobs:
 
           echo "Created cuda manifests for ${VERSION}-cuda and latest-cuda"
 
+  # ===== Re-tag base as latest (must run LAST so GHCR shows base as default) =====
+  docker-retag-latest:
+    runs-on: ubuntu-latest
+    needs: [version, docker-manifest, docker-pytorch-manifest, docker-cuda-manifest]
+    permissions:
+      contents: read
+      packages: write
+
+    steps:
+      - name: Log in to GHCR
+        uses: docker/login-action@4907a6ddec9925e35a0a9e82d7399ccc52663121 # v4.1.0
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@4d04d5d9486b7bd6fa91e7baf45bbb4f8b9deedd # v4.0.0
+
+      - name: Re-push base latest tag
+        run: |
+          VERSION="v${{ needs.version.outputs.version }}"
+          IMAGE="${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}"
+
+          # Re-create the latest tag so it is the most recently pushed,
+          # which makes GHCR show the base image as the default package.
+          docker buildx imagetools create -t ${IMAGE}:latest \
+            ${IMAGE}:${VERSION}-amd64 \
+            ${IMAGE}:${VERSION}-arm64
+
+          echo "Re-tagged ${IMAGE}:latest (base) as most recent"
+
   # ===== PyPI Publish =====
   pypi:
     runs-on: ubuntu-latest
