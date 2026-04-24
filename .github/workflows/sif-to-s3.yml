@@ -76,7 +76,7 @@ jobs:
       - name: Upload to S3
         run: |
           pip install awscli
-          aws s3 cp muxi-runtime-${{ inputs.version }}-linux-amd64.sif \
+          aws s3 cp --acl public-read muxi-runtime-${{ inputs.version }}-linux-amd64.sif \
             s3://${{ secrets.MUXI_S3_BUCKET }}/runtime/${{ inputs.version }}/muxi-runtime-${{ inputs.version }}-linux-amd64.sif
         env:
           AWS_ACCESS_KEY_ID: ${{ secrets.MUXI_S3_ACCESS_KEY }}
@@ -115,7 +115,7 @@ jobs:
       - name: Upload to S3
         run: |
           pip install awscli
-          aws s3 cp muxi-runtime-${{ inputs.version }}-linux-arm64.sif \
+          aws s3 cp --acl public-read muxi-runtime-${{ inputs.version }}-linux-arm64.sif \
             s3://${{ secrets.MUXI_S3_BUCKET }}/runtime/${{ inputs.version }}/muxi-runtime-${{ inputs.version }}-linux-arm64.sif
         env:
           AWS_ACCESS_KEY_ID: ${{ secrets.MUXI_S3_ACCESS_KEY }}
@@ -161,7 +161,7 @@ jobs:
       - name: Upload to S3
         run: |
           pip install awscli
-          aws s3 cp muxi-runtime-${{ inputs.version }}-pytorch-linux-amd64.sif \
+          aws s3 cp --acl public-read muxi-runtime-${{ inputs.version }}-pytorch-linux-amd64.sif \
             s3://${{ secrets.MUXI_S3_BUCKET }}/runtime/${{ inputs.version }}/muxi-runtime-${{ inputs.version }}-pytorch-linux-amd64.sif
         env:
           AWS_ACCESS_KEY_ID: ${{ secrets.MUXI_S3_ACCESS_KEY }}
@@ -200,7 +200,7 @@ jobs:
       - name: Upload to S3
         run: |
           pip install awscli
-          aws s3 cp muxi-runtime-${{ inputs.version }}-pytorch-linux-arm64.sif \
+          aws s3 cp --acl public-read muxi-runtime-${{ inputs.version }}-pytorch-linux-arm64.sif \
             s3://${{ secrets.MUXI_S3_BUCKET }}/runtime/${{ inputs.version }}/muxi-runtime-${{ inputs.version }}-pytorch-linux-arm64.sif
         env:
           AWS_ACCESS_KEY_ID: ${{ secrets.MUXI_S3_ACCESS_KEY }}
@@ -246,7 +246,7 @@ jobs:
       - name: Upload to S3
         run: |
           pip install awscli
-          aws s3 cp muxi-runtime-${{ inputs.version }}-cuda-linux-amd64.sif \
+          aws s3 cp --acl public-read muxi-runtime-${{ inputs.version }}-cuda-linux-amd64.sif \
             s3://${{ secrets.MUXI_S3_BUCKET }}/runtime/${{ inputs.version }}/muxi-runtime-${{ inputs.version }}-cuda-linux-amd64.sif
         env:
           AWS_ACCESS_KEY_ID: ${{ secrets.MUXI_S3_ACCESS_KEY }}
@@ -285,7 +285,7 @@ jobs:
       - name: Upload to S3
         run: |
           pip install awscli
-          aws s3 cp muxi-runtime-${{ inputs.version }}-cuda-linux-arm64.sif \
+          aws s3 cp --acl public-read muxi-runtime-${{ inputs.version }}-cuda-linux-arm64.sif \
             s3://${{ secrets.MUXI_S3_BUCKET }}/runtime/${{ inputs.version }}/muxi-runtime-${{ inputs.version }}-cuda-linux-arm64.sif
         env:
           AWS_ACCESS_KEY_ID: ${{ secrets.MUXI_S3_ACCESS_KEY }}
