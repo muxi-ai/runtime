@@ -2,6 +2,8 @@
 
 ## [unreleased]
 
+## v0.20260426.1
+
 ### Artifacts: reject comment-only / no-op `generate_file.code`
 
 A user query like *"create a PRD with a brief on muxi"* would surface a
