@@ -87,6 +87,7 @@ from onellm.errors import AuthenticationError, InvalidRequestError, RateLimitErr
 
 from ...utils.fastjson import json
 from .. import observability
+from ..memory.embedding import DEFAULT_EMBEDDING_MODEL
 
 # Import multimodal components
 from ..multimodal import (
@@ -1641,8 +1642,11 @@ Provide a helpful, conversational response that directly addresses what the user
             return []
 
         async def _embed_request():
-            # Default to openai/text-embedding-3-small if no embedding model is specified
-            embedding_model = kwargs.pop("model", "openai/text-embedding-3-small")
+            # Default to the runtime-wide local embedder when the caller
+            # didn't specify a model. See ``generate_embeddings`` for the
+            # full rationale; the same offline-safety argument applies
+            # equally to the single-text path here.
+            embedding_model = kwargs.pop("model", DEFAULT_EMBEDDING_MODEL)
 
             # Prepare parameters
             params = {
@@ -1771,8 +1775,20 @@ Provide a helpful, conversational response that directly addresses what the user
         """
 
         async def _embed_batch_request():
-            # Default to openai/text-embedding-3-small if no embedding model is specified
-            embedding_model = kwargs.pop("model", "openai/text-embedding-3-small")
+            # Default to the runtime-wide local embedder if no embedding model
+            # is specified. ``DEFAULT_EMBEDDING_MODEL`` resolves to
+            # ``local/nomic-ai/nomic-embed-text-v1.5`` (Apache-2.0, 768-dim,
+            # ships in the runtime SIF), so this method works offline and
+            # without any cloud-provider API key by default. The earlier
+            # default of ``openai/text-embedding-3-small`` silently coupled
+            # every embedding call to OpenAI auth — formations that only
+            # configured an Anthropic chat key would fail knowledge
+            # ingestion with "OpenAI API key is required" even though they
+            # never opted into OpenAI.
+            #
+            # Callers that want a specific embedding model still pass it
+            # via ``model=`` and bypass the default entirely.
+            embedding_model = kwargs.pop("model", DEFAULT_EMBEDDING_MODEL)
 
             # Prepare parameters
             params = {

@@ -236,43 +236,59 @@ class Agent:
                 and settings for the agent's knowledge base.
         """
         try:
-            # Import KnowledgeHandler here to avoid circular imports
+            # Build the embedding function via the shared adapter, mirroring
+            # what SOP search already does (formation/workflow/sops.py).
+            #
+            # Why not ``self.model.generate_embeddings``?
+            #   ``self.model`` is the agent's *chat* LLM (e.g. Anthropic
+            #   Haiku). Earlier this code asked the chat LLM to embed text,
+            #   which conceptually conflates two unrelated capabilities and
+            #   in practice fell through to ``LLM.generate_embeddings``'s
+            #   hardcoded ``openai/text-embedding-3-small`` default — so a
+            #   formation that only declared an Anthropic chat key would
+            #   silently die on knowledge ingestion with "OpenAI API key is
+            #   required". Embedding capability is orthogonal to chat
+            #   capability and must be resolved independently.
+            #
+            # Resolution order:
+            #   1. ``working_memory.embedding_model_name`` — the canonical
+            #      formation-wide embedding slug, populated by working
+            #      memory init from ``llm.models[*].embedding`` (with
+            #      fallback to the runtime default already baked into
+            #      WorkingMemory).
+            #   2. ``DEFAULT_EMBEDDING_MODEL`` (``local/nomic-ai/nomic-embed-text-v1.5``)
+            #      — used only when working memory is unavailable. The
+            #      local Nomic embedder ships in the runtime SIF so the
+            #      offline path stays viable.
+            #
+            # The returned ``OneLLMEmbeddingAdapter`` delegates every
+            # ``generate_embeddings(texts)`` call to
+            # ``services.memory.embedding.embed`` — the documented "single
+            # choke point" — so the knowledge handler now flows through the
+            # same provider-routing, ``task``-stripping, and
+            # ``EmbeddingResponse``-unpacking logic as every other
+            # consumer (long-term memory, working memory, SOP search,
+            # fusion engine).
+            #
+            # Imports are local (rather than module-top) to avoid the
+            # circular import between ``agent.py`` and
+            # ``formation.workflow.sops`` / ``agents.knowledge.handler``.
+            from ...services.memory.embedding import DEFAULT_EMBEDDING_MODEL
+            from ..workflow.sops import OneLLMEmbeddingAdapter
             from .knowledge.handler import KnowledgeHandler
 
-            # Get embedding function from model for semantic search
-            # Knowledge handler needs a function that handles multiple texts
-            embedding_fn: Optional[Callable[..., Any]] = None
-            if hasattr(self.model, "generate_embeddings"):
-                # Prefer batch embedding function for efficiency
-                embedding_fn = self.model.generate_embeddings
-            elif hasattr(self.model, "get_embeddings"):
-                embedding_fn = self.model.get_embeddings
-            elif hasattr(self.model, "embed"):
-                # Fallback: wrap single embed in a batch handler with error handling
-                async def batch_embed(texts):
-                    embeddings = []
-                    for i, text in enumerate(texts):
-                        try:
-                            embedding = await self.model.embed(text)
-                            embeddings.append(embedding)
-                        except Exception as e:
-                            # Log error but continue processing other texts
-                            observability.observe(
-                                event_type=observability.ErrorEvents.EMBEDDINGS_GENERATION_FAILED,
-                                level=observability.EventLevel.WARNING,
-                                description="Failed to generate embedding for text in batch",
-                                data={
-                                    "text_index": i,
-                                    "text_preview": text[:100] if text else "",
-                                    "error": str(e),
-                                    "error_type": type(e).__name__,
-                                },
-                            )
-                            # Append None to maintain index alignment
-                            embeddings.append(None)
-                    return embeddings
+            working_memory = getattr(self.overlord, "buffer_memory", None)
+            embedding_slug: Optional[str] = None
+            if working_memory is not None:
+                slug_candidate = getattr(working_memory, "embedding_model_name", None)
+                if isinstance(slug_candidate, str) and slug_candidate:
+                    embedding_slug = slug_candidate
+            if not embedding_slug:
+                embedding_slug = DEFAULT_EMBEDDING_MODEL
 
-                embedding_fn = batch_embed
+            embedding_fn: Optional[Callable[..., Any]] = OneLLMEmbeddingAdapter(
+                embedding_slug
+            ).generate_embeddings
 
             # Get formation config from overlord if available
             formation_config = None
@@ -282,13 +298,15 @@ class Agent:
             # Get formation_id from overlord
             formation_id = getattr(self.overlord, "formation_id", "default-formation")
 
-            # Create knowledge handler using the factory method with formation config
+            # Create knowledge handler using the factory method with formation config.
+            # ``working_memory`` was already resolved above when computing the
+            # embedding slug; reuse it instead of re-fetching from the overlord.
             self.knowledge_handler = await KnowledgeHandler.from_agent_config(
                 agent_id=self.agent_id,
                 knowledge_config=knowledge_config,
                 generate_embeddings_fn=embedding_fn,
                 formation_config=formation_config,
-                working_memory=getattr(self.overlord, "buffer_memory", None),
+                working_memory=working_memory,
                 auto_inject_knowledge=True,
                 formation_id=formation_id,  # Pass formation_id explicitly
             )

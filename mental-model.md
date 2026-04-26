@@ -460,6 +460,41 @@ The overlord maintains a consistent persona across all agents, so users experien
   v0.20260426.0 by dropping the env var entirely; muxi-server is the single
   source of truth for that bind. ERR log is clean after the fix.
 
+**Gotchas - Knowledge Ingestion Coupled To Chat-Model Auth (fixed 2026-04-26):**
+- Earlier `Agent._initialize_knowledge` (`formation/agents/agent.py`) resolved
+  the knowledge handler's `embedding_fn` via `self.model.generate_embeddings`
+  (with `get_embeddings` / `embed` fallbacks). `self.model` is the agent's
+  *chat* LLM, so this was conceptually asking the chat LLM to embed text —
+  conflating two orthogonal capabilities.
+- The chain ended at `LLM.generate_embeddings` in `services/llm/llm.py`, which
+  hardcoded a default of `openai/text-embedding-3-small` whenever the caller
+  didn't pass `model=`. Result: a formation that only declared an Anthropic
+  chat key (and never opted into OpenAI) silently died on knowledge ingestion
+  with `Authentication failed: OpenAI API key is required` even though the
+  runtime ships and bind-mounts a perfectly good local nomic embedder. The
+  failure was masked by the older SIF-bind-mount issue (which produced an
+  earlier embedding failure higher up the stack); cleaning that up surfaced
+  this bug.
+- Fix has two layers:
+  1. `Agent._initialize_knowledge` now builds `embedding_fn` from
+     `OneLLMEmbeddingAdapter` (the same adapter SOP search uses), with the
+     model slug resolved as
+     `working_memory.embedding_model_name` -> `DEFAULT_EMBEDDING_MODEL`
+     (= `local/nomic-ai/nomic-embed-text-v1.5`). The adapter delegates every
+     embed call to `services.memory.embedding.embed` — the documented
+     "single choke point". The whole `hasattr(self.model, ...)` cascade is
+     gone.
+  2. `LLM.generate_embeddings` and `LLM.embed` (singular) now default to
+     `DEFAULT_EMBEDDING_MODEL` instead of OpenAI. Defense-in-depth: any
+     other path that lands on these without an explicit `model=` now
+     stays offline-safe instead of needing an OpenAI API key.
+- Rule going forward: anything that needs to embed must either (a) pass
+  through `OneLLMEmbeddingAdapter` constructed from a slug, or (b) call
+  `services.memory.embedding.embed` directly. Reaching for
+  `chat_llm.generate_embeddings` is the regression to watch for —
+  `tests/unit/test_agent_knowledge_embedding.py` statically guards against
+  it inside `_initialize_knowledge`.
+
 **Pre-routing gate ordering (current state, 2026-04-26):**
 ```
 chat() -> _process_sync_chat()
