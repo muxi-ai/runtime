@@ -1682,6 +1682,48 @@ class Overlord:
         self.agent_descriptions[agent_id] = metadata["description"]
         self.agent_metadata[agent_id] = metadata
 
+    def _format_specialist_registry(self, exclude_generalist: bool = True) -> str:
+        """
+        Build a compact, LLM-friendly description of the available specialist agents.
+
+        Used by pre-routing gates (actionability check, clarification analyzer) so the
+        LLM can defer to a specialist instead of treating an in-domain question as
+        casual chatter or as ambiguous.
+
+        Args:
+            exclude_generalist: When True, omit the built-in muxi-generalist agent
+                from the listing (gates should reason about specialists).
+
+        Returns:
+            A multi-line string. Empty string if no specialist agents are available.
+        """
+        if not getattr(self, "agent_metadata", None):
+            return ""
+
+        lines: List[str] = []
+        for agent_id, metadata in self.agent_metadata.items():
+            if exclude_generalist and agent_id == "muxi-generalist":
+                continue
+            role = (metadata.get("role") or "general").strip()
+            name = (metadata.get("name") or agent_id).strip()
+            description = (metadata.get("description") or "").strip()
+            specialties = [s for s in metadata.get("specialties", []) if s]
+            keywords = [k for k in metadata.get("specialization_keywords", []) if k]
+            domain = (metadata.get("specialization_domain") or "").strip()
+
+            entry = [f"- {agent_id} ({role}): {name}"]
+            if description:
+                entry.append(f"    description: {description}")
+            if domain:
+                entry.append(f"    domain: {domain}")
+            if specialties:
+                entry.append(f"    specialties: {', '.join(specialties)}")
+            if keywords:
+                entry.append(f"    keywords: {', '.join(keywords)}")
+            lines.append("\n".join(entry))
+
+        return "\n".join(lines)
+
     def _inject_skill_catalog(self, agent: Any, agent_id: str) -> None:
         """Inject skill catalog and specialty descriptions into an agent."""
         if not (hasattr(self, "skill_manager") and self.skill_manager):
@@ -2174,22 +2216,47 @@ class Overlord:
         # For more complex cases, use LLM if available
         if self._capability_models.get("text"):
             try:
-                system_prompt = """Is this message requesting action or just providing information/greeting?
+                _specialist_registry = self._format_specialist_registry()
+                _specialist_section = (
+                    f"\n\nAvailable specialist agents in this formation:\n{_specialist_registry}\n"
+                    "If the request topic matches any specialist's name, description, "
+                    "specialties, or keywords, the message is ACTIONABLE — the specialist "
+                    "needs to handle it. Do NOT classify as NON_ACTIONABLE just because the "
+                    "wording sounds casual or conversational."
+                ) if _specialist_registry else ""
 
-Consider the conversation context: if the assistant just asked the user questions,
-the user's response (even if short or numbered) is ACTIONABLE because it answers
-those questions and implicitly requests the assistant to proceed with the task.
-
-Examples of ACTIONABLE messages:
-- "What database should I use?" → ACTIONABLE (question needing answer)
-- "Create a file" → ACTIONABLE (command to execute)
-- "1. core features 2. developers 3. casual" → ACTIONABLE if answering assistant's questions
-
-Examples of NON_ACTIONABLE messages:
-- "Hi" → NON_ACTIONABLE (greeting, unless answering a question)
-- "Thanks" → NON_ACTIONABLE (acknowledgment)
-
-Reply with only: ACTIONABLE or NON_ACTIONABLE"""
+                system_prompt = (
+                    "Is this message requesting action or just casual social chatter?\n\n"
+                    "A message is ACTIONABLE if it asks the system to DO anything — answer a "
+                    "question, explain a concept, fetch information, take an action, or "
+                    "produce a summary. Phrasings like 'tell me about X', 'what is X', "
+                    "'explain X', 'how does X work', 'describe X' are ALL ACTIONABLE because "
+                    "they require the system to produce content.\n\n"
+                    "A message is NON_ACTIONABLE only if it is purely social chatter that "
+                    "needs no actual content (a bare greeting, a bare acknowledgment, a "
+                    "thank-you).\n"
+                    f"{_specialist_section}\n"
+                    "Consider the conversation context: if the assistant just asked the user "
+                    "questions, the user's response (even if short or numbered) is "
+                    "ACTIONABLE because it answers those questions and implicitly requests "
+                    "the assistant to proceed with the task.\n\n"
+                    "Examples of ACTIONABLE messages:\n"
+                    "- \"What database should I use?\" -> ACTIONABLE (question)\n"
+                    "- \"Create a file\" -> ACTIONABLE (command)\n"
+                    "- \"Tell me about MUXI\" -> ACTIONABLE (request to explain)\n"
+                    "- \"What is the overlord?\" -> ACTIONABLE (definition request)\n"
+                    "- \"Explain how formations work\" -> ACTIONABLE (explanation request)\n"
+                    "- \"How does X work?\" -> ACTIONABLE (question)\n"
+                    "- \"Use the docs to ...\" -> ACTIONABLE (instruction with tool hint)\n"
+                    "- \"1. core features 2. developers 3. casual\" -> ACTIONABLE if "
+                    "answering assistant's questions\n\n"
+                    "Examples of NON_ACTIONABLE messages:\n"
+                    "- \"Hi\" -> NON_ACTIONABLE (bare greeting, unless answering a question)\n"
+                    "- \"Hello\" -> NON_ACTIONABLE (bare greeting)\n"
+                    "- \"Thanks\" -> NON_ACTIONABLE (bare acknowledgment)\n"
+                    "- \"Got it\" -> NON_ACTIONABLE (bare acknowledgment)\n\n"
+                    "Reply with only: ACTIONABLE or NON_ACTIONABLE"
+                )
 
                 text_model_config = self._capability_models.get("text")
                 model_name = text_model_config.get("model")

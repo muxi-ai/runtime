@@ -32,6 +32,23 @@ if (
         f"{_existing_ldpath}:{_extra_ldpath}" if _existing_ldpath else _extra_ldpath
     )
 
+    # muxi-server bind-mounts ~/.muxi/server/cache (flat <org>--<repo>/ layout)
+    # at /opt/hf-cache. huggingface_hub.hf_hub_download expects the standard
+    # HF Hub layout (models--<org>--<repo>/snapshots/<sha>/...). Without
+    # translation, the runtime can't find embedding weights even though they
+    # are right there in the bind mount. The shim creates a symlink
+    # projection at /tmp/muxi-hf-hub and re-exports HF_HUB_CACHE/HF_HOME to
+    # point at it. Must run BEFORE any HF / onellm / transformers import,
+    # because those libraries cache the cache-dir resolution at import time.
+    try:
+        from .hf_cache_shim import setup_hf_cache_shim
+
+        setup_hf_cache_shim()
+    except Exception as _shim_exc:
+        # Non-fatal: if shim fails, the original env stays in place and the
+        # downstream embedding loader will surface its own clear error.
+        print(f"[run_formation] hf_cache_shim setup failed: {_shim_exc}", file=sys.stderr)
+
 
 # Print banner immediately before heavy imports
 def _print_banner():

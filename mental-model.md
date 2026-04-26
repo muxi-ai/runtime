@@ -1,7 +1,7 @@
 # MUXI Runtime Architecture Analysis
 
 **Generated:** 2026-03-10
-**Last Updated:** 2026-04-24 (6-SIF release matrix, S3 distribution for CUDA SIFs, arch-aware CUDA Dockerfile)
+**Last Updated:** 2026-04-26 (pre-routing gates now agent-aware; HF cache layout shim for SIF)
 **Codebase:** `/Users/ran/Projects/muxi/code/runtime`  
 **Scope:** 290 Python files, ~119K lines
 
@@ -358,6 +358,108 @@ The overlord maintains a consistent persona across all agents, so users experien
   instead of 2. This halved the effective buffer lifetime.
 - Fix: Removed duplicate storage from `_process_sync_chat()`. The `chat_orchestrator` is the
   sole owner of buffer storage for all code paths (actionable, non-actionable, streaming).
+
+**Gotchas - Pre-routing Gates Were Agent-Blind (fixed 2026-04-26):**
+- Three gates run on every chat message in this order:
+  1. `_is_actionable_message()` -- if NON_ACTIONABLE, fast-path persona, no routing
+  2. `clarification.needs_clarification()` -- if `clarify`, asks a question, no routing
+  3. `agent_router.select_agent_for_message()` -- the only stage that knew about specialists
+- Both LLM-driven gates (#1 and #2) had system prompts that did **not** include any
+  information about which specialist agents the formation had loaded. Result on the
+  `hello-muxi` demo with Haiku 4.5:
+  - "tell me about muxi" -> gate #1 classified as NON_ACTIONABLE -> generic Overlord
+    persona, no routing.
+  - "tell me about the overlord" -> gate #2 asked "anime? game? movie?" because it
+    had no idea `muxi-expert` covers "overlord".
+  - "what is the muxi overlord?" -> survived both gates, routed correctly. Three
+    near-identical phrasings, three different broken outcomes.
+- Root causes:
+  1. `_is_actionable_message` prompt had only 2 NON_ACTIONABLE example phrases ("Hi",
+     "Thanks") and 3 ACTIONABLE examples. Any informational request that *sounded*
+     casual ("tell me about X", "explain X") was over-classified as conversational
+     under `max_tokens=20, temperature=0.1`.
+  2. `clarification_analysis.md` template exposed `capabilities`, `mcp_services`,
+     `matched_sop` -- but never the agent registry. The clarification LLM had no way
+     to know "the formation has a specialist whose keywords include 'overlord'".
+- Fix:
+  1. New helper `Overlord._format_specialist_registry(exclude_generalist=True)` builds
+     a compact, LLM-friendly description of every specialist agent in the formation
+     (name, role, description, domain, specialties, keywords) from `agent_metadata`.
+     Located right above `_inject_skill_catalog`.
+  2. `_is_actionable_message` system prompt rewritten:
+     - Inlines the specialist registry and adds an explicit rule: "if the topic
+       matches any specialist's name/description/specialties/keywords, ACTIONABLE."
+     - Added explicit examples for `tell me about X`, `what is X`, `explain X`,
+       `how does X work`, `describe X`, `use the docs to ...` -> ACTIONABLE.
+     - Reframed the binary as "asks the system to DO anything" vs. "purely social
+       chatter that needs no actual content".
+  3. `clarification_analysis.md` got a new `=== SPECIALIST AGENTS AVAILABLE ===`
+     section and a `SPECIALIST AGENT RULES` block instructing the LLM not to ask
+     "which X do you mean?" if a specialist exists for X. Includes a worked example.
+  4. `clarification._analyze_request` now passes `specialist_agents=` (computed via
+     `overlord._format_specialist_registry()`) into the prompt template.
+- Verification: All three problem queries now hit `stage:agent_selection`, no
+  `fast_path:true`, no clarification short-circuit, with `muxi-expert` returning
+  domain-specific answers using its embedded knowledge.
+- Architectural note: routing -- the only gate that knows about specialists -- still
+  runs **last**. Both gates that can short-circuit it have less context than the
+  gate they're short-circuiting. The fix injects that context into the gates
+  rather than reordering the pipeline; reordering is a larger design discussion.
+- Adding a new pre-routing gate? Inject the specialist registry into its prompt or
+  it will silently regress this exact bug.
+
+**Gotchas - SIF Embeddings Failed Despite Bind-Mounted Cache (fixed 2026-04-26):**
+- The SIF runtime sets `HF_HOME=/opt/hf-cache` and `HF_HUB_OFFLINE=1`. muxi-server
+  bind-mounts `~/.muxi/server/cache` into the SIF at `/opt/hf-cache` so embedding
+  weights are available offline.
+- Two different libraries write/read that cache with **incompatible layouts**:
+  - **muxi-server** (`pkg/hfcache/hfcache.go`) writes a flat custom layout:
+    `<cacheDir>/<org>--<repo>/onnx/model.onnx`
+  - **onellm / huggingface_hub** read the standard HF Hub layout:
+    `<HF_HUB_CACHE>/models--<org>--<repo>/snapshots/<sha>/onnx/model.onnx`
+  These don't match. With `HF_HUB_OFFLINE=1`, `hf_hub_download` only reads the cache
+  (no network fallback), so the embedding loader reports "Repo has no ONNX weights"
+  even though the weights are right there in the bind mount.
+- Fix: a startup shim (`utils/hf_cache_shim.py`) detects the flat layout in
+  `HF_HOME`/`HF_HUB_CACHE`, projects it into HF Hub layout via symlinks under
+  `/tmp/muxi-hf-hub`, and re-exports `HF_HUB_CACHE` and `HF_HOME` to the shim. Wired
+  into `run_formation.py`'s SIF-mode env-setup block so it runs **before** any
+  HF / onellm / transformers import (those libraries cache the cache-dir
+  resolution at import time).
+- Shim layout produced:
+  ```
+  /tmp/muxi-hf-hub/
+    models--<org>--<repo>/
+      refs/main          (contents: "local")
+      snapshots/local/
+        config.json -> /opt/hf-cache/<org>--<repo>/config.json
+        tokenizer.json -> /opt/hf-cache/<org>--<repo>/tokenizer.json
+        onnx/ -> /opt/hf-cache/<org>--<repo>/onnx     (directory symlink)
+        ...
+  ```
+  Idempotent: re-running on an already-shimmed cache is a no-op. Symlinks point
+  back into the bind mount so no host pollution and no extra disk usage.
+- Architectural note: the *right* fix would be to converge the two layouts (either
+  muxi-server writes HF Hub layout, or onellm reads flat layout). The shim is the
+  smallest change that unblocks the SIF without touching either layout contract;
+  picking which side to migrate is a separate design decision.
+- The bind-mount itself also produces a benign Apptainer warning
+  (`destination is already in the mount point list`) on the Docker-wrapped path
+  on macOS. The cache is still visible inside the SIF; the warning is harmless
+  but the underlying cause (muxi-server's `--bind /opt/hf-cache` on the
+  Singularity hop combined with the Docker `-v` hop and runtime-runner's default
+  bindpath config) should be cleaned up as a follow-up in muxi-server.
+
+**Pre-routing gate ordering (current state, 2026-04-26):**
+```
+chat() -> _process_sync_chat()
+  -> [gate 1] _is_actionable_message(message)        # LLM, includes specialist registry
+       NON_ACTIONABLE -> _apply_persona() -> return  (fast_path:true)
+  -> [gate 2] clarification.needs_clarification()    # LLM, includes specialist registry
+       action="clarify" -> return question
+  -> [gate 3] agent_router.select_agent_for_message  # LLM, full registry + scoring
+       -> route to selected agent
+```
 
 #### Agent Router
 

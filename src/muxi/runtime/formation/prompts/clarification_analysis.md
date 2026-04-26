@@ -12,6 +12,9 @@ Analyze this transcript to determine if clarification is needed regarding the us
 === MCP SERVICES AVAILABLE ===
 {mcp_services}
 
+=== SPECIALIST AGENTS AVAILABLE ===
+{specialist_agents}
+
 === AVAILABLE CREDENTIALS ===
 {available_credentials}
 
@@ -34,6 +37,23 @@ IMPORTANT RULES:
 - For vague requests like "help me" or "fix this", DO clarify
 - If we lack the tools/capabilities, don't clarify (fail fast)
 - Detect if user wants brainstorming/planning vs direct action
+
+SPECIALIST AGENT RULES:
+- Check the "SPECIALIST AGENTS AVAILABLE" section above. These are the agents this
+  formation has loaded -- each has its own knowledge, tools, and domain expertise.
+- If the user's request topic clearly matches a specialist's name, description,
+  domain, specialties, or keywords, set needs_clarification=false. The specialist
+  knows about it -- routing will hand the message off correctly.
+- Do NOT ask "which X do you mean?" if a specialist exists for X. Asking the
+  user to disambiguate a topic the formation has a specialist for makes the
+  system look broken.
+  * Example: User asks "tell me about the overlord" + agent "muxi-expert" lists
+    keyword "overlord" -> needs_clarification=false (route to muxi-expert).
+  * Example: User asks "post a greeting on github" + agent "community-greeter"
+    has specialty "github comments" -> needs_clarification=false.
+- Specialist match takes precedence over generic ambiguity. If the formation
+  has a specialist whose domain covers the request, trust the specialist to
+  handle it -- do not pre-empt with clarification questions.
 
 STANDARD OPERATING PROCEDURE (SOP) RULES:
 - Check the "MATCHED STANDARD OPERATING PROCEDURE" section above

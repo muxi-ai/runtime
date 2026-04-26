@@ -610,12 +610,22 @@ class UnifiedClarificationSystem:
 
         from ..prompts.loader import PromptLoader
 
+        # Build a description of available specialist agents so the clarification
+        # LLM can defer to a specialist instead of asking the user to disambiguate
+        # a topic the formation already has expertise for.
+        specialist_agents = ""
+        if hasattr(self.overlord, "_format_specialist_registry"):
+            specialist_agents = self.overlord._format_specialist_registry()
+        if not specialist_agents:
+            specialist_agents = "None"
+
         system_prompt = PromptLoader.get(
             "clarification_analysis.md",
             conversation=conversation,  # Full conversation history for context
             context=json.dumps(context) if context else "{}",
             capabilities=", ".join(capabilities) if capabilities else "Conversation",
             mcp_services="\n".join(mcp_services_detail) if mcp_services_detail else "None",
+            specialist_agents=specialist_agents,
             available_credentials=available_credentials,
             matched_sop=self._format_matched_sop(context.get("matched_sop")),
             response_style=response_style,
