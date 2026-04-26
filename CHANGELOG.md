@@ -1,6 +1,6 @@
 # Changelog
 
-## [unreleased]
+## v0.20260426.1
 
 ### Artifacts: reject comment-only / no-op `generate_file.code`
 
