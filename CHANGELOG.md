@@ -2,6 +2,105 @@
 
 ## [unreleased]
 
+## v0.20260426.0
+
+### Routing: pre-routing gates are now agent-aware
+
+The two pre-routing gates that run before agent selection
+(`_is_actionable_message` and `clarification.needs_clarification`) were
+deciding whether to short-circuit a request without ever seeing the
+formation's specialist registry. On a formation like `hello-muxi`
+(Overlord plus a domain expert agent), this meant informational queries
+like *"What is MUXI?"* or *"Tell me about the overlord."* would get
+classified as non-actionable and answered by the Overlord's persona
+instead of routed to `muxi-expert` — even though a perfectly capable
+specialist was right there.
+
+- New `_format_specialist_registry()` helper renders the available
+  agents (id, role, description, capabilities) into a compact block
+  that's now injected into both gate prompts.
+- `_is_actionable_message` rewritten with explicit informational-query
+  examples and a "if a specialist exists for this topic, route to them"
+  rule.
+- `clarification_analysis.md` gained a `SPECIALIST AGENTS AVAILABLE`
+  section with companion routing rules.
+- `clarification._analyze_request` now passes `specialist_agents=` so
+  the gate prompt is rendered with the live registry.
+
+Result: domain-grounded responses on formations whose agents define
+specialized expertise. Pure-Overlord formations are unaffected because
+the registry block is empty for them.
+
+### Knowledge ingestion no longer requires an OpenAI API key
+
+`Agent._initialize_knowledge` resolved the knowledge handler's embedding
+function via `self.model.generate_embeddings` — i.e. it asked the agent's
+*chat* LLM to embed knowledge text. That conflated two orthogonal
+capabilities (chat and embedding) and dragged knowledge ingestion into
+`LLM.generate_embeddings`, which itself defaulted to
+`openai/text-embedding-3-small` when no `model=` kwarg was passed.
+
+A formation that only declared an Anthropic chat key would therefore
+silently die on knowledge ingestion with `Authentication failed: OpenAI
+API key is required` even though the runtime ships and bind-mounts a
+local Nomic embedder.
+
+Two-layer fix:
+
+- `Agent._initialize_knowledge` now builds `embedding_fn` from
+  `OneLLMEmbeddingAdapter` (the same adapter SOP search uses), with the
+  slug resolved as
+  `working_memory.embedding_model_name` → `DEFAULT_EMBEDDING_MODEL`
+  (= `local/nomic-ai/nomic-embed-text-v1.5`). The adapter delegates every
+  embed call to `services.memory.embedding.embed` — the documented
+  "single choke point" — so the knowledge handler now flows through the
+  same provider-routing logic as every other memory consumer.
+- `LLM.generate_embeddings` and `LLM.embed` (singular) now default to
+  `DEFAULT_EMBEDDING_MODEL` instead of OpenAI. Defense-in-depth: any
+  future caller landing on these without an explicit `model=` stays
+  offline-safe.
+
+`tests/unit/test_agent_knowledge_embedding.py` (8 tests) statically
+guards against the chat-model-embedding regression inside
+`_initialize_knowledge` and the local default on both `LLM` paths.
+
+### SIF embeddings: HF Hub layout, no shim needed
+
+The runtime SIF sets `HF_HOME=/opt/hf-cache` and `HF_HUB_OFFLINE=1`, then
+bind-mounts `~/.muxi/server/cache` at `/opt/hf-cache`. Earlier
+muxi-server `pkg/hfcache/hfcache.go` wrote a flat custom layout
+(`<cacheDir>/<org>--<repo>/...`) that `huggingface_hub.hf_hub_download`
+couldn't read offline (it expects
+`models--<org>--<repo>/snapshots/<sha>/...`), so embedding loads inside
+the SIF would fail with "Repo has no ONNX weights" even though the
+weights were right there in the bind mount.
+
+- Added `utils/hf_cache_shim.py` — a startup shim that detects the legacy
+  flat layout under `HF_HOME`/`HF_HUB_CACHE` and projects it into HF Hub
+  layout via symlinks under `/tmp/muxi-hf-hub`, then re-exports
+  `HF_HUB_CACHE` and `HF_HOME` to point at the projection. Wired into
+  `utils/run_formation.py`'s SIF-mode env-setup block so it runs
+  *before* any HF / onellm / transformers import (those libraries cache
+  the cache-dir resolution at import time).
+- The shim is now a backwards-compat fallback. muxi-server
+  `pkg/hfcache/hfcache.go` v0.20260426.0 writes HF Hub layout natively
+  (`models--<org>--<repo>/snapshots/main/<file>` plus `refs/main`), so
+  freshly-init'd servers no longer need the shim. Older servers with
+  flat caches on disk continue to work via the shim path.
+- The bind-mount itself produced a benign Apptainer warning
+  (`destination is already in the mount point list`) on the
+  Docker-wrapped path; this is fixed in runtime-runner v0.20260426.0,
+  which dropped its `ENV SINGULARITY_BINDPATH=/opt/hf-cache:/opt/hf-cache`
+  so muxi-server's explicit `--bind /opt/hf-cache` is the single source
+  of truth.
+
+### Mental model
+
+`mental-model.md` gained four new gotcha sections covering pre-routing
+gate ordering, the SIF embedding cache layout convergence, the
+runtime-runner bind-mount fix, and the chat-model embedding coupling
+that this release removed.
+
 ## v0.20260424.0
 
 ## v0.20260423.5
