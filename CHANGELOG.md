@@ -4,6 +4,8 @@
 
 ## v0.20260426.0
 
+## v0.20260426.0
+
 ### Planning: `_finalize_execution_plan` no longer drops `my_steps` when LLM omits `steps`
 
 A user query like *"create a one-page pdf about muxi"* would result in
