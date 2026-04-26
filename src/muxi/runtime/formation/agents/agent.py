@@ -5542,32 +5542,89 @@ class Agent:
             queue = placeholders_by_tool.get(tool)
             return queue.pop(0) if queue else None
 
-        rebuilt_my_steps: List[Dict[str, Any]] = []
-        for step in plan.get("steps", []):
-            if not step.get("can_i_do_this"):
-                continue
-            tool_name = step.get("tool_name", "")
-            if tool_name not in available_tool_names:
-                continue
-            # Prefer parameters already present on the unified step (rare), then
-            # fall back to the LLM's my_steps entry for this tool.
-            step_params = step.get("parameters")
-            parameters = (
-                step_params
-                if isinstance(step_params, dict) and step_params
-                else _pop_params(tool_name)
+        # Some LLMs (notably Haiku on tight prompts) interpret the
+        # "ALL steps MUST go in my_steps" instruction literally and emit
+        # ``"steps": []`` while populating ``my_steps`` with the actual
+        # actions. The default rebuild loop below iterates ``plan["steps"]``,
+        # so when ``steps`` is empty the rebuilt list comes back empty too
+        # and we'd silently overwrite the LLM's real actions with ``[]``
+        # — agent then generates a narrative response pretending the work
+        # happened. Detect that case up-front and treat ``my_steps`` as
+        # canonical: the same tool-availability filter still applies, and
+        # we keep parameters/placeholders verbatim.
+        canonical_steps = plan.get("steps") or []
+        my_steps_is_authoritative = not canonical_steps and any(
+            isinstance(s, dict) and s.get("tool_name") for s in llm_my_steps
+        )
+
+        if my_steps_is_authoritative:
+            rebuilt_my_steps: List[Dict[str, Any]] = []
+            for step in llm_my_steps:
+                if not isinstance(step, dict):
+                    continue
+                tool_name = step.get("tool_name", "")
+                if not tool_name or tool_name not in available_tool_names:
+                    # Drop unknown tools rather than letting them reach the
+                    # executor where they'd error out as "tool not found".
+                    continue
+                params = step.get("parameters")
+                if not isinstance(params, dict):
+                    params = {}
+                placeholder = step.get("output_placeholder") or (f"{{{tool_name.upper()}_OUTPUT}}")
+                rebuilt_my_steps.append(
+                    {
+                        "action": step.get("action", ""),
+                        "tool_name": tool_name,
+                        "parameters": params,
+                        "output_placeholder": placeholder,
+                    }
+                )
+            observability.observe(
+                event_type=observability.ConversationEvents.AGENT_PLANNING,
+                level=observability.EventLevel.WARNING,
+                data={
+                    # ``agent_id`` may be absent when this finalizer is exercised
+                    # directly from unit tests via ``object.__new__(Agent)``; the
+                    # observability event is best-effort, so don't crash on it.
+                    "agent_id": getattr(self, "agent_id", "<unknown>"),
+                    "phase": "my_steps_authoritative",
+                    "llm_my_steps_count": len(llm_my_steps),
+                    "rebuilt_count": len(rebuilt_my_steps),
+                    "rebuilt_tools": [s["tool_name"] for s in rebuilt_my_steps],
+                },
+                description=(
+                    "Plan emitted empty 'steps' but populated 'my_steps'; "
+                    "treating my_steps as canonical to preserve the LLM's "
+                    "actions."
+                ),
             )
-            placeholder = step.get("output_placeholder") or _pop_placeholder(tool_name)
-            if not placeholder:
-                placeholder = f"{{{tool_name.upper()}_OUTPUT}}"
-            rebuilt_my_steps.append(
-                {
-                    "action": step["action"],
-                    "tool_name": tool_name,
-                    "parameters": parameters,
-                    "output_placeholder": placeholder,
-                }
-            )
+        else:
+            rebuilt_my_steps = []
+            for step in canonical_steps:
+                if not step.get("can_i_do_this"):
+                    continue
+                tool_name = step.get("tool_name", "")
+                if tool_name not in available_tool_names:
+                    continue
+                # Prefer parameters already present on the unified step (rare),
+                # then fall back to the LLM's my_steps entry for this tool.
+                step_params = step.get("parameters")
+                parameters = (
+                    step_params
+                    if isinstance(step_params, dict) and step_params
+                    else _pop_params(tool_name)
+                )
+                placeholder = step.get("output_placeholder") or _pop_placeholder(tool_name)
+                if not placeholder:
+                    placeholder = f"{{{tool_name.upper()}_OUTPUT}}"
+                rebuilt_my_steps.append(
+                    {
+                        "action": step["action"],
+                        "tool_name": tool_name,
+                        "parameters": parameters,
+                        "output_placeholder": placeholder,
+                    }
+                )
 
         plan["my_steps"] = rebuilt_my_steps
 

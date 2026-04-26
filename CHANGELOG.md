@@ -4,6 +4,53 @@
 
 ## v0.20260426.0
 
+### Planning: `_finalize_execution_plan` no longer drops `my_steps` when LLM omits `steps`
+
+A user query like *"create a one-page pdf about muxi"* would result in
+the agent narrating the work it was about to do (*"I'll activate the
+file-generation skill, then scrape the docs, then build the PDF…"*) but
+**no tool was ever invoked** and no PDF artifact came back. Tracing the
+planning observability events showed the LLM (Haiku) had emitted three
+correct actions in `my_steps` (`activate_skill`, `firecrawl_scrape`,
+`generate_file`) but with `"steps": []` because of the prompt's
+*"ALL steps MUST go in `my_steps`"* line, which Haiku interpreted
+literally.
+
+`_finalize_execution_plan` rebuilds `my_steps` by iterating
+`plan["steps"]`, then unconditionally writes the rebuilt list back via
+`plan["my_steps"] = rebuilt_my_steps`. With `steps == []`, the rebuilt
+list was `[]` — and the LLM's three real actions were silently
+overwritten before the executor ever saw them. The reconciliation logic
+at line ~1313 only handled the inverse case (`steps` populated, `my_steps`
+shorter); the empty-`steps` recovery was missing.
+
+Fix:
+
+- `_finalize_execution_plan` now detects the
+  `"steps": [], "my_steps": [...]` shape (`my_steps_is_authoritative`)
+  and treats `my_steps` as canonical for that plan: parameters and
+  output placeholders are kept verbatim, unknown tools are dropped to
+  avoid downstream "tool not found" errors, and a WARNING-level
+  observability event records the recovery for postmortem traceability.
+  The existing two-array path is unchanged when `steps` is populated.
+- `agent_planning.md` replaces the misleading single-line *"ALL steps
+  MUST go in my_steps"* instruction with explicit guidance: every action
+  MUST appear in **both** `steps` (with `can_i_do_this: true`) AND
+  `my_steps` (with concrete `parameters`). The runtime documents that
+  the empty-`steps` path is a recovery fallback, not the contract.
+- Three regression tests in `tests/unit/test_agent_planning_helpers.py`:
+  empty-`steps` recovery preserves and filters my_steps; both arrays
+  empty stays empty (no actions invented); both populated keeps the
+  existing canonical-`steps` behavior (extras in `my_steps` don't
+  smuggle in).
+
+End-to-end verification: re-running *"create a one-page pdf about
+muxi"* now fires `tool.invoked` events for all three planned steps. The
+agent's narrative response no longer claims work that didn't happen.
+(The new `generate_file` failure observed during verification —
+`Import not allowed: subprocess` — is a separate, unrelated artifact
+service constraint and will be tracked separately.)
+
 ### Routing: pre-routing gates are now agent-aware
 
 The two pre-routing gates that run before agent selection

@@ -12,7 +12,7 @@ Check the sections above for "Built-in agents" or "Remote agents":
 - IF YOU SEE "Built-in agents: None" OR "Remote agents: None" OR both sections are empty/missing
 - THEN YOU ARE THE ONLY AGENT - THERE IS NO ONE TO DELEGATE TO!
 - In this case: NEVER create any "delegate_steps" (keep delegate_steps empty: [])
-- ALL steps MUST go in "my_steps" with can_i_do_this: true
+- Every action MUST appear in BOTH the top-level "steps" array (with `can_i_do_this: true`) AND the "my_steps" array (with concrete `parameters`). The runtime treats `steps` as the canonical action list and uses `my_steps` to look up parameters by tool name. If `steps` is empty but `my_steps` is populated, the runtime falls back to `my_steps` as a recovery path — but the supported, predictable contract is to populate BOTH.
 - Even if you don't have the perfect tool, try your best with available tools
 - You CANNOT delegate when you're alone - delegation requires other agents to exist!
 - If you cannot complete a task with your available tools, explain this directly to the user

@@ -821,6 +821,151 @@ def test_finalize_execution_plan_preserves_parameters_across_repeated_tool_use()
     assert finalized["my_steps"][1]["parameters"]["summary"] == "Design Review"
 
 
+def test_finalize_execution_plan_preserves_my_steps_when_steps_is_empty():
+    """Regression for v0.20260426.0 Bug #1: 'create a one-page pdf about muxi'.
+
+    Some LLMs (notably Haiku) interpret the planning prompt's
+    "ALL steps MUST go in my_steps" line literally and emit
+    ``{"steps": [], "my_steps": [...]}`` — populating my_steps with the
+    actual actions but leaving the canonical ``steps`` array empty.
+
+    Before the fix, ``_finalize_execution_plan`` rebuilt my_steps by
+    iterating ``plan["steps"]``, which produced an empty list and
+    silently overwrote the LLM's actual actions. The agent then went on
+    to generate a narrative response describing the work it never
+    performed (no ``tool.invoked`` events fired, no artifact returned).
+
+    After the fix, when ``steps`` is empty but ``my_steps`` has at least
+    one entry with a known tool name, ``my_steps`` is treated as the
+    canonical action list — params and placeholders are kept verbatim,
+    unknown tools are dropped to avoid downstream "tool not found"
+    errors, and the rebuilt list reaches the executor unchanged.
+    """
+    agent = object.__new__(Agent)
+
+    plan = {
+        "steps": [],
+        "my_steps": [
+            {
+                "action": "Activate file-generation skill",
+                "tool_name": "activate_skill",
+                "parameters": {"skill_name": "file-generation"},
+                "output_placeholder": "{{SKILL_ACTIVATED}}",
+            },
+            {
+                "action": "Generate one-page PDF about MUXI",
+                "tool_name": "generate_file",
+                "parameters": {
+                    "code": "from reportlab.lib.pagesizes import letter\n# ...",
+                },
+                "output_placeholder": "{{PDF}}",
+            },
+            # An unknown tool the LLM hallucinated — must be dropped, not
+            # passed to the executor where it would error out.
+            {
+                "action": "Hallucinated step",
+                "tool_name": "nonexistent_tool",
+                "parameters": {},
+                "output_placeholder": "{{IGNORED}}",
+            },
+        ],
+        "delegate_steps": [],
+        "data_flow": "Activate skill → generate PDF",
+    }
+
+    available = {"activate_skill", "generate_file"}
+
+    finalized = agent._finalize_execution_plan(plan, available, allow_delegation=False)
+
+    # The two valid actions must be preserved verbatim — same order, same
+    # parameters, same placeholders.
+    assert len(finalized["my_steps"]) == 2
+
+    first, second = finalized["my_steps"]
+    assert first["tool_name"] == "activate_skill"
+    assert first["parameters"] == {"skill_name": "file-generation"}
+    assert first["output_placeholder"] == "{{SKILL_ACTIVATED}}"
+
+    assert second["tool_name"] == "generate_file"
+    assert second["parameters"]["code"].startswith("from reportlab")
+    assert second["output_placeholder"] == "{{PDF}}"
+
+    # The hallucinated tool must NOT have leaked through.
+    rebuilt_tools = {s["tool_name"] for s in finalized["my_steps"]}
+    assert "nonexistent_tool" not in rebuilt_tools
+
+
+def test_finalize_execution_plan_does_not_invent_my_steps_when_both_empty():
+    """When both ``steps`` and ``my_steps`` are empty (the LLM legitimately
+    determined no tools are needed), the finalizer must NOT manufacture
+    actions out of thin air. Empty plan in → empty plan out."""
+    agent = object.__new__(Agent)
+
+    plan = {
+        "steps": [],
+        "my_steps": [],
+        "delegate_steps": [],
+        "data_flow": "Direct response - no tools needed",
+    }
+
+    finalized = agent._finalize_execution_plan(
+        plan, {"some_tool", "another_tool"}, allow_delegation=False
+    )
+
+    assert finalized["my_steps"] == []
+    assert finalized.get("delegate_steps") == []
+
+
+def test_finalize_execution_plan_steps_authoritative_when_both_populated():
+    """Existing contract is preserved: when ``steps`` is populated, it
+    remains canonical and we keep using it to rebuild ``my_steps``
+    (matching parameters from the LLM's my_steps by tool name). Only the
+    ``steps:[]`` / ``my_steps:[...]`` *recovery path* is new."""
+    agent = object.__new__(Agent)
+
+    plan = {
+        "steps": [
+            {
+                "step_number": 1,
+                "action": "Read config",
+                "tool_name": "fs__read_file",
+                "can_i_do_this": True,
+                "output_placeholder": "{{CONFIG}}",
+            }
+        ],
+        "my_steps": [
+            {
+                "action": "Read config",
+                "tool_name": "fs__read_file",
+                "parameters": {"path": "/etc/muxi/config.yaml"},
+                "output_placeholder": "{{CONFIG}}",
+            },
+            # An extra entry only present in my_steps that's NOT in steps
+            # must NOT smuggle into the rebuilt plan when steps is the
+            # canonical list — that's the existing contract.
+            {
+                "action": "Sneaky extra action",
+                "tool_name": "fs__write_file",
+                "parameters": {"path": "/tmp/x", "content": "hi"},
+                "output_placeholder": "{{IGNORED}}",
+            },
+        ],
+        "delegate_steps": [],
+        "data_flow": "Read the file.",
+    }
+
+    finalized = agent._finalize_execution_plan(
+        plan, {"fs__read_file", "fs__write_file"}, allow_delegation=False
+    )
+
+    assert len(finalized["my_steps"]) == 1
+    assert finalized["my_steps"][0]["tool_name"] == "fs__read_file"
+    assert finalized["my_steps"][0]["parameters"] == {"path": "/etc/muxi/config.yaml"}
+    # Sneaky extra didn't smuggle in.
+    rebuilt_tools = {s["tool_name"] for s in finalized["my_steps"]}
+    assert "fs__write_file" not in rebuilt_tools
+
+
 @pytest.mark.asyncio
 async def test_plan_before_execution_injects_current_date_into_planning_prompt():
     """Regression for v0.20260416.0 Bug #2: the planning LLM never sees the
