@@ -439,16 +439,26 @@ The overlord maintains a consistent persona across all agents, so users experien
   ```
   Idempotent: re-running on an already-shimmed cache is a no-op. Symlinks point
   back into the bind mount so no host pollution and no extra disk usage.
-- Architectural note: the *right* fix would be to converge the two layouts (either
-  muxi-server writes HF Hub layout, or onellm reads flat layout). The shim is the
-  smallest change that unblocks the SIF without touching either layout contract;
-  picking which side to migrate is a separate design decision.
-- The bind-mount itself also produces a benign Apptainer warning
-  (`destination is already in the mount point list`) on the Docker-wrapped path
-  on macOS. The cache is still visible inside the SIF; the warning is harmless
-  but the underlying cause (muxi-server's `--bind /opt/hf-cache` on the
-  Singularity hop combined with the Docker `-v` hop and runtime-runner's default
-  bindpath config) should be cleaned up as a follow-up in muxi-server.
+- Architectural note: the *right* fix is to converge the two layouts. As of
+  2026-04-26 we did exactly that: muxi-server `pkg/hfcache/hfcache.go` now writes
+  the standard HF Hub layout natively (`models--<org>--<repo>/snapshots/main/...`
+  + `refs/main` -> `"main"`). The runtime shim still ships and stays useful as a
+  backwards-compat fallback for any flat caches still on disk from older
+  muxi-server versions; on a freshly-init'd server it's effectively a no-op
+  because the cache is already in the layout onellm expects.
+- We deliberately skipped HF Hub's blob+symlink dedup layer (`blobs/<sha>` +
+  `snapshots/<sha>/file -> ../../blobs/<sha>`). `hf_hub_download` resolves files
+  placed directly under `snapshots/<revision>/<file>` when they're regular files
+  (verified end-to-end), so the simpler scheme avoids two failure modes:
+  filesystems without symlink support, and the extra HF API round-trip needed
+  to learn the git OID for blob naming.
+- The bind-mount also produced a benign Apptainer warning
+  (`destination is already in the mount point list`) on the Docker-wrapped path.
+  Root cause: runtime-runner's Dockerfile set
+  `ENV SINGULARITY_BINDPATH=/opt/hf-cache:/opt/hf-cache` which collided with
+  muxi-server's explicit `--bind /opt/hf-cache`. Fixed in runtime-runner
+  v0.20260426.0 by dropping the env var entirely; muxi-server is the single
+  source of truth for that bind. ERR log is clean after the fix.
 
 **Pre-routing gate ordering (current state, 2026-04-26):**
 ```
