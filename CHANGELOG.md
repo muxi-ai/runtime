@@ -2,7 +2,58 @@
 
 ## [unreleased]
 
-## v0.20260426.0
+### Artifacts: reject comment-only / no-op `generate_file.code`
+
+A user query like *"create a PRD with a brief on muxi"* would surface a
+helpful narrative response — the planning fix from v0.20260426.0 was
+working, the agent was honest about *"the PDF generation hit a snag"* —
+but no PDF artifact came back. Tracing the planning event showed the
+LLM (Sonnet 4.6 in this case, but any model is susceptible) emitted
+`generate_file.code` values like:
+
+```python
+# Generate PRD for MUXI -- populated after doc scrape
+# Content will be injected from {{MUXI_DOCS}} at runtime
+```
+
+i.e. *intent* expressed as comments, with the LLM apparently believing
+the runtime would expand `{{MUXI_DOCS}}` into the multi-line Python
+source on its behalf. It does not — placeholder substitution applies to
+scalar leaf values in OTHER tools (URLs, IDs), not to author-supplied
+Python source. The sandbox would dutifully run the comment-only no-op
+script, produce zero files, and the artifact extractor would surface
+the confusing `"No file was generated"` error masking the real cause.
+
+Two-part fix:
+
+- `ArtifactService._validate_code` now runs an executable-content guard
+  immediately after a successful `ast.parse(code)`. Modules whose body
+  is empty (comment-only file), or whose body consists ONLY of
+  docstrings / imports / `pass` / `...`, are rejected with the precise,
+  actionable message: *"Code contains no executable statements (only
+  comments, docstrings, or imports). The `code` parameter must be
+  complete, executable Python that writes its output file to the
+  current directory."* This fires BEFORE the existing whitelist /
+  dangerous-call scans, so the import and call guards remain unchanged.
+- `_infer_tool_parameters` constraints prompt for `generate_file` was
+  tightened with an explicit "EXECUTABLE-CODE CONTRACT" section that
+  spells out: (a) `code` must be complete executable Python at planning
+  time — no second-pass fill-in; (b) `{{PLACEHOLDER}}` references are
+  NOT substituted inside the multi-line `code` body; (c) if the file's
+  content depends on data the LLM doesn't have at planning time, it
+  must either write the content verbatim from training knowledge OR
+  have the Python itself fetch via `requests` / `urllib`.
+
+15 new unit tests in `tests/unit/test_artifact_service_validate_code.py`
+cover both the actual production failure shapes (multi-line and one-line
+intent comments referencing unresolved placeholders) and edge cases:
+empty string, whitespace, docstring-only, imports-only, `pass`-only,
+`...`-only, mixed imports+docstring. Five accept-side tests guard
+against false positives on legitimate code (minimal file write,
+realistic reportlab snippet, docstring-then-real-code, function
+def+call, etc.). Two end-to-end tests confirm the existing
+import-whitelist and dangerous-call guards still fire correctly when
+the new check passes.
 
 ## v0.20260426.0
 

@@ -125,6 +125,50 @@ class ArtifactService:
         except Exception:
             pass
 
+    @staticmethod
+    def _has_executable_statements(tree: ast.AST) -> bool:
+        """Return True iff the parsed module has at least one statement that
+        could plausibly produce a side effect (write a file, build an object,
+        call a function, assign data).
+
+        Comment-only modules parse to ``Module(body=[])`` -- comments are
+        stripped during parsing -- so the module body alone catches the
+        most common LLM failure mode. We additionally treat a module whose
+        body consists ONLY of bare string-literal expressions (i.e. a
+        docstring) or ONLY of import statements as non-executable, because
+        neither writes a file. Pure ``pass`` bodies and ``...`` (Ellipsis)
+        bodies are also rejected for the same reason.
+
+        Heuristic, not a static analysis -- a sufficiently obfuscated module
+        could still execute and produce nothing. The point is to catch the
+        common LLM failure mode early with a clear error rather than to
+        prove halting.
+        """
+        if not isinstance(tree, ast.Module):
+            return True  # don't second-guess non-module ASTs (defensive)
+
+        body = tree.body
+        if not body:
+            # Empty module -- comment-only file or truly empty input.
+            return False
+
+        for stmt in body:
+            # Bare string-literal expression (docstring) -- skip.
+            if isinstance(stmt, ast.Expr) and isinstance(stmt.value, ast.Constant):
+                if isinstance(stmt.value.value, str) or stmt.value.value is Ellipsis:
+                    continue
+            # Bare ``pass`` -- skip.
+            if isinstance(stmt, ast.Pass):
+                continue
+            # Imports alone don't write files.
+            if isinstance(stmt, (ast.Import, ast.ImportFrom)):
+                continue
+            # Anything else (Assign, Expr-with-Call, FunctionDef + Call, If,
+            # For, With, etc.) counts as executable content.
+            return True
+
+        return False
+
     def _validate_code(self, code: str) -> tuple[bool, Optional[str]]:
         """
         Validate Python code using AST to ensure it only uses allowed libraries.
@@ -139,6 +183,25 @@ class ArtifactService:
             tree = ast.parse(code)
         except SyntaxError as e:
             return False, f"Syntax error: {e}"
+
+        # Reject code that has no executable content. The LLM occasionally
+        # emits a comment-only `code` value -- e.g.
+        #     # PDF will be generated using reportlab. Content will be
+        #     # injected from {{MUXI_DOCS}} at runtime.
+        # -- believing the runtime will substitute placeholders into the
+        # Python source on its behalf. It does not. Without this guard the
+        # sandbox subprocess runs the no-op script, produces zero files,
+        # and the artifact extractor returns `No file was generated` --
+        # a confusing error that hides the real cause. Catch it here with
+        # a precise, actionable message instead.
+        if not self._has_executable_statements(tree):
+            return (
+                False,
+                "Code contains no executable statements (only comments, "
+                "docstrings, or imports). The `code` parameter must be "
+                "complete, executable Python that writes its output file "
+                "to the current directory.",
+            )
 
         # Check all imports
         for node in ast.walk(tree):
