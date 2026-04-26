@@ -86,6 +86,29 @@ IMPORTANT: For each step you can do yourself, you MUST include appropriate param
 - For API calls: include required fields like title, description, etc.
 - If you're unsure about parameters, use common sense based on the tool name and request
 
+🚨 EXECUTABLE-CODE CONTRACT for `generate_file` 🚨
+
+The `generate_file` tool runs the value of its `code` parameter as Python in a sandboxed subprocess. The runtime does NOT do a "second pass" later to fill in the body for you. If you emit comment-only or pseudo-code values, the artifact sandbox will reject them with `Code contains no executable statements ...` — the step will fail and the user will not get a file.
+
+- The `code` parameter MUST be COMPLETE, EXECUTABLE Python at planning time. Examples of values that WILL BE REJECTED:
+  WRONG: `"code": "# PDF generation code will be constructed after skill activation and doc scraping"`
+  WRONG: `"code": "# Content will be injected from {{MUXI_DOCS}} at runtime"`
+  WRONG: `"code": "# Generate report using reportlab with scraped data"`
+  WRONG: `"code": "\"\"\"Generate a report\"\"\""`   (docstring only)
+  WRONG: `"code": "import io\nimport reportlab"`     (imports only — no file written)
+- `{{PLACEHOLDER}}` substitution does NOT extend into the multi-line `code` body. Placeholder substitution applies to scalar leaf values in OTHER tools (URLs, IDs, headers), not to author-supplied Python source. If you write `text = "{{MUXI_DOCS}}"` inside `code`, your Python will see the literal seven-character string `{{MUXI_DOCS}}` — not the scraped content.
+- If your file's content depends on data you don't have at planning time, you have TWO choices and only two:
+  (a) Write the content verbatim from what you already know about the subject. For one-pagers, briefs, summaries, charts, etc., your training-data knowledge of the subject is almost always sufficient. This is the recommended path.
+  (b) Have the Python ITSELF fetch the data using `requests` or `urllib` and then build the file from the response. The fetch happens INSIDE the sandboxed subprocess, not as a prior planning step. Both libraries are whitelisted.
+- Do NOT plan a `firecrawl_scrape` step BEFORE `generate_file` and try to "pass" its output into `code` via a placeholder. That pattern does not work — the scraped content cannot be substituted into multi-line Python. Either let the `generate_file` Python do the fetch itself, or skip the scrape and write the content from what you already know.
+
+CORRECT example for a one-page MUXI brief PDF:
+```python
+"code": "from reportlab.lib.pagesizes import letter\nfrom reportlab.platypus import SimpleDocTemplate, Paragraph, Spacer\nfrom reportlab.lib.styles import getSampleStyleSheet\nfrom reportlab.lib.units import inch\n\nstyles = getSampleStyleSheet()\nstory = [\n    Paragraph('MUXI Brief', styles['Heading1']),\n    Spacer(1, 0.2 * inch),\n    Paragraph('MUXI is open-source AI agent infrastructure.', styles['Normal']),\n]\ndoc = SimpleDocTemplate('muxi_brief.pdf', pagesize=letter)\ndoc.build(story)"
+```
+
+ALLOWED libraries inside `code`: matplotlib, seaborn, plotly, reportlab, fpdf2, python-docx (docx), openpyxl, xlsxwriter, python-pptx (pptx), Pillow (PIL), pandas, numpy, scipy, requests, urllib, qrcode, python-barcode, lxml, markdown, csv, json, datetime, math, random, re, io, base64. Use `matplotlib.use('Agg')` before any plotting. Save output files to the current directory. For PDFs, prefer `reportlab` over `fpdf2`; if you do use `fpdf2`, strip non-ASCII characters first.
+
 You MUST respond with ONLY a valid JSON object. Use EXACT tool names from the available tools list above:
 {{
     "steps": [
