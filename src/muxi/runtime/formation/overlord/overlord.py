@@ -2218,12 +2218,16 @@ class Overlord:
             try:
                 _specialist_registry = self._format_specialist_registry()
                 _specialist_section = (
-                    f"\n\nAvailable specialist agents in this formation:\n{_specialist_registry}\n"
-                    "If the request topic matches any specialist's name, description, "
-                    "specialties, or keywords, the message is ACTIONABLE — the specialist "
-                    "needs to handle it. Do NOT classify as NON_ACTIONABLE just because the "
-                    "wording sounds casual or conversational."
-                ) if _specialist_registry else ""
+                    (
+                        f"\n\nAvailable specialist agents in this formation:\n{_specialist_registry}\n"
+                        "If the request topic matches any specialist's name, description, "
+                        "specialties, or keywords, the message is ACTIONABLE — the specialist "
+                        "needs to handle it. Do NOT classify as NON_ACTIONABLE just because the "
+                        "wording sounds casual or conversational."
+                    )
+                    if _specialist_registry
+                    else ""
+                )
 
                 system_prompt = (
                     "Is this message requesting action or just casual social chatter?\n\n"
@@ -2241,20 +2245,20 @@ class Overlord:
                     "ACTIONABLE because it answers those questions and implicitly requests "
                     "the assistant to proceed with the task.\n\n"
                     "Examples of ACTIONABLE messages:\n"
-                    "- \"What database should I use?\" -> ACTIONABLE (question)\n"
-                    "- \"Create a file\" -> ACTIONABLE (command)\n"
-                    "- \"Tell me about MUXI\" -> ACTIONABLE (request to explain)\n"
-                    "- \"What is the overlord?\" -> ACTIONABLE (definition request)\n"
-                    "- \"Explain how formations work\" -> ACTIONABLE (explanation request)\n"
-                    "- \"How does X work?\" -> ACTIONABLE (question)\n"
-                    "- \"Use the docs to ...\" -> ACTIONABLE (instruction with tool hint)\n"
-                    "- \"1. core features 2. developers 3. casual\" -> ACTIONABLE if "
+                    '- "What database should I use?" -> ACTIONABLE (question)\n'
+                    '- "Create a file" -> ACTIONABLE (command)\n'
+                    '- "Tell me about MUXI" -> ACTIONABLE (request to explain)\n'
+                    '- "What is the overlord?" -> ACTIONABLE (definition request)\n'
+                    '- "Explain how formations work" -> ACTIONABLE (explanation request)\n'
+                    '- "How does X work?" -> ACTIONABLE (question)\n'
+                    '- "Use the docs to ..." -> ACTIONABLE (instruction with tool hint)\n'
+                    '- "1. core features 2. developers 3. casual" -> ACTIONABLE if '
                     "answering assistant's questions\n\n"
                     "Examples of NON_ACTIONABLE messages:\n"
-                    "- \"Hi\" -> NON_ACTIONABLE (bare greeting, unless answering a question)\n"
-                    "- \"Hello\" -> NON_ACTIONABLE (bare greeting)\n"
-                    "- \"Thanks\" -> NON_ACTIONABLE (bare acknowledgment)\n"
-                    "- \"Got it\" -> NON_ACTIONABLE (bare acknowledgment)\n\n"
+                    '- "Hi" -> NON_ACTIONABLE (bare greeting, unless answering a question)\n'
+                    '- "Hello" -> NON_ACTIONABLE (bare greeting)\n'
+                    '- "Thanks" -> NON_ACTIONABLE (bare acknowledgment)\n'
+                    '- "Got it" -> NON_ACTIONABLE (bare acknowledgment)\n\n'
                     "Reply with only: ACTIONABLE or NON_ACTIONABLE"
                 )
 

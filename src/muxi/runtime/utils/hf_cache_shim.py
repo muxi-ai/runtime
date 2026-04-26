@@ -164,7 +164,8 @@ def setup_hf_cache_shim(
         return None
 
     flat_dirs = [
-        entry for entry in cache_path.iterdir()
+        entry
+        for entry in cache_path.iterdir()
         if entry.is_dir() and _is_flat_layout_dir(entry.name)
     ]
     if not flat_dirs:
