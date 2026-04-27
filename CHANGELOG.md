@@ -2,6 +2,47 @@
 
 ## [unreleased]
 
+### Performance: skip the post-planning synthesis call for pure-artifact responses
+
+After planning execution, the agent fires a *second* LLM call —
+``_synthesize_planning_execution_response`` — to weave tool/delegation
+results into a user-facing prose response. For artifact-heavy requests
+("create a one-page PDF", "generate a chart", "make a CSV") the
+synthesized prose is mostly boilerplate ("Here's your file:") because
+the artifact itself is the answer. The synthesis call adds 3-10s of
+wall time on Sonnet-class models for content the user is not actually
+reading.
+
+**Fix:** when both gates open, the agent now substitutes a
+deterministic acknowledgment ("Done — I've created report.pdf for
+you.") for the synthesis call. Both gates must hold to bypass:
+
+* **Pure-artifact result.** Every entry in ``my_results`` must carry
+  an ``_artifact`` key. Mixed text+artifact results still run synthesis
+  because the LLM has real data to explain. An empty result set also
+  runs synthesis (an empty response is more likely a problem than a
+  silent success).
+* **Active streaming.** Either ``overlord.response.streaming = true``
+  in the formation YAML, or the current request id is registered with
+  the streaming manager. With streaming on, the user has been seeing
+  real-time tool progress events; without streaming, the synthesized
+  prose is the only narrative they receive and we keep it.
+
+The bypass emits an ``AGENT_PLANNING`` observability event with
+``phase=synthesis_skipped`` and ``reason=pure_artifact_with_streaming``
+so production traces clearly show when the fast path fires. Streaming
+detection is best-effort — any failure falls back to the safe behavior
+(run synthesis) so a broken streaming module cannot regress chat
+responses.
+
+17 new unit tests cover pure-artifact detection (empty / mixed /
+non-dict / missing key), the deterministic acknowledgment (single /
+multiple files, missing filename, ``name`` vs ``filename`` field), the
+streaming gate (formation config, per-request, exception swallowing),
+a static guard against accidental call-site removal, and three
+integration scenarios verifying that synthesis is *not* called on the
+skip path and *is* called on each guarded path.
+
 ### Performance: cache MCP tool results within a workflow window
 
 Many tool plans repeat the same read-only call within a single chat

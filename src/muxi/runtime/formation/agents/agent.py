@@ -901,6 +901,75 @@ class Agent:
         return response_text or None
 
     @staticmethod
+    def _is_pure_artifact_result(my_results: Dict[str, Any]) -> bool:
+        """Return True iff every planning result carries an ``_artifact`` key.
+
+        A pure-artifact result means the user's intent ("create a PDF",
+        "generate a chart") is satisfied by the artifact files themselves
+        — there is no textual data the LLM needs to summarize. Returns
+        False on empty input because an empty result set is more likely
+        to indicate something went wrong (the user expects *some* output)
+        than that we should silently bypass synthesis.
+        """
+        if not my_results:
+            return False
+        for result in my_results.values():
+            if not isinstance(result, dict) or "_artifact" not in result:
+                return False
+        return True
+
+    def _is_streaming_active(self) -> bool:
+        """Return True iff the user has an alternative feedback channel.
+
+        Two paths qualify:
+          * ``overlord.response.streaming = true`` in the formation YAML
+            (formation-level opt-in).
+          * The current request id is registered with the streaming
+            manager (per-request opt-in via the SSE/streaming endpoint).
+
+        Used as the gate for the skip-synthesis fast path: when
+        streaming is on the user has been receiving real-time tool
+        progress events and a separate ~5s LLM synthesis call adds
+        little value over a deterministic acknowledgment.
+        """
+        if self.overlord is not None and getattr(self.overlord, "streaming", False):
+            return True
+        try:
+            from ...services.observability.context import get_current_request_context
+            from ...services.streaming import streaming_manager
+
+            ctx = get_current_request_context()
+            if ctx is not None and getattr(ctx, "id", None):
+                return streaming_manager.is_streaming_enabled(ctx.id)
+        except Exception:
+            # Streaming detection is best-effort; if it fails we fall back
+            # to the safe behavior (run synthesis), so swallow.
+            pass
+        return False
+
+    @staticmethod
+    def _build_artifact_only_response(my_results: Dict[str, Any]) -> str:
+        """Compose a short deterministic message for the skip-synthesis path.
+
+        The wording mirrors what the LLM-driven synthesis typically produces
+        for artifact responses ("Done — I've created your.pdf for you.")
+        but costs zero LLM tokens. We never invent details about the
+        artifact contents; the artifact itself carries the user-visible
+        payload.
+        """
+        artifact_count = len(my_results)
+        if artifact_count == 1:
+            result = next(iter(my_results.values()))
+            artifact_meta = result.get("_artifact") if isinstance(result, dict) else None
+            filename: Optional[str] = None
+            if isinstance(artifact_meta, dict):
+                filename = artifact_meta.get("filename") or artifact_meta.get("name")
+            if filename:
+                return f"Done — I've created {filename} for you."
+            return "Done — I've created the file for you."
+        return f"Done — I've created {artifact_count} files for you."
+
+    @staticmethod
     def _content_to_text(content: Union[str, List[MuxiMessageContent], None]) -> str:
         """Extract plain text from mixed internal message content."""
         if content is None:
@@ -1997,25 +2066,57 @@ class Agent:
                     # If we have successful delegation responses, prioritize those
                     synthesized_planning_response = None
                     if my_results and not has_successful_delegation:
-                        try:
-                            synthesized_planning_response = (
-                                await self._synthesize_planning_execution_response(
-                                    actual_user_request, my_results, planning_response_parts
-                                )
+                        # Skip-synthesis fast path: when every result is an
+                        # artifact AND the user is already receiving streaming
+                        # progress, the extra ~5s LLM synthesis call only
+                        # adds boilerplate prose ("Here's your file:"). Use a
+                        # deterministic acknowledgment instead. Saves 3-10s
+                        # on artifact-heavy requests.
+                        if (
+                            self._is_pure_artifact_result(my_results)
+                            and self._is_streaming_active()
+                        ):
+                            synthesized_planning_response = self._build_artifact_only_response(
+                                my_results
                             )
-                        except Exception as e:
                             observability.observe(
-                                event_type=observability.ErrorEvents.INTERNAL_ERROR,
-                                level=observability.EventLevel.WARNING,
+                                event_type=observability.ConversationEvents.AGENT_PLANNING,
+                                level=observability.EventLevel.INFO,
                                 data={
                                     "agent_id": self.agent_id,
-                                    "error": str(e),
-                                    "phase": "planning_response_synthesis",
+                                    "phase": "synthesis_skipped",
+                                    "reason": "pure_artifact_with_streaming",
+                                    "artifact_count": len(my_results),
                                 },
                                 description=(
-                                    "Planning response synthesis failed; using raw planning results"
+                                    f"Agent {self.agent_id} skipped planning synthesis "
+                                    f"({len(my_results)} pure-artifact results, "
+                                    f"streaming active)"
                                 ),
                             )
+                        else:
+                            try:
+                                synthesized_planning_response = (
+                                    await self._synthesize_planning_execution_response(
+                                        actual_user_request,
+                                        my_results,
+                                        planning_response_parts,
+                                    )
+                                )
+                            except Exception as e:
+                                observability.observe(
+                                    event_type=observability.ErrorEvents.INTERNAL_ERROR,
+                                    level=observability.EventLevel.WARNING,
+                                    data={
+                                        "agent_id": self.agent_id,
+                                        "error": str(e),
+                                        "phase": "planning_response_synthesis",
+                                    },
+                                    description=(
+                                        "Planning response synthesis failed; "
+                                        "using raw planning results"
+                                    ),
+                                )
 
                     if synthesized_planning_response:
                         response_content = synthesized_planning_response
