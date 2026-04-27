@@ -158,6 +158,28 @@ async def run_formation(formation_path: str, port: int = None, host: str = None)
     """Load and run a formation with its API server."""
     formation = Formation()
     formation_loaded = False
+    pooling_initialized = False
+
+    # Enable HTTP/2-multiplexed connection pooling for OneLLM if available.
+    # Saves TCP+TLS handshakes on bursts of LLM calls (planning + synthesis,
+    # parallel A2A delegations, embedding bulk-ops). Opt-out via env var.
+    if os.environ.get("MUXI_HTTP_POOL_DISABLED", "").lower() not in ("1", "true", "yes"):
+        try:
+            import onellm
+
+            init_pooling = getattr(onellm, "init_pooling", None)
+            if callable(init_pooling):
+                init_pooling()
+                pooling_initialized = True
+        except Exception as _pool_exc:  # noqa: BLE001
+            # Non-fatal: pooling is an optimization. Older onellm versions
+            # without init_pooling() simply use per-request clients.
+            # Logged to stderr because observability subsystem is not yet
+            # initialized at this point.
+            print(
+                f"[run_formation] OneLLM connection pool init skipped: {_pool_exc}",
+                file=sys.stderr,
+            )
 
     try:
         # REMOVE - line 64 (redundant with InitEventFormatter section 1: Formation banner)
@@ -173,6 +195,7 @@ async def run_formation(formation_path: str, port: int = None, host: str = None)
                 "formation_id": formation.config.get("id", "unknown"),
                 "port_override": port,
                 "host_override": host,
+                "onellm_http_pool": pooling_initialized,
             },
             description="Starting formation server...",
         )
@@ -320,6 +343,29 @@ async def run_formation(formation_path: str, port: int = None, host: str = None)
         sys.exit(1)
 
     finally:
+        # Close OneLLM HTTP connection pool if it was initialized.
+        # Safe to call before formation.stop() — formation.stop() only needs
+        # in-process resources, not outbound HTTP clients.
+        if pooling_initialized:
+            try:
+                import onellm
+
+                close_pooling = getattr(onellm, "close_pooling", None)
+                if callable(close_pooling):
+                    await close_pooling()
+            except Exception as _pool_close_exc:  # noqa: BLE001
+                observability.observe(
+                    event_type=observability.ErrorEvents.INTERNAL_ERROR,
+                    level=observability.EventLevel.WARNING,
+                    data={
+                        "service": "run_formation",
+                        "feature": "onellm_http_pool",
+                        "error": str(_pool_close_exc),
+                        "error_type": type(_pool_close_exc).__name__,
+                    },
+                    description=f"OneLLM connection pool cleanup error: {_pool_close_exc}",
+                )
+
         # Ensure formation is properly stopped to prevent resource leaks
         if formation_loaded:
             try:

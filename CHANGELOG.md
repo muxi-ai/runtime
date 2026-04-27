@@ -2,6 +2,36 @@
 
 ## [unreleased]
 
+### Performance: enable OneLLM HTTP/2 connection pooling at runtime startup
+
+OneLLM ships an opt-in connection pool
+(``onellm.init_pooling()``) that switches the per-request httpx client
+to a shared, HTTP/2-multiplexed pool. With pooling on, bursts of
+parallel calls to the same provider reuse one TLS connection (h2 via
+ALPN), and sequential calls amortize the TCP+TLS handshake across the
+keepalive window instead of paying it on every request.
+
+Until now, the runtime never called ``init_pooling()`` — so the dev
+build of OneLLM with HTTP/2 was installed but dormant. ``run_formation``
+now initializes the pool before formation load (or skips silently on
+older OneLLM versions without ``init_pooling``) and tears it down in
+the cleanup path.
+
+**Measured impact** on the canonical
+``hello-muxi → "create a one-page PDF about MUXI"`` test
+(3-run sequence per condition, same prompts in same order):
+
+| Run        | HTTP/2 ON | HTTP/2 OFF | Δ            |
+|------------|-----------|------------|--------------|
+| 1 (cold)   | 64.7s     | 71.7s      | -7.0s  (-10%)|
+| 2 (warm)   | 21.6s     | 26.3s      | -4.7s  (-18%)|
+| 3 (warm)   | 19.7s     | 21.9s      | -2.2s  (-10%)|
+| **total**  | **106.0s**| **119.9s** | **-13.9s (-12%)** |
+
+Disable via ``MUXI_HTTP_POOL_DISABLED=1`` if pooling causes issues
+with a specific provider; the runtime falls back to the
+per-request-client behavior cleanly.
+
 ### Performance: skip the post-planning synthesis call for pure-artifact responses
 
 After planning execution, the agent fires a *second* LLM call —
