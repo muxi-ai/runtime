@@ -495,6 +495,79 @@ The overlord maintains a consistent persona across all agents, so users experien
   `tests/unit/test_agent_knowledge_embedding.py` statically guards against
   it inside `_initialize_knowledge`.
 
+**Gotchas - Adaptive Timeout Was Hardcoded To Bare Base (fixed 2026-04-27):**
+- `LLM._execute_with_resilience` at `services/llm/llm.py` previously
+  passed `messages=None` to `calculate_adaptive_timeout` with a documented
+  "Known limitation - we can't easily access messages/files here without
+  major refactoring". The result: every chat call got the bare 30s base
+  timeout regardless of how much context it carried. A planning prompt
+  with 58 tool definitions plus ~15K tokens of input genuinely needs ~34s
+  on Sonnet 4.6 — so the first attempt timed out at 30s, the resilience
+  layer retried with a 1.5x escalation (45s budget), and the retry
+  succeeded ~34s later. Net: 30 wasted seconds per complex planning call,
+  visible in production traces as `error.internal.error` followed
+  ~750ms later by `resource.allocated` with the 45s recalc.
+- Fix: chat-path closures now thread their `messages`, `files`, and
+  `max_tokens` through `_execute_with_resilience` via internal kwargs
+  (`_adaptive_messages`, `_adaptive_files`, `_adaptive_max_tokens`)
+  which are popped before reaching the wrapped provider call.
+- Two scaling signals are critical, not one. **Input scaling** alone
+  (1s per ~1000 input tokens) gave the planning call ~36.8s — still
+  short of what Sonnet 4.6 actually needs (~43s for a 16K-output
+  reasoning plan). **Output scaling** is the second-order signal: a
+  call that asks for `max_tokens=16384` is signaling a long generation
+  that the input-only formula can't predict. We add 2s per 1000
+  `max_tokens` (16384 → +32.7s) which pushes the planning first-attempt
+  budget to ~70s, eliminating the wasted retry cycle entirely.
+  Embedding/transcription paths still pass `None` for both signals
+  (their input shape isn't `List[Dict]` and they don't suffer from the
+  same bug).
+- `tests/unit/test_llm_adaptive_timeout.py` statically guards both the
+  `_execute_with_resilience` kwarg-popping contract and the call-site
+  forwarding from `_basic_chat_with_files` (the actual sink for all
+  text-only chats — `chat()` only routes through fusion mode dispatch)
+  and `chat_with_tools`. The `max_tokens` forwarding contract is
+  guarded explicitly because the fix only delivers its full value when
+  *both* signals reach the helper.
+
+**Gotchas - Knowledge Cold Start Landed On First User Message (fixed 2026-04-27):**
+- `Agent._ensure_knowledge_initialized` was lazy — the `KnowledgeHandler`
+  (and the Nomic embedder it transitively loads) wasn't constructed until
+  the first user message arrived. That deferred ~8s of chunking+embedding
+  plus the ~12s Nomic model cold-start onto the user's first chat
+  request, producing a ~20s "first message is sluggish" artifact in
+  production traces. The cold start also cascaded onto buffer-memory
+  writes — `WorkingMemory.add` calls `embed()` for each new message, so
+  the user-message store racing the knowledge-handler load both wait on
+  the same Nomic instance for ~12 seconds.
+- Fix: `Overlord._create_agent_from_config` (`formation/overlord/overlord.py`)
+  now eagerly calls `await agent._ensure_knowledge_initialized()` for
+  any agent with a `knowledge` config block immediately after MCP-server
+  registration. This shifts both costs to formation `up` (where
+  operators expect a brief warmup) and warms the Nomic embedder in the
+  same pass — the working-memory write of the user's first message used
+  to trigger the same cold start in parallel, so dropping that 12s spike
+  comes for free.
+- Failures during eager init propagate (matches the existing MCP-register
+  fail-fast policy) and emit a `SERVICE_UNAVAILABLE` event tagged
+  `phase=knowledge_eager_init` so operators can distinguish startup vs
+  runtime knowledge failures.
+- Combined first-request impact on the canonical "create a one-page PDF
+  about MUXI" trace, vanilla-validated on the hello-muxi formation
+  (Sonnet 4.6, RCE on localhost:7891): **108s → 65.9s (~40% reduction)**.
+  Buffer-memory write on first message: 12.3s → 0.6s (47x). Planning
+  round-trip: 80.9s → 36.1s (single attempt, no retry). Subsequent
+  requests benefit from the adaptive-timeout fix only (~45s saved per
+  complex planning call).
+- Trap to watch for: parallelizing `KnowledgeHandler.load_sources_from_config`
+  is *not* yet safe. `WorkingMemory.add_with_embedding` does
+  `await self._ensure_dim()` and then mutates `self.index` without
+  holding a lock; the broad `except` at the FAISS `.add()` site silently
+  drops chunks on shape mismatch during a concurrent dim-probe. Add an
+  `asyncio.Lock` around the dim/index critical section before flipping
+  the for-loop to `asyncio.gather`. There's a `TODO(perf-round-2)`
+  comment in `load_sources_from_config` flagging this.
+
 **Pre-routing gate ordering (current state, 2026-04-26):**
 ```
 chat() -> _process_sync_chat()

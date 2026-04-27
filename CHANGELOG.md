@@ -11,7 +11,7 @@ the hello-muxi formation showed 108 seconds of wall time for what
 ended up being a single-tool plan (activate_skill + generate_file).
 Two specific costs dominated the trace:
 
-1. **Wasted 30s timeout on every complex planning call** (saves ~30s).
+1. **Wasted 30s timeout on every complex planning call** (saves ~45s).
    `LLM._execute_with_resilience` was passing `messages=None` to
    `calculate_adaptive_timeout`, with a `# Known limitation` comment
    acknowledging the helper couldn't see the real payload. The result:
@@ -20,12 +20,18 @@ Two specific costs dominated the trace:
    ~15K tokens of input genuinely needs ~34s on Sonnet 4.6 — so the
    first attempt timed out at 30s, the resilience layer retried with a
    1.5x escalation (45s budget), and the retry succeeded ~34s later.
-   Fix: the chat-path closures now thread their `messages` and `files`
-   through `_execute_with_resilience` via internal kwargs
-   (`_adaptive_messages`, `_adaptive_files`) which are popped before
-   reaching the wrapped provider call. The adaptive-timeout helper now
-   sees the real payload and budgets ~45s for a 15K-token prompt
-   instead of 30s, eliminating the wasted retry cycle entirely.
+   Fix: the chat-path closures now thread their `messages`, `files`,
+   and `max_tokens` through `_execute_with_resilience` via internal
+   kwargs (`_adaptive_messages`, `_adaptive_files`,
+   `_adaptive_max_tokens`) which are popped before reaching the wrapped
+   provider call. `messages` is the input-size signal (1s per ~1000
+   tokens); `max_tokens` is the output-size signal (2s per 1000) and
+   was the second-order bug surfaced during vanilla validation: input
+   scaling alone gave the planning call 36.8s — still 6s short of what
+   Sonnet 4.6 actually needed — so the first attempt still timed out
+   and the retry escalated to 55.2s. Adding the output-size signal
+   pushes the first-attempt budget for a planning call (16K
+   max_tokens) to ~70s, eliminating the wasted retry entirely.
    Embedding and transcription paths still pass `None` and rely on the
    operation-type modifier alone — they don't suffer from the same bug.
 
@@ -48,15 +54,18 @@ Two specific costs dominated the trace:
    event tagged `phase=knowledge_eager_init` so operators can
    distinguish startup vs runtime knowledge failures.
 
-Combined first-request impact on the same query: 108s → ~58s
-(~46% reduction). Subsequent requests benefit from #1 only (~30s).
+Vanilla measurement on the same query (hello-muxi formation, macOS,
+Sonnet 4.6, RCE on localhost:7891) confirmed: **108s → 65.9s
+(~40% reduction)**. Buffer-memory write on first message dropped from
+12.3s to 0.6s (47x). Planning round-trip dropped from 80.9s to 36.1s
+(45s saved) — single attempt, no retry cycle.
 
-12 new unit tests across `tests/unit/test_llm_adaptive_timeout.py` (8
-tests covering timeout scaling math, kwarg-leak prevention, and call-
-site forwarding for both `chat` and `chat_with_tools` paths) and
-`tests/unit/test_overlord_eager_knowledge.py` (4 static guards on the
-eager-init call site, await contract, observability tagging, and
-fail-fast propagation).
+14 new unit tests across `tests/unit/test_llm_adaptive_timeout.py` (10
+tests covering timeout scaling math including `max_tokens`, kwarg-leak
+prevention, and call-site forwarding for both `chat` and
+`chat_with_tools` paths) and `tests/unit/test_overlord_eager_knowledge.py`
+(4 static guards on the eager-init call site, await contract,
+observability tagging, and fail-fast propagation).
 
 ### Deferred: parallel knowledge-source loading
 

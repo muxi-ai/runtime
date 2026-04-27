@@ -1155,14 +1155,18 @@ class LLM:
         operation_type = kwargs.pop("operation_type", "chat")
         # Extract adaptive-timeout sizing hints. These are internal kwargs
         # threaded by the chat/tool wrappers so calculate_adaptive_timeout
-        # can scale by actual context size and file count instead of
-        # falling back to the bare base_timeout (the previous behavior
-        # caused 30s timeouts on long planning prompts that genuinely
-        # needed 35-60s, producing a wasted-cycle retry on every complex
-        # request). Embedding/transcription paths still pass None and
-        # rely on the operation_type modifier alone.
+        # can scale by actual context size, requested output size, and
+        # file count instead of falling back to the bare base_timeout
+        # (the previous behavior caused 30s timeouts on long planning
+        # prompts that genuinely needed 35-60s, producing a wasted-cycle
+        # retry on every complex request). ``_adaptive_max_tokens`` is
+        # the strongest signal — agent planning calls ask for 16K output
+        # tokens which on Sonnet 4.6 routinely take 40-60s to generate.
+        # Embedding/transcription paths pass None and rely on the
+        # operation_type modifier alone.
         adaptive_messages = kwargs.pop("_adaptive_messages", None)
         adaptive_files = kwargs.pop("_adaptive_files", None)
+        adaptive_max_tokens = kwargs.pop("_adaptive_max_tokens", None)
 
         async def _wrapped_func(*args, **kwargs):
             try:
@@ -1179,6 +1183,7 @@ class LLM:
                         retry_attempt=retry_attempt,
                         files=adaptive_files,
                         max_timeout=self.max_adaptive_timeout,
+                        max_tokens=adaptive_max_tokens,
                     )
 
                     # Remove internal kwargs before passing to function
@@ -1560,11 +1565,14 @@ Provide a helpful, conversational response that directly addresses what the user
         # let calculate_adaptive_timeout scale the budget by actual context size
         # (1s per ~1000 tokens, +3s per file) instead of falling back to the bare
         # 30s base timeout, which used to silently truncate long planning prompts.
+        # max_tokens is the strongest signal — agent planning calls request 16K
+        # output tokens which Sonnet 4.6 routinely needs 40-60s to generate.
         return await self._execute_with_resilience(
             _chat_request,
             operation_type="chat",
             _adaptive_messages=messages,
             _adaptive_files=files,
+            _adaptive_max_tokens=kwargs.get("max_tokens"),
         )
 
     async def chat_with_tools(
@@ -1634,12 +1642,13 @@ Provide a helpful, conversational response that directly addresses what the user
             return self._extract_content_from_response(response)
 
         # Pass operation type and sizing hints for adaptive timeout. See chat()
-        # above for the rationale on threading messages/files through.
+        # above for the rationale on threading messages/files/max_tokens through.
         return await self._execute_with_resilience(
             _chat_request_with_tools,
             operation_type="tool",
             _adaptive_messages=messages,
             _adaptive_files=files,
+            _adaptive_max_tokens=max_tokens,
         )
 
     async def embed(self, text: str, **kwargs: Any) -> List[float]:
@@ -1996,6 +2005,7 @@ def calculate_adaptive_timeout(
     retry_attempt: int = 0,
     files: Optional[List[Union[str, Path]]] = None,
     max_timeout: float = 120.0,
+    max_tokens: Optional[int] = None,
 ) -> float:
     """
     Calculate adaptive timeout based on context size and operation complexity.
@@ -2008,6 +2018,8 @@ def calculate_adaptive_timeout(
         retry_attempt: Current retry attempt number (0 for first attempt)
         files: List of files being processed
         max_timeout: Maximum allowed timeout (default: 120s)
+        max_tokens: Maximum output tokens requested (strong signal for
+            reasoning-heavy calls — planning prompts pass 16K here).
 
     Returns:
         Calculated timeout in seconds, capped at max_timeout
@@ -2030,8 +2042,20 @@ def calculate_adaptive_timeout(
                         total_chars += len(item.get("text", ""))
 
         estimated_tokens = total_chars / 4
-        # Add 1 second per 1000 tokens
+        # Add 1 second per 1000 input tokens
         timeout += estimated_tokens / 1000
+
+    # Scale based on requested output size. ``max_tokens`` is the
+    # strongest signal we have at request-time for how much computation
+    # the model will do — e.g. an agent planning call asks for 16K
+    # output tokens because it's emitting a structured execution plan
+    # over many tools, and Sonnet 4.6 routinely needs 40-60s to
+    # generate a full reasoning chain at that scale. We budget 2s per
+    # 1000 max output tokens (a deliberate ceiling — the model rarely
+    # uses the full max, but a too-tight first-attempt timeout produces
+    # a wasted 1.5x retry cycle that the bare base never recovered).
+    if max_tokens:
+        timeout += max_tokens / 500
 
     # Scale based on tool results
     if tool_results:
