@@ -3556,6 +3556,51 @@ class Agent:
                     )
 
             # Regular MCP tool invocation
+            #
+            # Tool result cache lookup (formation+user-scoped, 5min TTL).
+            # We compute the key once and reuse it for the post-call store so
+            # canonicalization differences cannot cause a hit/store mismatch.
+            from ...services.mcp import tool_cache
+
+            _cache_key: Optional[str] = None
+            _formation_id = (
+                getattr(self.overlord, "formation_id", "default") if self.overlord else "default"
+            )
+            if tool_cache.is_cacheable(tool_name):
+                _cache_key = tool_cache.make_key(
+                    formation_id=_formation_id,
+                    tool_name=tool_name,
+                    parameters=parameters,
+                    server_id=server_id,
+                    user_id=user_id,
+                )
+                _cached = tool_cache.get(_cache_key)
+                if _cached is not None:
+                    streaming.stream(
+                        "progress",
+                        f"Using cached {tool_name}...",
+                        stage="tool_cache_hit",
+                        tool_name=tool_name,
+                        server_id=server_id,
+                        agent_name=self.agent_id,
+                        skip_rephrase=True,
+                    )
+                    observability.observe(
+                        event_type=observability.ConversationEvents.MCP_TOOL_CACHE_HIT,
+                        level=observability.EventLevel.INFO,
+                        data={
+                            "agent_id": self.agent_id,
+                            "tool_name": tool_name,
+                            "server_id": server_id,
+                            "formation_id": _formation_id,
+                            "cache_stats": tool_cache.stats(),
+                        },
+                        description=(f"Agent {self.agent_id} served {tool_name} from tool cache"),
+                    )
+                    return _cached
+            else:
+                tool_cache.note_skipped()
+
             streaming.stream(
                 "progress",
                 f"Using {tool_name}...",
@@ -3682,6 +3727,13 @@ class Agent:
                     await check_cancellation_from_context(self.overlord.request_tracker)
 
             tool_success = not self._is_tool_execution_error(result)
+
+            # Store successful read-tool results in the cache. We deliberately
+            # never cache error responses — they may reflect transient issues
+            # (rate limits, network blips) and serving them from cache would
+            # extend the failure window across the TTL.
+            if _cache_key is not None and tool_success:
+                tool_cache.set(_cache_key, result)
 
             observability.observe(
                 event_type=observability.ConversationEvents.MCP_TOOL_CALL_COMPLETED,

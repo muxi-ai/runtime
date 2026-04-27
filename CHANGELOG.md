@@ -2,6 +2,53 @@
 
 ## [unreleased]
 
+### Performance: cache MCP tool results within a workflow window
+
+Many tool plans repeat the same read-only call within a single chat
+session — e.g. listing a repo's files at the start of planning and
+again during execution, or fetching the same Slack channel metadata
+multiple times during a multi-step workflow. Each repeat paid the full
+MCP round-trip cost (network + provider + serialization).
+
+**Fix:** `Agent.invoke_tool` now wraps the underlying MCP call in a
+short-lived in-process result cache (5-minute TTL, formation+user
+scoped). The cache is deliberately conservative:
+
+* **Default-deny classifier.** A new `services.mcp.tool_cache` module
+  inspects the tool's verb token (`read_*`, `get_*`, `list_*`,
+  `search_*`, etc.) and only caches names that match a known read
+  vocabulary. Mutator verbs (`create_*`, `update_*`, `delete_*`,
+  `send_*`, `post_*`, `set_*`, `add_*`, `run_*`, `execute_*`,
+  `start_*`, `stop_*`, etc.) are never cached. Tools matching neither
+  vocabulary default-deny — false negatives only cost latency, false
+  positives can produce incorrect application behavior.
+* **Built-in side-effect tools** (`generate_file`, `activate_skill`,
+  `run_skill`) are always denied because they have process-level side
+  effects (artifact creation, RCE execution, skill state mutation).
+* **Formation- and user-scoped keys.** The cache key includes
+  `formation_id` and `user_id` so two formations or two users in the
+  same process never share results, even for tools with identical
+  parameters. Per-user tools (mailboxes, vaults, credential-bound APIs)
+  are protected by construction.
+* **Errors are never cached.** A tool that returns
+  `_is_tool_execution_error(result) == True` skips the store step;
+  serving a stale rate-limit or network-blip error across the TTL
+  would extend the failure window unnecessarily.
+* **Token-based name matching.** `is_cacheable("lookup_address")`
+  correctly returns `True` instead of false-positive matching the
+  substring `_add` inside `address`. Names are tokenized
+  snake_case + camelCase before classification.
+
+A new `MCP_TOOL_CACHE_HIT` observability event surfaces hit rates and
+the running counters (`hits`/`misses`/`stores`/`skipped`) for
+production monitoring.
+
+The cache is process-local, has no LRU eviction (TTL-only), and dies
+with the runtime — same characteristics as the existing LLM response
+cache, kept consistent on purpose. 50 new unit tests cover key
+determinism, scope isolation, TTL expiry, the verb classifier, and
+counter increments.
+
 ## v0.20260427.0
 
 ### Performance: kill the 30s wasted-timeout cycle and the 12s buffer-memory cold start

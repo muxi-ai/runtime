@@ -837,6 +837,9 @@ class ConversationEvents(Enum):
     MCP_TOOL_CALL_FAILED = "mcp.tool.call_failed"
     # When MCP tool call fails
 
+    MCP_TOOL_CACHE_HIT = "mcp.tool.cache_hit"
+    # When an MCP tool invocation is served from the in-process result cache
+
     # ===================================================================
     # EXTERNAL AGENT COLLABORATION (A2A)
     # ===================================================================
