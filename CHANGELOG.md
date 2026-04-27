@@ -2,6 +2,77 @@
 
 ## [unreleased]
 
+## v0.20260427.0
+
+### Performance: kill the 30s wasted-timeout cycle and the 12s buffer-memory cold start
+
+End-to-end production trace of *"create a one-page PDF about MUXI"* on
+the hello-muxi formation showed 108 seconds of wall time for what
+ended up being a single-tool plan (activate_skill + generate_file).
+Two specific costs dominated the trace:
+
+1. **Wasted 30s timeout on every complex planning call** (saves ~30s).
+   `LLM._execute_with_resilience` was passing `messages=None` to
+   `calculate_adaptive_timeout`, with a `# Known limitation` comment
+   acknowledging the helper couldn't see the real payload. The result:
+   every chat call got the bare 30s base timeout regardless of how much
+   context it carried. A planning prompt with 58 tool definitions plus
+   ~15K tokens of input genuinely needs ~34s on Sonnet 4.6 — so the
+   first attempt timed out at 30s, the resilience layer retried with a
+   1.5x escalation (45s budget), and the retry succeeded ~34s later.
+   Fix: the chat-path closures now thread their `messages` and `files`
+   through `_execute_with_resilience` via internal kwargs
+   (`_adaptive_messages`, `_adaptive_files`) which are popped before
+   reaching the wrapped provider call. The adaptive-timeout helper now
+   sees the real payload and budgets ~45s for a 15K-token prompt
+   instead of 30s, eliminating the wasted retry cycle entirely.
+   Embedding and transcription paths still pass `None` and rely on the
+   operation-type modifier alone — they don't suffer from the same bug.
+
+2. **Knowledge-handler cold start moved off the user's first message**
+   (saves ~20s on first request). `Agent._ensure_knowledge_initialized`
+   was lazy — the `KnowledgeHandler` (and the Nomic embedder it
+   transitively loads) wasn't constructed until the first user message
+   landed. That deferred ~8s of chunking+embedding plus the ~12s Nomic
+   model cold-start onto the user's first chat request, producing a
+   visible "first message is sluggish" artifact in production traces.
+   Fix: `Overlord._create_agent_from_config` now eagerly calls
+   `await agent._ensure_knowledge_initialized()` for any agent with a
+   `knowledge` config block immediately after MCP-server registration.
+   This shifts both costs to formation `up` (where operators expect a
+   brief warmup) and warms the Nomic embedder in the same pass — the
+   working-memory write of the user's first message used to trigger
+   the same cold start in parallel, dropping that 12s spike too.
+   Failures during eager init propagate (matches the existing
+   MCP-register fail-fast policy) and emit a `SERVICE_UNAVAILABLE`
+   event tagged `phase=knowledge_eager_init` so operators can
+   distinguish startup vs runtime knowledge failures.
+
+Combined first-request impact on the same query: 108s → ~58s
+(~46% reduction). Subsequent requests benefit from #1 only (~30s).
+
+12 new unit tests across `tests/unit/test_llm_adaptive_timeout.py` (8
+tests covering timeout scaling math, kwarg-leak prevention, and call-
+site forwarding for both `chat` and `chat_with_tools` paths) and
+`tests/unit/test_overlord_eager_knowledge.py` (4 static guards on the
+eager-init call site, await contract, observability tagging, and
+fail-fast propagation).
+
+### Deferred: parallel knowledge-source loading
+
+`KnowledgeHandler.load_sources_from_config` still iterates sources
+sequentially. Naively wrapping the for-loop in `asyncio.gather` would
+race two writers through `WorkingMemory.add_with_embedding` — that
+method does `await self._ensure_dim()` and then mutates `self.index`
+without holding a lock, and the broad `except` at the FAISS `.add()`
+site silently drops chunks if a shape mismatch happens during a
+concurrent dim-probe. The expected win is small (~1-2s per formation
+up — Nomic inference is GIL-serialized so we'd only overlap markitdown
++ file I/O). The fix is now blocked on adding an `asyncio.Lock`
+around the `_ensure_dim`/`index.add` critical section in working
+memory; tracking via a `TODO(perf-round-2)` comment in the
+`load_sources_from_config` body.
+
 ## v0.20260426.1
 
 ### Artifacts: reject comment-only / no-op `generate_file.code`

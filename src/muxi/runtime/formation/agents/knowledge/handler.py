@@ -1232,6 +1232,16 @@ class KnowledgeHandler:
         skipped_count = 0
         processed_count = 0
 
+        # TODO(perf-round-2): Parallelize this loop with asyncio.gather +
+        # semaphore=2-4. Blocked on auditing WorkingMemory writes for
+        # concurrency safety: add_with_embedding() awaits _ensure_dim() and
+        # then mutates self.index without holding a lock, so two concurrent
+        # writers on the same FAISS index can race the dim probe and the
+        # broad except at the FAISS .add() site silently drops chunks if a
+        # shape mismatch happens. Fixing requires an asyncio.Lock around the
+        # _ensure_dim/index.add critical section first. Today the for-loop
+        # is the only thing keeping this safe; the cost is ~1-2s per
+        # formation up which we'll recover after the lock lands.
         for source_config in knowledge_sources:
             try:
                 source_path = source_config.get("path", "")

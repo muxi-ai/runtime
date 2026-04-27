@@ -1912,6 +1912,37 @@ class Overlord:
             agent_config.get("id"), agent_config.get("mcp_servers", [])
         )
 
+        # Eagerly initialize the agent's knowledge handler at formation startup
+        # rather than deferring to first message. Two reasons:
+        #   1. Knowledge ingestion triggers a Nomic embedder load (~12s cold
+        #      start) on the very first embed call in the process. Doing this
+        #      during formation `up` is correct UX — operators expect a brief
+        #      warmup at startup but expect first-message latency to be tight.
+        #   2. Misconfigured knowledge sources surface at deploy time instead
+        #      of when the first user query lands.
+        # Delegates to the same _ensure_knowledge_initialized path that the
+        # request flow used to call lazily; on failure we propagate the error
+        # so formation up fails fast (consistent with MCP register policy).
+        if agent_config.get("knowledge"):
+            try:
+                await agent._ensure_knowledge_initialized()
+            except Exception as e:
+                observability.observe(
+                    event_type=observability.ErrorEvents.SERVICE_UNAVAILABLE,
+                    level=observability.EventLevel.ERROR,
+                    data={
+                        "agent_id": agent_config.get("id", "unknown"),
+                        "error": str(e),
+                        "error_type": type(e).__name__,
+                        "phase": "knowledge_eager_init",
+                    },
+                    description=(
+                        f"Eager knowledge init failed for agent "
+                        f"{agent_config.get('id', 'unknown')}: {e}"
+                    ),
+                )
+                raise
+
         return agent
 
     def _print_mcp_initialization_error(

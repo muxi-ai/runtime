@@ -1153,6 +1153,16 @@ class LLM:
 
         # Extract operation type from kwargs (won't be passed to func)
         operation_type = kwargs.pop("operation_type", "chat")
+        # Extract adaptive-timeout sizing hints. These are internal kwargs
+        # threaded by the chat/tool wrappers so calculate_adaptive_timeout
+        # can scale by actual context size and file count instead of
+        # falling back to the bare base_timeout (the previous behavior
+        # caused 30s timeouts on long planning prompts that genuinely
+        # needed 35-60s, producing a wasted-cycle retry on every complex
+        # request). Embedding/transcription paths still pass None and
+        # rely on the operation_type modifier alone.
+        adaptive_messages = kwargs.pop("_adaptive_messages", None)
+        adaptive_files = kwargs.pop("_adaptive_files", None)
 
         async def _wrapped_func(*args, **kwargs):
             try:
@@ -1162,17 +1172,12 @@ class LLM:
                     # Extract retry attempt from kwargs
                     retry_attempt = kwargs.get("retry_attempt", 0)
 
-                    # Use a simple adaptive timeout based on operation type and retry attempt
-                    # NOTE: Known limitation - We can't easily access messages/files here without
-                    # major refactoring. This means timeout calculations are less accurate for
-                    # large message contexts or file processing operations. This is acceptable
-                    # as the operation type modifier provides reasonable defaults.
                     timeout = calculate_adaptive_timeout(
                         base_timeout=self.timeout,
-                        messages=None,  # Would need refactoring to pass these properly
+                        messages=adaptive_messages,
                         operation_type=operation_type,
                         retry_attempt=retry_attempt,
-                        files=None,
+                        files=adaptive_files,
                         max_timeout=self.max_adaptive_timeout,
                     )
 
@@ -1551,8 +1556,16 @@ Provide a helpful, conversational response that directly addresses what the user
 
             return content
 
-        # Pass operation type for adaptive timeout via kwargs
-        return await self._execute_with_resilience(_chat_request, operation_type="chat")
+        # Pass operation type and sizing hints for adaptive timeout. messages/files
+        # let calculate_adaptive_timeout scale the budget by actual context size
+        # (1s per ~1000 tokens, +3s per file) instead of falling back to the bare
+        # 30s base timeout, which used to silently truncate long planning prompts.
+        return await self._execute_with_resilience(
+            _chat_request,
+            operation_type="chat",
+            _adaptive_messages=messages,
+            _adaptive_files=files,
+        )
 
     async def chat_with_tools(
         self,
@@ -1620,8 +1633,14 @@ Provide a helpful, conversational response that directly addresses what the user
             # Otherwise extract and return content as string
             return self._extract_content_from_response(response)
 
-        # Pass operation type for adaptive timeout
-        return await self._execute_with_resilience(_chat_request_with_tools, operation_type="tool")
+        # Pass operation type and sizing hints for adaptive timeout. See chat()
+        # above for the rationale on threading messages/files through.
+        return await self._execute_with_resilience(
+            _chat_request_with_tools,
+            operation_type="tool",
+            _adaptive_messages=messages,
+            _adaptive_files=files,
+        )
 
     async def embed(self, text: str, **kwargs: Any) -> List[float]:
         """
