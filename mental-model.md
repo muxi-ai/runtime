@@ -1332,6 +1332,43 @@ class LLM:
         self.circuit_breaker = CircuitBreaker(...) if enable_circuit_breaker else None
 ```
 
+### OneLLM HTTP/2 Connection Pooling (2026-04-28)
+
+**Location:** `src/muxi/runtime/utils/run_formation.py` (init_pooling/close_pooling wiring).
+
+OneLLM dev (≥ v0.20260427.0) ships an opt-in `init_pooling()` API that swaps the per-request `httpx.AsyncClient` for a shared, **HTTP/2-multiplexed** pool. Bursts of parallel calls to the same provider negotiate h2 via TLS ALPN and stream over a single connection; sequential calls amortize TCP+TLS handshake across the keepalive window instead of paying it on every request.
+
+**Wiring:**
+```python
+# run_formation.py — before formation.load()
+import onellm
+init_pooling = getattr(onellm, "init_pooling", None)
+if callable(init_pooling):
+    init_pooling()              # http2=True by default
+    pooling_initialized = True
+# ... formation runs ...
+# in finally block:
+if pooling_initialized:
+    await onellm.close_pooling()
+```
+
+**Defensive design:**
+- Wrapped in try/except so older OneLLM versions without `init_pooling` boot cleanly on the per-request-client fallback.
+- Env var kill switch: `MUXI_HTTP_POOL_DISABLED=1`.
+- `init_pooling()` configures a singleton `HTTPConnectionPool` (verify via `onellm.http_pool.HTTPConnectionPool._config`).
+- Pool init exception logs to **stderr** rather than `observability.observe()` because observability isn't bootstrapped yet at that point.
+
+**Measured impact** (hello-muxi, "create a one-page PDF about MUXI", 3 runs):
+| Run | ON | OFF | Δ |
+|-----|----|----|----|
+| Cold | 64.7s | 71.7s | -10% |
+| Warm | 21.6s | 26.3s | -18% |
+| Warm | 19.7s | 21.9s | -10% |
+
+The cold-run delta is larger than pure handshake savings would predict — planning's internal sub-calls were each opening fresh TLS connections; under pooling they share one h2 connection.
+
+**Known gotcha:** the pool is a process-level singleton. If a test spins up a Formation programmatically (without going through `run_formation`), pooling will not be initialized. For SDK / embedded usage, the consumer is responsible for calling `onellm.init_pooling()` themselves.
+
 ### Capability-Based Model Resolution
 
 Formation config uses **capabilities** instead of explicit model assignments:
@@ -3210,6 +3247,34 @@ The codebase is well-structured with clear separation of concerns, comprehensive
 ---
 
 ## Appendix: Lessons Learned (Updated During E2E Testing)
+
+### 2026-04-27/28: Cold-path performance pass — 108s → ~58-65s on the canonical PDF prompt
+
+Cumulative wins on `hello-muxi → "create a one-page PDF about MUXI"`:
+
+| Stage | Time | Δ vs prev | Δ vs start |
+|-------|------|-----------|------------|
+| Original baseline | 108s | — | — |
+| Round-1 (commits 8acb6ee6, 4fea7e40) | 65.9s | -42s (-39%) | -42s |
+| Round-2 (commits 894e0bb3, 439b9271) | 63.5s | -2.4s (variance) | -44.5s |
+| HTTP/2 pooling (commit 81e41e4b) | ~58-65s cold, ~20s warm | -7s cold (-10%) | **-43-50s, -40-46%** |
+
+**What round-1 fixed (the heavy lifting):**
+1. **30s wasted timeout cycle on planning calls.** Adaptive timeout was getting `messages=None`, so every chat got the bare 30s budget. Complex planning needed 34-43s — the first attempt timed out, the resilience layer retried, and the user paid 30s + retry overhead. Fix: thread `messages` + `files` + `max_tokens` through to give planning a proper ~70s budget on the first try.
+2. **Knowledge handler eager init.** Nomic embedder + KnowledgeHandler load (~20s) was happening on the user's first chat. Moved to formation `up`. Buffer-memory write went from 12.3s → 0.6s (47×).
+
+**What round-2 added (latent infrastructure):**
+3. **Tool result cache** (`services/mcp/tool_cache.py`, 5min TTL, formation+user scoped, default-deny). Wins on workloads with repeated read tool calls; never fires for `activate_skill` / `generate_file`.
+4. **Skip post-planning synthesis for pure-artifact responses.** Dual-gated: every `my_results` entry must carry `_artifact` AND streaming must be active. hello-muxi's `activate_skill → generate_file` plan structure produces mixed results, so this fast path doesn't fire on PDF prompts (correct safe-default behavior).
+
+**What HTTP/2 pooling added:**
+5. `onellm.init_pooling()` was never called by the runtime. Wiring it up gave -10% cold and -18% warm on this workload. Cold-run win bigger than pure handshake savings — planning's internal sub-calls were each opening fresh TLS connections.
+
+**Anti-pattern I almost shipped:**
+- "Parallelize planning vs synthesis." Pushed back by user: local classifiers are coming, and a 50-100ms local intent decision will obsolete network-parallel hacks. Skipped.
+
+**Honest limits of the wins:**
+- The dominant remaining cost on this workload (`~50-78s` per planning call) is LLM provider latency on long planning prompts (16K+ tokens with hello-muxi's 56 MCP tools in scope). No amount of transport-layer work fixes that — only smaller planning prompts (local classifiers, tool-set pruning, or smaller models) will.
 
 ### 2026-04-21: OneLLM 0.20260421.0 -- `local/` provider alias registry removed
 
