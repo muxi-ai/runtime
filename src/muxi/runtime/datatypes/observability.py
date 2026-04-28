@@ -44,6 +44,13 @@ class SystemEvents(Enum):
     LLM_STATISTICS_RESET = "llm.statistics.reset"
     # When LLM statistics and circuit breakers are reset
 
+    LOCAL_CLASSIFIER_INITIALIZED = "local_classifier.initialized"
+    # When the local prototype-similarity classifier finishes warmup
+    # (one-time embedding of all built-in IntentSpec exemplars). Emitted
+    # by Overlord._get_local_classifier on the first overlord that
+    # triggers warmup; subsequent overlords adopt the warmed singleton
+    # silently. Includes warmup_ms and the list of warmed intents.
+
     # ===================================================================
     # MCP RETRY EVENTS
     # ===================================================================

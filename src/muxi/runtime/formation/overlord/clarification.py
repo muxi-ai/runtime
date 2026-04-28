@@ -4,10 +4,10 @@ import time
 from dataclasses import dataclass
 from typing import Dict, Optional
 
-logger = logging.getLogger(__name__)
-
 from ...services import observability
 from ...utils.fastjson import json
+
+logger = logging.getLogger(__name__)
 
 
 @dataclass
@@ -517,10 +517,10 @@ class UnifiedClarificationSystem:
         try:
             extracted_message_for_classifier = message
             if "=== CURRENT REQUEST ===" in message:
-                for i, line in enumerate(message.split("\n")):
+                lines = message.split("\n")
+                for i, line in enumerate(lines):
                     if line.strip() == "=== CURRENT REQUEST ===":
-                        remaining = message.split("\n")[i + 1 :]
-                        for line2 in remaining:
+                        for line2 in lines[i + 1:]:  # noqa: E203
                             stripped = line2.strip()
                             if stripped.startswith("User:"):
                                 extracted_message_for_classifier = stripped[5:].strip()

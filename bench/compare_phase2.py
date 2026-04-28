@@ -32,7 +32,7 @@ import argparse
 import json
 from pathlib import Path
 from statistics import median
-from typing import Any, Dict, List, Optional, Tuple
+from typing import Any, Dict, List, Optional
 
 
 def _per_label_p50(results: List[Dict[str, Any]]) -> Dict[str, float]:

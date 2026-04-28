@@ -2249,7 +2249,7 @@ class Overlord:
             self._local_classifier = classifier
             if not already_warmed_in_singleton:
                 observability.observe(
-                    event_type=observability.SystemEvents.SERVICE_INITIALIZED,
+                    event_type=observability.SystemEvents.LOCAL_CLASSIFIER_INITIALIZED,
                     level=observability.EventLevel.INFO,
                     data={
                         "service": "local_classifier",
