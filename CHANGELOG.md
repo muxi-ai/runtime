@@ -2,6 +2,90 @@
 
 ## [unreleased]
 
+### Fix: synthesis LLM hallucinated "the file didn't come through" on mixed-result artifact plans
+
+Surfaced from a hello-muxi demo trace: `create a bar chart showing pretend
+quarterly sales of acme corp` returned the chart attachment **and** a
+synthesis paragraph saying the file didn't come through. The attachment
+WAS there; the prose contradicted reality.
+
+**Root cause.**
+`Agent._serialize_planning_result_for_synthesis` strips the `_artifact`
+key from each `my_results` entry before serializing for the synthesis
+LLM:
+
+```python
+serializable_result.pop("_artifact", None)
+```
+
+That left the synthesis prompt with **zero ground-truth signal** that any
+file was attached. The pure-artifact synthesis-skip fast path
+(`439b9271`, v0.20260427.0) didn't fire either, because the plan had two
+steps — `activate_skill(file-generation)` produces a non-`_artifact`
+instruction blob, and `generate_file` produces the artifact-bearing
+result. Mixed-shape `my_results` correctly fail the `every entry has
+_artifact` gate, so synthesis ran. With nothing in the prompt to confirm
+the file existed and a SOUL coaching the model to "be honest if
+something's broken," Sonnet 4.6 took the metadata-only view as failure
+evidence and wrote the contradiction.
+
+**Fix.** Surface the attached artifacts as a dedicated block in the
+synthesis prompt — explicitly so the LLM knows the file IS surfacing in
+the user's UI and cannot hallucinate failure.
+
+* New `Agent._collect_attached_artifact_lines(my_results)` helper. Walks
+  result values, pulls every `_artifact` (handles both `MuxiArtifact`
+  Pydantic instances and dict-shaped fallbacks), and renders one line
+  per artifact:
+  ```
+  - acme_corp_quarterly_sales.png (image/png, 56.4 KB)
+  ```
+* `Agent._build_planning_response_synthesis_prompt` calls the helper.
+  When non-empty, it injects:
+  ```
+  FILES ALREADY ATTACHED TO THIS RESPONSE:
+  - acme_corp_quarterly_sales.png (image/png, 56.4 KB)
+
+  These files have been successfully generated and will surface in the user's UI
+  regardless of what you write below. Do NOT claim a file is missing, did not come
+  through, or that generation failed when this list is non-empty. You MAY mention
+  the filename(s) naturally in your reply.
+  ```
+  …right before the existing closing instructions. Pure-text plans (no
+  artifacts at all) get no block — the conditional keeps prompt size
+  unchanged for the common case.
+
+The serializer is left as-is — it correctly avoids dumping the full
+`MuxiArtifact` (binary `data_url`, base64 thumbnails) into the LLM
+context. The new block carries only the user-facing identifying data
+(filename, type/format, size).
+
+**Out of scope (deliberate):**
+
+* **Did not loosen the synthesis-skip gate** to treat `activate_skill`
+  results as transparent. That's a fine follow-up if the demo team
+  wants `activate_skill + generate_file` to skip synthesis entirely,
+  but Option B addresses the structurally weaker path: the case where
+  synthesis runs anyway. Both Options A and B can coexist.
+* **Did not modify `hello-muxi/SOUL.md`.** The bug was in the prompt,
+  not the persona — the SOUL's "be honest" coaching is correct
+  guidance; the LLM was just lacking the ground truth it needed to be
+  honest about.
+
+**Tests** (`tests/unit/test_agent_planning_helpers.py`, 7 new):
+extraction from a real `MuxiArtifact` instance, dict-shaped fallback
+extraction with `format` + `metadata.size_bytes`, partial metadata
+(missing format, missing size, missing filename → "(unnamed file)"),
+non-`_artifact` results skipped (the mixed-plan case), empty-input
+returns `[]`, end-to-end mixed-plan prompt contains the FILES ATTACHED
+block + filename + no-hallucinate guard before the closing
+instructions, pure-text-plan prompt does NOT contain the block. Full
+unit suite green: 847 passed, 1 skipped, 0 regressions.
+
+**File of record:**
+`src/muxi/runtime/formation/agents/agent.py` — helper added; prompt
+builder extended.
+
 ### Performance: localize 13 binary classification gates — heavy PDF median 60.4 s → 50.7 s (-16 %)
 
 The pre-planning critical path was emitting 4-5 cloud LLM calls per

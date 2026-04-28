@@ -806,6 +806,57 @@ class Agent:
                 return str(serializable_result)
         return str(result)
 
+    @staticmethod
+    def _collect_attached_artifact_lines(my_results: Dict[str, Any]) -> List[str]:
+        """Return one human-readable line per ``_artifact`` in ``my_results``.
+
+        ``_serialize_planning_result_for_synthesis`` strips ``_artifact`` from
+        the per-result text block before showing it to the synthesis LLM.
+        That means the LLM has no ground-truth signal that any file came
+        through and is free to hallucinate "the file didn't make it" from
+        the surrounding metadata. We restore that signal by collecting the
+        filenames + format + size up front and surfacing them as a
+        dedicated block in the synthesis prompt.
+
+        Handles both ``MuxiArtifact`` Pydantic instances and dict-shaped
+        artifact metadata; both shapes occur in the wild depending on the
+        producer (artifact service vs. legacy fallbacks).
+        """
+
+        def _get(obj: Any, *keys: str) -> Any:
+            for key in keys:
+                attr_value = getattr(obj, key, None)
+                if attr_value is not None:
+                    return attr_value
+                if isinstance(obj, dict) and obj.get(key) is not None:
+                    return obj[key]
+            return None
+
+        lines: List[str] = []
+        for result in my_results.values():
+            if not isinstance(result, dict):
+                continue
+            artifact = result.get("_artifact")
+            if artifact is None:
+                continue
+
+            filename = _get(artifact, "filename", "name") or "(unnamed file)"
+            fmt = _get(artifact, "format")
+            atype = _get(artifact, "type")
+            meta = _get(artifact, "metadata")
+            size_bytes = _get(meta, "size_bytes") if meta is not None else None
+
+            descriptor_parts = [str(p) for p in (atype, fmt) if p]
+            descriptor = "/".join(descriptor_parts) if descriptor_parts else None
+            size_str = (
+                f"{size_bytes / 1024:.1f} KB"
+                if isinstance(size_bytes, (int, float))
+                else None
+            )
+            bracket = ", ".join(p for p in (descriptor, size_str) if p)
+            lines.append(f"- {filename}" + (f" ({bracket})" if bracket else ""))
+        return lines
+
     def _get_planning_response_synthesis_system_prompt(self) -> str:
         """Return the system prompt for agent-side planning response synthesis."""
         return (
@@ -839,6 +890,21 @@ class Agent:
                 prompt_parts.append(f"### Response {i}")
                 prompt_parts.append(str(response_part))
                 prompt_parts.append("")
+
+        attached_artifacts = self._collect_attached_artifact_lines(my_results)
+        if attached_artifacts:
+            prompt_parts.extend(
+                [
+                    "FILES ALREADY ATTACHED TO THIS RESPONSE:",
+                    *attached_artifacts,
+                    "",
+                    "These files have been successfully generated and will surface in the user's UI",
+                    "regardless of what you write below. Do NOT claim a file is missing, did not come",
+                    "through, or that generation failed when this list is non-empty. You MAY mention",
+                    "the filename(s) naturally in your reply.",
+                    "",
+                ]
+            )
 
         prompt_parts.extend(
             [
