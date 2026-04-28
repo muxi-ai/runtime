@@ -1,0 +1,1285 @@
+{
+  "started_at": "2026-04-28T13:01:53+0100",
+  "base_url": "http://127.0.0.1:8000",
+  "runs": 3,
+  "workloads_requested": [
+    "heavy",
+    "light"
+  ],
+  "heavy": {
+    "results": [
+      {
+        "label": "heavy_pdf",
+        "prompt": "create a one-page PDF about MUXI",
+        "wall_seconds": 64.77,
+        "http_status": 200,
+        "response_excerpt": "{\"object\":\"message\",\"timestamp\":1777377778095,\"type\":\"chat.completed\",\"request\":{\"id\":\"req_SxtMUZDoYcP5YZSJTzXJr\",\"idempotency_key\":null},\"success\":true,\"error\":null,\"data\":{\"message\":{\"role\":\"assista",
+        "session_id": "bench_heavy_run1",
+        "started_ms": 1777377713328,
+        "ended_ms": 1777377778099,
+        "classification_events": {
+          "classification": 1,
+          "synthesis": 1,
+          "planning": 1,
+          "unknown": 0,
+          "calls": [
+            {
+              "max_tokens": 10,
+              "temperature": 0.2,
+              "model": "anthropic/claude-sonnet-4-6",
+              "rel_s": 0.373
+            },
+            {
+              "max_tokens": 2000,
+              "temperature": 0.2,
+              "model": "anthropic/claude-sonnet-4-6",
+              "rel_s": 13.008
+            },
+            {
+              "max_tokens": 16384,
+              "temperature": 0.1,
+              "model": "anthropic/claude-sonnet-4-6",
+              "rel_s": 21.57
+            }
+          ]
+        }
+      },
+      {
+        "label": "heavy_pdf",
+        "prompt": "create a one-page PDF about MUXI",
+        "wall_seconds": 60.353,
+        "http_status": 200,
+        "response_excerpt": "{\"object\":\"message\",\"timestamp\":1777377839213,\"type\":\"chat.completed\",\"request\":{\"id\":\"req_JG6Is3LwQLcJ4atU1zA6h\",\"idempotency_key\":null},\"success\":true,\"error\":null,\"data\":{\"message\":{\"role\":\"assista",
+        "session_id": "bench_heavy_run2",
+        "started_ms": 1777377778862,
+        "ended_ms": 1777377839218,
+        "classification_events": {
+          "classification": 2,
+          "synthesis": 3,
+          "planning": 1,
+          "unknown": 1,
+          "calls": [
+            {
+              "max_tokens": 10,
+              "temperature": 0.2,
+              "model": "anthropic/claude-sonnet-4-6",
+              "rel_s": 0.77
+            },
+            {
+              "max_tokens": 250,
+              "temperature": 0.2,
+              "model": "anthropic/claude-sonnet-4-6",
+              "rel_s": 0.773
+            },
+            {
+              "max_tokens": 20,
+              "temperature": 0.1,
+              "model": "anthropic/claude-sonnet-4-6",
+              "rel_s": 0.774
+            },
+            {
+              "max_tokens": 1000,
+              "temperature": 0.2,
+              "model": "anthropic/claude-sonnet-4-6",
+              "rel_s": 0.774
+            },
+            {
+              "max_tokens": 200,
+              "temperature": 0.1,
+              "model": "anthropic/claude-sonnet-4-6",
+              "rel_s": 6.25
+            },
+            {
+              "max_tokens": 16384,
+              "temperature": 0.1,
+              "model": "anthropic/claude-sonnet-4-6",
+              "rel_s": 14.765
+            },
+            {
+              "max_tokens": null,
+              "temperature": 0.7,
+              "model": "anthropic/claude-sonnet-4-6",
+              "rel_s": 47.153
+            }
+          ]
+        }
+      },
+      {
+        "label": "heavy_pdf",
+        "prompt": "create a one-page PDF about MUXI",
+        "wall_seconds": 26.057,
+        "http_status": 200,
+        "response_excerpt": "{\"object\":\"message\",\"timestamp\":1777377866043,\"type\":\"chat.completed\",\"request\":{\"id\":\"req_7H9fR9MT8JgxuU3X5YcpN\",\"idempotency_key\":null},\"success\":true,\"error\":null,\"data\":{\"message\":{\"role\":\"assista",
+        "session_id": "bench_heavy_run3",
+        "started_ms": 1777377839987,
+        "ended_ms": 1777377866045,
+        "classification_events": {
+          "classification": 0,
+          "synthesis": 4,
+          "planning": 0,
+          "unknown": 0,
+          "calls": [
+            {
+              "max_tokens": 2000,
+              "temperature": 0.2,
+              "model": "anthropic/claude-sonnet-4-6",
+              "rel_s": 0.4
+            },
+            {
+              "max_tokens": 1000,
+              "temperature": 0.2,
+              "model": "anthropic/claude-sonnet-4-6",
+              "rel_s": 0.403
+            },
+            {
+              "max_tokens": 200,
+              "temperature": 0.1,
+              "model": "anthropic/claude-sonnet-4-6",
+              "rel_s": 0.405
+            },
+            {
+              "max_tokens": 2000,
+              "temperature": 0.7,
+              "model": "anthropic/claude-sonnet-4-6",
+              "rel_s": 2.7
+            }
+          ]
+        }
+      }
+    ],
+    "summary": {
+      "count": 3,
+      "successful": 3,
+      "min_s": 26.057,
+      "median_s": 60.353,
+      "max_s": 64.77,
+      "total_s": 151.18
+    },
+    "classification_event_totals": {
+      "classification": 3,
+      "synthesis": 8,
+      "planning": 2,
+      "unknown": 1
+    }
+  },
+  "light": {
+    "results": [
+      {
+        "label": "greeting",
+        "prompt": "hello",
+        "wall_seconds": 3.142,
+        "http_status": 200,
+        "response_excerpt": "{\"object\":\"message\",\"timestamp\":1777377869944,\"type\":\"chat.completed\",\"request\":{\"id\":\"req_r9yQCQGKmy3cbrGajMYgI\",\"idempotency_key\":null},\"success\":true,\"error\":null,\"data\":{\"message\":{\"role\":\"assista",
+        "session_id": "bench_light_run1",
+        "started_ms": 1777377866805,
+        "ended_ms": 1777377869947,
+        "classification_events": {
+          "classification": 0,
+          "synthesis": 0,
+          "planning": 0,
+          "unknown": 0,
+          "calls": []
+        },
+        "run": 1
+      },
+      {
+        "label": "acknowledgment",
+        "prompt": "thanks",
+        "wall_seconds": 3.828,
+        "http_status": 200,
+        "response_excerpt": "{\"object\":\"message\",\"timestamp\":1777377874526,\"type\":\"chat.completed\",\"request\":{\"id\":\"req_UJLR60urXZCM0Q1e7R5SR\",\"idempotency_key\":null},\"success\":true,\"error\":null,\"data\":{\"message\":{\"role\":\"assista",
+        "session_id": "bench_light_run1",
+        "started_ms": 1777377870701,
+        "ended_ms": 1777377874529,
+        "classification_events": {
+          "classification": 0,
+          "synthesis": 1,
+          "planning": 0,
+          "unknown": 0,
+          "calls": [
+            {
+              "max_tokens": 300,
+              "temperature": 0.7,
+              "model": "anthropic/claude-sonnet-4-6",
+              "rel_s": 2.585
+            }
+          ]
+        },
+        "run": 1
+      },
+      {
+        "label": "simple_question",
+        "prompt": "what time is it?",
+        "wall_seconds": 14.437,
+        "http_status": 200,
+        "response_excerpt": "{\"object\":\"message\",\"timestamp\":1777377889717,\"type\":\"chat.completed\",\"request\":{\"id\":\"req_NSB684c5pYSrBqcdGSmrr\",\"idempotency_key\":null},\"success\":true,\"error\":null,\"data\":{\"message\":{\"role\":\"assista",
+        "session_id": "bench_light_run1",
+        "started_ms": 1777377875283,
+        "ended_ms": 1777377889721,
+        "classification_events": {
+          "classification": 1,
+          "synthesis": 2,
+          "planning": 1,
+          "unknown": 0,
+          "calls": [
+            {
+              "max_tokens": 10,
+              "temperature": 0.2,
+              "model": "anthropic/claude-sonnet-4-6",
+              "rel_s": 0.353
+            },
+            {
+              "max_tokens": 1000,
+              "temperature": 0.2,
+              "model": "anthropic/claude-sonnet-4-6",
+              "rel_s": 2.165
+            },
+            {
+              "max_tokens": 16384,
+              "temperature": 0.1,
+              "model": "anthropic/claude-sonnet-4-6",
+              "rel_s": 11.703
+            },
+            {
+              "max_tokens": 2000,
+              "temperature": 0.7,
+              "model": "anthropic/claude-sonnet-4-6",
+              "rel_s": 12.821
+            }
+          ]
+        },
+        "run": 1
+      },
+      {
+        "label": "help_request",
+        "prompt": "can you help me?",
+        "wall_seconds": 3.403,
+        "http_status": 200,
+        "response_excerpt": "{\"object\":\"message\",\"timestamp\":1777377893888,\"type\":\"chat.completed\",\"request\":{\"id\":\"req_C5HMWuZQBGyHxyNHfc9fw\",\"idempotency_key\":null},\"success\":true,\"error\":null,\"data\":{\"message\":{\"role\":\"assista",
+        "session_id": "bench_light_run1",
+        "started_ms": 1777377890486,
+        "ended_ms": 1777377893889,
+        "classification_events": {
+          "classification": 1,
+          "synthesis": 2,
+          "planning": 0,
+          "unknown": 0,
+          "calls": [
+            {
+              "max_tokens": 10,
+              "temperature": 0.2,
+              "model": "anthropic/claude-sonnet-4-6",
+              "rel_s": 0.34
+            },
+            {
+              "max_tokens": 2000,
+              "temperature": 0.2,
+              "model": "anthropic/claude-sonnet-4-6",
+              "rel_s": 0.341
+            },
+            {
+              "max_tokens": 250,
+              "temperature": 0.2,
+              "model": "anthropic/claude-sonnet-4-6",
+              "rel_s": 0.395
+            }
+          ]
+        },
+        "run": 1
+      },
+      {
+        "label": "scheduler_query",
+        "prompt": "show my scheduled jobs",
+        "wall_seconds": 8.678,
+        "http_status": 200,
+        "response_excerpt": "{\"object\":\"message\",\"timestamp\":1777377903321,\"type\":\"chat.completed\",\"request\":{\"id\":\"req_NLU5xYUqVQQM55fkUUsKN\",\"idempotency_key\":null},\"success\":true,\"error\":null,\"data\":{\"message\":{\"role\":\"assista",
+        "session_id": "bench_light_run1",
+        "started_ms": 1777377894644,
+        "ended_ms": 1777377903322,
+        "classification_events": {
+          "classification": 1,
+          "synthesis": 2,
+          "planning": 0,
+          "unknown": 0,
+          "calls": [
+            {
+              "max_tokens": 20,
+              "temperature": 0.1,
+              "model": "anthropic/claude-sonnet-4-6",
+              "rel_s": 0.328
+            },
+            {
+              "max_tokens": 2000,
+              "temperature": 0.2,
+              "model": "anthropic/claude-sonnet-4-6",
+              "rel_s": 0.328
+            },
+            {
+              "max_tokens": 1000,
+              "temperature": 0.2,
+              "model": "anthropic/claude-sonnet-4-6",
+              "rel_s": 1.887
+            }
+          ]
+        },
+        "run": 1
+      },
+      {
+        "label": "approval_yes",
+        "prompt": "yes, please proceed",
+        "wall_seconds": 10.579,
+        "http_status": 200,
+        "response_excerpt": "{\"object\":\"message\",\"timestamp\":1777377914655,\"type\":\"chat.completed\",\"request\":{\"id\":\"req_ilWjreXe4HMqGPJ0O28rX\",\"idempotency_key\":null},\"success\":true,\"error\":null,\"data\":{\"message\":{\"role\":\"assista",
+        "session_id": "bench_light_run1",
+        "started_ms": 1777377904078,
+        "ended_ms": 1777377914657,
+        "classification_events": {
+          "classification": 0,
+          "synthesis": 2,
+          "planning": 1,
+          "unknown": 0,
+          "calls": [
+            {
+              "max_tokens": 250,
+              "temperature": 0.2,
+              "model": "anthropic/claude-sonnet-4-6",
+              "rel_s": 0.345
+            },
+            {
+              "max_tokens": 200,
+              "temperature": 0.1,
+              "model": "anthropic/claude-sonnet-4-6",
+              "rel_s": 2.116
+            },
+            {
+              "max_tokens": 16384,
+              "temperature": 0.1,
+              "model": "anthropic/claude-sonnet-4-6",
+              "rel_s": 7.732
+            }
+          ]
+        },
+        "run": 1
+      },
+      {
+        "label": "approval_no",
+        "prompt": "no, cancel that",
+        "wall_seconds": 3.804,
+        "http_status": 200,
+        "response_excerpt": "{\"object\":\"message\",\"timestamp\":1777377919214,\"type\":\"chat.completed\",\"request\":{\"id\":\"req_xZBbixEn0kg9ebKrbGB2S\",\"idempotency_key\":null},\"success\":true,\"error\":null,\"data\":{\"message\":{\"role\":\"assista",
+        "session_id": "bench_light_run1",
+        "started_ms": 1777377915411,
+        "ended_ms": 1777377919215,
+        "classification_events": {
+          "classification": 2,
+          "synthesis": 1,
+          "planning": 0,
+          "unknown": 0,
+          "calls": [
+            {
+              "max_tokens": 10,
+              "temperature": 0.2,
+              "model": "anthropic/claude-sonnet-4-6",
+              "rel_s": 0.341
+            },
+            {
+              "max_tokens": 2000,
+              "temperature": 0.2,
+              "model": "anthropic/claude-sonnet-4-6",
+              "rel_s": 0.341
+            },
+            {
+              "max_tokens": 20,
+              "temperature": 0.1,
+              "model": "anthropic/claude-sonnet-4-6",
+              "rel_s": 2.287
+            }
+          ]
+        },
+        "run": 1
+      },
+      {
+        "label": "follow_up",
+        "prompt": "tell me more",
+        "wall_seconds": 3.464,
+        "http_status": 200,
+        "response_excerpt": "{\"object\":\"message\",\"timestamp\":1777377923432,\"type\":\"chat.completed\",\"request\":{\"id\":\"req_O2zYoxd6fEdx_PIgDAcI7\",\"idempotency_key\":null},\"success\":true,\"error\":null,\"data\":{\"message\":{\"role\":\"assista",
+        "session_id": "bench_light_run1",
+        "started_ms": 1777377919970,
+        "ended_ms": 1777377923433,
+        "classification_events": {
+          "classification": 1,
+          "synthesis": 1,
+          "planning": 0,
+          "unknown": 0,
+          "calls": [
+            {
+              "max_tokens": 10,
+              "temperature": 0.2,
+              "model": "anthropic/claude-sonnet-4-6",
+              "rel_s": 0.348
+            },
+            {
+              "max_tokens": 250,
+              "temperature": 0.2,
+              "model": "anthropic/claude-sonnet-4-6",
+              "rel_s": 0.351
+            }
+          ]
+        },
+        "run": 1
+      },
+      {
+        "label": "trivia",
+        "prompt": "what's the weather like?",
+        "wall_seconds": 14.618,
+        "http_status": 200,
+        "response_excerpt": "{\"object\":\"message\",\"timestamp\":1777377938792,\"type\":\"chat.completed\",\"request\":{\"id\":\"req_9Ln41ZrHqOVwsVKjwZ6jq\",\"idempotency_key\":null},\"success\":true,\"error\":null,\"data\":{\"message\":{\"role\":\"assista",
+        "session_id": "bench_light_run1",
+        "started_ms": 1777377924189,
+        "ended_ms": 1777377938793,
+        "classification_events": {
+          "classification": 0,
+          "synthesis": 0,
+          "planning": 1,
+          "unknown": 0,
+          "calls": [
+            {
+              "max_tokens": 16384,
+              "temperature": 0.1,
+              "model": "anthropic/claude-sonnet-4-6",
+              "rel_s": 7.523
+            }
+          ]
+        },
+        "run": 1
+      },
+      {
+        "label": "scheduling",
+        "prompt": "schedule a reminder in 5 minutes to drink water",
+        "wall_seconds": 21.56,
+        "http_status": 200,
+        "response_excerpt": "{\"object\":\"message\",\"timestamp\":1777377961096,\"type\":\"chat.completed\",\"request\":{\"id\":\"req_zBuXrzBKjnMzFIHGMlXLU\",\"idempotency_key\":null},\"success\":true,\"error\":null,\"data\":{\"message\":{\"role\":\"assista",
+        "session_id": "bench_light_run1",
+        "started_ms": 1777377939551,
+        "ended_ms": 1777377961101,
+        "classification_events": {
+          "classification": 0,
+          "synthesis": 5,
+          "planning": 1,
+          "unknown": 1,
+          "calls": [
+            {
+              "max_tokens": 2000,
+              "temperature": 0.2,
+              "model": "anthropic/claude-sonnet-4-6",
+              "rel_s": 0.437
+            },
+            {
+              "max_tokens": 250,
+              "temperature": 0.2,
+              "model": "anthropic/claude-sonnet-4-6",
+              "rel_s": 0.438
+            },
+            {
+              "max_tokens": 200,
+              "temperature": 0.1,
+              "model": "anthropic/claude-sonnet-4-6",
+              "rel_s": 4.846
+            },
+            {
+              "max_tokens": 2000,
+              "temperature": 0.2,
+              "model": "anthropic/claude-sonnet-4-6",
+              "rel_s": 4.847
+            },
+            {
+              "max_tokens": 2000,
+              "temperature": 0.2,
+              "model": "anthropic/claude-sonnet-4-6",
+              "rel_s": 5.061
+            },
+            {
+              "max_tokens": 16384,
+              "temperature": 0.1,
+              "model": "anthropic/claude-sonnet-4-6",
+              "rel_s": 15.635
+            },
+            {
+              "max_tokens": null,
+              "temperature": 0.7,
+              "model": "anthropic/claude-sonnet-4-6",
+              "rel_s": 16.631
+            }
+          ]
+        },
+        "run": 1
+      },
+      {
+        "label": "greeting",
+        "prompt": "hello",
+        "wall_seconds": 3.223,
+        "http_status": 200,
+        "response_excerpt": "{\"object\":\"message\",\"timestamp\":1777377965081,\"type\":\"chat.completed\",\"request\":{\"id\":\"req_cVRH2s7qAtUxL7nI46BSH\",\"idempotency_key\":null},\"success\":true,\"error\":null,\"data\":{\"message\":{\"role\":\"assista",
+        "session_id": "bench_light_run2",
+        "started_ms": 1777377961859,
+        "ended_ms": 1777377965082,
+        "classification_events": {
+          "classification": 0,
+          "synthesis": 1,
+          "planning": 0,
+          "unknown": 0,
+          "calls": [
+            {
+              "max_tokens": 300,
+              "temperature": 0.7,
+              "model": "anthropic/claude-sonnet-4-6",
+              "rel_s": 0.28
+            }
+          ]
+        },
+        "run": 2
+      },
+      {
+        "label": "acknowledgment",
+        "prompt": "thanks",
+        "wall_seconds": 6.678,
+        "http_status": 200,
+        "response_excerpt": "{\"object\":\"message\",\"timestamp\":1777377972519,\"type\":\"chat.completed\",\"request\":{\"id\":\"req_UUZpnY2mg_KO3OxujkB5b\",\"idempotency_key\":null},\"success\":true,\"error\":null,\"data\":{\"message\":{\"role\":\"assista",
+        "session_id": "bench_light_run2",
+        "started_ms": 1777377965842,
+        "ended_ms": 1777377972520,
+        "classification_events": {
+          "classification": 1,
+          "synthesis": 0,
+          "planning": 0,
+          "unknown": 0,
+          "calls": [
+            {
+              "max_tokens": 10,
+              "temperature": 0.2,
+              "model": "anthropic/claude-sonnet-4-6",
+              "rel_s": 0.347
+            }
+          ]
+        },
+        "run": 2
+      },
+      {
+        "label": "simple_question",
+        "prompt": "what time is it?",
+        "wall_seconds": 6.449,
+        "http_status": 200,
+        "response_excerpt": "{\"object\":\"message\",\"timestamp\":1777377979727,\"type\":\"chat.completed\",\"request\":{\"id\":\"req_jyBcUXh3CtD4PVCPLZSXB\",\"idempotency_key\":null},\"success\":true,\"error\":null,\"data\":{\"message\":{\"role\":\"assista",
+        "session_id": "bench_light_run2",
+        "started_ms": 1777377973279,
+        "ended_ms": 1777377979728,
+        "classification_events": {
+          "classification": 1,
+          "synthesis": 4,
+          "planning": 0,
+          "unknown": 1,
+          "calls": [
+            {
+              "max_tokens": 10,
+              "temperature": 0.2,
+              "model": "anthropic/claude-sonnet-4-6",
+              "rel_s": 0.426
+            },
+            {
+              "max_tokens": 1000,
+              "temperature": 0.2,
+              "model": "anthropic/claude-sonnet-4-6",
+              "rel_s": 2.019
+            },
+            {
+              "max_tokens": 2000,
+              "temperature": 0.2,
+              "model": "anthropic/claude-sonnet-4-6",
+              "rel_s": 2.02
+            },
+            {
+              "max_tokens": 200,
+              "temperature": 0.1,
+              "model": "anthropic/claude-sonnet-4-6",
+              "rel_s": 2.022
+            },
+            {
+              "max_tokens": null,
+              "temperature": 0.7,
+              "model": "anthropic/claude-sonnet-4-6",
+              "rel_s": 4.984
+            },
+            {
+              "max_tokens": 2000,
+              "temperature": 0.7,
+              "model": "anthropic/claude-sonnet-4-6",
+              "rel_s": 4.984
+            }
+          ]
+        },
+        "run": 2
+      },
+      {
+        "label": "help_request",
+        "prompt": "can you help me?",
+        "wall_seconds": 5.053,
+        "http_status": 200,
+        "response_excerpt": "{\"object\":\"message\",\"timestamp\":1777377985540,\"type\":\"chat.completed\",\"request\":{\"id\":\"req_INDiZqVirBhjB5HCxDq0L\",\"idempotency_key\":null},\"success\":true,\"error\":null,\"data\":{\"message\":{\"role\":\"assista",
+        "session_id": "bench_light_run2",
+        "started_ms": 1777377980489,
+        "ended_ms": 1777377985542,
+        "classification_events": {
+          "classification": 1,
+          "synthesis": 0,
+          "planning": 0,
+          "unknown": 0,
+          "calls": [
+            {
+              "max_tokens": 10,
+              "temperature": 0.2,
+              "model": "anthropic/claude-sonnet-4-6",
+              "rel_s": 0.333
+            }
+          ]
+        },
+        "run": 2
+      },
+      {
+        "label": "scheduler_query",
+        "prompt": "show my scheduled jobs",
+        "wall_seconds": 3.995,
+        "http_status": 200,
+        "response_excerpt": "{\"object\":\"message\",\"timestamp\":1777377990290,\"type\":\"chat.completed\",\"request\":{\"id\":\"req_FQ1PTWXGE1b_5uyfUo3BC\",\"idempotency_key\":null},\"success\":true,\"error\":null,\"data\":{\"message\":{\"role\":\"assista",
+        "session_id": "bench_light_run2",
+        "started_ms": 1777377986297,
+        "ended_ms": 1777377990291,
+        "classification_events": {
+          "classification": 0,
+          "synthesis": 2,
+          "planning": 0,
+          "unknown": 0,
+          "calls": [
+            {
+              "max_tokens": 2000,
+              "temperature": 0.2,
+              "model": "anthropic/claude-sonnet-4-6",
+              "rel_s": 0.335
+            },
+            {
+              "max_tokens": 300,
+              "temperature": 0.7,
+              "model": "anthropic/claude-sonnet-4-6",
+              "rel_s": 2.204
+            }
+          ]
+        },
+        "run": 2
+      },
+      {
+        "label": "approval_yes",
+        "prompt": "yes, please proceed",
+        "wall_seconds": 8.503,
+        "http_status": 200,
+        "response_excerpt": "{\"object\":\"message\",\"timestamp\":1777377999552,\"type\":\"chat.completed\",\"request\":{\"id\":\"req_4oShK2XzVwMKdrRJdvtis\",\"idempotency_key\":null},\"success\":true,\"error\":null,\"data\":{\"message\":{\"role\":\"assista",
+        "session_id": "bench_light_run2",
+        "started_ms": 1777377991051,
+        "ended_ms": 1777377999553,
+        "classification_events": {
+          "classification": 1,
+          "synthesis": 5,
+          "planning": 1,
+          "unknown": 0,
+          "calls": [
+            {
+              "max_tokens": 10,
+              "temperature": 0.2,
+              "model": "anthropic/claude-sonnet-4-6",
+              "rel_s": 0.408
+            },
+            {
+              "max_tokens": 250,
+              "temperature": 0.2,
+              "model": "anthropic/claude-sonnet-4-6",
+              "rel_s": 0.41
+            },
+            {
+              "max_tokens": 1000,
+              "temperature": 0.2,
+              "model": "anthropic/claude-sonnet-4-6",
+              "rel_s": 2.478
+            },
+            {
+              "max_tokens": 2000,
+              "temperature": 0.2,
+              "model": "anthropic/claude-sonnet-4-6",
+              "rel_s": 2.479
+            },
+            {
+              "max_tokens": 200,
+              "temperature": 0.1,
+              "model": "anthropic/claude-sonnet-4-6",
+              "rel_s": 2.48
+            },
+            {
+              "max_tokens": 16384,
+              "temperature": 0.1,
+              "model": "anthropic/claude-sonnet-4-6",
+              "rel_s": 5.799
+            },
+            {
+              "max_tokens": 2000,
+              "temperature": 0.7,
+              "model": "anthropic/claude-sonnet-4-6",
+              "rel_s": 6.2
+            }
+          ]
+        },
+        "run": 2
+      },
+      {
+        "label": "approval_no",
+        "prompt": "no, cancel that",
+        "wall_seconds": 3.285,
+        "http_status": 200,
+        "response_excerpt": "{\"object\":\"message\",\"timestamp\":1777378003595,\"type\":\"chat.completed\",\"request\":{\"id\":\"req_K0br0Mm3g8KdQWnVo4ncc\",\"idempotency_key\":null},\"success\":true,\"error\":null,\"data\":{\"message\":{\"role\":\"assista",
+        "session_id": "bench_light_run2",
+        "started_ms": 1777378000312,
+        "ended_ms": 1777378003597,
+        "classification_events": {
+          "classification": 0,
+          "synthesis": 2,
+          "planning": 0,
+          "unknown": 0,
+          "calls": [
+            {
+              "max_tokens": 250,
+              "temperature": 0.2,
+              "model": "anthropic/claude-sonnet-4-6",
+              "rel_s": 0.358
+            },
+            {
+              "max_tokens": 300,
+              "temperature": 0.7,
+              "model": "anthropic/claude-sonnet-4-6",
+              "rel_s": 2.222
+            }
+          ]
+        },
+        "run": 2
+      },
+      {
+        "label": "follow_up",
+        "prompt": "tell me more",
+        "wall_seconds": 2.817,
+        "http_status": 200,
+        "response_excerpt": "{\"object\":\"message\",\"timestamp\":1777378007168,\"type\":\"chat.completed\",\"request\":{\"id\":\"req_MTe3M7ZRwW0W4FYMhQF7l\",\"idempotency_key\":null},\"success\":true,\"error\":null,\"data\":{\"message\":{\"role\":\"assista",
+        "session_id": "bench_light_run2",
+        "started_ms": 1777378004353,
+        "ended_ms": 1777378007169,
+        "classification_events": {
+          "classification": 1,
+          "synthesis": 1,
+          "planning": 0,
+          "unknown": 0,
+          "calls": [
+            {
+              "max_tokens": 10,
+              "temperature": 0.2,
+              "model": "anthropic/claude-sonnet-4-6",
+              "rel_s": 0.341
+            },
+            {
+              "max_tokens": 250,
+              "temperature": 0.2,
+              "model": "anthropic/claude-sonnet-4-6",
+              "rel_s": 0.342
+            }
+          ]
+        },
+        "run": 2
+      },
+      {
+        "label": "trivia",
+        "prompt": "what's the weather like?",
+        "wall_seconds": 8.944,
+        "http_status": 200,
+        "response_excerpt": "{\"object\":\"message\",\"timestamp\":1777378016870,\"type\":\"chat.completed\",\"request\":{\"id\":\"req_2WcJQrYXWhDr2gOHXNHoA\",\"idempotency_key\":null},\"success\":true,\"error\":null,\"data\":{\"message\":{\"role\":\"assista",
+        "session_id": "bench_light_run2",
+        "started_ms": 1777378007927,
+        "ended_ms": 1777378016872,
+        "classification_events": {
+          "classification": 1,
+          "synthesis": 1,
+          "planning": 1,
+          "unknown": 0,
+          "calls": [
+            {
+              "max_tokens": 20,
+              "temperature": 0.1,
+              "model": "anthropic/claude-sonnet-4-6",
+              "rel_s": 0.37
+            },
+            {
+              "max_tokens": 16384,
+              "temperature": 0.1,
+              "model": "anthropic/claude-sonnet-4-6",
+              "rel_s": 3.423
+            },
+            {
+              "max_tokens": 2000,
+              "temperature": 0.7,
+              "model": "anthropic/claude-sonnet-4-6",
+              "rel_s": 3.889
+            }
+          ]
+        },
+        "run": 2
+      },
+      {
+        "label": "scheduling",
+        "prompt": "schedule a reminder in 5 minutes to drink water",
+        "wall_seconds": 12.246,
+        "http_status": 200,
+        "response_excerpt": "{\"object\":\"message\",\"timestamp\":1777378029875,\"type\":\"chat.completed\",\"request\":{\"id\":\"req_pd4v0oE4J3F6IHxbOdXJ3\",\"idempotency_key\":null},\"success\":true,\"error\":null,\"data\":{\"message\":{\"role\":\"assista",
+        "session_id": "bench_light_run2",
+        "started_ms": 1777378017633,
+        "ended_ms": 1777378029879,
+        "classification_events": {
+          "classification": 1,
+          "synthesis": 3,
+          "planning": 1,
+          "unknown": 0,
+          "calls": [
+            {
+              "max_tokens": 10,
+              "temperature": 0.2,
+              "model": "anthropic/claude-sonnet-4-6",
+              "rel_s": 0.391
+            },
+            {
+              "max_tokens": 2000,
+              "temperature": 0.2,
+              "model": "anthropic/claude-sonnet-4-6",
+              "rel_s": 2.154
+            },
+            {
+              "max_tokens": 200,
+              "temperature": 0.1,
+              "model": "anthropic/claude-sonnet-4-6",
+              "rel_s": 2.379
+            },
+            {
+              "max_tokens": 16384,
+              "temperature": 0.1,
+              "model": "anthropic/claude-sonnet-4-6",
+              "rel_s": 8.513
+            },
+            {
+              "max_tokens": 2000,
+              "temperature": 0.7,
+              "model": "anthropic/claude-sonnet-4-6",
+              "rel_s": 8.974
+            }
+          ]
+        },
+        "run": 2
+      },
+      {
+        "label": "greeting",
+        "prompt": "hello",
+        "wall_seconds": 3.424,
+        "http_status": 200,
+        "response_excerpt": "{\"object\":\"message\",\"timestamp\":1777378034065,\"type\":\"chat.completed\",\"request\":{\"id\":\"req_GSV1ewIfMQ2lozOiE0t_C\",\"idempotency_key\":null},\"success\":true,\"error\":null,\"data\":{\"message\":{\"role\":\"assista",
+        "session_id": "bench_light_run3",
+        "started_ms": 1777378030641,
+        "ended_ms": 1777378034066,
+        "classification_events": {
+          "classification": 0,
+          "synthesis": 0,
+          "planning": 0,
+          "unknown": 0,
+          "calls": []
+        },
+        "run": 3
+      },
+      {
+        "label": "acknowledgment",
+        "prompt": "thanks",
+        "wall_seconds": 4.311,
+        "http_status": 200,
+        "response_excerpt": "{\"object\":\"message\",\"timestamp\":1777378039139,\"type\":\"chat.completed\",\"request\":{\"id\":\"req_OoJmhlUDdb3jNE9X6Acgy\",\"idempotency_key\":null},\"success\":true,\"error\":null,\"data\":{\"message\":{\"role\":\"assista",
+        "session_id": "bench_light_run3",
+        "started_ms": 1777378034830,
+        "ended_ms": 1777378039140,
+        "classification_events": {
+          "classification": 0,
+          "synthesis": 2,
+          "planning": 0,
+          "unknown": 0,
+          "calls": [
+            {
+              "max_tokens": 250,
+              "temperature": 0.2,
+              "model": "anthropic/claude-sonnet-4-6",
+              "rel_s": 0.331
+            },
+            {
+              "max_tokens": 300,
+              "temperature": 0.7,
+              "model": "anthropic/claude-sonnet-4-6",
+              "rel_s": 2.812
+            }
+          ]
+        },
+        "run": 3
+      },
+      {
+        "label": "simple_question",
+        "prompt": "what time is it?",
+        "wall_seconds": 8.15,
+        "http_status": 200,
+        "response_excerpt": "{\"object\":\"message\",\"timestamp\":1777378048046,\"type\":\"chat.completed\",\"request\":{\"id\":\"req_usIntZeFowCy0FU7MEejd\",\"idempotency_key\":null},\"success\":true,\"error\":null,\"data\":{\"message\":{\"role\":\"assista",
+        "session_id": "bench_light_run3",
+        "started_ms": 1777378039898,
+        "ended_ms": 1777378048048,
+        "classification_events": {
+          "classification": 0,
+          "synthesis": 5,
+          "planning": 1,
+          "unknown": 0,
+          "calls": [
+            {
+              "max_tokens": 2000,
+              "temperature": 0.2,
+              "model": "anthropic/claude-sonnet-4-6",
+              "rel_s": 0.335
+            },
+            {
+              "max_tokens": 250,
+              "temperature": 0.2,
+              "model": "anthropic/claude-sonnet-4-6",
+              "rel_s": 0.336
+            },
+            {
+              "max_tokens": 1000,
+              "temperature": 0.2,
+              "model": "anthropic/claude-sonnet-4-6",
+              "rel_s": 2.716
+            },
+            {
+              "max_tokens": 200,
+              "temperature": 0.1,
+              "model": "anthropic/claude-sonnet-4-6",
+              "rel_s": 2.72
+            },
+            {
+              "max_tokens": 16384,
+              "temperature": 0.1,
+              "model": "anthropic/claude-sonnet-4-6",
+              "rel_s": 5.154
+            },
+            {
+              "max_tokens": 2000,
+              "temperature": 0.7,
+              "model": "anthropic/claude-sonnet-4-6",
+              "rel_s": 5.492
+            }
+          ]
+        },
+        "run": 3
+      },
+      {
+        "label": "help_request",
+        "prompt": "can you help me?",
+        "wall_seconds": 3.301,
+        "http_status": 200,
+        "response_excerpt": "{\"object\":\"message\",\"timestamp\":1777378052109,\"type\":\"chat.completed\",\"request\":{\"id\":\"req_C9VMqbvbpveEjfMHluDJO\",\"idempotency_key\":null},\"success\":true,\"error\":null,\"data\":{\"message\":{\"role\":\"assista",
+        "session_id": "bench_light_run3",
+        "started_ms": 1777378048809,
+        "ended_ms": 1777378052110,
+        "classification_events": {
+          "classification": 1,
+          "synthesis": 1,
+          "planning": 0,
+          "unknown": 0,
+          "calls": [
+            {
+              "max_tokens": 10,
+              "temperature": 0.2,
+              "model": "anthropic/claude-sonnet-4-6",
+              "rel_s": 0.347
+            },
+            {
+              "max_tokens": 2000,
+              "temperature": 0.2,
+              "model": "anthropic/claude-sonnet-4-6",
+              "rel_s": 0.348
+            }
+          ]
+        },
+        "run": 3
+      },
+      {
+        "label": "scheduler_query",
+        "prompt": "show my scheduled jobs",
+        "wall_seconds": 6.753,
+        "http_status": 200,
+        "response_excerpt": "{\"object\":\"message\",\"timestamp\":1777378059623,\"type\":\"chat.completed\",\"request\":{\"id\":\"req_LgfAuYjRa57uaq1HwnNKg\",\"idempotency_key\":null},\"success\":true,\"error\":null,\"data\":{\"message\":{\"role\":\"assista",
+        "session_id": "bench_light_run3",
+        "started_ms": 1777378052870,
+        "ended_ms": 1777378059624,
+        "classification_events": {
+          "classification": 1,
+          "synthesis": 0,
+          "planning": 0,
+          "unknown": 0,
+          "calls": [
+            {
+              "max_tokens": 20,
+              "temperature": 0.1,
+              "model": "anthropic/claude-sonnet-4-6",
+              "rel_s": 0.323
+            }
+          ]
+        },
+        "run": 3
+      },
+      {
+        "label": "approval_yes",
+        "prompt": "yes, please proceed",
+        "wall_seconds": 10.28,
+        "http_status": 200,
+        "response_excerpt": "{\"object\":\"message\",\"timestamp\":1777378070666,\"type\":\"chat.completed\",\"request\":{\"id\":\"req_2Z3mX5BnVkU0MBRMNG6oX\",\"idempotency_key\":null},\"success\":true,\"error\":null,\"data\":{\"message\":{\"role\":\"assista",
+        "session_id": "bench_light_run3",
+        "started_ms": 1777378060390,
+        "ended_ms": 1777378070671,
+        "classification_events": {
+          "classification": 2,
+          "synthesis": 1,
+          "planning": 0,
+          "unknown": 0,
+          "calls": [
+            {
+              "max_tokens": 10,
+              "temperature": 0.2,
+              "model": "anthropic/claude-sonnet-4-6",
+              "rel_s": 0.356
+            },
+            {
+              "max_tokens": 20,
+              "temperature": 0.1,
+              "model": "anthropic/claude-sonnet-4-6",
+              "rel_s": 2.077
+            },
+            {
+              "max_tokens": 1000,
+              "temperature": 0.2,
+              "model": "anthropic/claude-sonnet-4-6",
+              "rel_s": 2.078
+            }
+          ]
+        },
+        "run": 3
+      },
+      {
+        "label": "approval_no",
+        "prompt": "no, cancel that",
+        "wall_seconds": 6.278,
+        "http_status": 200,
+        "response_excerpt": "{\"object\":\"message\",\"timestamp\":1777378077711,\"type\":\"chat.completed\",\"request\":{\"id\":\"req_3fybRRdT38NJaJSrYoPXI\",\"idempotency_key\":null},\"success\":true,\"error\":null,\"data\":{\"message\":{\"role\":\"assista",
+        "session_id": "bench_light_run3",
+        "started_ms": 1777378071434,
+        "ended_ms": 1777378077712,
+        "classification_events": {
+          "classification": 1,
+          "synthesis": 2,
+          "planning": 0,
+          "unknown": 0,
+          "calls": [
+            {
+              "max_tokens": 10,
+              "temperature": 0.2,
+              "model": "anthropic/claude-sonnet-4-6",
+              "rel_s": 0.357
+            },
+            {
+              "max_tokens": 250,
+              "temperature": 0.2,
+              "model": "anthropic/claude-sonnet-4-6",
+              "rel_s": 0.359
+            },
+            {
+              "max_tokens": 300,
+              "temperature": 0.7,
+              "model": "anthropic/claude-sonnet-4-6",
+              "rel_s": 2.123
+            }
+          ]
+        },
+        "run": 3
+      },
+      {
+        "label": "follow_up",
+        "prompt": "tell me more",
+        "wall_seconds": 2.706,
+        "http_status": 200,
+        "response_excerpt": "{\"object\":\"message\",\"timestamp\":1777378081175,\"type\":\"chat.completed\",\"request\":{\"id\":\"req_HFmtqjTPzIs4FSzKSW8Sb\",\"idempotency_key\":null},\"success\":true,\"error\":null,\"data\":{\"message\":{\"role\":\"assista",
+        "session_id": "bench_light_run3",
+        "started_ms": 1777378078470,
+        "ended_ms": 1777378081176,
+        "classification_events": {
+          "classification": 0,
+          "synthesis": 2,
+          "planning": 0,
+          "unknown": 0,
+          "calls": [
+            {
+              "max_tokens": 2000,
+              "temperature": 0.2,
+              "model": "anthropic/claude-sonnet-4-6",
+              "rel_s": 0.397
+            },
+            {
+              "max_tokens": 250,
+              "temperature": 0.2,
+              "model": "anthropic/claude-sonnet-4-6",
+              "rel_s": 0.398
+            }
+          ]
+        },
+        "run": 3
+      },
+      {
+        "label": "trivia",
+        "prompt": "what's the weather like?",
+        "wall_seconds": 11.63,
+        "http_status": 200,
+        "response_excerpt": "{\"object\":\"message\",\"timestamp\":1777378093564,\"type\":\"chat.completed\",\"request\":{\"id\":\"req_OpGg1QTR5godXIb6j9z4A\",\"idempotency_key\":null},\"success\":true,\"error\":null,\"data\":{\"message\":{\"role\":\"assista",
+        "session_id": "bench_light_run3",
+        "started_ms": 1777378081935,
+        "ended_ms": 1777378093566,
+        "classification_events": {
+          "classification": 1,
+          "synthesis": 2,
+          "planning": 1,
+          "unknown": 0,
+          "calls": [
+            {
+              "max_tokens": 20,
+              "temperature": 0.1,
+              "model": "anthropic/claude-sonnet-4-6",
+              "rel_s": 0.345
+            },
+            {
+              "max_tokens": 2000,
+              "temperature": 0.2,
+              "model": "anthropic/claude-sonnet-4-6",
+              "rel_s": 0.348
+            },
+            {
+              "max_tokens": 200,
+              "temperature": 0.1,
+              "model": "anthropic/claude-sonnet-4-6",
+              "rel_s": 0.349
+            },
+            {
+              "max_tokens": 16384,
+              "temperature": 0.1,
+              "model": "anthropic/claude-sonnet-4-6",
+              "rel_s": 5.57
+            }
+          ]
+        },
+        "run": 3
+      },
+      {
+        "label": "scheduling",
+        "prompt": "schedule a reminder in 5 minutes to drink water",
+        "wall_seconds": 14.657,
+        "http_status": 200,
+        "response_excerpt": "{\"object\":\"message\",\"timestamp\":1777378108987,\"type\":\"chat.completed\",\"request\":{\"id\":\"req_dtHSrGalmYfD8QkmcA_Qs\",\"idempotency_key\":null},\"success\":true,\"error\":null,\"data\":{\"message\":{\"role\":\"assista",
+        "session_id": "bench_light_run3",
+        "started_ms": 1777378094333,
+        "ended_ms": 1777378108990,
+        "classification_events": {
+          "classification": 2,
+          "synthesis": 5,
+          "planning": 1,
+          "unknown": 1,
+          "calls": [
+            {
+              "max_tokens": 10,
+              "temperature": 0.2,
+              "model": "anthropic/claude-sonnet-4-6",
+              "rel_s": 0.402
+            },
+            {
+              "max_tokens": 250,
+              "temperature": 0.2,
+              "model": "anthropic/claude-sonnet-4-6",
+              "rel_s": 0.403
+            },
+            {
+              "max_tokens": 20,
+              "temperature": 0.1,
+              "model": "anthropic/claude-sonnet-4-6",
+              "rel_s": 2.012
+            },
+            {
+              "max_tokens": 1000,
+              "temperature": 0.2,
+              "model": "anthropic/claude-sonnet-4-6",
+              "rel_s": 2.013
+            },
+            {
+              "max_tokens": 2000,
+              "temperature": 0.2,
+              "model": "anthropic/claude-sonnet-4-6",
+              "rel_s": 2.253
+            },
+            {
+              "max_tokens": 200,
+              "temperature": 0.1,
+              "model": "anthropic/claude-sonnet-4-6",
+              "rel_s": 2.254
+            },
+            {
+              "max_tokens": 16384,
+              "temperature": 0.1,
+              "model": "anthropic/claude-sonnet-4-6",
+              "rel_s": 10.495
+            },
+            {
+              "max_tokens": null,
+              "temperature": 0.7,
+              "model": "anthropic/claude-sonnet-4-6",
+              "rel_s": 11.331
+            },
+            {
+              "max_tokens": 2000,
+              "temperature": 0.7,
+              "model": "anthropic/claude-sonnet-4-6",
+              "rel_s": 11.332
+            }
+          ]
+        },
+        "run": 3
+      }
+    ],
+    "summary": {
+      "count": 30,
+      "successful": 30,
+      "min_s": 2.706,
+      "median_s": 6.364,
+      "max_s": 21.56,
+      "total_s": 220.196
+    },
+    "classification_event_totals": {
+      "classification": 21,
+      "synthesis": 55,
+      "planning": 10,
+      "unknown": 3
+    }
+  }
+}
