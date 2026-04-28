@@ -4690,40 +4690,81 @@ Agent response: {raw_response}"""
         """
         Document User Experience
 
-        Generate persona-consistent acknowledgments and summaries.
-        For audio files, includes the transcription directly so LLM can see it.
+        Surface the actual processed content (transcriptions, image/video
+        analyses, extracted document text) for every modality so the
+        downstream agent LLM can ground its response on real content
+        rather than a generic "I've processed your files" acknowledgment.
+
+        Originally only audio short-circuited to return its transcription;
+        text/PDF/image/video paths fell through to a generic acknowledger
+        that produced no usable content for the responder LLM, which then
+        flakily asked the user to re-upload their already-processed file.
+        We now build a single section per processed doc with a clear
+        ``### filename (modality)`` header and the joined chunk content;
+        the per-modality processors already prefix their output (e.g.
+        ``Video analysis of demo.mov:\\n...``), so we preserve those.
         """
         try:
-            # Check if any audio files were processed - include transcriptions directly
-            audio_transcriptions = []
+            sections: List[str] = []
             for doc in processed_docs:
-                if doc.get("modality") == "audio" and doc.get("content"):
-                    # Extract transcription from content list
-                    for content_item in doc.get("content", []):
-                        if content_item and isinstance(content_item, str):
-                            # Clean up the transcription prefix if present
-                            if content_item.startswith("Audio transcription of"):
-                                parts = content_item.split(": ", 1)
-                                if len(parts) > 1:
-                                    audio_transcriptions.append(parts[1])
-                                else:
-                                    audio_transcriptions.append(content_item)
-                            else:
-                                audio_transcriptions.append(content_item)
+                filename = doc.get("filename", "unknown")
+                modality = doc.get("modality", "text")
+                raw_chunks = doc.get("content") or []
 
-            # If we have audio transcriptions, return them directly
-            if audio_transcriptions:
-                transcription_text = " ".join(audio_transcriptions).strip()
-                return f"Audio transcription:\n\n{transcription_text}"
+                # Normalize chunk content to strings; drop empty entries.
+                content_pieces: List[str] = []
+                for piece in raw_chunks:
+                    if isinstance(piece, str):
+                        stripped = piece.strip()
+                        if stripped:
+                            content_pieces.append(stripped)
+                    elif isinstance(piece, bytes):
+                        try:
+                            decoded = piece.decode("utf-8", errors="replace").strip()
+                            if decoded:
+                                content_pieces.append(decoded)
+                        except Exception:
+                            continue
 
+                if not content_pieces:
+                    continue
+
+                if modality == "audio":
+                    # The audio processor returns
+                    # ``Audio transcription of {filename}: {text}``.
+                    # Strip the ``Audio transcription of <filename>: ``
+                    # prefix so the section header carries the filename
+                    # and the body is just the transcription.
+                    cleaned: List[str] = []
+                    for piece in content_pieces:
+                        if piece.startswith("Audio transcription of"):
+                            parts = piece.split(": ", 1)
+                            cleaned.append(parts[1].strip() if len(parts) > 1 else piece)
+                        else:
+                            cleaned.append(piece)
+                    body = " ".join(cleaned).strip()
+                    sections.append(
+                        f"### {filename} (audio transcription)\n{body}"
+                    )
+                else:
+                    body = "\n\n".join(content_pieces).strip()
+                    label = {
+                        "image": "image analysis",
+                        "video": "video analysis",
+                    }.get(modality, "document content")
+                    sections.append(f"### {filename} ({label})\n{body}")
+
+            if sections:
+                return "\n\n".join(sections)
+
+            # No usable content extracted — fall back to a persona-aware
+            # or generic acknowledgment so the caller still gets a string.
             if self.document_acknowledger:
-                # Generate acknowledgment using the component
                 doc_list = [(doc["doc_id"], doc["filename"]) for doc in processed_docs]
                 acknowledgment = await self.document_acknowledger.generate_document_acknowledgment(
                     processed_docs=doc_list, user_request=user_request, context=context or {}
                 )
             else:
-                # Fallback acknowledgment
                 file_list = [doc["filename"] for doc in processed_docs]
                 file_names = ", ".join(file_list)
                 acknowledgment = f"I've successfully processed your document(s): {file_names}. "
