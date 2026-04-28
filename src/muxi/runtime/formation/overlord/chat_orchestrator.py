@@ -1185,13 +1185,57 @@ class ChatOrchestrator:
                         metadata_filter["session_id"] = session_id
 
                     if vector_search:
-                        context_messages_list = (
-                            await self.overlord.buffer_memory_manager.search_buffer_memory(
+                        # When vector search is enabled, the current
+                        # message is used as the embedding key. For
+                        # meta-recall queries ("list back what I
+                        # mentioned earlier", "summarise what we've
+                        # discussed") that embedding does NOT match the
+                        # content messages well, and conversation
+                        # recency_bias alone (0.3) is too weak to
+                        # surface recent turns. Always merge a recency
+                        # floor — the last buffer_size items by
+                        # recency — with the vector-search results so
+                        # follow-up / recall questions still see the
+                        # most recent conversational context. The
+                        # local-only path already does pure-recency
+                        # via the empty-query fast path.
+                        vector_results, recency_results = await asyncio.gather(
+                            self.overlord.buffer_memory_manager.search_buffer_memory(
                                 query=message,
                                 k=buffer_size,
                                 filter_metadata=metadata_filter,
-                            )
+                            ),
+                            self.overlord.buffer_memory_manager.search_buffer_memory(
+                                query="",
+                                k=buffer_size,
+                                filter_metadata=metadata_filter,
+                            ),
                         )
+                        # De-duplicate by (text, timestamp). Preserve
+                        # vector_results ordering (most relevant first)
+                        # and append any recency-only items missing
+                        # from the vector pass at the end.
+                        seen_keys = set()
+                        merged: List[Dict[str, Any]] = []
+                        for item in vector_results or []:
+                            key = (
+                                item.get("text", ""),
+                                item.get("metadata", {}).get("timestamp"),
+                            )
+                            if key in seen_keys:
+                                continue
+                            seen_keys.add(key)
+                            merged.append(item)
+                        for item in recency_results or []:
+                            key = (
+                                item.get("text", ""),
+                                item.get("metadata", {}).get("timestamp"),
+                            )
+                            if key in seen_keys:
+                                continue
+                            seen_keys.add(key)
+                            merged.append(item)
+                        context_messages_list = merged
                     else:
                         context_messages_list = (
                             await self.overlord.buffer_memory_manager.search_buffer_memory(
