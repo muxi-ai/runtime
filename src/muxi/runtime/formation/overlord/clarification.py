@@ -814,10 +814,48 @@ class UnifiedClarificationSystem:
     async def _check_need_more(self, state: Dict) -> Dict:
         """
         Check if we need more clarification.
+
+        Phase 2 'split text from classification decision' fast path:
+        we run the local classifier first on the joint
+        ``Original: ...\nCollected: ...`` string and only call the
+        LLM when the classifier says more clarification is needed
+        (since the LLM also has to GENERATE the next question, the
+        binary skip is the only legitimate place to localize). On
+        classifier failure we fall through to the existing LLM path,
+        preserving prior behavior.
         """
         if not self.llm:
             # Fallback when no LLM available
             return {"needs_more": False, "question": None}
+
+        # STEP 0: Local-classifier fast path. Decision-only — when the
+        # classifier confidently says the gap between original_request
+        # and collected_info has closed, we skip the LLM (saving ~500-
+        # 1500 ms on the happy path of well-collected clarifications).
+        try:
+            joint = (
+                f"Original: {state.get('original_request', '')}\n"
+                f"Collected: {state.get('collected_info', '')}"
+            )
+            classifier = await self.overlord._get_local_classifier()
+            needs_more, margin = await classifier.classify_binary(
+                "clarification_needs_more", joint
+            )
+            if not needs_more:
+                observability.observe(
+                    event_type=observability.ConversationEvents.CLARIFICATION_SKIPPED,
+                    level=observability.EventLevel.DEBUG,
+                    data={
+                        "decision": "needs_more=False",
+                        "margin": round(margin, 4),
+                        "method": "local_classifier_fast_path",
+                        "stage": "check_need_more",
+                    },
+                    description="check_need_more fast-path: classifier said collected info is sufficient",
+                )
+                return {"needs_more": False, "question": None}
+        except Exception as e:
+            logger.debug(f"check_need_more classifier fast-path failed, falling through to LLM: {e}")
 
         from ..prompts.loader import PromptLoader
 
