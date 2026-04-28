@@ -2001,19 +2001,67 @@ class Agent:
                     if (
                         "direct response" in data_flow.lower()
                         or "no tools needed" in data_flow.lower()
+                        or "file processing already complete" in data_flow.lower()
                     ):
-                        # Generate a direct response for simple conversational requests
-                        # Use the agent's system_message if available, otherwise use default
-                        system_content = (
-                            self.system_message
-                            if self.system_message
-                            else (
-                                "You are a helpful assistant. Provide direct, natural responses without using any tools or files."
-                            )
+                        # Generate a direct response for simple conversational requests.
+                        #
+                        # When the orchestrator has surfaced file-processing
+                        # results (transcriptions, OCR, document text, etc.)
+                        # in the enhanced prompt, the empty-plan path MUST
+                        # see them — otherwise the model has no idea the
+                        # user's attachment was already processed and will
+                        # respond as if the attachment is missing.
+                        # ``actual_user_request`` is the stripped-down form
+                        # used for planning; it intentionally drops the
+                        # ``=== FILE PROCESSING RESULTS ===`` section.
+                        # Fall back to the full ``user_message`` only when
+                        # file processing results are present so we don't
+                        # inadvertently change response behavior for plain
+                        # conversational requests that have user profile or
+                        # memory context but no attachments. We also swap
+                        # the system prompt so the LLM is told the file
+                        # content has already been processed and is
+                        # included below — otherwise the default system
+                        # prompt's "without using any tools or files"
+                        # instruction contradicts the user-message content
+                        # and the LLM flakily asks the user to re-upload.
+                        has_file_results = (
+                            isinstance(user_message, str)
+                            and "=== FILE PROCESSING RESULTS" in user_message
                         )
+                        if has_file_results:
+                            user_for_response = user_message
+                            file_results_clause = (
+                                "The user's attached file(s) have already been "
+                                "processed by the runtime; the results are included "
+                                "in the user message under the "
+                                "`=== FILE PROCESSING RESULTS ===` section. Treat "
+                                "those results as the authoritative content of the "
+                                "user's attachment(s) and use them to answer the "
+                                "request directly. Do not ask the user to re-upload "
+                                "or re-share the file."
+                            )
+                            if self.system_message:
+                                system_content = (
+                                    f"{self.system_message}\n\n{file_results_clause}"
+                                )
+                            else:
+                                system_content = (
+                                    f"You are a helpful assistant. {file_results_clause}"
+                                )
+                        else:
+                            user_for_response = actual_user_request
+                            system_content = (
+                                self.system_message
+                                if self.system_message
+                                else (
+                                    "You are a helpful assistant. Provide direct, natural responses without using any tools or files."
+                                )
+                            )
+
                         simple_messages = [
                             {"role": "system", "content": system_content},
-                            {"role": "user", "content": actual_user_request},
+                            {"role": "user", "content": user_for_response},
                         ]
 
                         response_obj = await self.model.chat(simple_messages)
