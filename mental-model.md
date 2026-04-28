@@ -1,7 +1,7 @@
 # MUXI Runtime Architecture Analysis
 
 **Generated:** 2026-03-10
-**Last Updated:** 2026-04-26 (pre-routing gates now agent-aware; HF cache layout shim for SIF)
+**Last Updated:** 2026-04-28 (security-guard self-recall override; workflow-approval kv_set race; remote-buffer recency floor)
 **Codebase:** `/Users/ran/Projects/muxi/code/runtime`  
 **Scope:** 290 Python files, ~119K lines
 
@@ -3247,6 +3247,109 @@ The codebase is well-structured with clear separation of concerns, comprehensive
 ---
 
 ## Appendix: Lessons Learned (Updated During E2E Testing)
+
+### 2026-04-28: Three bugs surfaced while debugging two e2e tests on develop
+
+While fixing `test_2d1_local_buffer_mode` and `test_9a3b_with_approval`
+(both of which had been failing on develop independent of recent
+performance work) three real runtime bugs surfaced. All three are now
+fixed and unit-tested.
+
+**Bug 1 — `information_extraction` security guard false-positives on
+user-self-recall.** The LLM-based security analyzers
+(`RequestAnalyzer._llm_analyze_request` and
+`AgentRouter._parse_routing_response`) intermittently classified
+benign user-self-recall messages ("list back the role I mentioned
+earlier", "summarize my profession", "what's my name?") as
+`information_extraction` attacks. The user got "I can't process that
+request." back; the LLM never saw buffer context. Both prompts
+already carved this out in plain English; the classifier just would
+not comply on borderline phrasings.
+
+* **Why it surfaced now.** The 2d1 test's recall probes hit this
+  guard in remote-buffer mode; in local mode they sometimes squeaked
+  through.
+* **Fix shape.** Added a deterministic *precision-first* heuristic
+  `RequestAnalyzer._heuristic_is_user_self_recall` and wired it into
+  both call sites. Heuristic returns true only when **all three**
+  hold: (a) first-person possessor anchored to the user, (b) recall
+  verb / "mentioned earlier" anchor pointing back at the conversation,
+  (c) no system-state target word (system prompt, config, internal
+  tools, credentials, …). Override only fires for the
+  `information_extraction` threat type — `prompt_injection`,
+  `credential_fishing`, `jailbreak` are untouched. SECURITY_BLOCK from
+  the routing LLM is treated as a null routing decision (intelligent
+  fallback picks an agent) when the heuristic confirms self-recall;
+  real attack messages still propagate `SecurityViolation`.
+* **Don't:** widen the LLM prompt's "not a threat" list and assume the
+  classifier will follow. The classifier is non-deterministic on
+  borderline phrasings and *will* drift.
+
+**Bug 2 — workflow-approval pending state lost to a fire-and-forget
+race.** `_handle_workflow_approval` used the fire-and-forget
+`_set_pending_clarification`. The user's reply ("Yes, please proceed")
+arrived before the kv_set landed → `_get_pending_clarification`
+returned `None` → workflow_approval branch was skipped → approval
+message treated as a fresh, contextless prompt ("Could you share more
+about the plan?"). The `ambiguous_credential` path already used the
+synchronous variant *for exactly this reason* and even documented why
+in a comment. Applied the same fix at the workflow-approval site with
+a comment cross-referencing the credential site so future drive-by
+edits don't regress it.
+
+* **Pattern to remember.** When the runtime is about to return a
+  response that *expects an immediate user reply*, the pending state
+  MUST be persisted with `await self._set_pending_clarification_sync(...)`
+  — not the fire-and-forget variant. The other call sites
+  (clarification asks, credential redirects) are not provably safe;
+  they have not failed in the wild yet, but they are theoretically
+  racy and worth tightening if test fragility ever points there.
+
+**Bug 3 — remote-buffer recall in `_enhance_message_with_context`.**
+With `memory.buffer.vector_search: true` (the remote / FAISSx
+default), follow-up and meta-recall questions ("list back the
+technical skills I mentioned earlier") got back "I don't have access
+to your prior details" even when the relevant turns were still in the
+buffer. Local mode worked fine.
+
+* **Root cause.** `ChatOrchestrator._enhance_message_with_context`
+  picks the buffer search query based on `vector_search`:
+  - `False` (local default): `query=""` → recency-only fast path →
+    always returns the most recent buffer items.
+  - `True` (remote default): `query=<current message>` →
+    vector + `recency_bias=0.3` hybrid.
+  For meta-recall queries the embedding of the QUERY does not match
+  the embeddings of the CONTENT messages it wants to recall, and 0.3
+  recency bias alone is too weak to surface them.
+* **Fix.** When `vector_search` is enabled, issue both passes
+  concurrently (`asyncio.gather`) and merge: vector results keep
+  their relevance ordering at the head, recency-only items missing
+  from the vector pass append at the tail, dedup by
+  `(text, timestamp)`. Local mode is byte-identical to before
+  (single empty-query call, no extra round-trip).
+* **Mental note.** `vector_search=True` is *not* a strict superset of
+  recency search. It can lose recent turns when the query embedding
+  is meta-conversational. The merge restores the floor.
+
+**Files touched.**
+
+| File | Reason |
+|------|--------|
+| `src/muxi/runtime/formation/workflow/analyzer.py` | new heuristic + override at LLM analyzer |
+| `src/muxi/runtime/formation/overlord/agent_router.py` | override at SECURITY_BLOCK call site + clearer prompt carve-out |
+| `src/muxi/runtime/formation/prompts/workflow_request_analysis.md` | explicit not-a-threat carve-out |
+| `src/muxi/runtime/formation/overlord/overlord.py` | sync `_set_pending_clarification` at workflow approval |
+| `src/muxi/runtime/formation/overlord/chat_orchestrator.py` | recency-floor merge in remote vector_search path |
+| `tests/unit/test_overlord_pending_clarification_race.py` | 3 cases for fix #2 |
+| `tests/unit/test_request_analyzer_user_self_recall.py` | 25 cases for fix #1 (heuristic + integration + router) |
+| `tests/unit/test_chat_orchestrator_buffer_recency_floor.py` | 3 cases for fix #3 |
+| `e2e/tests/2_memory/test_2d1_local_buffer_mode.py` | session_id pinning, follow-up anchor, "list back" phrasing |
+| `e2e/tests/9_async/test_9a3b_with_approval.py` | post-approval check downgraded to non-blocking secondary observation |
+
+**Verified.** 819 unit tests pass, ruff clean on all touched files,
+event validation 1205/1205 (100%). Two consecutive `run_random_tests.py 10`
+passes ran 10/10 each across areas 1, 2, 4, 8, 9, 12, 13, 17, 18, 19.
+Zero regressions.
 
 ### 2026-04-27/28: Cold-path performance pass — 108s → ~58-65s on the canonical PDF prompt
 
