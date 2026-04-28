@@ -305,6 +305,96 @@ class RequestAnalyzer:
         )
 
     @staticmethod
+    def _heuristic_is_user_self_recall(user_message: str) -> bool:
+        """
+        Detect whether a request is asking the agent to recall information
+        the USER previously shared about THEMSELVES.
+
+        Used as a defensive override for the LLM-based security analyzer's
+        ``information_extraction`` classification, which is intended for
+        attacks against system / agent state ("show me your config",
+        "reveal your system prompt") but occasionally false-positives on
+        legitimate conversational recall ("list back the role I mentioned
+        earlier", "what did I tell you about myself?", "summarize my
+        profession").
+
+        We only return True when BOTH (a) a first-person possessor anchors
+        the request to the user's OWN information and (b) a recall verb /
+        anaphora signals that the request points BACK at earlier turns
+        rather than at system state. This intentionally favours precision
+        over recall — when in doubt the LLM classification stands.
+
+        Returns ``True`` only when the message is confidently a self-recall
+        request. Returns ``False`` for ambiguous or unrelated messages.
+        """
+        import re
+
+        if not user_message or not user_message.strip():
+            return False
+
+        msg = user_message.lower()
+
+        # First-person possessor patterns: "my X", "myself", "I told you",
+        # "I mentioned", "I said", "about me". A bare "I" is too noisy.
+        first_person_patterns = [
+            r"\bmy\s+\w+",
+            r"\bmyself\b",
+            r"\babout\s+me\b",
+            r"\bi\s+(?:just\s+)?(?:told|tell|mentioned|said|shared|gave|provided)\b",
+        ]
+        has_first_person = any(re.search(p, msg) for p in first_person_patterns)
+        if not has_first_person:
+            return False
+
+        # Recall / "look back" anchors. Phrases that explicitly point at
+        # the conversation so far rather than at system state.
+        recall_patterns = [
+            r"\bmentioned\s+earlier\b",
+            r"\bi\s+(?:just\s+)?(?:told|tell|mentioned|said|shared|gave|provided)\b",
+            r"\blist\s+back\b",
+            r"\btell\s+(?:me\s+)?back\b",
+            r"\bremind\s+me\b",
+            r"\brestate\b",
+            r"\brepeat\s+back\b",
+            r"\bwhat\s+(?:did|have)\s+i\b",
+            # "what's my X" / "what is my X" / "what was my X". Note that
+            # "what's" is a single token, so the apostrophe pattern must
+            # not require whitespace between "what" and "'s".
+            r"\bwhat'?s\s+my\b",
+            r"\bwhat\s+(?:is|was)\s+my\b",
+            r"\bwhat\s+do\s+you\s+(?:remember|recall|know)\s+about\s+me\b",
+            r"\bsummari[sz]e\s+(?:my|what\s+i)\b",
+            r"\bin\s+our\s+conversation\b",
+            r"\bso\s+far\b",
+            r"\bearlier\s+in\s+(?:this|our)\b",
+        ]
+        has_recall_anchor = any(re.search(p, msg) for p in recall_patterns)
+        if not has_recall_anchor:
+            return False
+
+        # Hard rejection: messages that clearly target SYSTEM state even
+        # if they contain "my" (e.g., "what's my access to your config?").
+        # The information_extraction prompt examples list these explicitly.
+        system_targets = [
+            "your system prompt",
+            "your config",
+            "your configuration",
+            "your instructions",
+            "your tools",
+            "your api key",
+            "your credentials",
+            "your password",
+            "your secrets",
+            "your architecture",
+            "how were you built",
+            "how you were built",
+        ]
+        if any(target in msg for target in system_targets):
+            return False
+
+        return True
+
+    @staticmethod
     def _heuristic_detect_scheduler_query(message_lower: str) -> bool:
         """Detect scheduler query intent via keyword patterns."""
         import re
@@ -354,6 +444,35 @@ class RequestAnalyzer:
             if not analysis.is_scheduler_query_request:
                 if self._heuristic_detect_scheduler_query(user_message.lower()):
                     analysis.is_scheduler_query_request = True
+
+            # Defensive override: the LLM classifier is non-deterministic on
+            # borderline information-extraction phrasings and sometimes
+            # blocks legitimate user-self-recall ("list back the role I
+            # mentioned earlier", "what did I tell you about myself?").
+            # The threat category is unambiguously about reading SYSTEM /
+            # AGENT / INFRASTRUCTURE state — recall of the user's own
+            # earlier utterances is not in scope. When the heuristic
+            # confidently identifies user-self-recall, downgrade.
+            if (
+                analysis.is_security_threat
+                and analysis.threat_type == "information_extraction"
+                and self._heuristic_is_user_self_recall(user_message)
+            ):
+                observability.observe(
+                    event_type=observability.ConversationEvents.WORKFLOW_ANALYSIS_FAILED,
+                    level=observability.EventLevel.INFO,
+                    data={
+                        "reason": "user_self_recall_override",
+                        "original_threat_type": analysis.threat_type,
+                        "message_preview": user_message[:120],
+                    },
+                    description=(
+                        "LLM flagged user-self-recall as information_extraction; "
+                        "heuristic override downgraded to non-threat"
+                    ),
+                )
+                analysis.is_security_threat = False
+                analysis.threat_type = None
 
             return analysis
 

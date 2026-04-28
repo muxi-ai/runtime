@@ -8405,10 +8405,17 @@ Agent response: {raw_response}"""
 
         approval_message = await self.approval_manager.present_plan_for_approval(workflow)
 
-        # Store clarification info if session_id exists
+        # Store clarification info if session_id exists.
+        # MUST be synchronous: the user receives the approval prompt and is
+        # expected to reply almost immediately ("Yes, please proceed"). If
+        # the pending-clarification write is fire-and-forget, the user's
+        # reply can race past it, _get_pending_clarification returns None
+        # on the next request, the workflow_approval branch is skipped,
+        # and the approval message is treated as a fresh, contextless
+        # prompt. Same fix is applied at the ambiguous_credential path
+        # for the same reason.
         if session_id:
-
-            self._set_pending_clarification(
+            await self._set_pending_clarification_sync(
                 session_id,
                 {
                     "type": "workflow_approval",
