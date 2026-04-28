@@ -2255,9 +2255,7 @@ class Overlord:
                         "service": "local_classifier",
                         "model": self._local_classifier.model,
                         "warmup_ms": warmup_ms,
-                        "intents": list(
-                            self._local_classifier.diagnostic_snapshot().keys()
-                        ),
+                        "intents": list(self._local_classifier.diagnostic_snapshot().keys()),
                     },
                     description="Local classification service warmed up",
                 )
@@ -4680,9 +4678,7 @@ Agent response: {raw_response}"""
                         else:
                             cleaned.append(piece)
                     body = " ".join(cleaned).strip()
-                    sections.append(
-                        f"### {filename} (audio transcription)\n{body}"
-                    )
+                    sections.append(f"### {filename} (audio transcription)\n{body}")
                 else:
                     body = "\n\n".join(content_pieces).strip()
                     label = {

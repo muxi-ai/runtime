@@ -849,9 +849,7 @@ class Agent:
             descriptor_parts = [str(p) for p in (atype, fmt) if p]
             descriptor = "/".join(descriptor_parts) if descriptor_parts else None
             size_str = (
-                f"{size_bytes / 1024:.1f} KB"
-                if isinstance(size_bytes, (int, float))
-                else None
+                f"{size_bytes / 1024:.1f} KB" if isinstance(size_bytes, (int, float)) else None
             )
             bracket = ", ".join(p for p in (descriptor, size_str) if p)
             lines.append(f"- {filename}" + (f" ({bracket})" if bracket else ""))
@@ -2108,9 +2106,7 @@ class Agent:
                                 "or re-share the file."
                             )
                             if self.system_message:
-                                system_content = (
-                                    f"{self.system_message}\n\n{file_results_clause}"
-                                )
+                                system_content = f"{self.system_message}\n\n{file_results_clause}"
                             else:
                                 system_content = (
                                     f"You are a helpful assistant. {file_results_clause}"

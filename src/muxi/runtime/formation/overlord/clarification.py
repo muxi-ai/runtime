@@ -520,7 +520,7 @@ class UnifiedClarificationSystem:
                 lines = message.split("\n")
                 for i, line in enumerate(lines):
                     if line.strip() == "=== CURRENT REQUEST ===":
-                        for line2 in lines[i + 1:]:  # noqa: E203
+                        for line2 in lines[i + 1 :]:  # noqa: E203
                             stripped = line2.strip()
                             if stripped.startswith("User:"):
                                 extracted_message_for_classifier = stripped[5:].strip()
@@ -838,9 +838,7 @@ class UnifiedClarificationSystem:
                 f"Collected: {state.get('collected_info', '')}"
             )
             classifier = await self.overlord._get_local_classifier()
-            needs_more, margin = await classifier.classify_binary(
-                "clarification_needs_more", joint
-            )
+            needs_more, margin = await classifier.classify_binary("clarification_needs_more", joint)
             if not needs_more:
                 observability.observe(
                     event_type=observability.ConversationEvents.CLARIFICATION_SKIPPED,
@@ -855,7 +853,9 @@ class UnifiedClarificationSystem:
                 )
                 return {"needs_more": False, "question": None}
         except Exception as e:
-            logger.debug(f"check_need_more classifier fast-path failed, falling through to LLM: {e}")
+            logger.debug(
+                f"check_need_more classifier fast-path failed, falling through to LLM: {e}"
+            )
 
         from ..prompts.loader import PromptLoader
 
@@ -933,9 +933,7 @@ class UnifiedClarificationSystem:
             return False
         try:
             classifier = await self.overlord._get_local_classifier()
-            label, _margin = await classifier.classify_binary(
-                "clarification_stop", response
-            )
+            label, _margin = await classifier.classify_binary("clarification_stop", response)
             return label
         except Exception:
             return False
@@ -1489,9 +1487,7 @@ Please check {mcp_service}'s documentation for specific instructions on obtainin
             # general-knowledge / task-request as negative.
             try:
                 classifier = await self.overlord._get_local_classifier()
-                label, _margin = await classifier.classify_binary(
-                    "recall_question", clean_message
-                )
+                label, _margin = await classifier.classify_binary("recall_question", clean_message)
 
                 # Cancellation check, preserved from the LLM-based path
                 # for parity. Runs after every gate call so a cancel

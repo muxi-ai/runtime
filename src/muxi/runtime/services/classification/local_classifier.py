@@ -98,8 +98,7 @@ def _centroid(vectors: list[list[float]]) -> list[float]:
     for vec in vectors:
         if len(vec) != dim:
             raise ValueError(
-                f"Vector dimension mismatch in centroid: expected {dim}, "
-                f"got {len(vec)}"
+                f"Vector dimension mismatch in centroid: expected {dim}, " f"got {len(vec)}"
             )
         for i, v in enumerate(vec):
             accum[i] += v
@@ -208,9 +207,7 @@ class LocalClassifier:
             )
             self._specs[spec.name] = spec
 
-    async def classify_binary(
-        self, name: str, text: str
-    ) -> Tuple[bool, float]:
+    async def classify_binary(self, name: str, text: str) -> Tuple[bool, float]:
         """Classify ``text`` against the registered intent ``name``.
 
         Returns
@@ -236,9 +233,7 @@ class LocalClassifier:
         if not text or not text.strip():
             # Empty input is a wiring bug, not user data. Embedding it
             # would raise inside ``embed()``; we surface a clearer error.
-            raise ValueError(
-                f"classify_binary({name!r}) called with empty text"
-            )
+            raise ValueError(f"classify_binary({name!r}) called with empty text")
 
         # Auto-register on first use if a built-in intent was requested
         # but warmup wasn't called explicitly. Keeps the call sites in
