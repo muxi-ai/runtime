@@ -2225,21 +2225,36 @@ class Overlord:
         fallback defaults around their classify call sites, so a
         transient HF outage doesn't take the runtime down.
         """
+        from ...services.classification import get_classifier
+
         if self._local_classifier is not None and self._local_classifier.is_warmed:
             return self._local_classifier
+
         async with self._local_classifier_lock:
-            if self._local_classifier is None:
-                self._local_classifier = LocalClassifier()
-            if not self._local_classifier.is_warmed:
-                t0 = time.perf_counter()
-                await self._local_classifier.warmup()
+            if self._local_classifier is not None and self._local_classifier.is_warmed:
+                return self._local_classifier
+            already_warmed_in_singleton = (
+                # If the process-wide singleton is already warmed (e.g. another
+                # overlord or the scheduler / fusion engine touched it first),
+                # we just adopt it; we don't double-emit the warmup event.
+                False
+            )
+            t0 = time.perf_counter()
+            classifier = await get_classifier()
+            warmup_ms = int((time.perf_counter() - t0) * 1000)
+            # Heuristic: a sub-millisecond return means the singleton was
+            # already warmed by a prior consumer, so we skip the
+            # observability event for THIS overlord.
+            already_warmed_in_singleton = warmup_ms < 50
+            self._local_classifier = classifier
+            if not already_warmed_in_singleton:
                 observability.observe(
                     event_type=observability.SystemEvents.SERVICE_INITIALIZED,
                     level=observability.EventLevel.INFO,
                     data={
                         "service": "local_classifier",
                         "model": self._local_classifier.model,
-                        "warmup_ms": int((time.perf_counter() - t0) * 1000),
+                        "warmup_ms": warmup_ms,
                         "intents": list(
                             self._local_classifier.diagnostic_snapshot().keys()
                         ),

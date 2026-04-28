@@ -537,71 +537,18 @@ Respond in JSON format:
 
     async def is_credential_request(self, message: str) -> bool:
         """
-        Check if message is requesting to add credentials using LLM.
-        Simple binary check for credential addition intent.
+        Check if message is requesting to add credentials.
 
-        Args:
-            message: User's message to analyze
-
-        Returns:
-            True if user is requesting to add credentials, False otherwise
+        Uses the local prototype-similarity classifier (no cloud LLM
+        round-trip). Falls through to ``False`` on classifier failure
+        — conservative bias matches the prior LLM-fail behavior.
         """
-        # Use LLM to detect credential request intent
-        text_model_config = self.overlord._capability_models.get("text")
-        if not text_model_config:
-            return False
-
-        model_name = text_model_config.get("model")
-        cache_key = f"credential_request_{model_name}"
-
-        if cache_key in self.overlord._model_cache:
-            llm = self.overlord._model_cache[cache_key]
-        else:
-            # Filter out params we're setting explicitly to avoid duplicate kwargs
-            settings = {
-                k: v
-                for k, v in text_model_config.get("settings", {}).items()
-                if k not in ["temperature", "max_tokens"]
-            }
-            llm = await self.overlord.create_model(
-                model=model_name,
-                api_key=text_model_config.get("api_key"),
-                temperature=0.0,
-                max_tokens=10,
-                **settings,
-            )
-            self.overlord._model_cache[cache_key] = llm
-
-        system_prompt = """Analyze messages to determine if the user is asking to ADD or CONFIGURE new credentials.
-
-Examples of credential requests:
-- "I need to add a new GitHub account"
-- "Configure new API key"
-- "Set up different credentials"
-- "Add another account"
-
-Examples of NON-credential requests:
-- "Use my GitHub account"
-- "List my repositories"
-- "What's my balance?"
-
-Respond with only "YES" if requesting to add credentials, "NO" otherwise."""
-
         try:
-            messages = [
-                {"role": "system", "content": system_prompt},
-                {"role": "user", "content": message},
-            ]
-            response_obj = await llm.chat(messages)
-            response = (
-                response_obj.content if hasattr(response_obj, "content") else str(response_obj)
-            )
-
-            result = response.strip().upper()
-            return result == "YES"
-        except Exception:
-            # Failed to detect credential request via LLM
-            pass
+            classifier = await self.overlord._get_local_classifier()
+            label, _ = await classifier.classify_binary("credential_request", message)
+            return label
+        except Exception as e:
+            logger.debug(f"Failed to detect credential request via classifier: {e}")
             return False
 
     async def handle_credential_request(
@@ -779,129 +726,43 @@ Generate only the message, nothing else."""
             return f"I need your {service} credentials to continue."
 
     async def _is_cancellation(self, message: str) -> bool:
-        """Check if user wants to cancel credential entry using LLM."""
-        system_prompt = """The user is in the middle of providing credentials.
-Determine if they are trying to cancel/abort/skip the credential entry process.
+        """Check if user wants to cancel credential entry.
 
-Examples of cancellation (in any language):
-- "nevermind"
-- "forget it"
-- "cancel"
-- "I don't want to"
-- "skip this"
-- "later"
-- "stop"
-- "no thanks"
-- "pas maintenant" (French: not now)
-- "cancelar" (Spanish: cancel)
-- "やめる" (Japanese: stop)
-
-IMPORTANT: These are NOT cancellations - they are HELP REQUESTS:
-- "I don't know how to get a token"
-- "How do I get this?"
-- "Can you help me?"
-- "Where do I find this?"
-- "What is this?"
-
-If the user is asking for help or guidance, respond NO (not a cancellation).
-
-Respond with only YES or NO."""
-
+        Uses the local prototype-similarity classifier with curated
+        positive examples (cancel / nevermind / skip — including
+        Spanish / French / Japanese variants from the legacy LLM
+        prompt) and negatives (help requests, actual credential
+        strings). On classifier failure we conservatively return
+        ``False`` so users do not accidentally exit a credential flow.
+        """
         try:
-            # Use properly configured LLM from overlord/formation
-            llm = await self._get_configured_llm(cache_suffix="cancellation", max_tokens=10)
-            if not llm:
-                # No configured LLM available, fallback to simple pattern matching
-                cancel_patterns = [
-                    "cancel",
-                    "stop",
-                    "nevermind",
-                    "forget",
-                    "skip",
-                    "abort",
-                    "no",
-                    "later",
-                ]
-                message_lower = message.lower()
-                return any(pattern in message_lower for pattern in cancel_patterns)
-
-            messages = [
-                {"role": "system", "content": system_prompt},
-                {"role": "user", "content": message},
-            ]
-            response_obj = await llm.chat(messages)
-            response = (
-                response_obj.content if hasattr(response_obj, "content") else str(response_obj)
-            )
-            return response.strip().upper().startswith("YES")
+            classifier = await self.overlord._get_local_classifier()
+            label, _ = await classifier.classify_binary("credential_cancellation", message)
+            return label
         except Exception as e:
-            logger.debug(f"Failed to check cancellation with LLM: {e}")
-            # On LLM failure, assume not cancellation to avoid accidental exits
+            logger.debug(f"Failed to check cancellation with classifier: {e}")
             return False
 
     async def _is_help_request(self, message: str) -> bool:
-        """Check if user is asking for help/guidance on getting credentials."""
-        system_prompt = """The user is in the middle of providing credentials.
-Determine if they are asking for HELP or GUIDANCE on how to obtain credentials.
+        """Check if user is asking for help/guidance on getting credentials.
 
-Examples of help requests (in any language):
-- "I don't know how to get a token"
-- "How do I get this?"
-- "Can you help me?"
-- "Where do I find this?"
-- "What is this?"
-- "How do I create one?"
-- "I need help"
-- "Show me how"
-- "¿Cómo obtengo esto?" (Spanish: How do I get this?)
-- "Comment obtenir ça?" (French: How to get this?)
-- "これをどうやって入手しますか？" (Japanese: How do I get this?)
-
-IMPORTANT: These are NOT help requests - they are PROVIDING credentials:
-- "Thanks for the help! Here's my token: xyz123"
-- "Here is my key: abc789"
-- "My token is: ghp_xxxxx"
-- If the message contains what looks like an actual credential/token, respond NO
-
-Respond with only YES or NO."""
-
+        Uses the local prototype-similarity classifier. Positives
+        include multilingual help phrases (Spanish / French / Japanese);
+        negatives include actual credential strings so that messages
+        carrying tokens are not misclassified as help requests. The
+        classifier's negative centroid handles the legacy 'token:' /
+        'here is my key' heuristic implicitly. On classifier failure we
+        conservatively fall back to a minimal keyword test that
+        preserves the prior 'message contains a credential string'
+        guard.
+        """
         try:
-            llm = await self._get_configured_llm(cache_suffix="help", max_tokens=10)
-            if not llm:
-                # Fallback to simple pattern matching
-                message_lower = message.lower()
-                # If message contains a token-like string, it's NOT a help request
-                if any(
-                    pattern in message_lower
-                    for pattern in ["here's my", "here is my", "my token is", "token:", "key:"]
-                ):
-                    return False
-                help_patterns = [
-                    "don't know",
-                    "how do i",
-                    "how to",
-                    "can you help",
-                    "help me",
-                    "where do i",
-                    "what is",
-                    "show me",
-                ]
-                return any(pattern in message_lower for pattern in help_patterns)
-
-            messages = [
-                {"role": "system", "content": system_prompt},
-                {"role": "user", "content": message},
-            ]
-            response_obj = await llm.chat(messages)
-            response = (
-                response_obj.content if hasattr(response_obj, "content") else str(response_obj)
-            )
-            return response.strip().upper().startswith("YES")
+            classifier = await self.overlord._get_local_classifier()
+            label, _ = await classifier.classify_binary("credential_help_request", message)
+            return label
         except Exception as e:
-            logger.debug(f"Failed to check help request with LLM: {e}")
-            # On LLM failure, fallback to pattern matching
+            logger.debug(f"Failed to check help request with classifier: {e}")
             message_lower = message.lower()
-            # If message contains a token-like string, it's NOT a help request
             if any(
                 pattern in message_lower
                 for pattern in ["here's my", "here is my", "my token is", "token:", "key:"]

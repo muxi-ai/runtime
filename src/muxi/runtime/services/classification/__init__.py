@@ -24,6 +24,9 @@ Public API
   across overlord and clarification modules.
 """
 
+import asyncio
+from typing import Optional
+
 from .local_classifier import LocalClassifier
 from .prototypes import (
     ACTIONABILITY,
@@ -40,9 +43,44 @@ from .prototypes import (
     IntentSpec,
 )
 
+# Process-level singleton: the classifier is stateless after warmup
+# (model weights + cached prototype centroids), so a single instance
+# is safe to share across overlords / services / formations. Consumers
+# that don't have an overlord reference (scheduler JobManager, fusion
+# engine) call ``get_classifier()`` to obtain the warmed singleton.
+_singleton: Optional[LocalClassifier] = None
+_singleton_lock = asyncio.Lock()
+
+
+async def get_classifier() -> LocalClassifier:
+    """Return the warmed process-wide LocalClassifier singleton.
+
+    Lazily constructs and warms the classifier on first call. Lock-
+    protected so concurrent first-touch callers don't both pay the
+    warmup cost. Subsequent calls return the cached instance
+    immediately.
+
+    The first overlord to come up will normally trigger warmup via its
+    own observability-instrumented ``_get_local_classifier()``; this
+    helper exists for non-overlord consumers (scheduler, fusion engine,
+    other services) that need the same shared instance without taking
+    a runtime dependency on the overlord.
+    """
+    global _singleton
+    if _singleton is not None and _singleton.is_warmed:
+        return _singleton
+    async with _singleton_lock:
+        if _singleton is None:
+            _singleton = LocalClassifier()
+        if not _singleton.is_warmed:
+            await _singleton.warmup()
+    return _singleton
+
+
 __all__ = [
     "LocalClassifier",
     "IntentSpec",
+    "get_classifier",
     "ACTIONABILITY",
     "WORKFLOW_ELIGIBILITY",
     "SIMPLE_QUESTION",
