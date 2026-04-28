@@ -88,7 +88,7 @@ dependencies = [
     # Native 1.0 migration landed 2026-04-21; services/a2a/_sdk_helpers.py
     # centralises protobuf glue (Part/Struct/Value wrapping, MessageToDict).
     "a2a-sdk>=1.0,<2.0",  # Google's Agent-to-Agent SDK for inter-agent communication
-    "protobuf>=5.29.5,<8",  # a2a-sdk 1.0 uses protobuf; the 6.x json_format.py is incompatible
+    "protobuf>=5.29.5,<8",  # a2a-sdk 1.0 uses protobuf; MessageToDict fallbacks handle any json_format API differences
 
 
     # Server components
