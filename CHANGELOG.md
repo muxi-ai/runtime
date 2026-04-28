@@ -2,6 +2,194 @@
 
 ## [unreleased]
 
+### Performance: localize 13 binary classification gates — heavy PDF median 60.4 s → 50.7 s (-16 %)
+
+The pre-planning critical path was emitting 4-5 cloud LLM calls per
+non-trivial request — actionability detection, workflow eligibility,
+clarification analysis, simple-question detection, recall-question
+detection, plus credential and scheduler binary checks deeper in the
+flow. Every one of those was structurally a **binary** decision
+(yes/no, label/no-label) or a pure semantic-similarity score. None of
+them needed a cloud LLM. A 384-dim multilingual embedder pinned
+against curated prototype exemplars classifies them in ~60 ms with
+deterministic accuracy on the eval set, and ships as part of the
+runtime — no extra service, no API key, no network round-trip.
+
+**The architecture.** New `services/classification/` module:
+
+* `prototypes.py` — 11 `IntentSpec` definitions, each carrying 8-15
+  positive + 8-15 negative exemplars (with 1-2 multilingual entries per
+  spec where the call site is multilingual).
+* `local_classifier.py` — `classify_binary(intent, text)` and
+  `pairwise_similarity(text_a, text_b)`.
+* `__init__.py` — public API + a process-wide singleton accessor
+  (`await get_classifier()`).
+
+The model is `local/Xenova/multilingual-e5-small` (384-dim, ONNX,
+multilingual), auto-downloaded by OneLLM on first use, cached under
+the standard HuggingFace cache directory. Classifier warmup batch-
+embeds all positive and negative exemplars once at first use,
+computes L2-normalized centroid pairs per intent, and caches them
+in-process. Per-call cost: ~60 ms median on Apple Silicon ONNX
+Runtime. Process warmup is ~13 s, amortized.
+
+**Phase 1 (commits `3acd09e9`, `1ca9b3be`) — six pre-planning gates
+moved local:**
+
+* `Overlord._is_actionable_message`
+* `Overlord._is_non_actionable_for_workflow`
+* `Overlord._is_simple_question`
+* `UnifiedClarificationSystem._check_context_switch`
+* `UnifiedClarificationSystem._check_stop_intent`
+* The recall-question detection at STEP 1 of `_analyze_request`
+
+**Phase 2 (commits `3fc8d8c1` → `cd39e50c`) — seven more gates in
+three patterns:**
+
+* **Group A — full replacements (no LLM fallback when classifier is
+  healthy).**
+  * `CredentialHandler.is_credential_request`
+  * `CredentialHandler._is_cancellation` (multilingual: en/es/fr/ja
+    exemplars)
+  * `CredentialHandler._is_help_request` (multilingual)
+  * `JobManager._is_significant_prompt_change` →
+    `pairwise_similarity(old, new) < 0.88` (calibrated threshold).
+* **Group D — direct cosine replacement.**
+  * `MultiModalFusionEngine._calculate_semantic_similarity` →
+    `pairwise_similarity(source_desc, target_desc)`. The LLM was being
+    asked to score 0.0-1.0 similarity; that *is* cosine in an
+    embedding space, so we compute it directly.
+* **Group B — fast-path skip (split text generation from
+  classification decision).**
+  The clarification analyzer (`mt=250-1000`) and the inner "do we
+  need more info?" gate produce a `{needs_X: bool, question: str}`
+  structured output. The classifier owns the binary; the LLM only
+  fires on the positive branch (where it has to *generate* the
+  clarifying question). On a confident-no the LLM never runs.
+  Wired in `UnifiedClarificationSystem._analyze_request` (STEP 1.5)
+  and `_check_need_more` (STEP 0).
+
+**Deferred (intentional, not regressions):**
+
+* **Agent router** (`AgentRouter.select_agent_for_message`,
+  sequential, ~8 s on heavy PDF). Skipped for defense-in-depth
+  security reasons — the router doubles as a defense surface against
+  malicious agent-name injection in user input.
+* **Topic extraction** in `RequestAnalyzer` (parallel, ~1.5 s).
+  Skipped because the analyzer LLM still runs for 11 other
+  structured-output fields — replacing topics alone breaks the call
+  into two round-trips and saves nothing.
+* **`IntentDetectionService`** (4+ multi-class call sites).
+  Skipped: bigger blast radius; would need a `classify_multiclass`
+  method and per-`IntentType` prototype curation.
+
+**Failure modes — every wired gate falls back to the prior behavior
+on classifier-fail.** Group A credential gates fall back to the
+preserved keyword fallback from the legacy LLM-fail branches. Group
+A scheduler gate falls back to `True` (consider all changes
+significant — same conservative default the prior LLM-fail branch
+used; better to spawn a fresh job than silently reassign one). Group
+D fusion engine falls back to neutral 0.5. Group B fast-paths fall
+through to the existing LLM call path. This fall-through is the
+safety net, not a feature flag — a transient classifier outage
+degrades gracefully back to pre-Phase-2 behavior with no config
+surface to keep in sync.
+
+**Observability.** New
+`SystemEvents.LOCAL_CLASSIFIER_INITIALIZED` (emitted once per process
+the first time the classifier warms; carries `warmup_ms` and the list
+of warmed intents). Group B fast-path skips reuse
+`ConversationEvents.CLARIFICATION_SKIPPED` with
+`method: "local_classifier_fast_path"` and `margin: <float>` so
+operators can audit how often they fire and what the classifier's
+confidence looked like.
+
+**Measured impact** on the canonical
+`hello-muxi → "create a one-page PDF about MUXI"` workload, three
+runs per condition, same prompts in same order:
+
+| Stage | Heavy PDF wall (median) |
+|---|---:|
+| Phase 0 (post-perf, pre-classifier) | 60.353 s |
+| Phase 1 + 2 (today) | **50.709 s** |
+
+Wall-time delta vs Phase 0: **-9.6 s, -16 %.** Cumulative delta vs the
+original 108 s baseline: **-57.3 s, -53 %.** LLM call buckets across
+the three runs:
+
+| Bucket | Phase 0 | Phase 2 |
+|---|---:|---:|
+| classification (`mt <= 64`) | 3 | **0** |
+| synthesis (`mt <= 4000`) | 8 | 9 |
+| planning (`mt > 4000`) | 2 | 1 |
+
+The cleanest signal is `classification` going to **zero** across all
+three Phase 2 runs — direct confirmation that the binary gates are
+now exclusively local. The +1 in synthesis is the clarification
+analyzer (`mt=250`) still firing on runs where the classifier defers;
+the Group B fast-path is opportunistic by design, not aggressive.
+
+The 9.6 s improvement comes almost entirely from the **Group B
+fast-path on the clarification analyzer**, which was the bottleneck
+of the parallel pre-planning batch in the Phase 0 trace. The four
+parallel gates ran via `asyncio.gather` and the wall clock was bound
+by the slowest call (~5 s clarification analyzer). Phase 2 collapses
+that to ~60 ms when the classifier is confident no clarification is
+needed (which it should be, and is, on "create a one-page PDF about
+MUXI").
+
+The remaining ~50 s on the heavy PDF path is downstream of
+pre-planning — agent router (~8 s), topic extraction (~1.5 s), the
+planning round-trip itself (~30-40 s on Sonnet-class models for
+16 K-token planning prompts with 56 MCP tools in scope), plus
+post-planning execution + synthesis. None of those are
+binary-classification-shaped, so none of them are this pass's target.
+
+**Microbench (server-free)** in `bench/classifier_microbench.py`
+exercises the classifier in isolation:
+
+| Op | Median | Per-call speedup vs cloud LLM |
+|---|---:|---:|
+| `classify_binary` (across all 11 intents) | 51-79 ms | ~12-13× |
+| `pairwise_similarity` (10 paraphrase pairs) | 53 ms | ~12× |
+
+(The reference cloud cost is ~750 ms median for `mt <= 1000`
+`gpt-4o-mini` calls, measured on the same network during Phase 0
+baselining.)
+
+**Tests.** `tests/unit/test_local_classifier.py` adds 45 tests covering:
+spec invariants (disjoint pos/neg sets, length cap), accuracy floors
+(≥85 % per IntentSpec eval set), pairwise correctness (identical near
+1.0, paraphrase ≥0.95, cross-language same-task ≥0.85, same-vs-
+different gap ≥0.10, symmetry within 1e-5, empty input raises),
+failure modes (unknown intent, register idempotency), diagnostic
+snapshot, and singleton accessor identity. Full unit suite: 864
+passed, 3 skipped, zero regressions. Event validation 1210/1210
+(100 %).
+
+**Files of record:**
+
+* `src/muxi/runtime/services/classification/{prototypes.py,
+  local_classifier.py, __init__.py}` — new
+* `src/muxi/runtime/formation/overlord/overlord.py` — singleton
+  accessor + 3 Phase 1 gates
+* `src/muxi/runtime/formation/overlord/clarification.py` — 3 Phase 1
+  gates + 2 Phase 2 Group B fast-paths
+* `src/muxi/runtime/formation/credentials/handler.py` — 3 Phase 2
+  Group A credential gates
+* `src/muxi/runtime/services/scheduler/manager.py` — Phase 2 Group A
+  scheduler pairwise gate
+* `src/muxi/runtime/services/multimodal/fusion_engine.py` — Phase 2
+  Group D pairwise replacement
+* `src/muxi/runtime/datatypes/observability.py` —
+  `LOCAL_CLASSIFIER_INITIALIZED` event
+* `tests/unit/test_local_classifier.py` — 45 tests
+* `bench/run_baseline.py`, `bench/compare_phase2.py`,
+  `bench/classifier_microbench.py` — measurement harnesses
+* `bench/local_classification_baseline.{json,md}`,
+  `bench/local_classification_phase2.{json,md}`,
+  `bench/classifier_microbench.{json,md}` — measurement artifacts
+
 ### Fix: remote-buffer recall in `_enhance_message_with_context`
 
 Symptom: in remote-buffer / FAISSx mode
