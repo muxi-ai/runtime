@@ -1,0 +1,138 @@
+{
+  "started_at": "2026-04-28T19:20:50+0100",
+  "model": "local/Xenova/multilingual-e5-small",
+  "runs_per_eval_set": 3,
+  "cloud_baseline_ms_per_call": 750.0,
+  "warmup_ms": 12472.6,
+  "intents": {
+    "actionable": {
+      "count": 30,
+      "min_ms": 22.044,
+      "median_ms": 55.33,
+      "p95_ms": 75.441,
+      "max_ms": 89.213,
+      "mean_ms": 55.16,
+      "stdev_ms": 16.296,
+      "total_ms": 1654.803
+    },
+    "workflow_eligible": {
+      "count": 30,
+      "min_ms": 40.549,
+      "median_ms": 62.539,
+      "p95_ms": 107.146,
+      "max_ms": 117.302,
+      "mean_ms": 67.513,
+      "stdev_ms": 20.684,
+      "total_ms": 2025.397
+    },
+    "simple_question": {
+      "count": 30,
+      "min_ms": 35.989,
+      "median_ms": 64.361,
+      "p95_ms": 108.974,
+      "max_ms": 166.739,
+      "mean_ms": 70.895,
+      "stdev_ms": 25.292,
+      "total_ms": 2126.861
+    },
+    "clarification_context_switch": {
+      "count": 30,
+      "min_ms": 23.438,
+      "median_ms": 50.988,
+      "p95_ms": 91.937,
+      "max_ms": 127.82,
+      "mean_ms": 58.068,
+      "stdev_ms": 24.022,
+      "total_ms": 1742.045
+    },
+    "clarification_stop": {
+      "count": 30,
+      "min_ms": 19.193,
+      "median_ms": 49.002,
+      "p95_ms": 64.097,
+      "max_ms": 70.818,
+      "mean_ms": 45.64,
+      "stdev_ms": 14.807,
+      "total_ms": 1369.198
+    },
+    "clarification_needed": {
+      "count": 30,
+      "min_ms": 20.724,
+      "median_ms": 55.751,
+      "p95_ms": 114.122,
+      "max_ms": 133.346,
+      "mean_ms": 63.872,
+      "stdev_ms": 26.941,
+      "total_ms": 1916.159
+    },
+    "clarification_needs_more": {
+      "count": 30,
+      "min_ms": 44.445,
+      "median_ms": 78.837,
+      "p95_ms": 135.889,
+      "max_ms": 204.683,
+      "mean_ms": 87.25,
+      "stdev_ms": 31.965,
+      "total_ms": 2617.511
+    },
+    "credential_cancellation": {
+      "count": 30,
+      "min_ms": 19.498,
+      "median_ms": 48.078,
+      "p95_ms": 65.478,
+      "max_ms": 69.655,
+      "mean_ms": 48.605,
+      "stdev_ms": 11.881,
+      "total_ms": 1458.163
+    },
+    "credential_help_request": {
+      "count": 30,
+      "min_ms": 41.395,
+      "median_ms": 54.394,
+      "p95_ms": 84.344,
+      "max_ms": 89.736,
+      "mean_ms": 58.596,
+      "stdev_ms": 12.18,
+      "total_ms": 1757.894
+    },
+    "credential_request": {
+      "count": 30,
+      "min_ms": 24.703,
+      "median_ms": 51.928,
+      "p95_ms": 126.902,
+      "max_ms": 157.419,
+      "mean_ms": 62.733,
+      "stdev_ms": 31.71,
+      "total_ms": 1881.989
+    },
+    "recall_question": {
+      "count": 30,
+      "min_ms": 21.123,
+      "median_ms": 48.529,
+      "p95_ms": 63.143,
+      "max_ms": 79.058,
+      "mean_ms": 47.199,
+      "stdev_ms": 13.104,
+      "total_ms": 1415.98
+    }
+  },
+  "pairwise_similarity": {
+    "count": 30,
+    "min_ms": 25.31,
+    "median_ms": 53.058,
+    "p95_ms": 93.068,
+    "max_ms": 105.573,
+    "mean_ms": 57.742,
+    "stdev_ms": 21.612,
+    "total_ms": 1732.273
+  },
+  "aggregates": {
+    "mean_classify_binary_ms": 60.503,
+    "mean_pairwise_similarity_ms": 57.742,
+    "classify_binary_speedup_vs_cloud": 12.4,
+    "pairwise_similarity_speedup_vs_cloud": 13.0,
+    "ms_saved_per_classify_call": 689.497,
+    "ms_saved_per_pairwise_call": 692.258,
+    "worst_case_per_request_savings_ms": 8969.0
+  }
+}
