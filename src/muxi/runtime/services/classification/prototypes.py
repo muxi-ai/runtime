@@ -246,6 +246,196 @@ CLARIFICATION_STOP_INTENT = IntentSpec(
 )
 
 
+CREDENTIAL_CANCELLATION = IntentSpec(
+    name="credential_cancellation",
+    description=(
+        "True when the user, in the middle of a credential-collection "
+        "flow, wants to cancel / abort / skip providing the credential. "
+        "False for help requests ('how do I get one?') and for actual "
+        "credential strings. Multilingual."
+    ),
+    positive=[
+        "cancel",
+        "stop",
+        "nevermind",
+        "never mind",
+        "forget it",
+        "skip this",
+        "skip it for now",
+        "abort",
+        "I don't want to",
+        "no thanks",
+        "later",
+        "maybe later",
+        "not now",
+        "pas maintenant",
+        "cancelar",
+        "olvidalo",
+    ],
+    negative=[
+        "How do I get a token?",
+        "Where do I find this?",
+        "Can you help me?",
+        "I don't know how to get this",
+        "What is this for?",
+        "Show me how",
+        "ghp_abc123def456",  # actual credential string
+        "sk-proj-xxxxxxxxxxxx",
+        "Bearer eyJhbGciOiJI",
+        "my username is alice and password is hunter2",
+        "Como obtengo esto?",
+        "Comment trouver ca?",
+    ],
+)
+
+
+CREDENTIAL_HELP_REQUEST = IntentSpec(
+    name="credential_help_request",
+    description=(
+        "True when the user is asking for help/guidance on obtaining a "
+        "credential (where to find it, how to create one). False when "
+        "the user is providing an actual credential string or "
+        "cancelling. Multilingual."
+    ),
+    positive=[
+        "How do I get a token?",
+        "Where do I find my API key?",
+        "How do I create one?",
+        "Can you help me?",
+        "I don't know how to get this",
+        "What is this for?",
+        "Where can I find this?",
+        "I need help getting credentials",
+        "Show me how to obtain it",
+        "Como obtengo esto?",
+        "Donde encuentro mi token?",
+        "Comment obtenir ca?",
+    ],
+    negative=[
+        "ghp_abc123def456",
+        "sk-proj-xxxxxxxxxxxxxxxxxxxxxxxx",
+        "Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9",
+        "my key is abc123def456",
+        "username:password",
+        "alice@example.com:hunter2",
+        "cancel",
+        "nevermind",
+        "stop",
+        "Here is my token: xyz789",
+        "Thanks for helping! API key is 9f8e7d6c5b4a3210",
+    ],
+)
+
+
+CREDENTIAL_REQUEST = IntentSpec(
+    name="credential_request",
+    description=(
+        "True when the user is asking to ADD or CONFIGURE a NEW "
+        "credential / account. False for ordinary chat requests, "
+        "follow-ups, or other tasks unrelated to credential setup."
+    ),
+    positive=[
+        "I need to add a new GitHub account",
+        "Configure a new API key",
+        "Set up different credentials",
+        "Add another account",
+        "Connect a new service",
+        "I want to add my Notion credentials",
+        "Set up a new integration",
+        "Register a new account with the system",
+        "Anadir nueva cuenta",
+        "Add my Slack token",
+    ],
+    negative=[
+        "Tell me about MUXI",
+        "What is the capital of France?",
+        "Build me a web app",
+        "Explain how vector search works",
+        "Compare these two documents",
+        "Hi",
+        "Thanks",
+        "Show me my scheduled jobs",
+        "Send a message via Slack",
+        "Open my GitHub issues",
+        "Que es FAISS?",
+    ],
+)
+
+
+CLARIFICATION_NEEDED = IntentSpec(
+    name="clarification_needed",
+    description=(
+        "True when the user's request is ambiguous, vague, or missing "
+        "essential information that the system cannot reasonably guess. "
+        "False when the request is clear enough to act on directly. "
+        "Conservative bias: only ambiguity that would change the action "
+        "in important ways triggers True."
+    ),
+    positive=[
+        "Help me with the project",
+        "Do the thing",
+        "Send it",
+        "Configure that",
+        "Schedule a meeting",
+        "Email someone about it",
+        "Update the file",
+        "Send a notification",
+        "Move the task",
+        "Make it bigger",
+        "Set it up",
+        "Run the report",
+        "Ayudame con el proyecto",
+    ],
+    negative=[
+        "What is the capital of France?",
+        "Tell me about MUXI",
+        "Hi",
+        "Thanks",
+        "Build a one-page PDF about quarterly sales",
+        "Schedule a daily standup at 10am every weekday",
+        "Send an email to alice@example.com saying the deploy is done",
+        "Compare these two PDFs and summarize the differences",
+        "Search the docs for buffer memory configuration",
+        "What did I tell you about my project?",
+        "Explain how formations work",
+        "Que es FAISS?",
+        "Why is the sky blue?",
+        "1. Postgres 2. Redis 3. Both",
+        "Yes, use the staging environment",
+    ],
+)
+
+
+CLARIFICATION_NEEDS_MORE = IntentSpec(
+    name="clarification_needs_more",
+    description=(
+        "True when the gap between the original request and the "
+        "information collected so far is still wide enough that more "
+        "questions are warranted. False when collected info is "
+        "sufficient to proceed. Embed input is a joint string "
+        "concatenating original_request and collected_info — the "
+        "centroid encodes 'completeness' as semantic alignment between "
+        "the two."
+    ),
+    positive=[
+        "Original: Schedule a meeting\nCollected: {}",
+        "Original: Send an email\nCollected: {recipient: alice}",
+        "Original: Build a report\nCollected: {topic: sales}",
+        "Original: Configure my account\nCollected: {service: github}",
+        "Original: Help me set up monitoring\nCollected: {}",
+        "Original: Make a presentation\nCollected: {audience: executives}",
+        "Original: Plan a trip\nCollected: {destination: Tokyo}",
+    ],
+    negative=[
+        "Original: Schedule a meeting\nCollected: {time: 2pm tomorrow, attendees: [alice, bob], title: Q4 review, duration: 1h}",
+        "Original: Send an email\nCollected: {recipient: alice@example.com, subject: deploy done, body: deployed at 3pm, signed off: yes}",
+        "Original: Build a report\nCollected: {topic: Q4 sales, length: 1 page, format: PDF, data_source: salesforce, deadline: Friday}",
+        "Original: Configure my account\nCollected: {service: github, account_type: enterprise, token: provided, scope: repo+admin, verified: true}",
+        "Original: Make a presentation\nCollected: {audience: executives, slides: 10, topic: roadmap, deadline: Monday, theme: corporate-dark, exported: pptx}",
+    ],
+)
+
+
 RECALL_QUESTION = IntentSpec(
     name="recall_question",
     description=(
@@ -288,6 +478,11 @@ ALL_INTENTS = (
     SIMPLE_QUESTION,
     CLARIFICATION_CONTEXT_SWITCH,
     CLARIFICATION_STOP_INTENT,
+    CLARIFICATION_NEEDED,
+    CLARIFICATION_NEEDS_MORE,
+    CREDENTIAL_CANCELLATION,
+    CREDENTIAL_HELP_REQUEST,
+    CREDENTIAL_REQUEST,
     RECALL_QUESTION,
 )
 """Tuple of all built-in intents. The classifier registers these eagerly

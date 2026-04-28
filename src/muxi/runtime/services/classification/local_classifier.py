@@ -262,6 +262,44 @@ class LocalClassifier:
 
         return sim_pos > sim_neg, margin
 
+    async def pairwise_similarity(self, text_a: str, text_b: str) -> float:
+        """Cosine similarity between two texts using the embedding model.
+
+        Direct replacement for any LLM call that asks "how similar are
+        these two texts?" — semantic similarity scoring, prompt-change
+        detection, fusion-quality assessment. No prototype centroid is
+        involved; we just embed both inputs and dot the L2-normalized
+        vectors.
+
+        Returns
+        -------
+        float
+            Cosine similarity in ``[-1.0, 1.0]``. For natural-language
+            text the practical range is ``[0.0, 1.0]``: identical or
+            paraphrased text approaches 1.0; unrelated topics drop
+            toward 0.0; only adversarial pairs go negative.
+
+        Notes
+        -----
+        Symmetric: ``pairwise_similarity(a, b) == pairwise_similarity(b, a)``
+        within floating-point noise. Embeds both texts in a single
+        OneLLM call so latency is one round-trip, not two.
+
+        The e5 family's ``query: `` prefix is applied to both inputs to
+        match the convention used elsewhere in this module — it
+        improves cross-language similarity calibration.
+        """
+        if not text_a or not text_a.strip():
+            raise ValueError("pairwise_similarity: text_a must be non-empty")
+        if not text_b or not text_b.strip():
+            raise ValueError("pairwise_similarity: text_b must be non-empty")
+
+        vecs = await embed(self.model, [f"query: {text_a}", f"query: {text_b}"])
+        a_unit = _l2_normalize(vecs[0])
+        b_unit = _l2_normalize(vecs[1])
+        sim = sum(x * y for x, y in zip(a_unit, b_unit))
+        return max(-1.0, min(1.0, sim))
+
     def diagnostic_snapshot(self) -> Dict[str, dict]:
         """Return a dict describing every registered intent — useful
         for ``/health`` endpoints and tests. Does not include the
