@@ -1,7 +1,10 @@
+import logging
 import re
 import time
 from dataclasses import dataclass
 from typing import Dict, Optional
+
+logger = logging.getLogger(__name__)
 
 from ...services import observability
 from ...utils.fastjson import json
@@ -498,6 +501,57 @@ class UnifiedClarificationSystem:
                 "confidence": 1.0,
                 "mcp_service": None,
             }
+
+        # STEP 1.5: Local-classifier fast path.
+        # The cloud LLM analysis below is the heaviest gate in the
+        # pre-planning critical path (mt=1000). When the local
+        # classifier confidently says the request is clear and
+        # actionable, we skip the LLM entirely and execute directly.
+        # This is the "split text from classification decision" Phase 2
+        # pattern: the classifier owns the BINARY decision; the LLM
+        # only fires when the binary is True (clarification needed) so
+        # it can do its remaining job — generating the clarification
+        # question, detecting which MCP service applies, and selecting
+        # redirect vs clarify mode. On classifier failure we fall
+        # through to the existing LLM path, preserving prior behavior.
+        try:
+            extracted_message_for_classifier = message
+            if "=== CURRENT REQUEST ===" in message:
+                for i, line in enumerate(message.split("\n")):
+                    if line.strip() == "=== CURRENT REQUEST ===":
+                        remaining = message.split("\n")[i + 1 :]
+                        for line2 in remaining:
+                            stripped = line2.strip()
+                            if stripped.startswith("User:"):
+                                extracted_message_for_classifier = stripped[5:].strip()
+                                break
+                        break
+
+            classifier = await self.overlord._get_local_classifier()
+            needs_clar, margin = await classifier.classify_binary(
+                "clarification_needed", extracted_message_for_classifier
+            )
+            if not needs_clar:
+                observability.observe(
+                    event_type=observability.ConversationEvents.CLARIFICATION_SKIPPED,
+                    level=observability.EventLevel.DEBUG,
+                    data={
+                        "decision": "execute_directly",
+                        "margin": round(margin, 4),
+                        "method": "local_classifier_fast_path",
+                    },
+                    description="Clarification analyzer fast-path: classifier said no clarification needed",
+                )
+                return {
+                    "needs_clarification": False,
+                    "reason": "classifier_clear_execute",
+                    "mode": "direct",
+                    "question": None,
+                    "confidence": 1.0,
+                    "mcp_service": None,
+                }
+        except Exception as e:
+            logger.debug(f"Clarification classifier fast-path failed, falling through to LLM: {e}")
 
         # STEP 2: Continue with normal clarification analysis
         # Get formation capabilities (pre-computed during overlord initialization)
