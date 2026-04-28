@@ -22,12 +22,18 @@ import pytest_asyncio
 from muxi.runtime.services.classification import (
     ACTIONABILITY,
     CLARIFICATION_CONTEXT_SWITCH,
+    CLARIFICATION_NEEDED,
+    CLARIFICATION_NEEDS_MORE,
     CLARIFICATION_STOP_INTENT,
+    CREDENTIAL_CANCELLATION,
+    CREDENTIAL_HELP_REQUEST,
+    CREDENTIAL_REQUEST,
     RECALL_QUESTION,
     SIMPLE_QUESTION,
     WORKFLOW_ELIGIBILITY,
     IntentSpec,
     LocalClassifier,
+    get_classifier,
 )
 
 
@@ -55,16 +61,24 @@ def _accuracy(predictions: List[Tuple[bool, bool]]) -> float:
 # ---------------------------------------------------------------------------
 
 
+_ALL_BUILTIN_SPECS = [
+    ACTIONABILITY,
+    WORKFLOW_ELIGIBILITY,
+    SIMPLE_QUESTION,
+    CLARIFICATION_CONTEXT_SWITCH,
+    CLARIFICATION_STOP_INTENT,
+    CLARIFICATION_NEEDED,
+    CLARIFICATION_NEEDS_MORE,
+    CREDENTIAL_CANCELLATION,
+    CREDENTIAL_HELP_REQUEST,
+    CREDENTIAL_REQUEST,
+    RECALL_QUESTION,
+]
+
+
 @pytest.mark.parametrize(
     "spec",
-    [
-        ACTIONABILITY,
-        WORKFLOW_ELIGIBILITY,
-        SIMPLE_QUESTION,
-        CLARIFICATION_CONTEXT_SWITCH,
-        CLARIFICATION_STOP_INTENT,
-        RECALL_QUESTION,
-    ],
+    _ALL_BUILTIN_SPECS,
     ids=lambda s: s.name,
 )
 def test_intent_specs_have_disjoint_pos_neg_examples(spec: IntentSpec) -> None:
@@ -79,20 +93,19 @@ def test_intent_specs_have_disjoint_pos_neg_examples(spec: IntentSpec) -> None:
 
 @pytest.mark.parametrize(
     "spec",
-    [
-        ACTIONABILITY,
-        WORKFLOW_ELIGIBILITY,
-        SIMPLE_QUESTION,
-        CLARIFICATION_CONTEXT_SWITCH,
-        CLARIFICATION_STOP_INTENT,
-        RECALL_QUESTION,
-    ],
+    _ALL_BUILTIN_SPECS,
     ids=lambda s: s.name,
 )
 def test_intent_spec_examples_are_short_enough(spec: IntentSpec) -> None:
     """Long examples dilute the centroid and slow warmup. We empirically
     capped exemplars at <100 chars; this test enforces the cap so future
     edits stay honest."""
+    # CLARIFICATION_NEEDS_MORE intentionally uses joint
+    # "Original: ...\nCollected: ..." strings as exemplars; those are
+    # naturally longer than single-utterance exemplars, so we exempt
+    # this spec from the per-example length cap.
+    if spec.name == "clarification_needs_more":
+        return
     overlong = [t for t in spec.positive + spec.negative if len(t) > 200]
     assert not overlong, f"{spec.name} has examples > 200 chars: {overlong}"
 
@@ -168,6 +181,91 @@ RECALL_QUESTION_EVAL = [
 ]
 
 
+# --- Phase 2 eval sets -----------------------------------------------------
+
+CREDENTIAL_CANCELLATION_EVAL = [
+    ("cancel", True),
+    ("nevermind", True),
+    ("skip this for now", True),
+    ("forget it", True),
+    ("Cancelar", True),  # Spanish
+    ("How do I get a token?", False),
+    ("Where do I find my API key?", False),
+    ("ghp_abc123def456789", False),  # actual cred string
+    ("here is my key: sk-proj-xyz", False),
+    ("Can you help me?", False),
+]
+
+
+CREDENTIAL_HELP_REQUEST_EVAL = [
+    ("How do I get a token?", True),
+    ("Where can I find this?", True),
+    ("Can you help me?", True),
+    ("I don't know how to get this", True),
+    ("Donde encuentro mi token?", True),  # Spanish
+    ("ghp_abc123def456789", False),  # actual cred string
+    ("Bearer eyJhbGci...", False),
+    ("here is my token: xyz789", False),
+    ("cancel", False),
+    ("nevermind", False),
+]
+
+
+CREDENTIAL_REQUEST_EVAL = [
+    ("I need to add a new GitHub account", True),
+    ("Configure new API key", True),
+    ("Set up different credentials", True),
+    ("Anadir nueva cuenta", True),  # Spanish
+    ("Tell me about MUXI", False),
+    ("What is the capital of France?", False),
+    ("Hi", False),
+    ("Build me a web app", False),
+    ("Send a Slack message", False),
+    ("Show me my scheduled jobs", False),
+]
+
+
+CLARIFICATION_NEEDED_EVAL = [
+    ("Help me with the project", True),
+    ("Send it", True),
+    ("Configure that", True),
+    ("Schedule a meeting", True),
+    ("Run the report", True),
+    ("Schedule a daily standup at 10am every weekday", False),
+    ("Send an email to alice@example.com saying the deploy is done", False),
+    ("Build a one-page PDF about quarterly sales", False),
+    ("Tell me about MUXI", False),
+    ("Hi", False),
+    ("Why is the sky blue?", False),
+    ("Que es FAISS?", False),  # Spanish
+]
+
+
+CLARIFICATION_NEEDS_MORE_EVAL = [
+    ("Original: Schedule a meeting\nCollected: {}", True),
+    ("Original: Send an email\nCollected: {recipient: alice}", True),
+    ("Original: Help me set up monitoring\nCollected: {}", True),
+    (
+        "Original: Schedule a meeting\nCollected: "
+        "{time: 2pm tomorrow, attendees: [alice, bob], "
+        "title: Q4 review, duration: 1h}",
+        False,
+    ),
+    (
+        "Original: Send an email\nCollected: "
+        "{recipient: alice@example.com, subject: deploy done, "
+        "body: deployed at 3pm, signed off: yes}",
+        False,
+    ),
+    (
+        "Original: Build a report\nCollected: "
+        "{topic: Q4 sales, length: 1 page, format: PDF, "
+        "data_source: salesforce, deadline: Friday}",
+        False,
+    ),
+]
+
+
 @pytest.mark.asyncio(loop_scope="module")
 @pytest.mark.parametrize(
     "intent_name,eval_set",
@@ -178,6 +276,11 @@ RECALL_QUESTION_EVAL = [
         ("clarification_context_switch", CLARIFICATION_CONTEXT_SWITCH_EVAL),
         ("clarification_stop", CLARIFICATION_STOP_INTENT_EVAL),
         ("recall_question", RECALL_QUESTION_EVAL),
+        ("credential_cancellation", CREDENTIAL_CANCELLATION_EVAL),
+        ("credential_help_request", CREDENTIAL_HELP_REQUEST_EVAL),
+        ("credential_request", CREDENTIAL_REQUEST_EVAL),
+        ("clarification_needed", CLARIFICATION_NEEDED_EVAL),
+        ("clarification_needs_more", CLARIFICATION_NEEDS_MORE_EVAL),
     ],
 )
 async def test_classifier_accuracy_meets_threshold(
@@ -278,6 +381,11 @@ async def test_diagnostic_snapshot_reports_all_warmed_intents(
         "simple_question",
         "clarification_context_switch",
         "clarification_stop",
+        "clarification_needed",
+        "clarification_needs_more",
+        "credential_cancellation",
+        "credential_help_request",
+        "credential_request",
         "recall_question",
     }
     assert set(snap.keys()) >= expected
@@ -285,3 +393,104 @@ async def test_diagnostic_snapshot_reports_all_warmed_intents(
         assert snap[name]["positive_examples"] > 0
         assert snap[name]["negative_examples"] > 0
         assert snap[name]["centroid_dim"] == 384  # e5-small native dim
+
+
+# ---------------------------------------------------------------------------
+# pairwise_similarity tests (Phase 2)
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.asyncio(loop_scope="module")
+async def test_pairwise_similarity_identical_strings_near_one(
+    classifier: LocalClassifier,
+) -> None:
+    """Embedding the same text twice and dotting the L2-normalized
+    vectors must be 1.0 within floating-point noise."""
+    sim = await classifier.pairwise_similarity("send a daily report", "send a daily report")
+    assert sim >= 0.999, f"identical strings should score near 1.0, got {sim}"
+
+
+@pytest.mark.asyncio(loop_scope="module")
+async def test_pairwise_similarity_paraphrase_high(
+    classifier: LocalClassifier,
+) -> None:
+    """Trivial paraphrases (typo / pluralization / article insertion)
+    should score very high — the model is robust to these."""
+    cases = [
+        ("check my email", "check my emails"),
+        ("send daily report", "send a daily report"),
+        ("backup my files", "back up my files"),
+    ]
+    for a, b in cases:
+        sim = await classifier.pairwise_similarity(a, b)
+        assert sim >= 0.95, f"paraphrase ({a!r}, {b!r}) scored only {sim}"
+
+
+@pytest.mark.asyncio(loop_scope="module")
+async def test_pairwise_similarity_cross_language_same_task(
+    classifier: LocalClassifier,
+) -> None:
+    """The whole point of the multilingual e5 family is cross-language
+    semantic alignment. Same task across languages should score above
+    the threshold the scheduler uses (0.85+)."""
+    sim_en_es = await classifier.pairwise_similarity("check email", "verificar correo")
+    assert sim_en_es >= 0.85, f"check email / verificar correo: {sim_en_es}"
+
+
+@pytest.mark.asyncio(loop_scope="module")
+async def test_pairwise_similarity_different_tasks_separated(
+    classifier: LocalClassifier,
+) -> None:
+    """Genuinely different task descriptions should score notably lower
+    than identical / paraphrase pairs. We don't pin a hard upper bound
+    because the e5 family clusters all natural language fairly close,
+    but the gap from same-task must be measurable."""
+    sim_same = await classifier.pairwise_similarity("send daily report", "send a daily report")
+    sim_diff = await classifier.pairwise_similarity("generate a report", "backup my files")
+    gap = sim_same - sim_diff
+    assert gap >= 0.10, (
+        f"same-task vs different-task gap too small: "
+        f"sim_same={sim_same:.3f}, sim_diff={sim_diff:.3f}, gap={gap:.3f}"
+    )
+
+
+@pytest.mark.asyncio(loop_scope="module")
+async def test_pairwise_similarity_is_symmetric(classifier: LocalClassifier) -> None:
+    """``cos(a, b) == cos(b, a)`` mathematically; we verify that the
+    implementation respects this within floating-point noise. A
+    regression here would indicate the embedding pipeline is doing
+    something different per input position (e.g. asymmetric prefixing
+    or batching artifacts)."""
+    a, b = "schedule a daily standup", "remind me to stand up daily"
+    sim_ab = await classifier.pairwise_similarity(a, b)
+    sim_ba = await classifier.pairwise_similarity(b, a)
+    assert abs(sim_ab - sim_ba) < 1e-5, (
+        f"pairwise_similarity not symmetric: {sim_ab} vs {sim_ba}"
+    )
+
+
+@pytest.mark.asyncio(loop_scope="module")
+async def test_pairwise_similarity_rejects_empty_inputs(
+    classifier: LocalClassifier,
+) -> None:
+    """Empty / whitespace-only inputs are wiring bugs — fail loudly,
+    same convention as classify_binary."""
+    with pytest.raises(ValueError):
+        await classifier.pairwise_similarity("", "non-empty")
+    with pytest.raises(ValueError):
+        await classifier.pairwise_similarity("non-empty", "  \t\n")
+
+
+# ---------------------------------------------------------------------------
+# Singleton accessor (Phase 2)
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.asyncio(loop_scope="module")
+async def test_get_classifier_returns_warmed_singleton() -> None:
+    """The process-wide singleton accessor must return a warmed
+    instance and return the SAME instance on subsequent calls."""
+    a = await get_classifier()
+    b = await get_classifier()
+    assert a is b, "get_classifier() should return the same instance"
+    assert a.is_warmed, "singleton classifier must be warmed before return"
