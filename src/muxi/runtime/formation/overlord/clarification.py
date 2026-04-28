@@ -798,52 +798,55 @@ class UnifiedClarificationSystem:
     async def _check_context_switch(self, state: Dict, response: str) -> bool:
         """
         Check if user is trying to do something else (context switch).
-        Uses LLM to detect when user wants to break out of clarification.
+
+        Replaced the previous cloud LLM call (mt=20) with a local
+        prototype-similarity classifier. The
+        ``clarification_context_switch`` intent's positives are
+        explicit topic-switch phrasings ("never mind that", "different
+        question:"), and its negatives are normal clarification
+        answers ("yes, Postgres", "the first option"). The classifier
+        runs in ~50 ms vs ~500-1500 ms for the cloud round trip.
+
+        ``state`` is no longer used directly — the original LLM prompt
+        included the original request and last question for context,
+        but the prototype set already discriminates topic-switch
+        phrasings from on-topic answers without needing that context.
+        Kept in the signature for API stability.
         """
-        if not self.llm:
-            return False  # Assume no context switch without LLM
-
-        # Get the last question we asked
-        last_question = state.get("last_question", "a clarification question")
-
-        from ..prompts.loader import PromptLoader
-
-        system_prompt = PromptLoader.get(
-            "clarification_context_switch.md",
-            original_request=state["original_request"],
-            last_question=last_question,
-            response=response,
-        )
-
-        messages = [
-            {"role": "system", "content": system_prompt},
-            {"role": "user", "content": f"User response: {response}"},
-        ]
-        result = await self.llm.chat(messages, temperature=0, max_tokens=20)
-        content = result.content if hasattr(result, "content") else str(result)
-        return "different" in content.lower()
+        if not response or not response.strip():
+            return False
+        try:
+            classifier = await self.overlord._get_local_classifier()
+            label, _margin = await classifier.classify_binary(
+                "clarification_context_switch", response
+            )
+            return label
+        except Exception:
+            # Conservative default: assume no context switch when the
+            # classifier is unavailable, so the clarification flow
+            # continues rather than being prematurely abandoned.
+            return False
 
     async def _check_stop_intent(self, response: str) -> bool:
         """
         Check if user wants to stop clarification.
         Different from context switch - this is when user wants to stop but stay on topic.
+
+        Replaced the previous cloud LLM call (mt=10) with a local
+        prototype-similarity classifier. The ``clarification_stop``
+        intent positives are stop / proceed-anyway phrasings; negatives
+        are normal clarification answers. ~50 ms locally.
         """
-        if not self.llm:
-            return False  # Assume no stop intent without LLM
-
-        system_prompt = """Does this response indicate the user wants to stop clarification?
-
-Look for phrases like "enough", "just do it", "stop asking", "never mind", etc.
-
-Return just "true" or "false"."""
-
-        messages = [
-            {"role": "system", "content": system_prompt},
-            {"role": "user", "content": response},
-        ]
-        result = await self.llm.chat(messages, temperature=0, max_tokens=10)
-        content = result.content if hasattr(result, "content") else str(result)
-        return "true" in content.lower()
+        if not response or not response.strip():
+            return False
+        try:
+            classifier = await self.overlord._get_local_classifier()
+            label, _margin = await classifier.classify_binary(
+                "clarification_stop", response
+            )
+            return label
+        except Exception:
+            return False
 
     def _is_help_request(self, response: str) -> bool:
         """
@@ -1386,46 +1389,34 @@ Please check {mcp_service}'s documentation for specific instructions on obtainin
                             clean_message = next_line[5:].strip()
                             break
 
-            # Check if it looks like a recall question using LLM (fast, focused prompt)
-            recall_system_prompt = """Is this a recall/memory question about something the user previously stated?
-
-Examples of recall questions:
-- "What is my name?"
-- "What's my favorite database?"
-- "What did I tell you about X?"
-- "What is my X?"
-
-NOT recall questions:
-- "What is FastAPI?" (asking about general knowledge)
-- "How do I do X?" (asking for help)
-- "Can you X?" (making a request)
-
-Answer with just: YES or NO"""
-
+            # Check if it looks like a recall question using the local
+            # prototype-similarity classifier (mt=10 LLM call replaced
+            # by a deterministic ~50 ms cosine match). The
+            # ``recall_question`` intent encodes "user asking us to
+            # recall something they said earlier" as positive and
+            # general-knowledge / task-request as negative.
             try:
-                if self.llm:
-                    response = await self.llm.chat(
-                        [
-                            {"role": "system", "content": recall_system_prompt},
-                            {"role": "user", "content": clean_message},
-                        ],
-                        temperature=0,
-                        max_tokens=10,
-                    )
+                classifier = await self.overlord._get_local_classifier()
+                label, _margin = await classifier.classify_binary(
+                    "recall_question", clean_message
+                )
 
-                    # Check cancellation after LLM call
-                    from ..background.cancellation import check_cancellation_from_context
+                # Cancellation check, preserved from the LLM-based path
+                # for parity. Runs after every gate call so a cancel
+                # mid-clarification doesn't leak through.
+                from ..background.cancellation import check_cancellation_from_context
 
-                    if hasattr(self.overlord, "request_tracker"):
-                        await check_cancellation_from_context(self.overlord.request_tracker)
+                if hasattr(self.overlord, "request_tracker"):
+                    await check_cancellation_from_context(self.overlord.request_tracker)
 
-                    content = response.content if hasattr(response, "content") else str(response)
-
-                    if "YES" not in content.upper():
-                        # Not a recall question
-                        return False
+                if not label:
+                    # Not a recall question
+                    return False
             except Exception:
-                # If LLM call fails, use simple heuristics
+                # If the classifier is unavailable, fall back to the
+                # simple keyword heuristics that were the prior
+                # exception path. Maintains behavior parity for the
+                # cold-start / classifier-failure case.
                 recall_patterns = ["what is my", "what's my", "what did i say", "what did i tell"]
                 if not any(pattern in clean_message.lower() for pattern in recall_patterns):
                     return False
