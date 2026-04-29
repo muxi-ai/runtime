@@ -43,7 +43,7 @@ from __future__ import annotations
 import asyncio
 import math
 from dataclasses import dataclass
-from typing import Dict, Optional, Tuple
+from typing import Dict, Tuple
 
 from .. import observability
 from ..memory.embedding import embed
@@ -309,26 +309,3 @@ class LocalClassifier:
             }
             for name in self._centroids
         }
-
-
-_default_classifier: Optional[LocalClassifier] = None
-_default_lock = asyncio.Lock()
-
-
-async def get_default_classifier() -> LocalClassifier:
-    """Return a process-wide singleton :class:`LocalClassifier`.
-
-    Used by overlord and clarification call sites that don't carry their
-    own classifier reference. Lazily warms up on first call. Safe under
-    concurrent first-touch; the warmup itself takes the classifier's own
-    register lock.
-    """
-    global _default_classifier
-    if _default_classifier is not None and _default_classifier.is_warmed:
-        return _default_classifier
-    async with _default_lock:
-        if _default_classifier is None:
-            _default_classifier = LocalClassifier()
-        if not _default_classifier.is_warmed:
-            await _default_classifier.warmup()
-    return _default_classifier

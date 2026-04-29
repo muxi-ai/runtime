@@ -2,6 +2,34 @@
 
 ## [unreleased]
 
+### Review hardening (PR #160)
+
+Two follow-ups from greptile code review:
+
+* **Deleted dead `get_default_classifier()`** in
+  `services/classification/local_classifier.py`. The function declared its
+  own competing `_default_classifier` / `_default_lock` singleton but was
+  never imported or called anywhere — all consumers (`overlord`,
+  `scheduler`, `fusion_engine`) go through `get_classifier()` in
+  `classification/__init__.py`. Per AGENTS.md "no dead code" rule, removed
+  the dead function entirely along with the now-unused `Optional` import.
+* **Added minimum-margin gate** to both Group B clarification fast paths.
+  New module-level constant `MIN_FAST_PATH_MARGIN = 0.05` in
+  `clarification.py`. `_analyze_request` STEP 1.5 and `_check_need_more`
+  STEP 0 now skip the LLM only when the classifier is **both** confident
+  in "no clarification" **and** the margin clears the threshold. On a
+  near-zero margin (uncertain centroids) the call falls through to the
+  LLM, preserving the clarification-on-ambiguity guarantee. Below-
+  threshold cases emit a `logger.debug` line so operators can audit how
+  often the threshold is biting; no new event types or config surface.
+
+  ```python
+  if not needs_clar and margin > MIN_FAST_PATH_MARGIN:
+      # confident-no — skip LLM
+  elif not needs_clar:
+      # uncertain-no — fall through to LLM
+  ```
+
 ### Fix: synthesis LLM hallucinated "the file didn't come through" on mixed-result artifact plans
 
 Surfaced from a hello-muxi demo trace: `create a bar chart showing pretend

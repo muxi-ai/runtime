@@ -9,6 +9,17 @@ from ...utils.fastjson import json
 
 logger = logging.getLogger(__name__)
 
+# Minimum classifier confidence margin required to take the local-classifier
+# fast path and skip the LLM. The margin is the absolute gap between the
+# positive and negative centroid cosine similarities; a value below this
+# threshold means the prototype centroids barely differentiate the query
+# (effectively a coin flip), so we fall through to the LLM rather than risk
+# silently swallowing a clarification on an ambiguous request. Empirically,
+# a margin of 0.05 corresponds to a similarity-difference noise floor on the
+# multilingual-e5-small embedding space — below that, classifier decisions
+# are not reliable enough to suppress the LLM fallback.
+MIN_FAST_PATH_MARGIN = 0.05
+
 
 @dataclass
 class ClarificationResult:
@@ -531,7 +542,7 @@ class UnifiedClarificationSystem:
             needs_clar, margin = await classifier.classify_binary(
                 "clarification_needed", extracted_message_for_classifier
             )
-            if not needs_clar:
+            if not needs_clar and margin > MIN_FAST_PATH_MARGIN:
                 observability.observe(
                     event_type=observability.ConversationEvents.CLARIFICATION_SKIPPED,
                     level=observability.EventLevel.DEBUG,
@@ -550,6 +561,16 @@ class UnifiedClarificationSystem:
                     "confidence": 1.0,
                     "mcp_service": None,
                 }
+            elif not needs_clar:
+                # Margin too low — classifier says no but with low confidence.
+                # Fall through to the LLM so an ambiguous request still gets
+                # the chance to surface a clarification question.
+                logger.debug(
+                    "Clarification classifier fast-path skipped: margin=%.4f below "
+                    "threshold %.2f, falling through to LLM",
+                    margin,
+                    MIN_FAST_PATH_MARGIN,
+                )
         except Exception as e:
             logger.debug(f"Clarification classifier fast-path failed, falling through to LLM: {e}")
 
@@ -839,7 +860,7 @@ class UnifiedClarificationSystem:
             )
             classifier = await self.overlord._get_local_classifier()
             needs_more, margin = await classifier.classify_binary("clarification_needs_more", joint)
-            if not needs_more:
+            if not needs_more and margin > MIN_FAST_PATH_MARGIN:
                 observability.observe(
                     event_type=observability.ConversationEvents.CLARIFICATION_SKIPPED,
                     level=observability.EventLevel.DEBUG,
@@ -852,6 +873,16 @@ class UnifiedClarificationSystem:
                     description="check_need_more fast-path: classifier said collected info is sufficient",
                 )
                 return {"needs_more": False, "question": None}
+            elif not needs_more:
+                # Margin too low — classifier says no-more but with low
+                # confidence. Fall through to the LLM so we don't prematurely
+                # close a clarification round on an uncertain signal.
+                logger.debug(
+                    "check_need_more classifier fast-path skipped: margin=%.4f below "
+                    "threshold %.2f, falling through to LLM",
+                    margin,
+                    MIN_FAST_PATH_MARGIN,
+                )
         except Exception as e:
             logger.debug(
                 f"check_need_more classifier fast-path failed, falling through to LLM: {e}"
