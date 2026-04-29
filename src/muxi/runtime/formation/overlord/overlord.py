@@ -88,7 +88,7 @@ import time
 from contextlib import contextmanager, suppress
 from datetime import datetime
 from pathlib import Path
-from typing import Any, AsyncGenerator, Dict, List, Optional, Set, Union
+from typing import Any, AsyncGenerator, Dict, List, Optional, Set, Tuple, Union
 
 # Import MarkItDown - required dependency
 from markitdown import MarkItDown
@@ -9709,13 +9709,98 @@ Agent response: {raw_response}"""
                 metadata={"synthesis_method": "emergency_fallback", "error": str(e)},
             )
 
+    # Synthesis-prompt budgets. Per-task caps the body excerpt of any
+    # single task; total caps the cumulative body bytes across all tasks
+    # so a 200-task workflow can't blow the overlord LLM's context window.
+    # Static template (descriptions, instructions, hints) is not counted.
+    _SYNTHESIS_PER_TASK_BUDGET: int = 2_000
+    _SYNTHESIS_TOTAL_BUDGET: int = 20_000
+
+    def _render_task_body(self, outputs: Dict[str, Any], budget: int) -> Tuple[str, str, str]:
+        """Render a single task's outputs for the synthesis prompt.
+
+        The workflow executor (``WorkflowExecutor._parse_task_response``)
+        wraps every agent response under ``outputs["main"]["result"]``;
+        for non-Linear flows that prose is the *only* meaningful payload
+        in the dict. The previous prompt builder ignored ``main.result``
+        and relied solely on regex extraction from ``str(outputs)``,
+        which silently dropped GitHub issue URLs, file paths, and the
+        agent's conversational synthesis.
+
+        Returns a triple ``(body, hints, artifacts)``:
+
+        * ``body`` — excerpt of ``outputs["main"]["result"]``. Strings
+          are truncated to ``budget`` chars with a ``[...truncated, N
+          chars omitted]`` marker. Dict values render as ``key: value``
+          lines so the LLM can read them naturally instead of seeing
+          ``str(dict)`` syntax inline.
+        * ``hints`` — output of ``_extract_key_outcomes`` (regex hits
+          for Linear MX-IDs / URLs and the legacy flat-shape fields).
+          Kept as a supplementary signal because the regex is free and
+          surfaces the most actionable IDs.
+        * ``artifacts`` — comma-separated filenames pulled from
+          ``outputs["artifacts"]["result"]`` so the LLM can mention
+          attachments by name.
+        """
+        if not isinstance(outputs, dict):
+            return "", "", ""
+
+        # 1. Body — drawn from outputs["main"]["result"]
+        body = ""
+        main = outputs.get("main")
+        if isinstance(main, dict):
+            result = main.get("result")
+            if isinstance(result, str):
+                body = result.strip()
+            elif isinstance(result, dict):
+                lines = []
+                for k, v in result.items():
+                    if v is None or v == "":
+                        continue
+                    lines.append(f"{k}: {v}")
+                body = "\n".join(lines)
+            elif result is not None:
+                body = str(result).strip()
+
+        if budget > 0 and len(body) > budget:
+            omitted = len(body) - budget
+            body = body[:budget] + f"\n[...truncated, {omitted} chars omitted]"
+        elif budget == 0:
+            body = ""
+
+        # 2. Hints — regex/flat-shape extraction kept as supplementary
+        hints = self._extract_key_outcomes(outputs, "")
+
+        # 3. Artifacts — filenames the user may want to reference
+        artifact_names: List[str] = []
+        artifacts_dict = outputs.get("artifacts")
+        if isinstance(artifacts_dict, dict):
+            artifact_list = artifacts_dict.get("result", [])
+            if isinstance(artifact_list, list):
+                for a in artifact_list:
+                    name: Any = None
+                    if isinstance(a, dict):
+                        name = a.get("filename") or a.get("name")
+                    else:
+                        name = getattr(a, "filename", None) or getattr(a, "name", None)
+                    if name:
+                        artifact_names.append(str(name))
+        artifacts = ", ".join(artifact_names)
+
+        return body, hints, artifacts
+
     def _create_synthesis_prompt(
         self,
         original_request: str,
         successful_results: List[Dict[str, Any]],
         all_results: List[Dict[str, Any]],
     ) -> str:
-        """Create prompt for LLM synthesis of task results."""
+        """Create prompt for LLM synthesis of task results.
+
+        Renders each task's ``outputs["main"]["result"]`` into the prompt
+        within per-task and total byte budgets. Regex-extracted IDs and
+        attached artifact filenames are surfaced as supplementary fields.
+        """
         prompt_parts = [
             f"Original User Request: {original_request}",
             "",
@@ -9723,20 +9808,30 @@ Agent response: {raw_response}"""
             "",
         ]
 
-        # Add successful task results with only key outcomes
+        consumed = 0
         for i, result in enumerate(successful_results, 1):
             task_desc = result.get("description", "Unknown task")
+            outputs = result.get("outputs", {})
+
+            remaining = max(0, self._SYNTHESIS_TOTAL_BUDGET - consumed)
+            per_task = min(self._SYNTHESIS_PER_TASK_BUDGET, remaining)
+
+            body, hints, artifacts = self._render_task_body(outputs, per_task)
+
             prompt_parts.append(f"Task {i}: {task_desc}")
 
-            # Extract only key actionable outcomes from outputs
-            outputs = result.get("outputs", {})
-            key_outcomes = self._extract_key_outcomes(outputs, task_desc)
-
-            if key_outcomes:
-                prompt_parts.append(f"Key Outcomes: {key_outcomes}")
-            else:
-                # For tasks without specific outcomes, just note completion
+            if body:
+                prompt_parts.append(f"Result: {body}")
+                consumed += len(body)
+            elif not hints and not artifacts:
+                # Nothing useful to render — preserve the legacy status
+                # line so the LLM still sees a per-task signal.
                 prompt_parts.append("Status: Completed successfully")
+
+            if hints:
+                prompt_parts.append(f"Key Outcomes: {hints}")
+            if artifacts:
+                prompt_parts.append(f"Files Attached: {artifacts}")
             prompt_parts.append("")
 
         # Note any failed tasks
