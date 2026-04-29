@@ -30,7 +30,7 @@ async def get_audit_log(
     resource_type: Optional[str] = Query(
         None,
         description="Filter by resource type",
-        regex="^(agent|secret|mcp_server|scheduler_job|logging_destination|async|memory)$",
+        pattern="^(agent|secret|mcp_server|scheduler_job|logging_destination|async|memory)$",
     ),
     since: Optional[str] = Query(None, description="Return entries since this ISO 8601 timestamp"),
 ) -> JSONResponse:

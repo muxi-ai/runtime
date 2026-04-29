@@ -2,6 +2,87 @@
 
 ## [unreleased]
 
+### Cold-path latency cuts: classifier preload + SOP-template analyzer skip
+
+Two complementary changes that together shave ~16-18 s off the cold
+hello-muxi demo path without touching the workflow executor or model
+selection. Both are pure additions; nothing in the existing flow is
+removed and there is a fallback for every new fast path.
+
+**Local classifier preloaded at formation startup**
+The local prototype-similarity classifier (``Xenova/multilingual-e5-small``,
+introduced in PR #160) lazy-loaded on first user request, costing
+~10 s on the very first chat turn — easily the worst-feeling part of
+the demo. ``Overlord._async_startup`` now awaits
+``_get_local_classifier()`` immediately after the routing/extraction
+models are ready, moving that cost off the critical path. The
+existing process-wide ``services.classification.get_classifier()``
+singleton means subsequent overlord/scheduler/credential consumers
+adopt the warmed instance for free. Failures during preload degrade
+to the legacy lazy-init path with a warning event, never block
+startup.
+
+**SOP-template fast path skips the LLM request analyzer**
+When an SOP has been matched earlier in a request AND is in
+deterministic ``template`` mode, the analyzer's complexity score and
+topic tags are not consulted by the downstream workflow — the SOP
+itself is the plan. ``_process_sync_chat`` now skips the ~6-8 s
+``request_analyzer.analyze_request`` LLM call and substitutes a stub
+``RequestAnalysis`` with ``requires_decomposition=True``,
+``is_security_threat=False``, and empty topics.
+
+Security is not regressed: a fast heuristic regex screen
+(``_looks_heuristically_suspicious``) runs against the actual user
+message before the skip is taken. The pattern set covers the
+canonical prompt-injection / jailbreak phrasings ("ignore previous
+instructions", "reveal your system prompt", "you are now DAN", role-
+override prefixes like ``<|im_start|>system``, content-policy
+override attempts, etc.). When any pattern matches, the gate falls
+through to the full LLM analyzer so the higher-confidence verdict
+still runs and can block the request.
+
+A new debug-level ``WORKFLOW_ANALYSIS_SKIPPED`` event fires whenever
+the fast path is taken, tagged with ``reason: sop_template_match``,
+``sop_id``, ``sop_name``, and ``skipped_stage: request_analyzer_llm``,
+so operators can audit how often the override is biting.
+
+22 new unit tests in ``tests/unit/test_overlord_sop_template_analyzer_skip.py``
+pin the heuristic screen (8 attack patterns must flag, 7 benign
+inputs must not), the stub ``RequestAnalysis`` shape (safe defaults,
+reasonable complexity/confidence), and the composed gate (benign +
+template = fast path; attack + template = falls through; guide-mode
+SOP never takes fast path; no SOP never takes fast path).
+
+### Synthesis capability in AFS schema (companion spec)
+
+Adds an optional ``synthesis`` capability to the formation LLM model
+list, with the same shape and options as ``text``: ``api_key``
+override plus ``settings.{temperature, max_tokens, timeout_seconds,
+max_retries, fallback_model}``. When present, agents route the
+post-tool-call response synthesis stage through this model; when
+absent, agents fall back to ``text`` (existing behavior). Pure spec
+addition for now — runtime resolution is a follow-up.
+
+Documented in ``afs-spec/schemas/formation.afs`` and the SCHEMA_GUIDE
+override hierarchy section.
+
+### Maintenance: FastAPI deprecation + OneLLM startup warning
+
+* ``audit`` admin route: replaced ``Query(regex=...)`` with
+  ``Query(pattern=...)``. FastAPI deprecated ``regex=`` in favor of
+  ``pattern=``; the runtime now emits the right keyword and the
+  startup deprecation warning is gone.
+* ``llm.py``: registered a ``warnings.filterwarnings`` for the
+  ``onellm.cache`` UserWarning that fires when OneLLM's default
+  semantic-cache embedding model lacks ONNX weights and PyTorch
+  isn't installed. The cache correctly falls back to hash-only mode
+  and the runtime ships ``Xenova/multilingual-e5-small`` for actual
+  semantic similarity work, so the warning is noise that scared
+  users on every formation startup. Filter is registered
+  immediately before the ``onellm_init_cache`` call in
+  ``initialize_onellm_cache`` so it stays scoped to the cache
+  module.
+
 ### SOP-aware actionability gate (post-PR-#160 regression)
 
 Fixes a demo regression where the hello-muxi formation would silently

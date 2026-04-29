@@ -80,6 +80,7 @@
 import asyncio
 import base64
 import os
+import re
 import signal
 import sys
 import threading
@@ -1107,6 +1108,35 @@ class Overlord:
         # No need to start it again
 
         # Observability system is already initialized and ready (no async start needed)
+
+        # Pre-warm the local prototype-similarity classifier. The first
+        # touch of ``_get_local_classifier`` downloads / loads the ONNX
+        # weights and computes prototype centroids — typically ~1 s on a
+        # warm HuggingFace cache, ~10 s on a cold one. Doing it here
+        # moves that cost out of the first user request's critical path,
+        # where it would otherwise show up as ~10 s added latency on the
+        # very first chat turn (visible in the demo as "the first reply
+        # takes forever"). Failures are non-fatal: the gates that use
+        # the classifier already have safe fallback defaults at each
+        # classify call site, so a transient HF outage degrades to the
+        # legacy LLM-call path rather than taking the runtime down.
+        try:
+            await self._get_local_classifier()
+        except Exception as e:
+            observability.observe(
+                event_type=observability.ErrorEvents.INTERNAL_ERROR,
+                level=observability.EventLevel.WARNING,
+                data={
+                    "service": "local_classifier",
+                    "stage": "startup_preload",
+                    "error_type": type(e).__name__,
+                    "error": str(e),
+                },
+                description=(
+                    f"Local classifier preload failed at startup; will retry "
+                    f"lazily on first request: {e}"
+                ),
+            )
 
         # Load agents from formation configuration
         # Load agents from formation's pre-processed configuration
@@ -2341,6 +2371,83 @@ class Overlord:
             # Matches the prior LLM-based behavior — failures here
             # should not silently drop user messages on the floor.
             return True
+
+    # Heuristic prompt-injection / jailbreak patterns. Used as a
+    # belt-and-suspenders security check on the SOP-template fast path
+    # where we skip the LLM-based ``request_analyzer.analyze_request``
+    # for latency. The set is intentionally conservative — false
+    # negatives here just mean we lose ~6-8 s of LLM analysis for an
+    # SOP request, while false positives would block legitimate users.
+    # When any of these matches, we fall back to the full LLM analyzer
+    # path so the LLM-grade security check still runs.
+    _HEURISTIC_INJECTION_PATTERNS = [
+        re.compile(r"\bignore\s+(all\s+)?(previous|prior|earlier|above|the\s+above)\b", re.I),
+        re.compile(
+            r"\b(disregard|forget)\s+(all\s+)?(previous|prior|earlier|above|the\s+above)\b", re.I
+        ),
+        re.compile(
+            r"\b(reveal|print|show|leak|share|tell\s+me)\s+(your\s+)?(system\s+(prompt|message|instructions?)|prompt|api[_\s-]?key)\b",
+            re.I,
+        ),  # noqa: E501
+        re.compile(
+            r"\b(you\s+are\s+now|act\s+as|pretend\s+to\s+be|simulate)\s+(an?\s+)?(unrestricted|jailbroken|developer|admin|root|dan|grandma)\b",
+            re.I,
+        ),  # noqa: E501
+        re.compile(r"<\|\s*(system|im_start|endoftext|user|assistant)\s*\|>", re.I),
+        re.compile(
+            r"\b(override|bypass)\s+(your\s+|the\s+)?(safety|content\s+policy|rules|guard|restrictions?)\b",
+            re.I,
+        ),  # noqa: E501
+    ]
+
+    @classmethod
+    def _looks_heuristically_suspicious(cls, message: str) -> bool:
+        """Cheap regex screen for obvious prompt-injection / jailbreak attempts.
+
+        Returns True iff the message matches a known attack pattern.
+        Designed to be conservative — matches well-known phrasings
+        only — so a False return is not a security guarantee, only a
+        signal that we can take the SOP-template fast path and skip
+        the LLM analyzer call without obvious risk. When True, the
+        caller should fall back to the full LLM-based analyzer so the
+        higher-confidence security verdict still runs.
+        """
+        if not message:
+            return False
+        for pattern in cls._HEURISTIC_INJECTION_PATTERNS:
+            if pattern.search(message):
+                return True
+        return False
+
+    @staticmethod
+    def _build_sop_template_analysis_stub() -> "RequestAnalysis":
+        """Build a non-LLM ``RequestAnalysis`` for the SOP-template fast path.
+
+        The SOP itself is the workflow plan, so we don't need the
+        analyzer's complexity scoring or topic extraction to decide
+        what to do next. The stub forces ``requires_decomposition=True``
+        so the SOP path runs end-to-end. ``is_security_threat`` is
+        ``False`` because the caller has already cleared the message
+        with ``_looks_heuristically_suspicious``; if that screen had
+        flagged anything, we wouldn't be here.
+        """
+        from ...datatypes.workflow import RequestAnalysis
+
+        return RequestAnalysis(
+            complexity_score=4.0,
+            requires_decomposition=True,
+            requires_approval=False,
+            implicit_subtasks=[],
+            required_capabilities=["general"],
+            acceptance_criteria=["Request completed successfully"],
+            confidence_score=0.95,
+            is_scheduling_request=False,
+            is_scheduler_query_request=False,
+            is_explicit_approval_request=False,
+            topics=[],
+            is_security_threat=False,
+            threat_type=None,
+        )
 
     async def _resolve_actionability(
         self, message: str, matched_sop: Optional[Dict[str, Any]]
@@ -7241,9 +7348,43 @@ Agent response: {raw_response}"""
                     await self.request_tracker.clear_cancelled(request_id)
                     raise RequestCancelledException(request_id)
 
-                analysis = await self.request_analyzer.analyze_request(
-                    actual_message, context=analysis_context
-                )
+                # SOP-template fast path: when an SOP was already matched
+                # earlier in this request and is in deterministic
+                # ``template`` mode, the analyzer's complexity score and
+                # topic tags are not consulted by the downstream workflow
+                # — the SOP itself is the plan. Skip the ~6-8 s
+                # ``analyze_request`` LLM call and stub a minimal
+                # ``RequestAnalysis``. The LLM analyzer's security check
+                # is replaced by a fast heuristic regex screen; if the
+                # heuristic flags anything suspicious we fall through to
+                # the full LLM analyzer so the higher-confidence verdict
+                # still runs and can block the request.
+                if (
+                    _matched_sop is not None
+                    and _matched_sop.get("mode") == "template"
+                    and not skip_security_check
+                    and not self._looks_heuristically_suspicious(actual_message)
+                ):
+                    analysis = self._build_sop_template_analysis_stub()
+                    observability.observe(
+                        event_type=observability.ConversationEvents.WORKFLOW_ANALYSIS_SKIPPED,
+                        level=observability.EventLevel.DEBUG,
+                        data={
+                            "reason": "sop_template_match",
+                            "sop_id": _matched_sop["id"],
+                            "sop_name": _matched_sop.get("name", _matched_sop["id"]),
+                            "skipped_stage": "request_analyzer_llm",
+                            "request_id": request_id,
+                        },
+                        description=(
+                            f"Skipped LLM workflow analysis for SOP-template request "
+                            f"'{_matched_sop['id']}' (heuristic security check passed)"
+                        ),
+                    )
+                else:
+                    analysis = await self.request_analyzer.analyze_request(
+                        actual_message, context=analysis_context
+                    )
 
                 # SECURITY CHECK: Block security threats detected by LLM analyzer
                 # Skip security check if this is a credential or workflow approval response

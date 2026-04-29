@@ -70,6 +70,7 @@ import mimetypes
 import random
 import re
 import time
+import warnings
 from enum import Enum
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Union
@@ -162,6 +163,21 @@ def initialize_onellm_cache(cache_config: Optional[Dict[str, Any]] = None) -> bo
         "stream_chunk_length": cache_config.get("stream_chunk_length", 1),
         "ttl": cache_config.get("ttl", 86400),  # 24 hours
     }
+
+    # Suppress OneLLM's UserWarning when its default semantic-cache
+    # embedding model (``paraphrase-multilingual-MiniLM-L12-v2``) lacks
+    # ONNX weights and PyTorch isn't installed in the runtime container.
+    # The cache correctly falls back to hash-only mode and the runtime
+    # ships ``Xenova/multilingual-e5-small`` for actual semantic-similarity
+    # work, so the warning is noise that scares users on every formation
+    # startup. Filter is registered here — immediately before the call
+    # that emits it — so it stays scoped to OneLLM's cache module.
+    warnings.filterwarnings(
+        "ignore",
+        message=r".*Semantic cache disabled.*",
+        category=UserWarning,
+        module=r"onellm\.cache",
+    )
 
     # Initialize OneLLM cache
     onellm_init_cache(**cache_params)

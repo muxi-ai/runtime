@@ -637,6 +637,15 @@ class ConversationEvents(Enum):
     WORKFLOW_ANALYSIS_FAILED = "workflow.analysis.failed"
     # When workflow request analysis fails
 
+    WORKFLOW_ANALYSIS_SKIPPED = "workflow.analysis.skipped"
+    # When the LLM-backed request analyzer is bypassed for performance —
+    # currently fired by the SOP-template fast path in
+    # Overlord._process_sync_chat when an SOP has already been matched
+    # in deterministic template mode and a heuristic security regex
+    # has cleared the message. data.reason carries the trigger
+    # (e.g. "sop_template_match"), data.skipped_stage names the LLM
+    # call that was skipped.
+
     WORKFLOW_DECOMPOSITION_FAILED = "workflow.decomposition.failed"
     # When workflow task decomposition fails
 
