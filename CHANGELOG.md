@@ -2,6 +2,49 @@
 
 ## [unreleased]
 
+### SOP-aware actionability gate (post-PR-#160 regression)
+
+Fixes a demo regression where the hello-muxi formation would silently
+swallow a matched SOP. Replaying the demo flow:
+
+* User says "onboard me"
+* `sop.matched` fires at +1.1s for SOP `onboarding` (mode `template`)
+* Clarification analyzer returns `action: execute`
+* `_is_actionable_message` (the new local prototype-similarity
+  classifier from PR #160) returns `False` for the bare two-word
+  phrase
+* Overlord takes the persona fast path, returns a chat-style reply
+* No `agent.planning`, no `overlord.routing.completed`, no GitHub
+  issue comment — the matched SOP is dropped on the floor
+
+The classifier replacement was the right call for filtering bare
+social chatter ("hi" / "thanks" / "got it") at ~50 ms instead of a
+cloud LLM round-trip, but it is deliberately conservative on short
+verb-light phrases. Pre-PR-#160 the LLM-based check correctly read
+"onboard me" as a procedure trigger; the new heuristic does not.
+
+Fix: extracted the actionability decision in
+`overlord._process_sync_chat` into a small helper
+`_resolve_actionability(message, matched_sop)`. Behavior:
+
+* No SOP match → defer to `_is_actionable_message` verbatim
+  (preserves the PR #160 latency win for greetings/acks)
+* SOP match + classifier says actionable → no-op, return `True`
+* SOP match + classifier says non-actionable → **force `True`** and
+  emit a debug-level `SOP_MATCHED` event tagged
+  `stage: actionability_override` so operators can audit how often
+  the override is biting
+
+A matched SOP is by definition actionable: we already know what to
+do. The classifier verdict cannot override an explicit procedure
+match.
+
+5 new unit tests in
+`tests/unit/test_overlord_actionability_sop_override.py` pin all
+four classifier × SOP combinations plus the `name`-fallback
+metadata shape. Full unit suite: 891 passed / 1 skipped (one
+pre-existing rce-token-validation failure unrelated to this change).
+
 ### Pure-chat multi-turn context fix (clean role-turn bundle)
 
 Fixes cross-turn context loss in pure-chat sessions where

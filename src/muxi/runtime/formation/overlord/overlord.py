@@ -2342,6 +2342,48 @@ class Overlord:
             # should not silently drop user messages on the floor.
             return True
 
+    async def _resolve_actionability(
+        self, message: str, matched_sop: Optional[Dict[str, Any]]
+    ) -> bool:
+        """
+        Decide whether a message warrants the full action pipeline.
+
+        Defers to ``_is_actionable_message`` for the heuristic call
+        (local prototype-similarity classifier introduced in PR #160).
+        That classifier is tuned to filter bare social chatter ("hi",
+        "thanks", "got it") and is deliberately conservative about
+        accepting short verb-light phrases as actionable — so terse
+        procedure triggers like "onboard me" or "ship it" land on the
+        wrong side of its decision boundary.
+
+        When an SOP was matched earlier in the same request the
+        procedure IS the action: we already know what to do, the
+        classifier's verdict is moot, and routing to the persona fast
+        path would silently swallow the match (no agent.planning, no
+        tool execution, no workflow). Force ``True`` and emit a
+        debug-level SOP_MATCHED event tagged
+        ``stage: actionability_override`` so operators can audit how
+        often the override is biting.
+        """
+        is_actionable = await self._is_actionable_message(message)
+        if not is_actionable and matched_sop is not None:
+            observability.observe(
+                event_type=observability.ConversationEvents.SOP_MATCHED,
+                level=observability.EventLevel.DEBUG,
+                data={
+                    "sop_id": matched_sop["id"],
+                    "sop_name": matched_sop.get("name", matched_sop["id"]),
+                    "stage": "actionability_override",
+                    "classifier_label": "non_actionable",
+                },
+                description=(
+                    f"Forcing actionable=True for SOP-matched request "
+                    f"'{matched_sop['id']}' despite classifier verdict"
+                ),
+            )
+            return True
+        return is_actionable
+
     async def _is_non_actionable_for_workflow(self, message_lower: str) -> bool:
         """
         Check if a message is non-actionable for workflow purposes.
@@ -7076,8 +7118,11 @@ Agent response: {raw_response}"""
         # ===================================================================
         # NON-ACTIONABLE MESSAGE FAST PATH
         # ===================================================================
-        # Check if message requires any action at all
-        is_actionable = await self._is_actionable_message(message)
+        # Resolve actionability with SOP awareness — see
+        # ``_resolve_actionability`` for the full rationale. A matched
+        # SOP is by definition actionable and must never be silently
+        # swallowed by the local-classifier fast path.
+        is_actionable = await self._resolve_actionability(message, _matched_sop)
 
         if not is_actionable:
             observability.observe(
