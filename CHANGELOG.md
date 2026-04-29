@@ -2,6 +2,306 @@
 
 ## [unreleased]
 
+### Review hardening (PR #160)
+
+Two follow-ups from greptile code review:
+
+* **Deleted dead `get_default_classifier()`** in
+  `services/classification/local_classifier.py`. The function declared its
+  own competing `_default_classifier` / `_default_lock` singleton but was
+  never imported or called anywhere — all consumers (`overlord`,
+  `scheduler`, `fusion_engine`) go through `get_classifier()` in
+  `classification/__init__.py`. Per AGENTS.md "no dead code" rule, removed
+  the dead function entirely along with the now-unused `Optional` import.
+* **Added minimum-margin gate** to both Group B clarification fast paths.
+  New module-level constant `MIN_FAST_PATH_MARGIN = 0.05` in
+  `clarification.py`. `_analyze_request` STEP 1.5 and `_check_need_more`
+  STEP 0 now skip the LLM only when the classifier is **both** confident
+  in "no clarification" **and** the margin clears the threshold. On a
+  near-zero margin (uncertain centroids) the call falls through to the
+  LLM, preserving the clarification-on-ambiguity guarantee. Below-
+  threshold cases emit a `logger.debug` line so operators can audit how
+  often the threshold is biting; no new event types or config surface.
+
+  ```python
+  if not needs_clar and margin > MIN_FAST_PATH_MARGIN:
+      # confident-no — skip LLM
+  elif not needs_clar:
+      # uncertain-no — fall through to LLM
+  ```
+
+### Fix: synthesis LLM hallucinated "the file didn't come through" on mixed-result artifact plans
+
+Surfaced from a hello-muxi demo trace: `create a bar chart showing pretend
+quarterly sales of acme corp` returned the chart attachment **and** a
+synthesis paragraph saying the file didn't come through. The attachment
+WAS there; the prose contradicted reality.
+
+**Root cause.**
+`Agent._serialize_planning_result_for_synthesis` strips the `_artifact`
+key from each `my_results` entry before serializing for the synthesis
+LLM:
+
+```python
+serializable_result.pop("_artifact", None)
+```
+
+That left the synthesis prompt with **zero ground-truth signal** that any
+file was attached. The pure-artifact synthesis-skip fast path
+(`439b9271`, v0.20260427.0) didn't fire either, because the plan had two
+steps — `activate_skill(file-generation)` produces a non-`_artifact`
+instruction blob, and `generate_file` produces the artifact-bearing
+result. Mixed-shape `my_results` correctly fail the `every entry has
+_artifact` gate, so synthesis ran. With nothing in the prompt to confirm
+the file existed and a SOUL coaching the model to "be honest if
+something's broken," Sonnet 4.6 took the metadata-only view as failure
+evidence and wrote the contradiction.
+
+**Fix.** Surface the attached artifacts as a dedicated block in the
+synthesis prompt — explicitly so the LLM knows the file IS surfacing in
+the user's UI and cannot hallucinate failure.
+
+* New `Agent._collect_attached_artifact_lines(my_results)` helper. Walks
+  result values, pulls every `_artifact` (handles both `MuxiArtifact`
+  Pydantic instances and dict-shaped fallbacks), and renders one line
+  per artifact:
+  ```
+  - acme_corp_quarterly_sales.png (image/png, 56.4 KB)
+  ```
+* `Agent._build_planning_response_synthesis_prompt` calls the helper.
+  When non-empty, it injects:
+  ```
+  FILES ALREADY ATTACHED TO THIS RESPONSE:
+  - acme_corp_quarterly_sales.png (image/png, 56.4 KB)
+
+  These files have been successfully generated and will surface in the user's UI
+  regardless of what you write below. Do NOT claim a file is missing, did not come
+  through, or that generation failed when this list is non-empty. You MAY mention
+  the filename(s) naturally in your reply.
+  ```
+  …right before the existing closing instructions. Pure-text plans (no
+  artifacts at all) get no block — the conditional keeps prompt size
+  unchanged for the common case.
+
+The serializer is left as-is — it correctly avoids dumping the full
+`MuxiArtifact` (binary `data_url`, base64 thumbnails) into the LLM
+context. The new block carries only the user-facing identifying data
+(filename, type/format, size).
+
+**Out of scope (deliberate):**
+
+* **Did not loosen the synthesis-skip gate** to treat `activate_skill`
+  results as transparent. That's a fine follow-up if the demo team
+  wants `activate_skill + generate_file` to skip synthesis entirely,
+  but Option B addresses the structurally weaker path: the case where
+  synthesis runs anyway. Both Options A and B can coexist.
+* **Did not modify `hello-muxi/SOUL.md`.** The bug was in the prompt,
+  not the persona — the SOUL's "be honest" coaching is correct
+  guidance; the LLM was just lacking the ground truth it needed to be
+  honest about.
+
+**Tests** (`tests/unit/test_agent_planning_helpers.py`, 7 new):
+extraction from a real `MuxiArtifact` instance, dict-shaped fallback
+extraction with `format` + `metadata.size_bytes`, partial metadata
+(missing format, missing size, missing filename → "(unnamed file)"),
+non-`_artifact` results skipped (the mixed-plan case), empty-input
+returns `[]`, end-to-end mixed-plan prompt contains the FILES ATTACHED
+block + filename + no-hallucinate guard before the closing
+instructions, pure-text-plan prompt does NOT contain the block. Full
+unit suite green: 847 passed, 1 skipped, 0 regressions.
+
+**File of record:**
+`src/muxi/runtime/formation/agents/agent.py` — helper added; prompt
+builder extended.
+
+### Performance: localize 13 binary classification gates — heavy PDF median 60.4 s → 50.7 s (-16 %)
+
+The pre-planning critical path was emitting 4-5 cloud LLM calls per
+non-trivial request — actionability detection, workflow eligibility,
+clarification analysis, simple-question detection, recall-question
+detection, plus credential and scheduler binary checks deeper in the
+flow. Every one of those was structurally a **binary** decision
+(yes/no, label/no-label) or a pure semantic-similarity score. None of
+them needed a cloud LLM. A 384-dim multilingual embedder pinned
+against curated prototype exemplars classifies them in ~60 ms with
+deterministic accuracy on the eval set, and ships as part of the
+runtime — no extra service, no API key, no network round-trip.
+
+**The architecture.** New `services/classification/` module:
+
+* `prototypes.py` — 11 `IntentSpec` definitions, each carrying 8-15
+  positive + 8-15 negative exemplars (with 1-2 multilingual entries per
+  spec where the call site is multilingual).
+* `local_classifier.py` — `classify_binary(intent, text)` and
+  `pairwise_similarity(text_a, text_b)`.
+* `__init__.py` — public API + a process-wide singleton accessor
+  (`await get_classifier()`).
+
+The model is `local/Xenova/multilingual-e5-small` (384-dim, ONNX,
+multilingual), auto-downloaded by OneLLM on first use, cached under
+the standard HuggingFace cache directory. Classifier warmup batch-
+embeds all positive and negative exemplars once at first use,
+computes L2-normalized centroid pairs per intent, and caches them
+in-process. Per-call cost: ~60 ms median on Apple Silicon ONNX
+Runtime. Process warmup is ~13 s, amortized.
+
+**Phase 1 (commits `3acd09e9`, `1ca9b3be`) — six pre-planning gates
+moved local:**
+
+* `Overlord._is_actionable_message`
+* `Overlord._is_non_actionable_for_workflow`
+* `Overlord._is_simple_question`
+* `UnifiedClarificationSystem._check_context_switch`
+* `UnifiedClarificationSystem._check_stop_intent`
+* The recall-question detection at STEP 1 of `_analyze_request`
+
+**Phase 2 (commits `3fc8d8c1` → `cd39e50c`) — seven more gates in
+three patterns:**
+
+* **Group A — full replacements (no LLM fallback when classifier is
+  healthy).**
+  * `CredentialHandler.is_credential_request`
+  * `CredentialHandler._is_cancellation` (multilingual: en/es/fr/ja
+    exemplars)
+  * `CredentialHandler._is_help_request` (multilingual)
+  * `JobManager._is_significant_prompt_change` →
+    `pairwise_similarity(old, new) < 0.88` (calibrated threshold).
+* **Group D — direct cosine replacement.**
+  * `MultiModalFusionEngine._calculate_semantic_similarity` →
+    `pairwise_similarity(source_desc, target_desc)`. The LLM was being
+    asked to score 0.0-1.0 similarity; that *is* cosine in an
+    embedding space, so we compute it directly.
+* **Group B — fast-path skip (split text generation from
+  classification decision).**
+  The clarification analyzer (`mt=250-1000`) and the inner "do we
+  need more info?" gate produce a `{needs_X: bool, question: str}`
+  structured output. The classifier owns the binary; the LLM only
+  fires on the positive branch (where it has to *generate* the
+  clarifying question). On a confident-no the LLM never runs.
+  Wired in `UnifiedClarificationSystem._analyze_request` (STEP 1.5)
+  and `_check_need_more` (STEP 0).
+
+**Deferred (intentional, not regressions):**
+
+* **Agent router** (`AgentRouter.select_agent_for_message`,
+  sequential, ~8 s on heavy PDF). Skipped for defense-in-depth
+  security reasons — the router doubles as a defense surface against
+  malicious agent-name injection in user input.
+* **Topic extraction** in `RequestAnalyzer` (parallel, ~1.5 s).
+  Skipped because the analyzer LLM still runs for 11 other
+  structured-output fields — replacing topics alone breaks the call
+  into two round-trips and saves nothing.
+* **`IntentDetectionService`** (4+ multi-class call sites).
+  Skipped: bigger blast radius; would need a `classify_multiclass`
+  method and per-`IntentType` prototype curation.
+
+**Failure modes — every wired gate falls back to the prior behavior
+on classifier-fail.** Group A credential gates fall back to the
+preserved keyword fallback from the legacy LLM-fail branches. Group
+A scheduler gate falls back to `True` (consider all changes
+significant — same conservative default the prior LLM-fail branch
+used; better to spawn a fresh job than silently reassign one). Group
+D fusion engine falls back to neutral 0.5. Group B fast-paths fall
+through to the existing LLM call path. This fall-through is the
+safety net, not a feature flag — a transient classifier outage
+degrades gracefully back to pre-Phase-2 behavior with no config
+surface to keep in sync.
+
+**Observability.** New
+`SystemEvents.LOCAL_CLASSIFIER_INITIALIZED` (emitted once per process
+the first time the classifier warms; carries `warmup_ms` and the list
+of warmed intents). Group B fast-path skips reuse
+`ConversationEvents.CLARIFICATION_SKIPPED` with
+`method: "local_classifier_fast_path"` and `margin: <float>` so
+operators can audit how often they fire and what the classifier's
+confidence looked like.
+
+**Measured impact** on the canonical
+`hello-muxi → "create a one-page PDF about MUXI"` workload, three
+runs per condition, same prompts in same order:
+
+| Stage | Heavy PDF wall (median) |
+|---|---:|
+| Phase 0 (post-perf, pre-classifier) | 60.353 s |
+| Phase 1 + 2 (today) | **50.709 s** |
+
+Wall-time delta vs Phase 0: **-9.6 s, -16 %.** Cumulative delta vs the
+original 108 s baseline: **-57.3 s, -53 %.** LLM call buckets across
+the three runs:
+
+| Bucket | Phase 0 | Phase 2 |
+|---|---:|---:|
+| classification (`mt <= 64`) | 3 | **0** |
+| synthesis (`mt <= 4000`) | 8 | 9 |
+| planning (`mt > 4000`) | 2 | 1 |
+
+The cleanest signal is `classification` going to **zero** across all
+three Phase 2 runs — direct confirmation that the binary gates are
+now exclusively local. The +1 in synthesis is the clarification
+analyzer (`mt=250`) still firing on runs where the classifier defers;
+the Group B fast-path is opportunistic by design, not aggressive.
+
+The 9.6 s improvement comes almost entirely from the **Group B
+fast-path on the clarification analyzer**, which was the bottleneck
+of the parallel pre-planning batch in the Phase 0 trace. The four
+parallel gates ran via `asyncio.gather` and the wall clock was bound
+by the slowest call (~5 s clarification analyzer). Phase 2 collapses
+that to ~60 ms when the classifier is confident no clarification is
+needed (which it should be, and is, on "create a one-page PDF about
+MUXI").
+
+The remaining ~50 s on the heavy PDF path is downstream of
+pre-planning — agent router (~8 s), topic extraction (~1.5 s), the
+planning round-trip itself (~30-40 s on Sonnet-class models for
+16 K-token planning prompts with 56 MCP tools in scope), plus
+post-planning execution + synthesis. None of those are
+binary-classification-shaped, so none of them are this pass's target.
+
+**Microbench (server-free)** in `bench/classifier_microbench.py`
+exercises the classifier in isolation:
+
+| Op | Median | Per-call speedup vs cloud LLM |
+|---|---:|---:|
+| `classify_binary` (across all 11 intents) | 51-79 ms | ~12-13× |
+| `pairwise_similarity` (10 paraphrase pairs) | 53 ms | ~12× |
+
+(The reference cloud cost is ~750 ms median for `mt <= 1000`
+`gpt-4o-mini` calls, measured on the same network during Phase 0
+baselining.)
+
+**Tests.** `tests/unit/test_local_classifier.py` adds 45 tests covering:
+spec invariants (disjoint pos/neg sets, length cap), accuracy floors
+(≥85 % per IntentSpec eval set), pairwise correctness (identical near
+1.0, paraphrase ≥0.95, cross-language same-task ≥0.85, same-vs-
+different gap ≥0.10, symmetry within 1e-5, empty input raises),
+failure modes (unknown intent, register idempotency), diagnostic
+snapshot, and singleton accessor identity. Full unit suite: 864
+passed, 3 skipped, zero regressions. Event validation 1210/1210
+(100 %).
+
+**Files of record:**
+
+* `src/muxi/runtime/services/classification/{prototypes.py,
+  local_classifier.py, __init__.py}` — new
+* `src/muxi/runtime/formation/overlord/overlord.py` — singleton
+  accessor + 3 Phase 1 gates
+* `src/muxi/runtime/formation/overlord/clarification.py` — 3 Phase 1
+  gates + 2 Phase 2 Group B fast-paths
+* `src/muxi/runtime/formation/credentials/handler.py` — 3 Phase 2
+  Group A credential gates
+* `src/muxi/runtime/services/scheduler/manager.py` — Phase 2 Group A
+  scheduler pairwise gate
+* `src/muxi/runtime/services/multimodal/fusion_engine.py` — Phase 2
+  Group D pairwise replacement
+* `src/muxi/runtime/datatypes/observability.py` —
+  `LOCAL_CLASSIFIER_INITIALIZED` event
+* `tests/unit/test_local_classifier.py` — 45 tests
+* `bench/run_baseline.py`, `bench/compare_phase2.py`,
+  `bench/classifier_microbench.py` — measurement harnesses
+* `bench/local_classification_baseline.{json,md}`,
+  `bench/local_classification_phase2.{json,md}`,
+  `bench/classifier_microbench.{json,md}` — measurement artifacts
+
 ### Fix: remote-buffer recall in `_enhance_message_with_context`
 
 Symptom: in remote-buffer / FAISSx mode

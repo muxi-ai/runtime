@@ -1,0 +1,152 @@
+{
+  "started_at": "2026-04-28T21:56:29+0100",
+  "base_url": "http://127.0.0.1:8000",
+  "runs": 3,
+  "workloads_requested": [
+    "heavy"
+  ],
+  "heavy": {
+    "results": [
+      {
+        "label": "heavy_pdf",
+        "prompt": "create a one-page PDF about MUXI",
+        "wall_seconds": 77.976,
+        "http_status": 200,
+        "response_excerpt": "{\"object\":\"message\",\"timestamp\":1777409867559,\"type\":\"chat.completed\",\"request\":{\"id\":\"req_FD3AvrxelOYi42JdKLzZo\",\"idempotency_key\":null},\"success\":true,\"error\":null,\"data\":{\"message\":{\"role\":\"assista",
+        "session_id": "bench_heavy_run1",
+        "started_ms": 1777409789586,
+        "ended_ms": 1777409867562,
+        "classification_events": {
+          "classification": 0,
+          "synthesis": 3,
+          "planning": 1,
+          "unknown": 1,
+          "calls": [
+            {
+              "max_tokens": 2000,
+              "temperature": 0.2,
+              "model": "anthropic/claude-sonnet-4-6",
+              "rel_s": 1.246
+            },
+            {
+              "max_tokens": 1000,
+              "temperature": 0.2,
+              "model": "anthropic/claude-sonnet-4-6",
+              "rel_s": 11.951
+            },
+            {
+              "max_tokens": 2000,
+              "temperature": 0.2,
+              "model": "anthropic/claude-sonnet-4-6",
+              "rel_s": 19.313
+            },
+            {
+              "max_tokens": 16384,
+              "temperature": 0.1,
+              "model": "anthropic/claude-sonnet-4-6",
+              "rel_s": 27.585
+            },
+            {
+              "max_tokens": null,
+              "temperature": 0.7,
+              "model": "anthropic/claude-sonnet-4-6",
+              "rel_s": 66.823
+            }
+          ]
+        }
+      },
+      {
+        "label": "heavy_pdf",
+        "prompt": "create a one-page PDF about MUXI",
+        "wall_seconds": 40.653,
+        "http_status": 200,
+        "response_excerpt": "{\"object\":\"message\",\"timestamp\":1777409908962,\"type\":\"chat.completed\",\"request\":{\"id\":\"req_FAwRABXJ6oAzGisrsb6xH\",\"idempotency_key\":null},\"success\":true,\"error\":null,\"data\":{\"message\":{\"role\":\"assista",
+        "session_id": "bench_heavy_run2",
+        "started_ms": 1777409868317,
+        "ended_ms": 1777409908970,
+        "classification_events": {
+          "classification": 0,
+          "synthesis": 4,
+          "planning": 0,
+          "unknown": 1,
+          "calls": [
+            {
+              "max_tokens": 2000,
+              "temperature": 0.2,
+              "model": "anthropic/claude-sonnet-4-6",
+              "rel_s": 0.357
+            },
+            {
+              "max_tokens": 2000,
+              "temperature": 0.2,
+              "model": "anthropic/claude-sonnet-4-6",
+              "rel_s": 0.481
+            },
+            {
+              "max_tokens": 200,
+              "temperature": 0.1,
+              "model": "anthropic/claude-sonnet-4-6",
+              "rel_s": 0.482
+            },
+            {
+              "max_tokens": null,
+              "temperature": 0.7,
+              "model": "anthropic/claude-sonnet-4-6",
+              "rel_s": 37.747
+            },
+            {
+              "max_tokens": 2000,
+              "temperature": 0.7,
+              "model": "anthropic/claude-sonnet-4-6",
+              "rel_s": 37.749
+            }
+          ]
+        }
+      },
+      {
+        "label": "heavy_pdf",
+        "prompt": "create a one-page PDF about MUXI",
+        "wall_seconds": 50.709,
+        "http_status": 200,
+        "response_excerpt": "{\"object\":\"message\",\"timestamp\":1777409960433,\"type\":\"chat.completed\",\"request\":{\"id\":\"req_Hq2oHMSW1nIlxvX7juL80\",\"idempotency_key\":null},\"success\":true,\"error\":null,\"data\":{\"message\":{\"role\":\"assista",
+        "session_id": "bench_heavy_run3",
+        "started_ms": 1777409909724,
+        "ended_ms": 1777409960434,
+        "classification_events": {
+          "classification": 0,
+          "synthesis": 2,
+          "planning": 0,
+          "unknown": 0,
+          "calls": [
+            {
+              "max_tokens": 1000,
+              "temperature": 0.2,
+              "model": "anthropic/claude-sonnet-4-6",
+              "rel_s": 0.624
+            },
+            {
+              "max_tokens": 200,
+              "temperature": 0.1,
+              "model": "anthropic/claude-sonnet-4-6",
+              "rel_s": 2.137
+            }
+          ]
+        }
+      }
+    ],
+    "summary": {
+      "count": 3,
+      "successful": 3,
+      "min_s": 40.653,
+      "median_s": 50.709,
+      "max_s": 77.976,
+      "total_s": 169.338
+    },
+    "classification_event_totals": {
+      "classification": 0,
+      "synthesis": 9,
+      "planning": 1,
+      "unknown": 2
+    }
+  }
+}

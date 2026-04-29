@@ -16,7 +16,6 @@ from ...utils.fastjson import json
 from ...utils.id_generator import generate_nanoid
 from .. import observability
 from ..db import DatabaseManager
-from ..llm import LLM
 from ..memory.long_term import User  # Import User model for formation isolation
 from .limits import get_limits_enforcer
 from .models import ScheduledJob, ScheduledJobAudit
@@ -1292,47 +1291,44 @@ class JobManager:
 
             return (job_id, "updated")
 
+    # Threshold for the scheduler prompt-change gate. Cosine similarity
+    # between the e5-small embeddings of old and new prompt; values >=
+    # this threshold are treated as "the same task" (minor edit / typo
+    # fix / language switch). Calibrated on:
+    #   identical / paraphrase            -> ~0.99
+    #   same task across languages        -> ~0.88
+    #   different tasks (email vs report) -> 0.80-0.86
+    # 0.88 sits inside the same-task lower bound and above the
+    # different-task ceiling. Conservative bias: when in doubt we
+    # err toward "different" (False from this method) so a genuinely
+    # new task spawns a fresh scheduled job rather than silently
+    # reassigning an existing one.
+    _PROMPT_CHANGE_SIM_THRESHOLD = 0.88
+
     async def _is_significant_prompt_change(self, old_prompt: str, new_prompt: str) -> bool:
-        """
-        Determine if a prompt change represents a fundamentally different task.
-        Uses LLM to understand semantic similarity across languages.
+        """Determine if a prompt change represents a different task.
 
-        Examples of significant changes:
-        - "check my email" -> "send me a text"
-        - "generate a report" -> "backup my files"
-        - "每天检查邮件" -> "每天发送报告" (Chinese: check email -> send report)
+        Replaces the previous LLM round-trip with a deterministic
+        cosine-similarity comparison against the local
+        multilingual-e5-small embeddings — same model the
+        prototype-similarity classifier uses. The model's strong
+        cross-language alignment handles the multilingual cases that
+        the legacy LLM prompt called out (e.g. "check email" vs
+        "verificar correo" still scores ~0.88 same-task).
 
-        Examples of minor changes:
-        - "check my email" -> "check my emails"
-        - "send daily report" -> "send a daily report"
-        - "check email" -> "verificar correo" (English -> Spanish, same task)
+        On classifier failure we fall back to the prior conservative
+        default of "consider all changes significant" so a transient
+        failure never silently reassigns a job to a different task.
         """
-        # Quick exact match check
         if old_prompt.strip().lower() == new_prompt.strip().lower():
             return False
 
-        # Use LLM for semantic comparison
         try:
-            llm_service = self.db_manager._services.get("llm")
-            if not llm_service:
-                observability.observe(
-                    event_type=observability.ErrorEvents.SERVICE_UNAVAILABLE,
-                    level=observability.EventLevel.WARNING,
-                    data={"service": "llm", "fallback": "consider_all_changes_significant"},
-                    description="LLM service not available for prompt comparison",
-                )
-                return True  # Fallback: consider all changes significant
+            from .. import classification as _classification
 
-            llm = LLM(service=llm_service)
-
-            from ...formation.prompts.loader import PromptLoader
-
-            prompt = PromptLoader.get(
-                "scheduler_task_comparison.md", old_prompt=old_prompt, new_prompt=new_prompt
-            ).strip()
-
-            response = await llm.generate_json(prompt)
-            result = response.get("different_task", True)
+            classifier = await _classification.get_classifier()
+            similarity = await classifier.pairwise_similarity(old_prompt, new_prompt)
+            different = similarity < self._PROMPT_CHANGE_SIM_THRESHOLD
 
             observability.observe(
                 event_type=observability.SystemEvents.SCHEDULER_PROMPT_COMPARISON,
@@ -1340,13 +1336,14 @@ class JobManager:
                 data={
                     "old_prompt": old_prompt[:50] + "..." if len(old_prompt) > 50 else old_prompt,
                     "new_prompt": new_prompt[:50] + "..." if len(new_prompt) > 50 else new_prompt,
-                    "different_task": result,
-                    "reason": response.get("reason", ""),
+                    "different_task": different,
+                    "similarity": round(similarity, 4),
+                    "threshold": self._PROMPT_CHANGE_SIM_THRESHOLD,
+                    "method": "pairwise_cosine",
                 },
-                description="Prompt change comparison completed",
+                description="Prompt change comparison completed (local cosine)",
             )
-
-            return result
+            return different
 
         except Exception as e:
             observability.observe(
@@ -1357,7 +1354,6 @@ class JobManager:
                     "old_prompt": old_prompt[:50] + "..." if len(old_prompt) > 50 else old_prompt,
                     "new_prompt": new_prompt[:50] + "..." if len(new_prompt) > 50 else new_prompt,
                 },
-                description=f"Failed to compare prompts using LLM: {str(e)}",
+                description=f"Failed to compare prompts via classifier: {str(e)}",
             )
-            # Fallback: consider all changes significant if LLM fails
             return True

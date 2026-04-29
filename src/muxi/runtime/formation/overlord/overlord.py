@@ -115,6 +115,7 @@ from ...datatypes.workflow import ApprovalStatus, RequestAnalysis, Workflow, Wor
 from ...services import observability, streaming
 from ...services.a2a.registry_client import A2ARegistryClient
 from ...services.a2a.server import A2AServer
+from ...services.classification import LocalClassifier
 from ...services.llm import LLM
 
 # Built-in MCP imports
@@ -347,6 +348,15 @@ class Overlord:
         # Note: This uses asyncio.Lock which assumes all calls occur within the same event loop.
         # Cross-thread calls are not supported - use the Formation's thread-safe methods instead.
         self._agent_add_lock = asyncio.Lock()
+
+        # Local prototype-similarity classifier for binary pre-planning gates
+        # (actionability, workflow eligibility, simple-question detection,
+        # clarification context-switch / stop-intent / recall detection).
+        # Lazily initialized + warmed on first use via
+        # ``_get_local_classifier()`` so the runtime doesn't pay the
+        # ~95 MB ONNX download cost at formation up time.
+        self._local_classifier: Optional[LocalClassifier] = None
+        self._local_classifier_lock = asyncio.Lock()
 
         # Recent document tracking for immediate context
         # Structure: {session_id: [documents]}
@@ -2193,6 +2203,64 @@ class Overlord:
                 description="Failed to load soul, using fallback",
             )
 
+    async def _get_local_classifier(self) -> LocalClassifier:
+        """Return the lazily-initialized prototype-similarity classifier
+        used by the binary pre-planning gates.
+
+        Replaces a cluster of cloud LLM calls (actionability,
+        workflow-eligibility, simple-question, clarification context
+        switch / stop intent / recall question) with deterministic
+        local cosine-similarity matches against curated prototype
+        sentences. See ``services.classification`` for the design.
+
+        First call constructs the classifier and warms up all six
+        built-in intents — typically ~1 s on a hot HuggingFace cache,
+        ~60-90 s on a cold cache (one-time download of the
+        ``Xenova/multilingual-e5-small`` ONNX weights). Subsequent
+        calls return the cached instance immediately.
+
+        Lock-protected so concurrent first-touch callers don't both
+        pay the warmup cost. Failures during warmup are propagated —
+        the gates that depend on the classifier already have safe
+        fallback defaults around their classify call sites, so a
+        transient HF outage doesn't take the runtime down.
+        """
+        from ...services.classification import get_classifier
+
+        if self._local_classifier is not None and self._local_classifier.is_warmed:
+            return self._local_classifier
+
+        async with self._local_classifier_lock:
+            if self._local_classifier is not None and self._local_classifier.is_warmed:
+                return self._local_classifier
+            already_warmed_in_singleton = (
+                # If the process-wide singleton is already warmed (e.g. another
+                # overlord or the scheduler / fusion engine touched it first),
+                # we just adopt it; we don't double-emit the warmup event.
+                False
+            )
+            t0 = time.perf_counter()
+            classifier = await get_classifier()
+            warmup_ms = int((time.perf_counter() - t0) * 1000)
+            # Heuristic: a sub-millisecond return means the singleton was
+            # already warmed by a prior consumer, so we skip the
+            # observability event for THIS overlord.
+            already_warmed_in_singleton = warmup_ms < 50
+            self._local_classifier = classifier
+            if not already_warmed_in_singleton:
+                observability.observe(
+                    event_type=observability.SystemEvents.LOCAL_CLASSIFIER_INITIALIZED,
+                    level=observability.EventLevel.INFO,
+                    data={
+                        "service": "local_classifier",
+                        "model": self._local_classifier.model,
+                        "warmup_ms": warmup_ms,
+                        "intents": list(self._local_classifier.diagnostic_snapshot().keys()),
+                    },
+                    description="Local classification service warmed up",
+                )
+        return self._local_classifier
+
     async def _is_actionable_message(self, message: str) -> bool:
         """
         Determine if a message requires action or is just informational.
@@ -2244,92 +2312,35 @@ class Overlord:
         if "=== RELEVANT MEMORIES ===" in message:
             return True
 
-        # For more complex cases, use LLM if available
-        if self._capability_models.get("text"):
-            try:
-                _specialist_registry = self._format_specialist_registry()
-                _specialist_section = (
-                    (
-                        f"\n\nAvailable specialist agents in this formation:\n{_specialist_registry}\n"
-                        "If the request topic matches any specialist's name, description, "
-                        "specialties, or keywords, the message is ACTIONABLE — the specialist "
-                        "needs to handle it. Do NOT classify as NON_ACTIONABLE just because the "
-                        "wording sounds casual or conversational."
-                    )
-                    if _specialist_registry
-                    else ""
+        # Local prototype-similarity classifier. Replaces a cloud LLM
+        # boolean classification (mt=20) with a deterministic
+        # multilingual ONNX cosine match (~50 ms). The classifier was
+        # tuned to recognize bare social chatter as NON_ACTIONABLE and
+        # everything that asks the system to produce content as
+        # ACTIONABLE; numbered answers to assistant questions are
+        # included in the ACTIONABLE prototype set.
+        #
+        # When the user is replying to an assistant question, prefix
+        # the last assistant message to the embed input so the
+        # classifier sees the same conversational context the LLM
+        # prompt previously saw. The e5 family handles short prefixes
+        # gracefully; we cap the prefix at 240 chars to keep the input
+        # within the encoder's effective window.
+        try:
+            classifier = await self._get_local_classifier()
+            classify_text = actual_message
+            if last_assistant_msg:
+                classify_text = (
+                    f"Previous assistant turn: {last_assistant_msg[:240]}\n"
+                    f"User reply: {actual_message}"
                 )
-
-                system_prompt = (
-                    "Is this message requesting action or just casual social chatter?\n\n"
-                    "A message is ACTIONABLE if it asks the system to DO anything — answer a "
-                    "question, explain a concept, fetch information, take an action, or "
-                    "produce a summary. Phrasings like 'tell me about X', 'what is X', "
-                    "'explain X', 'how does X work', 'describe X' are ALL ACTIONABLE because "
-                    "they require the system to produce content.\n\n"
-                    "A message is NON_ACTIONABLE only if it is purely social chatter that "
-                    "needs no actual content (a bare greeting, a bare acknowledgment, a "
-                    "thank-you).\n"
-                    f"{_specialist_section}\n"
-                    "Consider the conversation context: if the assistant just asked the user "
-                    "questions, the user's response (even if short or numbered) is "
-                    "ACTIONABLE because it answers those questions and implicitly requests "
-                    "the assistant to proceed with the task.\n\n"
-                    "Examples of ACTIONABLE messages:\n"
-                    '- "What database should I use?" -> ACTIONABLE (question)\n'
-                    '- "Create a file" -> ACTIONABLE (command)\n'
-                    '- "Tell me about MUXI" -> ACTIONABLE (request to explain)\n'
-                    '- "What is the overlord?" -> ACTIONABLE (definition request)\n'
-                    '- "Explain how formations work" -> ACTIONABLE (explanation request)\n'
-                    '- "How does X work?" -> ACTIONABLE (question)\n'
-                    '- "Use the docs to ..." -> ACTIONABLE (instruction with tool hint)\n'
-                    '- "1. core features 2. developers 3. casual" -> ACTIONABLE if '
-                    "answering assistant's questions\n\n"
-                    "Examples of NON_ACTIONABLE messages:\n"
-                    '- "Hi" -> NON_ACTIONABLE (bare greeting, unless answering a question)\n'
-                    '- "Hello" -> NON_ACTIONABLE (bare greeting)\n'
-                    '- "Thanks" -> NON_ACTIONABLE (bare acknowledgment)\n'
-                    '- "Got it" -> NON_ACTIONABLE (bare acknowledgment)\n\n'
-                    "Reply with only: ACTIONABLE or NON_ACTIONABLE"
-                )
-
-                text_model_config = self._capability_models.get("text")
-                model_name = text_model_config.get("model")
-                cache_key = f"actionability_{model_name}"
-
-                if cache_key in self._model_cache:
-                    llm = self._model_cache[cache_key]
-                else:
-                    settings = self._filter_llm_settings(text_model_config.get("settings", {}))
-                    llm = await self.create_model(
-                        model=model_name,
-                        api_key=text_model_config.get("api_key"),
-                        temperature=0.1,
-                        max_tokens=20,
-                        **settings,
-                    )
-                    self._model_cache[cache_key] = llm
-
-                # Include last assistant message so the LLM can see if this is a follow-up
-                user_content = actual_message
-                if last_assistant_msg:
-                    user_content = (
-                        f"Previous assistant message: {last_assistant_msg}\n\n"
-                        f"User reply: {actual_message}"
-                    )
-
-                messages = [
-                    {"role": "system", "content": system_prompt},
-                    {"role": "user", "content": user_content},
-                ]
-                response = await llm.chat(messages)
-                if response and "NON_ACTIONABLE" in response.upper():
-                    return False
-            except Exception:
-                pass
-
-        # Default to actionable if unsure
-        return True
+            label, _margin = await classifier.classify_binary("actionable", classify_text)
+            return label
+        except Exception:
+            # Default to actionable if the classifier is unavailable.
+            # Matches the prior LLM-based behavior — failures here
+            # should not silently drop user messages on the floor.
+            return True
 
     async def _is_non_actionable_for_workflow(self, message_lower: str) -> bool:
         """
@@ -2343,54 +2354,22 @@ class Overlord:
         Returns:
             True if message should NOT trigger workflow
         """
-        # Use LLM to determine if this is non-actionable
-        if self._capability_models.get("text"):
-            try:
-                system_prompt = """Determine if this message is non-actionable (greeting, acknowledgment, or pure information).
-
-Non-actionable messages include:
-- Greetings or pleasantries in any language
-- Acknowledgments or confirmations in any language
-- Pure informational statements with no request or question
-- Simple responses like "yes", "no", "ok" in any language
-
-If the message is a greeting, acknowledgment, or pure information with no action needed, respond with: NON_ACTIONABLE
-If the message requests action, asks a question, or needs a response, respond with: ACTIONABLE"""
-
-                # Use cached model if available
-                text_model_config = self._capability_models.get("text")
-                if not text_model_config or not text_model_config.get("model"):
-                    raise ValueError("Text model is required in formation configuration")
-                model_name = text_model_config.get("model")
-                cache_key = f"workflow_check_{model_name}"
-
-                if cache_key in self._model_cache:
-                    llm = self._model_cache[cache_key]
-                else:
-                    # Filter out params we're setting explicitly to avoid duplicate kwargs
-                    settings = self._filter_llm_settings(text_model_config.get("settings", {}))
-                    llm = await self.create_model(
-                        model=model_name,
-                        api_key=text_model_config.get("api_key"),
-                        temperature=0.1,
-                        max_tokens=20,
-                        **settings,
-                    )
-                    self._model_cache[cache_key] = llm
-
-                messages = [
-                    {"role": "system", "content": system_prompt},
-                    {"role": "user", "content": message_lower},
-                ]
-                response = await llm.chat(messages)
-                if response and "NON_ACTIONABLE" in response.upper():
-                    return True
-            except Exception:
-                # If LLM fails, be conservative and allow workflow to proceed
-                pass
-
-        # Default to actionable if we can't determine
-        return False
+        # Local prototype-similarity classifier. The
+        # ``workflow_eligible`` intent encodes exactly the inverse
+        # decision: True when the message is real workflow-worthy work,
+        # False for greetings / acks / pure information statements. We
+        # invert the label here so the public contract of this method
+        # (True == "non-actionable for workflow") is preserved.
+        try:
+            classifier = await self._get_local_classifier()
+            workflow_eligible, _margin = await classifier.classify_binary(
+                "workflow_eligible", message_lower
+            )
+            return not workflow_eligible
+        except Exception:
+            # Be conservative and allow workflow to proceed. Matches
+            # the prior LLM-based fallback semantics.
+            return False
 
     async def _is_simple_question(self, message_lower: str) -> bool:
         """
@@ -2404,64 +2383,20 @@ If the message requests action, asks a question, or needs a response, respond wi
         Returns:
             True if this is a simple question
         """
-        # Use LLM to determine if this is a simple question
-        if self._capability_models.get("text"):
-            try:
-                # System prompt for simple question detection
-                system_prompt = """Determine if the user's message is a simple question that can be answered directly.
-
-A simple question is one that:
-- Asks for a recommendation or suggestion
-- Seeks basic information or clarification
-- Can be answered in a few sentences
-- Doesn't require multiple steps or complex analysis
-- Is asking "what", "how", "why", "when", "where", "who" about something specific
-
-Complex questions that need workflows:
-- Multi-part requests requiring several steps
-- Requests to build, create, or implement something
-- Tasks requiring research AND analysis AND action
-
-If this is a simple question that can be answered directly, respond with: SIMPLE
-If this requires complex multi-step work, respond with: COMPLEX"""
-
-                # Use cached model if available
-                text_model_config = self._capability_models.get("text")
-                if not text_model_config or not text_model_config.get("model"):
-                    raise ValueError("Text model is required in formation configuration")
-                model_name = text_model_config.get("model")
-                cache_key = f"question_check_{model_name}"
-
-                if cache_key in self._model_cache:
-                    llm = self._model_cache[cache_key]
-                else:
-                    # Filter out params we're setting explicitly to avoid duplicate kwargs
-                    settings = self._filter_llm_settings(text_model_config.get("settings", {}))
-                    llm = await self.create_model(
-                        model=model_name,
-                        api_key=text_model_config.get("api_key"),
-                        temperature=0.1,
-                        max_tokens=20,
-                        **settings,
-                    )
-                    self._model_cache[cache_key] = llm
-
-                messages = [
-                    {"role": "system", "content": system_prompt},
-                    {"role": "user", "content": message_lower},
-                ]
-                response_obj = await llm.chat(messages)
-                response = (
-                    response_obj.content if hasattr(response_obj, "content") else str(response_obj)
-                )
-                if response and "SIMPLE" in response.upper():
-                    return True
-            except Exception:
-                # If LLM fails, be conservative and allow workflow to proceed
-                pass
-
-        # Default to complex if we can't determine
-        return False
+        # Local prototype-similarity classifier. SIMPLE_QUESTION
+        # positives are short answerable questions; negatives are
+        # multi-step build / refactor / migrate requests. Returns True
+        # for "answer in a few sentences" territory.
+        try:
+            classifier = await self._get_local_classifier()
+            label, _margin = await classifier.classify_binary("simple_question", message_lower)
+            return label
+        except Exception:
+            # Default to complex if the classifier is unavailable —
+            # matches the prior LLM-fallback semantics: when we can't
+            # tell, allow workflow to proceed rather than short-circuit
+            # to a one-shot answer.
+            return False
 
     async def _check_cancelled(self, request_id: Optional[str]) -> None:
         """
@@ -4690,40 +4625,79 @@ Agent response: {raw_response}"""
         """
         Document User Experience
 
-        Generate persona-consistent acknowledgments and summaries.
-        For audio files, includes the transcription directly so LLM can see it.
+        Surface the actual processed content (transcriptions, image/video
+        analyses, extracted document text) for every modality so the
+        downstream agent LLM can ground its response on real content
+        rather than a generic "I've processed your files" acknowledgment.
+
+        Originally only audio short-circuited to return its transcription;
+        text/PDF/image/video paths fell through to a generic acknowledger
+        that produced no usable content for the responder LLM, which then
+        flakily asked the user to re-upload their already-processed file.
+        We now build a single section per processed doc with a clear
+        ``### filename (modality)`` header and the joined chunk content;
+        the per-modality processors already prefix their output (e.g.
+        ``Video analysis of demo.mov:\\n...``), so we preserve those.
         """
         try:
-            # Check if any audio files were processed - include transcriptions directly
-            audio_transcriptions = []
+            sections: List[str] = []
             for doc in processed_docs:
-                if doc.get("modality") == "audio" and doc.get("content"):
-                    # Extract transcription from content list
-                    for content_item in doc.get("content", []):
-                        if content_item and isinstance(content_item, str):
-                            # Clean up the transcription prefix if present
-                            if content_item.startswith("Audio transcription of"):
-                                parts = content_item.split(": ", 1)
-                                if len(parts) > 1:
-                                    audio_transcriptions.append(parts[1])
-                                else:
-                                    audio_transcriptions.append(content_item)
-                            else:
-                                audio_transcriptions.append(content_item)
+                filename = doc.get("filename", "unknown")
+                modality = doc.get("modality", "text")
+                raw_chunks = doc.get("content") or []
 
-            # If we have audio transcriptions, return them directly
-            if audio_transcriptions:
-                transcription_text = " ".join(audio_transcriptions).strip()
-                return f"Audio transcription:\n\n{transcription_text}"
+                # Normalize chunk content to strings; drop empty entries.
+                content_pieces: List[str] = []
+                for piece in raw_chunks:
+                    if isinstance(piece, str):
+                        stripped = piece.strip()
+                        if stripped:
+                            content_pieces.append(stripped)
+                    elif isinstance(piece, bytes):
+                        try:
+                            decoded = piece.decode("utf-8", errors="replace").strip()
+                            if decoded:
+                                content_pieces.append(decoded)
+                        except Exception:
+                            continue
 
+                if not content_pieces:
+                    continue
+
+                if modality == "audio":
+                    # The audio processor returns
+                    # ``Audio transcription of {filename}: {text}``.
+                    # Strip the ``Audio transcription of <filename>: ``
+                    # prefix so the section header carries the filename
+                    # and the body is just the transcription.
+                    cleaned: List[str] = []
+                    for piece in content_pieces:
+                        if piece.startswith("Audio transcription of"):
+                            parts = piece.split(": ", 1)
+                            cleaned.append(parts[1].strip() if len(parts) > 1 else piece)
+                        else:
+                            cleaned.append(piece)
+                    body = " ".join(cleaned).strip()
+                    sections.append(f"### {filename} (audio transcription)\n{body}")
+                else:
+                    body = "\n\n".join(content_pieces).strip()
+                    label = {
+                        "image": "image analysis",
+                        "video": "video analysis",
+                    }.get(modality, "document content")
+                    sections.append(f"### {filename} ({label})\n{body}")
+
+            if sections:
+                return "\n\n".join(sections)
+
+            # No usable content extracted — fall back to a persona-aware
+            # or generic acknowledgment so the caller still gets a string.
             if self.document_acknowledger:
-                # Generate acknowledgment using the component
                 doc_list = [(doc["doc_id"], doc["filename"]) for doc in processed_docs]
                 acknowledgment = await self.document_acknowledger.generate_document_acknowledgment(
                     processed_docs=doc_list, user_request=user_request, context=context or {}
                 )
             else:
-                # Fallback acknowledgment
                 file_list = [doc["filename"] for doc in processed_docs]
                 file_names = ", ".join(file_list)
                 acknowledgment = f"I've successfully processed your document(s): {file_names}. "

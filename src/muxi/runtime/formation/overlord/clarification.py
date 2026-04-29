@@ -1,3 +1,4 @@
+import logging
 import re
 import time
 from dataclasses import dataclass
@@ -5,6 +6,19 @@ from typing import Dict, Optional
 
 from ...services import observability
 from ...utils.fastjson import json
+
+logger = logging.getLogger(__name__)
+
+# Minimum classifier confidence margin required to take the local-classifier
+# fast path and skip the LLM. The margin is the absolute gap between the
+# positive and negative centroid cosine similarities; a value below this
+# threshold means the prototype centroids barely differentiate the query
+# (effectively a coin flip), so we fall through to the LLM rather than risk
+# silently swallowing a clarification on an ambiguous request. Empirically,
+# a margin of 0.05 corresponds to a similarity-difference noise floor on the
+# multilingual-e5-small embedding space — below that, classifier decisions
+# are not reliable enough to suppress the LLM fallback.
+MIN_FAST_PATH_MARGIN = 0.05
 
 
 @dataclass
@@ -499,6 +513,67 @@ class UnifiedClarificationSystem:
                 "mcp_service": None,
             }
 
+        # STEP 1.5: Local-classifier fast path.
+        # The cloud LLM analysis below is the heaviest gate in the
+        # pre-planning critical path (mt=1000). When the local
+        # classifier confidently says the request is clear and
+        # actionable, we skip the LLM entirely and execute directly.
+        # This is the "split text from classification decision" Phase 2
+        # pattern: the classifier owns the BINARY decision; the LLM
+        # only fires when the binary is True (clarification needed) so
+        # it can do its remaining job — generating the clarification
+        # question, detecting which MCP service applies, and selecting
+        # redirect vs clarify mode. On classifier failure we fall
+        # through to the existing LLM path, preserving prior behavior.
+        try:
+            extracted_message_for_classifier = message
+            if "=== CURRENT REQUEST ===" in message:
+                lines = message.split("\n")
+                for i, line in enumerate(lines):
+                    if line.strip() == "=== CURRENT REQUEST ===":
+                        for line2 in lines[i + 1 :]:  # noqa: E203
+                            stripped = line2.strip()
+                            if stripped.startswith("User:"):
+                                extracted_message_for_classifier = stripped[5:].strip()
+                                break
+                        break
+
+            classifier = await self.overlord._get_local_classifier()
+            needs_clar, margin = await classifier.classify_binary(
+                "clarification_needed", extracted_message_for_classifier
+            )
+            if not needs_clar and margin > MIN_FAST_PATH_MARGIN:
+                observability.observe(
+                    event_type=observability.ConversationEvents.CLARIFICATION_SKIPPED,
+                    level=observability.EventLevel.DEBUG,
+                    data={
+                        "decision": "execute_directly",
+                        "margin": round(margin, 4),
+                        "method": "local_classifier_fast_path",
+                    },
+                    description="Clarification analyzer fast-path: classifier said no clarification needed",
+                )
+                return {
+                    "needs_clarification": False,
+                    "reason": "classifier_clear_execute",
+                    "mode": "direct",
+                    "question": None,
+                    "confidence": 1.0,
+                    "mcp_service": None,
+                }
+            elif not needs_clar:
+                # Margin too low — classifier says no but with low confidence.
+                # Fall through to the LLM so an ambiguous request still gets
+                # the chance to surface a clarification question.
+                logger.debug(
+                    "Clarification classifier fast-path skipped: margin=%.4f below "
+                    "threshold %.2f, falling through to LLM",
+                    margin,
+                    MIN_FAST_PATH_MARGIN,
+                )
+        except Exception as e:
+            logger.debug(f"Clarification classifier fast-path failed, falling through to LLM: {e}")
+
         # STEP 2: Continue with normal clarification analysis
         # Get formation capabilities (pre-computed during overlord initialization)
         capabilities = getattr(self.overlord, "capabilities", [])
@@ -760,10 +835,58 @@ class UnifiedClarificationSystem:
     async def _check_need_more(self, state: Dict) -> Dict:
         """
         Check if we need more clarification.
+
+        Phase 2 'split text from classification decision' fast path:
+        we run the local classifier first on the joint
+        ``Original: ...\nCollected: ...`` string and only call the
+        LLM when the classifier says more clarification is needed
+        (since the LLM also has to GENERATE the next question, the
+        binary skip is the only legitimate place to localize). On
+        classifier failure we fall through to the existing LLM path,
+        preserving prior behavior.
         """
         if not self.llm:
             # Fallback when no LLM available
             return {"needs_more": False, "question": None}
+
+        # STEP 0: Local-classifier fast path. Decision-only — when the
+        # classifier confidently says the gap between original_request
+        # and collected_info has closed, we skip the LLM (saving ~500-
+        # 1500 ms on the happy path of well-collected clarifications).
+        try:
+            joint = (
+                f"Original: {state.get('original_request', '')}\n"
+                f"Collected: {state.get('collected_info', '')}"
+            )
+            classifier = await self.overlord._get_local_classifier()
+            needs_more, margin = await classifier.classify_binary("clarification_needs_more", joint)
+            if not needs_more and margin > MIN_FAST_PATH_MARGIN:
+                observability.observe(
+                    event_type=observability.ConversationEvents.CLARIFICATION_SKIPPED,
+                    level=observability.EventLevel.DEBUG,
+                    data={
+                        "decision": "needs_more=False",
+                        "margin": round(margin, 4),
+                        "method": "local_classifier_fast_path",
+                        "stage": "check_need_more",
+                    },
+                    description="check_need_more fast-path: classifier said collected info is sufficient",
+                )
+                return {"needs_more": False, "question": None}
+            elif not needs_more:
+                # Margin too low — classifier says no-more but with low
+                # confidence. Fall through to the LLM so we don't prematurely
+                # close a clarification round on an uncertain signal.
+                logger.debug(
+                    "check_need_more classifier fast-path skipped: margin=%.4f below "
+                    "threshold %.2f, falling through to LLM",
+                    margin,
+                    MIN_FAST_PATH_MARGIN,
+                )
+        except Exception as e:
+            logger.debug(
+                f"check_need_more classifier fast-path failed, falling through to LLM: {e}"
+            )
 
         from ..prompts.loader import PromptLoader
 
@@ -798,52 +921,53 @@ class UnifiedClarificationSystem:
     async def _check_context_switch(self, state: Dict, response: str) -> bool:
         """
         Check if user is trying to do something else (context switch).
-        Uses LLM to detect when user wants to break out of clarification.
+
+        Replaced the previous cloud LLM call (mt=20) with a local
+        prototype-similarity classifier. The
+        ``clarification_context_switch`` intent's positives are
+        explicit topic-switch phrasings ("never mind that", "different
+        question:"), and its negatives are normal clarification
+        answers ("yes, Postgres", "the first option"). The classifier
+        runs in ~50 ms vs ~500-1500 ms for the cloud round trip.
+
+        ``state`` is no longer used directly — the original LLM prompt
+        included the original request and last question for context,
+        but the prototype set already discriminates topic-switch
+        phrasings from on-topic answers without needing that context.
+        Kept in the signature for API stability.
         """
-        if not self.llm:
-            return False  # Assume no context switch without LLM
-
-        # Get the last question we asked
-        last_question = state.get("last_question", "a clarification question")
-
-        from ..prompts.loader import PromptLoader
-
-        system_prompt = PromptLoader.get(
-            "clarification_context_switch.md",
-            original_request=state["original_request"],
-            last_question=last_question,
-            response=response,
-        )
-
-        messages = [
-            {"role": "system", "content": system_prompt},
-            {"role": "user", "content": f"User response: {response}"},
-        ]
-        result = await self.llm.chat(messages, temperature=0, max_tokens=20)
-        content = result.content if hasattr(result, "content") else str(result)
-        return "different" in content.lower()
+        if not response or not response.strip():
+            return False
+        try:
+            classifier = await self.overlord._get_local_classifier()
+            label, _margin = await classifier.classify_binary(
+                "clarification_context_switch", response
+            )
+            return label
+        except Exception:
+            # Conservative default: assume no context switch when the
+            # classifier is unavailable, so the clarification flow
+            # continues rather than being prematurely abandoned.
+            return False
 
     async def _check_stop_intent(self, response: str) -> bool:
         """
         Check if user wants to stop clarification.
         Different from context switch - this is when user wants to stop but stay on topic.
+
+        Replaced the previous cloud LLM call (mt=10) with a local
+        prototype-similarity classifier. The ``clarification_stop``
+        intent positives are stop / proceed-anyway phrasings; negatives
+        are normal clarification answers. ~50 ms locally.
         """
-        if not self.llm:
-            return False  # Assume no stop intent without LLM
-
-        system_prompt = """Does this response indicate the user wants to stop clarification?
-
-Look for phrases like "enough", "just do it", "stop asking", "never mind", etc.
-
-Return just "true" or "false"."""
-
-        messages = [
-            {"role": "system", "content": system_prompt},
-            {"role": "user", "content": response},
-        ]
-        result = await self.llm.chat(messages, temperature=0, max_tokens=10)
-        content = result.content if hasattr(result, "content") else str(result)
-        return "true" in content.lower()
+        if not response or not response.strip():
+            return False
+        try:
+            classifier = await self.overlord._get_local_classifier()
+            label, _margin = await classifier.classify_binary("clarification_stop", response)
+            return label
+        except Exception:
+            return False
 
     def _is_help_request(self, response: str) -> bool:
         """
@@ -1386,46 +1510,32 @@ Please check {mcp_service}'s documentation for specific instructions on obtainin
                             clean_message = next_line[5:].strip()
                             break
 
-            # Check if it looks like a recall question using LLM (fast, focused prompt)
-            recall_system_prompt = """Is this a recall/memory question about something the user previously stated?
-
-Examples of recall questions:
-- "What is my name?"
-- "What's my favorite database?"
-- "What did I tell you about X?"
-- "What is my X?"
-
-NOT recall questions:
-- "What is FastAPI?" (asking about general knowledge)
-- "How do I do X?" (asking for help)
-- "Can you X?" (making a request)
-
-Answer with just: YES or NO"""
-
+            # Check if it looks like a recall question using the local
+            # prototype-similarity classifier (mt=10 LLM call replaced
+            # by a deterministic ~50 ms cosine match). The
+            # ``recall_question`` intent encodes "user asking us to
+            # recall something they said earlier" as positive and
+            # general-knowledge / task-request as negative.
             try:
-                if self.llm:
-                    response = await self.llm.chat(
-                        [
-                            {"role": "system", "content": recall_system_prompt},
-                            {"role": "user", "content": clean_message},
-                        ],
-                        temperature=0,
-                        max_tokens=10,
-                    )
+                classifier = await self.overlord._get_local_classifier()
+                label, _margin = await classifier.classify_binary("recall_question", clean_message)
 
-                    # Check cancellation after LLM call
-                    from ..background.cancellation import check_cancellation_from_context
+                # Cancellation check, preserved from the LLM-based path
+                # for parity. Runs after every gate call so a cancel
+                # mid-clarification doesn't leak through.
+                from ..background.cancellation import check_cancellation_from_context
 
-                    if hasattr(self.overlord, "request_tracker"):
-                        await check_cancellation_from_context(self.overlord.request_tracker)
+                if hasattr(self.overlord, "request_tracker"):
+                    await check_cancellation_from_context(self.overlord.request_tracker)
 
-                    content = response.content if hasattr(response, "content") else str(response)
-
-                    if "YES" not in content.upper():
-                        # Not a recall question
-                        return False
+                if not label:
+                    # Not a recall question
+                    return False
             except Exception:
-                # If LLM call fails, use simple heuristics
+                # If the classifier is unavailable, fall back to the
+                # simple keyword heuristics that were the prior
+                # exception path. Maintains behavior parity for the
+                # cold-start / classifier-failure case.
                 recall_patterns = ["what is my", "what's my", "what did i say", "what did i tell"]
                 if not any(pattern in clean_message.lower() for pattern in recall_patterns):
                     return False

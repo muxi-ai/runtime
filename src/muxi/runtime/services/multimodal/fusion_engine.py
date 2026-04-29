@@ -1085,36 +1085,38 @@ class MultiModalFusionEngine:
     async def _calculate_semantic_similarity(
         self, source_result: Dict[str, Any], target_result: Dict[str, Any]
     ) -> float:
-        """Calculate semantic similarity between modality results"""
+        """Calculate semantic similarity between modality results.
+
+        Replaces the previous LLM scoring round-trip with a direct
+        cosine-similarity over the local multilingual-e5-small
+        embeddings. The LLM was being asked to score "how related are
+        these two content descriptions on a 0.0-1.0 scale" — that is
+        literally the definition of cosine similarity in a sentence-
+        embedding space, so we compute it directly. Cross-modal
+        descriptions land in the same embedding space (the model is
+        text-only, but we already pass text descriptions of every
+        modality through ``_extract_semantic_description``), so
+        unrelated-modality pairs still surface as low similarity.
+
+        Returns the cosine in ``[0.0, 1.0]`` — natural language stays
+        non-negative in practice. On classifier failure we keep the
+        prior neutral 0.5 fallback so downstream fusion logic that
+        treats this as a continuous score is never biased by failure.
+        """
         try:
-            # Extract semantic representations
             source_desc = self._extract_semantic_description(source_result)
             target_desc = self._extract_semantic_description(target_result)
 
-            # Use LLM to assess similarity
-            similarity_prompt = f"""
-Compare the semantic similarity between these two content descriptions:
-
-Content A: {source_desc}
-Content B: {target_desc}
-
-Rate their semantic similarity on a scale of 0.0 to 1.0, where:
-- 0.0 = completely unrelated
-- 1.0 = highly related or complementary
-
-Provide only the numerical score:
-"""
-
-            response = await self.llm.generate(similarity_prompt, max_tokens=10, temperature=0.1)
-
-            # Extract numerical score
-            import re
-
-            score_match = re.search(r"(\d+\.?\d*)", response)
-            if score_match:
-                return float(score_match.group(1))
-            else:
+            if not source_desc.strip() or not target_desc.strip():
                 return 0.5
+
+            from .. import classification as _classification
+
+            classifier = await _classification.get_classifier()
+            similarity = await classifier.pairwise_similarity(source_desc, target_desc)
+            # Clamp to non-negative for downstream consumers that treat
+            # this as a quality score in [0, 1].
+            return max(0.0, similarity)
 
         except Exception as e:
             observability.observe(

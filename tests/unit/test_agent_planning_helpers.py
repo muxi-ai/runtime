@@ -644,6 +644,169 @@ def test_planning_response_synthesis_prompt_preserves_exact_dates_from_results()
     assert "Do not turn absolute dates into relative words like 'today' or 'recently'" in prompt
 
 
+# ---------------------------------------------------------------------------
+# v0.20260428: surface attached artifacts in the synthesis prompt
+#
+# Background: ``_serialize_planning_result_for_synthesis`` strips the
+# ``_artifact`` key from each per-result dict before it reaches the LLM,
+# leaving the synthesis model with no ground-truth signal that a file
+# was actually attached. On hello-muxi's "be straight" SOUL the
+# clarification gate would not fire ("create a bar chart...") so
+# synthesis ran on a mixed plan (``activate_skill`` + ``generate_file``)
+# and the LLM hallucinated "the file didn't come through" while the
+# attachment WAS present in the response. The fix: collect the
+# artifacts up-front and surface them as a dedicated FILES ATTACHED
+# block with an explicit no-hallucinate instruction.
+# ---------------------------------------------------------------------------
+
+
+def test_collect_attached_artifact_lines_extracts_pydantic_artifact_with_metadata():
+    """``MuxiArtifact`` instance: pull filename, type, format and size."""
+    from muxi.runtime.datatypes.artifacts import (
+        ArtifactMetadata,
+        MuxiArtifact,
+    )
+
+    artifact = MuxiArtifact(
+        type="image",
+        format="png",
+        filename="acme_corp_quarterly_sales.png",
+        metadata=ArtifactMetadata(
+            size_bytes=57_753,
+            created_at="2026-04-28T22:25:38Z",
+        ),
+    )
+    my_results = {
+        "{SKILL_INSTRUCTIONS}": {"text": "long skill body, no _artifact key"},
+        "{ACME_CHART}": {"_artifact": artifact, "ok": True},
+    }
+
+    lines = Agent._collect_attached_artifact_lines(my_results)
+
+    assert len(lines) == 1
+    assert "acme_corp_quarterly_sales.png" in lines[0]
+    assert "image/png" in lines[0]
+    # 57_753 / 1024 == 56.4 KB
+    assert "56.4 KB" in lines[0]
+
+
+def test_collect_attached_artifact_lines_extracts_dict_shaped_artifact():
+    """Legacy / fallback shape: ``_artifact`` is a plain dict."""
+    my_results = {
+        "{REPORT}": {
+            "_artifact": {
+                "filename": "muxi_brief.pdf",
+                "type": "document",
+                "format": "pdf",
+                "metadata": {"size_bytes": 4_915},
+            }
+        }
+    }
+
+    lines = Agent._collect_attached_artifact_lines(my_results)
+
+    assert len(lines) == 1
+    assert "muxi_brief.pdf" in lines[0]
+    assert "document/pdf" in lines[0]
+    assert "4.8 KB" in lines[0]
+
+
+def test_collect_attached_artifact_lines_handles_partial_metadata():
+    """Missing format / size / type must NOT crash; just omit those parts."""
+    my_results = {
+        "{ANON}": {"_artifact": {"filename": "blob.bin"}},
+        "{ANON_NAME_FALLBACK}": {"_artifact": {"name": "fallback.txt"}},
+        "{NO_NAME_AT_ALL}": {"_artifact": {}},
+    }
+
+    lines = Agent._collect_attached_artifact_lines(my_results)
+
+    assert len(lines) == 3
+    assert any("blob.bin" in line for line in lines)
+    assert any("fallback.txt" in line for line in lines)
+    assert any("(unnamed file)" in line for line in lines)
+
+
+def test_collect_attached_artifact_lines_skips_non_artifact_results():
+    """Mixed plans (``activate_skill`` + ``generate_file``) keep working —
+    only the artifact-bearing results contribute lines."""
+    my_results = {
+        "{SKILL_INSTRUCTIONS}": "raw string, no _artifact",
+        "{TEXT_RESULT}": {"text": "no _artifact here"},
+        "{ARTIFACT}": {"_artifact": {"filename": "chart.png", "format": "png"}},
+    }
+
+    lines = Agent._collect_attached_artifact_lines(my_results)
+
+    assert len(lines) == 1
+    assert "chart.png" in lines[0]
+
+
+def test_collect_attached_artifact_lines_returns_empty_for_no_artifacts():
+    """Pure-text plans (no artifacts at all) return an empty list, which
+    the prompt builder uses to keep the FILES ATTACHED block off."""
+    assert Agent._collect_attached_artifact_lines({}) == []
+    assert (
+        Agent._collect_attached_artifact_lines({"{TEXT}": {"content": "hello"}}) == []
+    )
+
+
+def test_synthesis_prompt_injects_files_attached_block_for_mixed_plan():
+    """The hello-muxi bar-chart case: ``activate_skill`` + ``generate_file``
+    results. The block must appear BEFORE the closing instructions, list
+    the filename, and carry the explicit no-hallucinate guard."""
+    agent = object.__new__(Agent)
+    my_results = {
+        "{SKILL_INSTRUCTIONS}": {
+            "text": (
+                "# File generation skill\n"
+                "Use reportlab for PDFs, matplotlib for charts...\n"
+            )
+        },
+        "{ACME_CHART}": {
+            "_artifact": {
+                "filename": "acme_corp_quarterly_sales.png",
+                "type": "image",
+                "format": "png",
+                "metadata": {"size_bytes": 57_753},
+            },
+            "ok": True,
+        },
+    }
+
+    prompt = agent._build_planning_response_synthesis_prompt(
+        "create a bar chart showing pretend quarterly sales of acme corp",
+        my_results,
+        [],
+    )
+
+    assert "FILES ALREADY ATTACHED TO THIS RESPONSE:" in prompt
+    assert "acme_corp_quarterly_sales.png" in prompt
+    # Explicit no-hallucinate guard
+    assert "Do NOT claim a file is missing" in prompt
+    # Block must precede the "Write the final response" closing line
+    assert prompt.index("FILES ALREADY ATTACHED") < prompt.index(
+        "Write the final response to the user."
+    )
+
+
+def test_synthesis_prompt_omits_files_attached_block_when_no_artifacts():
+    """Pure-text plans must not gain a stray FILES ATTACHED block."""
+    agent = object.__new__(Agent)
+    my_results = {
+        "{ANSWER}": {
+            "text": "The capital of France is Paris.",
+        }
+    }
+
+    prompt = agent._build_planning_response_synthesis_prompt(
+        "What is the capital of France?", my_results, []
+    )
+
+    assert "FILES ALREADY ATTACHED" not in prompt
+    assert "Do NOT claim a file is missing" not in prompt
+
+
 def test_finalize_execution_plan_strips_delegate_steps_when_delegation_is_disabled():
     agent = object.__new__(Agent)
     plan = {

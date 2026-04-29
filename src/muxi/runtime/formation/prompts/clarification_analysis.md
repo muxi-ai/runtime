@@ -78,6 +78,22 @@ CONVERSATION CONTEXT INFERENCE RULES:
 - Only ask for clarification if the intent remains truly unclear even WITH the conversation context
 
 MULTIMODAL CONTENT RULES:
+- **CRITICAL**: If the CONVERSATION TRANSCRIPT above contains a
+  `=== FILE PROCESSING RESULTS ===` section (or any line starting with
+  `[File Processing Result]:`), the user HAS already attached file(s)
+  AND those files have already been processed by the runtime
+  (transcriptions, OCR, image/video analyses, document text extraction).
+  In that case:
+  * Do NOT ask the user to "provide", "upload", "share", or "attach"
+    a file. The files are already attached and processed -- asking
+    again would be a regression.
+  * Treat the user's request as CLEAR and set
+    needs_clarification=false unless the requested ACTION itself is
+    truly ambiguous beyond the file content (e.g. "do something with
+    this").
+  * Do NOT confuse a short user message ("compare these documents",
+    "summarize this", "what does this say?") for ambiguity when files
+    are present in the transcript.
 - If user provides documents/images/files WITH explicit action verbs, that's clear - don't clarify
 - Explicit actions include: summarize, analyze, list, extract, describe, compare, transcribe, translate, explain
 - Examples of CLEAR requests (don't clarify):
@@ -87,7 +103,9 @@ MULTIMODAL CONTENT RULES:
   * "Transcribe this audio" (with audio)
   * "Extract text from this document" (with file)
   * "Analyze this chart" (with image)
-- Only clarify multimodal requests if action is truly ambiguous:
+  * "Compare and summarize these documents" (with multiple files)
+- Only clarify multimodal requests if action is truly ambiguous AND no
+  files appear in the transcript:
   * "Help me with this file" (no specific action)
   * "Do something with this" (no specific action)
   * "Fix this" (unclear what needs fixing)
