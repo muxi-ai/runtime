@@ -2,6 +2,73 @@
 
 ## [unreleased]
 
+### Pure-chat multi-turn context fix (clean role-turn bundle)
+
+Fixes cross-turn context loss in pure-chat sessions where
+honesty-trained models (Sonnet 4.6 most prominently) would respond
+"I'm missing the context here" to a simple follow-up question
+(`"What about the language thing though?"`) on turn 3 of an
+otherwise normal four-turn conversation, despite the buffer memory
+holding the full prior exchange.
+
+Root cause: every pure-chat turn was sent to the agent's LLM as a
+**single user message** wrapping the request inside a
+`=== CURRENT REQUEST ===` block, with the prior conversation
+re-serialized as a flat `[12:30] User: ...` blob inside a
+`=== CONVERSATION CONTEXT ===` section of that *same* user message.
+GPT-class models pattern-match through this; honesty-trained models
+read the explicit "CURRENT REQUEST" framing as an isolated query and
+treat the surrounding prose as ambient metadata, not history. The
+result was correct context retrieval but a confused model.
+
+Fix:
+
+* **`ChatOrchestrator._build_clean_chat_context`** — new helper that
+  builds a structured bundle alongside the existing marker-formatted
+  `enhanced_message` (kept verbatim because the analyzer pipeline —
+  clarification, classifier text extraction, planning intent
+  extraction — depends on the marker contract). The bundle carries
+  buffer history as proper role turns (`{"role": "user"|"assistant",
+  "content": ...}`), the un-enhanced current user message, plus
+  `user_profile_text` / `long_term_memories` / `file_results` as
+  separate fields. `chat()` now `gather()`s both representations in
+  parallel and threads the bundle through `_create_stream_generator`
+  → `_process_sync_chat`.
+* **`Overlord._process_sync_chat`** — accepts and forwards
+  `clean_chat_context` to `Agent.process_message`.
+* **`Agent._assemble_messages_from_clean_context`** — new helper
+  that produces a chat-API-shape `[system_with_addendum, ...buffer
+  turns, current_user]` list. Profile, memories and file-results
+  land in a *system addendum*, not embedded inside the user turn.
+* **`Agent.process_message`** — when a clean bundle is supplied,
+  prefers the raw user text from the bundle and rebuilds
+  `self._messages` via the helper each turn rather than appending
+  marker-formatted blobs into agent-instance state. This produces a
+  transcript shape that matches a normal direct LLM call.
+* **`Agent.process_message` `direct_simple_response` path
+  (line ~2229)** — the empty-plan synthesis path was constructing
+  its own `[system, current_user]` pair from scratch, which silently
+  bypassed the freshly-rebuilt `self._messages`. Now reuses the
+  fully-assembled transcript when a clean bundle is present, falling
+  back to the legacy two-message pair for non-chat callers.
+
+Verification: replayed the same four-turn solo-trip transcript
+against Sonnet 4.6 (`anthropic/claude-sonnet-4-6`). Turn 3 now
+opens "You'll be totally fine in Lisbon" and turn 4 builds on the
+prior anchor-mornings advice. Input token count grows turn over
+turn (8703 → 9406 → 9027 → 9560) where it was previously flat at
+~8000 every turn — confirming the model is actually receiving the
+accumulated history rather than re-processing the same isolated
+turn.
+
+14 new unit tests in
+`tests/unit/test_chat_orchestrator_clean_context.py` pin the bundle
+shape, chronological reversal of recency-first buffer rows, the
+race-filter that drops the current user message if the buffer
+stored it ahead of us, role/empty-text filtering, and the
+agent-side assembly invariants (system addendum, no double history
+in any user turn). Full unit suite: 885 passed / 3 skipped.
+
 ### Review hardening (PR #160)
 
 Two follow-ups from greptile code review:

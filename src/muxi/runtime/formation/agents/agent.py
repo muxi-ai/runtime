@@ -855,6 +855,60 @@ class Agent:
             lines.append(f"- {filename}" + (f" ({bracket})" if bracket else ""))
         return lines
 
+    def _assemble_messages_from_clean_context(
+        self, clean_chat_context: Dict[str, Any], system_message_base: str
+    ) -> List[Dict[str, Any]]:
+        """Assemble a chat-API-shaped message list from the orchestrator's bundle.
+
+        Returns the role-turn transcript:
+
+            [system_with_addendum, user_1, asst_1, ..., user_N, current_user]
+
+        The system message is the agent's own ``system_message`` (passed
+        in pre-enriched with auth/error-reporting instructions) plus an
+        optional addendum carrying user profile, long-term memories,
+        and file-processing results. Buffer history fills the role
+        turns; the current user message goes at the tail. No
+        ``=== CURRENT REQUEST ===`` / ``=== CONVERSATION CONTEXT ===``
+        markers — those are only for the analyzer pipeline.
+        """
+        addendum_parts: List[str] = []
+        user_profile_text = clean_chat_context.get("user_profile_text") or ""
+        long_term_memories = clean_chat_context.get("long_term_memories") or ""
+        file_results = clean_chat_context.get("file_results") or ""
+        if user_profile_text:
+            addendum_parts.append("=== USER PROFILE ===")
+            addendum_parts.append(user_profile_text)
+        if long_term_memories:
+            if addendum_parts:
+                addendum_parts.append("")
+            addendum_parts.append("=== RELEVANT MEMORIES ===")
+            addendum_parts.append(long_term_memories)
+        if file_results:
+            if addendum_parts:
+                addendum_parts.append("")
+            addendum_parts.append("=== FILE PROCESSING RESULTS ===")
+            addendum_parts.append(file_results)
+
+        if addendum_parts:
+            system_content = system_message_base + "\n\n" + "\n".join(addendum_parts)
+        else:
+            system_content = system_message_base
+
+        messages: List[Dict[str, Any]] = [{"role": "system", "content": system_content}]
+
+        for turn in clean_chat_context.get("buffer_turns") or []:
+            role = turn.get("role")
+            content = turn.get("content")
+            if role in ("user", "assistant") and content:
+                messages.append({"role": role, "content": content})
+
+        current_user_message = clean_chat_context.get("current_user_message") or ""
+        if current_user_message:
+            messages.append({"role": "user", "content": current_user_message})
+
+        return messages
+
     def _get_planning_response_synthesis_system_prompt(self) -> str:
         """Return the system prompt for agent-side planning response synthesis."""
         return (
@@ -1089,6 +1143,7 @@ class Agent:
         session_id: Optional[str] = None,
         request_id: Optional[str] = None,
         is_a2a_task: bool = False,
+        clean_chat_context: Optional[Dict[str, Any]] = None,
     ) -> MuxiResponse:
         """
         Process a message from the overlord and generate a response.
@@ -1108,6 +1163,14 @@ class Agent:
                 Contains the content to be processed by the agent.
             user_id: Optional user ID for multi-user support. Used for memory
                 isolation and user-specific context.
+            clean_chat_context: Optional bundle from
+                ``ChatOrchestrator._build_clean_chat_context`` carrying
+                buffer history as proper role turns plus the raw
+                current user message and addendum context (profile,
+                long-term memories, file results). When supplied,
+                ``self._messages`` is rebuilt from this bundle so the
+                LLM call uses a proper chat-API-shape transcript
+                instead of the accumulated marker-formatted blobs.
 
         Returns:
             The agent's response as an MuxiResponse, possibly including tool call results
@@ -1120,6 +1183,17 @@ class Agent:
         else:
             message_obj = message
             user_message = self._content_to_text(message.content)
+
+        # When the orchestrator hands us a clean role-turn bundle,
+        # prefer the raw user message it carries — this is the
+        # un-enhanced original text the user actually typed, while
+        # ``message`` at this point is the analyzer-formatted
+        # ``=== CURRENT REQUEST ===`` blob. Using the raw text in
+        # the LLM transcript matches how a normal chat API call
+        # looks; the analyzer blob is only used in the path before
+        # we got here (clarification / planning / intent extraction).
+        if clean_chat_context and clean_chat_context.get("current_user_message"):
+            user_message = clean_chat_context["current_user_message"]
 
         content = user_message
 
@@ -1153,6 +1227,34 @@ class Agent:
         # Memory storage is handled by chat orchestrator - agent should not store messages
         # This prevents duplicate storage of enhanced messages
 
+        if clean_chat_context is not None:
+            # New path (PR #161): rebuild ``self._messages`` from the
+            # orchestrator's clean role-turn bundle every turn rather
+            # than accumulating marker-formatted blobs in agent-instance
+            # state. This produces a chat-API-shape transcript
+            # (``[system, user, asst, user, asst, ..., user]``) that
+            # matches how a normal direct LLM call looks — fixing the
+            # double-encoded-history confusion that caused Sonnet 4.6
+            # to claim missing context on simple multi-turn chats.
+            #
+            # Use the agent's bootstrap system message as the base
+            # (already enriched with auth/error-reporting at __init__
+            # time) and let the helper append profile/memories/file
+            # results as a system addendum. Buffer history fills the
+            # role turns; the current user message ends the list.
+            base_system = (
+                self._messages[0]["content"]
+                if self._messages and self._messages[0].get("role") == "system"
+                else self.system_message
+            )
+            # Strip any previously injected date prefix so we don't
+            # accumulate them across turns.
+            if base_system.startswith("It is now ") and ".\n" in base_system:
+                base_system = base_system[base_system.index(".\n") + 2 :]
+            self._messages = self._assemble_messages_from_clean_context(
+                clean_chat_context, base_system
+            )
+
         # Keep the system message current date/time fresh on every request.
         # Agents are long-lived; without this the model falls back to its training-data date.
         if self._messages and self._messages[0].get("role") == "system":
@@ -1168,8 +1270,12 @@ class Agent:
                 base = base[base.index(".\n") + 2 :]
             self._messages[0]["content"] = f"It is now {now_str}.\n{base}"
 
-        # Add message to conversation context
-        self._messages.append({"role": "user", "content": user_message})
+        # Add message to conversation context — but only if the
+        # orchestrator didn't already do it for us via the clean bundle
+        # rebuild above. Double-appending would put two copies of the
+        # current user turn in the LLM context.
+        if clean_chat_context is None:
+            self._messages.append({"role": "user", "content": user_message})
 
         # Store current user message for credential selection context
         self._current_user_message = user_message
@@ -2121,10 +2227,24 @@ class Agent:
                                 )
                             )
 
-                        simple_messages = [
-                            {"role": "system", "content": system_content},
-                            {"role": "user", "content": user_for_response},
-                        ]
+                        # When the orchestrator handed us a clean
+                        # role-turn bundle, ``self._messages`` already
+                        # contains the proper chat-API-shape transcript
+                        # (system-with-addendum + buffer history +
+                        # current user). Sending only ``[system, user]``
+                        # here would strip the prior turns and cause
+                        # honesty-trained models (e.g. Sonnet 4.6) to
+                        # claim missing context on simple follow-ups.
+                        # Fall back to the legacy two-message pair only
+                        # when no bundle is present (e.g. SDK callers
+                        # that haven't migrated, or non-chat entrypoints).
+                        if clean_chat_context is not None:
+                            simple_messages = list(self._messages)
+                        else:
+                            simple_messages = [
+                                {"role": "system", "content": system_content},
+                                {"role": "user", "content": user_for_response},
+                            ]
 
                         response_obj = await self.model.chat(simple_messages)
                         response_text = (

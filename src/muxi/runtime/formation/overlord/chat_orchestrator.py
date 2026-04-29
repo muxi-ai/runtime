@@ -55,6 +55,7 @@ class ChatOrchestrator:
         internal_user_id: Optional[int] = None,
         muxi_user_id: Optional[str] = None,
         bypass_workflow_approval: bool = False,
+        clean_chat_context: Optional[Dict[str, Any]] = None,
     ) -> AsyncGenerator[str, None]:
         """
         Create a streaming generator that fires off processing and yields events.
@@ -118,6 +119,7 @@ class ChatOrchestrator:
                     use_async=use_async,
                     webhook_url=webhook_url,
                     bypass_workflow_approval=bypass_workflow_approval,
+                    clean_chat_context=clean_chat_context,
                 )
             except Exception as exc:
                 observability.observe(
@@ -538,12 +540,37 @@ class ChatOrchestrator:
                     },
                 )
 
-            # Enhance message with conversation context (memories + buffer)
-            enhanced_message = await self._enhance_message_with_context(
-                message=message,
-                user_id=user_id,
-                session_id=session_id,
-                file_results=file_results,
+            # Enhance message with conversation context (memories + buffer).
+            # We build BOTH representations in parallel:
+            #
+            # * ``enhanced_message`` is the marker-formatted analyzer
+            #   blob (``=== CURRENT REQUEST ===`` / ``=== CONVERSATION
+            #   CONTEXT ===`` / etc). It is consumed by the
+            #   clarification analyzer, planning, intent extraction,
+            #   and other pre-agent text-parsing hops that depend on
+            #   the existing string layout.
+            #
+            # * ``clean_chat_context`` is a structured bundle of the
+            #   same pieces (buffer history as proper role turns,
+            #   profile + memories as separate fields). The agent
+            #   uses this to assemble a chat-API-shaped message list
+            #   with its own system message — avoiding the
+            #   double-encoding of conversation history that broke
+            #   Sonnet 4.6's pure-chat behavior on PR #160's casual
+            #   chat test.
+            enhanced_message, clean_chat_context = await asyncio.gather(
+                self._enhance_message_with_context(
+                    message=message,
+                    user_id=user_id,
+                    session_id=session_id,
+                    file_results=file_results,
+                ),
+                self._build_clean_chat_context(
+                    current_user_message=message,
+                    user_id=user_id,
+                    session_id=session_id,
+                    file_results=file_results,
+                ),
             )
 
             # Extract user information from enhanced message (fire-and-forget)
@@ -654,6 +681,7 @@ class ChatOrchestrator:
                     internal_user_id=internal_user_id,
                     muxi_user_id=muxi_user_id,
                     bypass_workflow_approval=bypass_workflow_approval,
+                    clean_chat_context=clean_chat_context,
                 )
 
             # Sync processing
@@ -669,6 +697,7 @@ class ChatOrchestrator:
                     use_async=use_async,
                     webhook_url=webhook_url,
                     bypass_workflow_approval=bypass_workflow_approval,
+                    clean_chat_context=clean_chat_context,
                 )
                 success = True
             except Exception:
@@ -816,12 +845,13 @@ class ChatOrchestrator:
         use_async: Optional[bool] = None,
         webhook_url: Optional[str] = None,
         bypass_workflow_approval: bool = False,
+        clean_chat_context: Optional[Dict[str, Any]] = None,
     ) -> Union[str, Dict[str, Any], MuxiResponse]:
         """
         Process a chat request synchronously.
 
         Args:
-            message: The user's message
+            message: The user's message (analyzer-formatted enhanced blob)
             agent_name: Optional specific agent
             user_id: Optional user ID
             session_id: Optional session ID
@@ -829,6 +859,12 @@ class ChatOrchestrator:
             original_message: Original message before enhancement
             use_async: Explicit async preference to pass to workflow
             webhook_url: Webhook URL for async responses
+            clean_chat_context: Optional bundle from
+                ``_build_clean_chat_context`` carrying buffer history
+                as proper role turns + the raw current user message.
+                When supplied, the agent uses this for its LLM call
+                instead of accumulating ``self._messages`` from
+                marker-formatted enhanced blobs.
 
         Returns:
             The response string or MuxiResponse with artifacts
@@ -844,6 +880,7 @@ class ChatOrchestrator:
                 use_async=use_async,
                 webhook_url=webhook_url,
                 bypass_workflow_approval=bypass_workflow_approval,
+                clean_chat_context=clean_chat_context,
             )
         except RequestCancelledException as e:
             # Request was cancelled by user - log and return empty response
@@ -1372,6 +1409,168 @@ class ChatOrchestrator:
         enhanced_message = "\n".join(enhanced_parts)
 
         return enhanced_message
+
+    async def _build_clean_chat_context(
+        self,
+        *,
+        current_user_message: str,
+        user_id: Any,
+        session_id: Optional[str],
+        file_results: Optional[str] = None,
+    ) -> Dict[str, Any]:
+        """Build a chat-API-shaped context bundle for the agent's LLM call.
+
+        Returns a dict bundle that the agent assembles into a clean
+        role-turn transcript using its own system message::
+
+            {
+              "buffer_turns": [{"role": "user"|"assistant", "content": "..."}],
+              "current_user_message": "<raw text, no markers>",
+              "user_profile_text": "...",
+              "long_term_memories": "...",
+              "file_results": "...",
+            }
+
+        in contrast to ``_enhance_message_with_context`` which produces a
+        single flat string with ``=== CURRENT REQUEST ===`` /
+        ``=== CONVERSATION CONTEXT ===`` markers (still consumed by the
+        clarification analyzer, planning, intent extraction, and other
+        pre-agent processing hops).
+
+        The two functions exist side-by-side intentionally:
+
+        * The marker-formatted string is the analyzer-pipeline contract.
+          Anything that parses the user's request with regex/text
+          extraction still sees the same shape it always saw.
+        * This clean bundle is the LLM-completion contract. Buffer
+          memory stores ORIGINAL (un-enhanced) user/assistant text —
+          see ``_store_user_message_async`` /
+          ``_store_assistant_response_async`` — so we can simply
+          replay those rows as proper role tags without any string
+          parsing.
+
+        Why this matters: rendering the conversation history twice
+        (once as proper role turns, once as a flat ``[12:30] User:``
+        block embedded inside every fresh user-turn) gives the LLM
+        contradictory framing. Models with strong honesty training
+        (Sonnet 4.6, GPT-5) read the ``=== CURRENT REQUEST ===``
+        wrapper as an isolated query and treat the surrounding flat
+        blob as metadata-not-history, then ask for clarification on
+        questions that are unambiguous in the proper role-turn view.
+        See mental-model.md for the full diagnosis.
+
+        The agent owns the final assembly because the agent owns its
+        own ``system_message``; we don't want the orchestrator to have
+        to know which agent was selected.
+        """
+        buffer_config = self.overlord.formation_config.get("memory", {}).get("buffer", {})
+        buffer_size = buffer_config.get("size", 10)
+
+        # Run profile/memories/buffer fetches concurrently, mirroring
+        # _enhance_message_with_context's approach.
+        async def _fetch_user_synopsis() -> str:
+            if self.overlord.is_multi_user and user_id:
+                try:
+                    synopsis = await self.overlord.get_user_synopsis(external_user_id=user_id)
+                    if synopsis and synopsis.strip():
+                        return synopsis
+                except Exception:
+                    pass
+            return ""
+
+        async def _fetch_long_term_memories() -> str:
+            if self.overlord.long_term_memory and user_id:
+                try:
+                    collections_to_search = [
+                        c
+                        for c in (
+                            self.overlord.formation_config.get("memory", {})
+                            .get("long_term", {})
+                            .get("collections", [])
+                            or []
+                        )
+                        if isinstance(c, str) and c
+                    ]
+                    if not collections_to_search:
+                        collections_to_search = ["conversations"]
+                    results = await self.overlord.long_term_memory.search(
+                        query=current_user_message,
+                        user_id=user_id,
+                        collections=collections_to_search,
+                        k=5,
+                    )
+                    if results:
+                        formatted_memories = []
+                        for r in results:
+                            text = r.get("text") or r.get("content") or ""
+                            if text:
+                                formatted_memories.append(f"- {text}")
+                        if formatted_memories:
+                            return "\n".join(formatted_memories)
+                except Exception:
+                    pass
+            return ""
+
+        async def _fetch_buffer_role_turns() -> List[Dict[str, str]]:
+            """Pull recent buffer rows as proper {role, content} dicts.
+
+            Buffer storage is keyed by recency only (we use the
+            empty-query branch of search_buffer_memory). The current
+            user turn itself was just stored fire-and-forget by
+            ``_store_user_message_async`` immediately before this
+            method runs; it MAY or MAY NOT be visible in the buffer
+            yet depending on ordering, so we filter it out by content
+            equality to avoid double-injection.
+            """
+            if not self.overlord.buffer_memory_manager:
+                return []
+            try:
+                metadata_filter: Dict[str, Any] = {"user_id": user_id}
+                if session_id:
+                    metadata_filter["session_id"] = session_id
+                rows = await self.overlord.buffer_memory_manager.search_buffer_memory(
+                    query="",
+                    k=buffer_size,
+                    filter_metadata=metadata_filter,
+                )
+            except Exception:
+                return []
+            if not rows:
+                return []
+
+            # search_buffer_memory returns most-recent-first; reverse
+            # for chronological replay into the LLM context.
+            ordered = list(reversed(rows))
+            turns: List[Dict[str, str]] = []
+            for row in ordered:
+                meta = row.get("metadata", {}) or {}
+                role = meta.get("role")
+                if role not in ("user", "assistant"):
+                    continue
+                text = row.get("text") or ""
+                if not text:
+                    continue
+                # Skip the current user message if buffer storage
+                # raced ahead of us; the orchestrator appends it
+                # separately at the tail of this list.
+                if role == "user" and text.strip() == current_user_message.strip():
+                    continue
+                turns.append({"role": role, "content": text})
+            return turns
+
+        user_profile_text, long_term_memories, buffer_turns = await asyncio.gather(
+            _fetch_user_synopsis(),
+            _fetch_long_term_memories(),
+            _fetch_buffer_role_turns(),
+        )
+
+        return {
+            "buffer_turns": buffer_turns,
+            "current_user_message": current_user_message,
+            "user_profile_text": user_profile_text,
+            "long_term_memories": long_term_memories,
+            "file_results": file_results or "",
+        }
 
     async def _extract_user_information_async(
         self,

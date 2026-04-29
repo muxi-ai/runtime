@@ -6017,6 +6017,7 @@ Agent response: {raw_response}"""
         use_async: Optional[bool] = None,
         webhook_url: Optional[str] = None,
         bypass_workflow_approval: bool = False,
+        clean_chat_context: Optional[Dict[str, Any]] = None,
     ) -> MuxiResponse:
         """
         Process chat synchronously using existing infrastructure.
@@ -6025,6 +6026,14 @@ Agent response: {raw_response}"""
         infrastructure for agent selection and message processing. It maintains
         compatibility with the current system while providing a clean interface
         for both sync and async execution paths.
+
+        The ``clean_chat_context`` bundle (when present) is forwarded
+        verbatim to ``agent.process_message`` so the agent can build a
+        proper role-turn LLM message list from buffer memory instead
+        of accumulating marker-formatted enhanced blobs into
+        ``self._messages``. See
+        ``ChatOrchestrator._build_clean_chat_context`` for the bundle
+        shape and rationale.
 
         ENHANCED: Now detects and handles agent clarification requests.
         """
@@ -7610,6 +7619,7 @@ Agent response: {raw_response}"""
                 user_id=user_id,
                 session_id=session_id,
                 request_id=request_id,
+                clean_chat_context=clean_chat_context,
             )
 
             # NOTE: Assistant response buffer storage is handled by
