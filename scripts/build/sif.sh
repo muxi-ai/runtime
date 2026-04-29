@@ -181,6 +181,7 @@ else
     fi
     docker run --rm --privileged \
         -v "$(pwd):/work" \
+        --tmpfs /tmp:exec,dev,size=8G \
         -w /work \
         ghcr.io/muxi-ai/runtime-runner:latest \
         build "$SIF_FILE" "docker-archive://$TARBALL"
