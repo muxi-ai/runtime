@@ -173,17 +173,8 @@ async def reload_secrets(request: Request) -> JSONResponse:
         )
         return JSONResponse(content=response.model_dump(), status_code=500)
 
-    observability.observe(
-        event_type=observability.SystemEvents.SECRET_OPERATION_COMPLETED,
-        level=observability.EventLevel.INFO,
-        data={"operation": "reload", **summary},
-        description=(
-            f"Secrets reloaded: {len(summary['added'])} added, "
-            f"{len(summary['overwritten'])} overwritten, "
-            f"{len(summary['preserved'])} preserved"
-        ),
-    )
-
+    # Success observability is already emitted by SecretsManager.reload()
+    # (SECRET_OPERATION_COMPLETED) — avoid double-counting in dashboards.
     response = create_success_response(
         APIObjectType.SECRET,
         APIEventType.SECRET_RELOADED,
