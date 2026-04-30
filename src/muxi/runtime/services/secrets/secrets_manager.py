@@ -585,9 +585,7 @@ class SecretsManager:
                 # Load fresh secrets from disk (raises on decrypt/parse failure,
                 # leaving the existing cache intact).
                 disk_secrets = (
-                    await self._load_secrets_from_file()
-                    if self.secrets_file_path.exists()
-                    else {}
+                    await self._load_secrets_from_file() if self.secrets_file_path.exists() else {}
                 )
 
                 current_cache = self._secrets_cache or {}
