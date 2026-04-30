@@ -163,12 +163,8 @@ async def reload_secrets(request: Request) -> JSONResponse:
             )
             return JSONResponse(content=response.model_dump(), status_code=503)
     except Exception as e:
-        observability.observe(
-            event_type=observability.SystemEvents.SECRET_OPERATION_FAILED,
-            level=observability.EventLevel.ERROR,
-            data={"operation": "reload", "error": str(e), "error_type": type(e).__name__},
-            description=f"Secrets reload failed: {str(e)}",
-        )
+        # Failure observability is already emitted by SecretsManager.reload()
+        # before re-raising; avoid double-counting in dashboards/alerting.
         response = create_error_response(
             "SECRETS_RELOAD_FAILED",
             f"Failed to reload secrets: {str(e)}",
@@ -178,7 +174,7 @@ async def reload_secrets(request: Request) -> JSONResponse:
         return JSONResponse(content=response.model_dump(), status_code=500)
 
     observability.observe(
-        event_type=observability.SystemEvents.CONFIG_FORMATION_LOADED,
+        event_type=observability.SystemEvents.SECRET_OPERATION_COMPLETED,
         level=observability.EventLevel.INFO,
         data={"operation": "reload", **summary},
         description=(
