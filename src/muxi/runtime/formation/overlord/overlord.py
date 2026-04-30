@@ -2090,6 +2090,20 @@ class Overlord:
                 if "parameters" in server_config and isinstance(server_config["parameters"], dict):
                     registration_params["parameters"] = server_config["parameters"]
 
+                # Translate optional tools.{whitelist|blacklist} into a
+                # ToolFilterSpec — same semantics as the formation-level
+                # registration path in formation.py. Without this, a
+                # per-agent re-registration would silently restore the
+                # full upstream catalog and bloat the planning prompt
+                # back to its unfiltered size.
+                tools_block = server_config.get("tools")
+                if isinstance(tools_block, dict):
+                    from ...services.mcp.tool_filter import ToolFilterSpec
+
+                    spec = ToolFilterSpec.from_config(tools_block)
+                    if spec.is_active:
+                        registration_params["tool_filter"] = spec
+
                 # Register the MCP server with process-level timeout
                 # This may raise MCPConnectionError if connection fails
                 # Note: MCP library v1.12.3 has issues with 401 errors causing hangs

@@ -1611,20 +1611,105 @@ async def register_mcp_server(
     # 4. Discover tools
     tools = await handler.list_tools()
     
-    # 5. Register tools
+    # 5. Apply optional tools.{whitelist|blacklist} filter (see "Tool
+    #    Filtering" section below). Runs BETWEEN list_tools and registry
+    #    insertion so a post-filter empty set aborts registration with a
+    #    typed warning instead of silently registering zero tools.
+    tools, filter_report = apply_filter(tools, tool_filter_spec)
+    
+    # 6. Register tools
     if agent_id:
         self.agent_tool_registry[agent_id][server_id] = tools
     else:
         self.agent_tool_registry["_shared"][server_id] = tools
     
-    # 6. Cache transport for future reconnection
+    # 7. Cache transport for future reconnection
     self.transport_cache[server_id] = transport
     
-    # 7. Store handler
+    # 8. Store handler
     self.mcp_handlers[server_id] = handler
     
     return server_id
 ```
+
+### Tool Filtering (whitelist / blacklist)
+
+**Path:** `services/mcp/tool_filter.py` → applied inside `MCPService._connect_single_transport`
+
+Optional ``tools`` block on any MCP server's `.afs` lets operators register
+only a subset of an upstream catalog:
+
+```yaml
+type: "http"
+endpoint: "https://api.githubcopilot.com/mcp/"
+auth: { type: "bearer", token: "${{ secrets.GITHUB_PAT }}" }
+tools:
+  whitelist:               # mutually exclusive with blacklist
+    - "search_*"           # fnmatch globs (* ? [...])
+    - "get_*"
+    - "issue_*"
+    - "add_issue_comment"  # literal names match exactly
+```
+
+**Why this exists.** A formation that needs only a handful of capabilities
+from an upstream MCP (the github-mcp publishes 44 tools; most demos use
+4-15) ends up paying for the full catalog on every planning prompt. The
+schemas of unused tools become token bloat and a hallucination surface
+("just use this destructive tool, it sounds plausible"). The filter
+collapses both — fewer schemas in the planning prompt, fewer dangerous
+verbs reachable.
+
+**Pipeline.**
+
+1. Loader reads `tools` block from MCP `.afs` (formation.py L2419 and
+   overlord.py L2092 — both registration paths must wire this).
+2. ``ToolFilterSpec.from_config`` translates the dict into a normalized
+   spec (mode + tuple of patterns). Tolerant: malformed input becomes
+   an inactive spec, never raises.
+3. ``apply_filter(upstream_tools, spec)`` is the single pure entry
+   point. Runs literal names through equality check, glob patterns
+   through ``fnmatch``. Returns ``(kept_tools, FilterReport)`` —
+   ordering of ``kept_tools`` follows upstream order, not pattern
+   order, for deterministic planning prompts.
+4. ``FilterReport`` carries the full pattern-resolution table and any
+   unknown patterns (with ``difflib`` "did you mean?" suggestions for
+   literal typos; suppressed for globs to avoid noise).
+
+**Validation.** ``ConfigValidator._validate_mcp_tools_block`` enforces
+fail-fast load-time rules:
+
+* mutex: ``whitelist`` XOR ``blacklist`` (never both, never neither
+  inside a ``tools`` block)
+* type: list of strings; non-string entries → load error
+* non-blank: whitespace-only patterns rejected (almost always a typo)
+* empty list: warning, not error — ``tools.whitelist: []`` is treated as
+  no-filter at runtime, but worth flagging since the operator clearly
+  intended *something*
+
+**Observability.** Three event types in ``SystemEvents``:
+
+* ``MCP_TOOL_FILTER_APPLIED`` (info, every registration) — full
+  pattern resolution table. **Critical for catching silent scope
+  expansion** when an upstream server adds a new tool that newly
+  matches a wildcard.
+* ``MCP_TOOL_FILTER_UNKNOWN_TOOL`` (warning, once per unknown literal
+  pattern) — surfaces typos with similarity-ranked suggestions.
+* ``MCP_TOOL_FILTER_EMPTY_SET`` (warning) — registration aborted
+  because the post-filter set is empty.
+
+A clean ``[ INFO ]`` init line also prints the resolution inline next
+to the existing ``Connected to MCP`` line so operators reviewing
+startup logs see scope decisions without grepping the JSON event log.
+
+**Two registration paths must both wire the filter.** A formation-level
+``register_mcp_server`` call happens early; ``Overlord._register_agent_mcp_servers``
+runs again per agent during the agent-load phase. Without the filter
+plumbed through both, the agent-load path silently re-registered the
+full upstream catalog and bloated the planning prompt back to its
+unfiltered size — caught during live test on
+``example-formations/demo/hello-muxi`` (29-vs-44 mismatch was visible
+both as a duplicate ``Connected to MCP`` line and as ``tool_count: 58``
+in the ``agent.planning`` event).
 
 ### Transport Auto-Detection
 
@@ -5897,3 +5982,101 @@ Claude Sonnet 4.5 producing identical behavior on the same MS365 Excel workflow.
   clean context binding, placeholder rejection, successful-results-only filtering
 - `tests/unit/test_agent_planning_helpers.py` -- 20+ new tests for planning execution fixes
 - `tests/unit/test_mcp_default_parameters.py` -- 10 tests for MCP parameters feature
+
+
+## MCP Tool Filtering — Lessons Learned
+
+**Problem statement.** Every upstream MCP tool's full JSON schema lands in the planning
+prompt of every agent that has access to that MCP. For an upstream like github-mcp
+(44 tools), most of those schemas describe capabilities a given formation never uses.
+Operators paid for the full catalog on every planning turn AND had no way to keep
+destructive verbs (`delete_repo`, `force_push_branch`, etc.) out of the LLM's
+plannable surface.
+
+**Solution shape.** Optional `tools.{whitelist|blacklist}` block on any MCP server
+`.afs`. Glob patterns (`fnmatch`) for capability families, literal names for
+exact picks. Mutually exclusive — pick one mode per server.
+
+### Lesson 1: There are TWO MCP registration paths and both must wire new kwargs
+
+`Formation._register_mcp_servers` runs at formation load. `Overlord._register_agent_mcp_servers`
+runs again per agent during agent load. Both end up calling
+`MCPService.register_mcp_server()`. The first wiring of `tool_filter` only touched the
+formation-level path; live test on `example-formations/demo/hello-muxi` revealed:
+
+- Boot log printed `Connected to MCP 'github-mcp' (4 tools)` then later
+  `Connected to MCP 'github-mcp' (44 tools)` — the agent-load path was silently
+  re-registering the unfiltered catalog.
+- `agent.planning` event showed `tool_count: 58` instead of the expected 18,
+  proving the agent's effective tool set was the unfiltered one.
+
+This is the same gotcha that bit the MCP `parameters` feature earlier (see prior
+section). Both registration paths are real, both fire, both must wire any new
+registration kwarg.
+
+### Lesson 2: Filter has to run BEFORE registry insertion, not after
+
+Earlier filter sketches mutated the registry post-insertion. That made the empty-set
+case ambiguous: was the agent registered with zero tools (silent failure) or did the
+operator forget to declare a `tools` block? Moving the filter inside
+`_connect_single_transport` between `tools/list` and registry insertion made
+abort-on-empty deterministic — the registration aborts with a typed
+`mcp.tool_filter.empty_set` warning and the agent never starts in a broken state.
+
+### Lesson 3: Operators need both verbose telemetry AND an inline init line
+
+Pure observability events (`MCP_TOOL_FILTER_APPLIED`) aren't enough — operators reading
+`stderr` during `muxi run` look for the `Connected to MCP` lines, not the JSON event log.
+Printing the resolution table inline next to the existing init line means scope decisions
+get reviewed at the same moment as connection success:
+
+```
+[ INFO ] MCP 'github-mcp' tool filter (resolved 29/44 tools via whitelist(9 patterns))
+           whitelist['search_*'] -> 5 match(es): search_code, search_issues, ...
+           whitelist['issue_*']  -> 2 match(es): issue_read, issue_write
+[  OK  ] Connected to MCP 'github-mcp' (29 tools available via streamable http)
+```
+
+The verbose telemetry stays for log analysis (catching silent scope expansion when an
+upstream MCP adds a new tool that newly matches a wildcard); the init line keeps the
+human-reviewable signal.
+
+### Lesson 4: Whitelist scope choice is a product/security decision, not a log-replay one
+
+The first whitelist iteration on hello-muxi was scoped to the four tools observed in
+the previous demo's log (`search_repositories`, `get_me`, `get_file_contents`,
+`create_or_update_file`). That overfit to one specific flow — testing
+"comment on the muxi guestbook issue on github" then failed because
+`add_issue_comment` had been filtered out.
+
+The right scoping question is **"what should this agent be allowed to do in this
+formation?"** — not "what did one log file show me." Capability-scoped patterns
+(`search_*`, `get_*`, `list_*`, `issue_*`) generalize across paraphrasings of the
+same intent. The 12-phrase test battery on hello-muxi confirmed this: 4 different
+ways of saying "post a comment on the guestbook" all reached `add_issue_comment`
+cleanly.
+
+### Lesson 5: `difflib` suggestions for unknown literals only — never for globs
+
+`MCP_TOOL_FILTER_UNKNOWN_TOOL` warnings include `difflib.get_close_matches` ranked
+suggestions for typo'd literal patterns ("`create_isue` → did you mean `create_issue`?").
+For glob patterns that match nothing (`destroy_*`), the suggestion list is forced
+empty — suggesting arbitrary unrelated tool names for a glob is noise, not signal.
+
+### Key files
+
+- `src/muxi/runtime/services/mcp/tool_filter.py` — pure module, no I/O,
+  `ToolFilterSpec` + `apply_filter` + `FilterReport`. Total functions; malformed
+  input becomes inactive spec, never raises.
+- `src/muxi/runtime/services/mcp/service.py` — `_observe_filter_applied` helper +
+  filter call inside `_connect_single_transport`.
+- `src/muxi/runtime/formation/formation.py` — formation-level `tools` block
+  translation (L2419).
+- `src/muxi/runtime/formation/overlord/overlord.py` — agent-level `tools` block
+  translation (L2092). Mirrors the formation-level wiring exactly; if these two
+  drift, the filter silently breaks for agent-load-time MCPs.
+- `src/muxi/runtime/formation/config/validation.py` — load-time mutex/type/blank
+  validation in `_validate_mcp_tools_block`.
+- `src/muxi/runtime/datatypes/observability.py` — three new `SystemEvents` enums.
+- `tests/unit/test_mcp_tool_filter.py` — 27 tests covering pure filter, spec
+  tolerance, and validator hooks.

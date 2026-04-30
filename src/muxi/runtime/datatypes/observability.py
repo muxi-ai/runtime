@@ -156,6 +156,20 @@ class SystemEvents(Enum):
     MCP_TOOL_FALLBACK_USED = "mcp.tool.fallback.used"
     # When MCP tool execution falls back to alternative
 
+    # Tool filtering (whitelist / blacklist) at registration time
+    MCP_TOOL_FILTER_APPLIED = "mcp.tool_filter.applied"
+    # When a whitelist/blacklist filter is applied to an upstream MCP catalog
+    # at registration time. Carries pattern resolutions so operators can audit
+    # exactly which upstream tools each glob expanded to.
+
+    MCP_TOOL_FILTER_UNKNOWN_TOOL = "mcp.tool_filter.unknown_tool"
+    # When a whitelist/blacklist pattern matches zero upstream tools.
+    # Carries difflib "did you mean?" suggestions for literal patterns.
+
+    MCP_TOOL_FILTER_EMPTY_SET = "mcp.tool_filter.empty_set"
+    # When the post-filter tool set is empty. The MCP is NOT registered;
+    # agents that reference it will receive no tools from this source.
+
     MCP_TRANSPORT_CACHE_CLEARED = "mcp.transport.cache.cleared"
     # When MCP transport cache is cleared
 
