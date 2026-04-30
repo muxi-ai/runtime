@@ -109,6 +109,42 @@ def test_build_raw_response_non_dict_result_stringified() -> None:
     assert "raw string output" in rendered
 
 
+def test_build_raw_response_empty_string_result_with_artifact_only_emits_filename() -> None:
+    """Dict with empty-string ``result`` plus an artifact must NOT emit a
+    blank line under the header.
+
+    Regression guard: the previous ``elif raw_text is not None`` branch
+    appended ``str("").strip()`` (an empty string) into the section,
+    leaving the persona LLM with just ``### {placeholder}`` followed by
+    blank space. The fix mirrors ``_render_task_body``'s ``if body:``
+    guard so empty / whitespace-only ``result`` values are skipped, and
+    the artifact filename becomes the section's only body line.
+    """
+    my_results = {
+        "{{CHART}}": {
+            "result": "",
+            "_artifact": {"filename": "sales.png"},
+        },
+    }
+    rendered = Agent._build_raw_response(my_results, [])
+    assert "### {{CHART}}" in rendered
+    assert "Files Attached: sales.png" in rendered
+    # No blank-line body between header and Files Attached.
+    chart_block = rendered.split("### {{CHART}}", 1)[1]
+    non_empty_body_lines = [ln for ln in chart_block.splitlines() if ln.strip()]
+    assert non_empty_body_lines == ["Files Attached: sales.png"]
+
+
+def test_build_raw_response_whitespace_only_result_treated_as_empty() -> None:
+    """``result`` that's pure whitespace must not surface as a section
+    body (parallels the non-empty-string check on the first branch)."""
+    my_results = {"{{STEP}}": {"result": "   \n  "}}
+    rendered = Agent._build_raw_response(my_results, [])
+    assert "### {{STEP}}" in rendered
+    step_block = rendered.split("### {{STEP}}", 1)[1]
+    assert step_block.strip() == ""
+
+
 def test_build_raw_response_empty_inputs_returns_empty_string() -> None:
     """Empty results AND empty delegations return an empty string.
 
@@ -120,14 +156,34 @@ def test_build_raw_response_empty_inputs_returns_empty_string() -> None:
 
 
 def test_build_raw_response_skips_empty_delegated_parts() -> None:
-    """Empty/None delegated entries are skipped, not rendered as blanks."""
+    """Empty/None delegated entries are skipped, and the surviving
+    entries are numbered contiguously from 1.
+
+    Numbering by the original list position would produce gaps
+    (``["", None, "Real"]`` → "Delegated Response 3" with no 1 or 2),
+    which carries no semantic meaning and just confuses the persona
+    LLM. The renderer counts only emitted parts.
+    """
     my_results = {"{{TOOL}}": {"result": "X"}}
     rendered = Agent._build_raw_response(my_results, ["", None, "Real response"])  # type: ignore[list-item]
-    assert "### Delegated Response 1" not in rendered
+    # Only the non-empty entry surfaces, numbered 1 (not 3).
+    assert "### Delegated Response 1" in rendered
     assert "### Delegated Response 2" not in rendered
-    # Only the non-empty entry surfaces, indexed by its position.
-    assert "### Delegated Response 3" in rendered
+    assert "### Delegated Response 3" not in rendered
     assert "Real response" in rendered
+
+
+def test_build_raw_response_delegated_parts_numbered_contiguously() -> None:
+    """Multiple non-empty parts interleaved with skips still produce a
+    contiguous 1..N sequence."""
+    rendered = Agent._build_raw_response(
+        {},
+        ["First", "", None, "Second", None, "Third"],  # type: ignore[list-item]
+    )
+    assert "### Delegated Response 1\nFirst" in rendered
+    assert "### Delegated Response 2\nSecond" in rendered
+    assert "### Delegated Response 3\nThird" in rendered
+    assert "### Delegated Response 4" not in rendered
 
 
 # ---------------------------------------------------------------------------

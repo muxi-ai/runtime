@@ -2,8 +2,9 @@
 
 **Branch:** `feature/synthesis-speedup`
 **Date:** 2026-04-30
-**Status:** Plan — implementation pending
+**Status:** Implemented (merged in PR #162, 2026-04-30)
 **Predecessor commit:** `9650a95e` (overlord prompt now renders raw task outputs)
+**Implementation commit:** `2cc1d23e` (perf(synthesis): collapse three LLM passes into one persona call)
 
 ---
 

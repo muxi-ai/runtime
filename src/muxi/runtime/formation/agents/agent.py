@@ -1050,7 +1050,9 @@ class Agent:
                                 continue
                             section_lines.append(f"{key}: {value}")
                     elif raw_text is not None:
-                        section_lines.append(str(raw_text).strip())
+                        stripped = str(raw_text).strip()
+                        if stripped:
+                            section_lines.append(stripped)
                     else:
                         # Dict result with no result/output key — render
                         # the whole dict as key:value lines so nothing
@@ -1075,10 +1077,18 @@ class Agent:
                 sections.append("\n".join(section_lines))
 
         if planning_response_parts:
-            for idx, part in enumerate(planning_response_parts, 1):
+            # Number only the delegated parts we actually emit so the
+            # persona LLM sees a contiguous 1..N sequence. Numbering by
+            # the original list position would leave gaps for empty /
+            # None entries (e.g. ``["", None, "X"]`` → "Delegated
+            # Response 3" with no 1 or 2), which carries no semantic
+            # meaning and just confuses the model.
+            delegated_idx = 0
+            for part in planning_response_parts:
                 if not part:
                     continue
-                sections.append(f"### Delegated Response {idx}\n{part}")
+                delegated_idx += 1
+                sections.append(f"### Delegated Response {delegated_idx}\n{part}")
 
         if not sections:
             return ""
