@@ -1010,6 +1010,21 @@ class MCPService:
                 # Success - the transport type is already stored in cache by _connect_single_transport
                 return result
 
+            except MCPToolFilterEmptySetError:
+                # Filter excluded every upstream tool — this is a clean
+                # skip per spec, NOT a transport failure. The warning
+                # event + init log were already emitted from inside
+                # ``_connect_single_transport`` and partial state was
+                # cleaned. Without this re-raise the broad ``except
+                # Exception`` below would (a) log a spurious
+                # ``MCP_TRANSPORT_FAILED`` event, (b) retry on the next
+                # transport which would re-emit the warning a second
+                # time, and (c) ultimately raise ``MCPConnectionError``
+                # — which the overlord's broad handler converts to
+                # ``sys.exit(1)``, killing the formation over what is
+                # by design an intentional configuration.
+                raise
+
             except Exception as e:
                 errors[transport_type] = str(e)
 
@@ -1178,6 +1193,11 @@ class MCPService:
                             pass
                         self.handlers.pop(server_id, None)
                         self.connections.pop(server_id, None)
+                        # ``self.locks[server_id]`` was created at the
+                        # top of ``register_mcp_server`` before any
+                        # transport attempt — symmetric cleanup with
+                        # the other partial-state pops above.
+                        self.locks.pop(server_id, None)
                         raise MCPToolFilterEmptySetError(
                             (
                                 f"MCP server '{server_id}' skipped: "

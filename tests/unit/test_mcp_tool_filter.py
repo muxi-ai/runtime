@@ -535,3 +535,117 @@ def test_empty_set_error_inherits_from_mcp_error_family() -> None:
     assert err.details["mode"] == "whitelist"
     assert err.details["upstream_tool_count"] == 44
     assert "skipped" in err.message
+
+
+# ---------------------------------------------------------------------------
+# Follow-up review fixes — propagation through ``_connect_with_fallback``
+# (Issue 1) and lock-cleanup symmetry on empty-set abort (Issue 2).
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.asyncio
+async def test_connect_with_fallback_propagates_empty_set_error() -> None:
+    """``_connect_with_fallback`` must re-raise ``MCPToolFilterEmptySetError``
+    instead of catching it as a transport failure.
+
+    Regression: before the fix, the bare ``except Exception as e:``
+    handler in ``_connect_with_fallback`` caught the empty-set
+    exception, logged a spurious ``MCP_TRANSPORT_FAILED`` event,
+    retried with the second transport (which would re-raise from
+    inside ``_connect_single_transport`` and re-emit the warning),
+    and ultimately raised ``MCPConnectionError``. Overlord's broad
+    ``except (asyncio.CancelledError, Exception)`` then converted
+    that into ``sys.exit(1)``, killing the formation over what is
+    by spec an intentional configuration choice.
+    """
+    from muxi.runtime.services.mcp.service import MCPService
+    from muxi.runtime.services.mcp.transports.base import (
+        MCPConnectionError,
+        MCPToolFilterEmptySetError,
+    )
+
+    service = MCPService()
+    call_count = {"n": 0}
+
+    async def fake_connect_single_transport(*args, **kwargs):
+        call_count["n"] += 1
+        raise MCPToolFilterEmptySetError(
+            "filter matched 0 of 44 upstream tools",
+            details={"server_id": "gh", "mode": "whitelist", "upstream_tool_count": 44},
+        )
+
+    service._connect_single_transport = fake_connect_single_transport  # type: ignore[assignment]
+
+    # The exception must propagate UNCHANGED (not converted to
+    # MCPConnectionError) and the second transport must NOT be tried.
+    with pytest.raises(MCPToolFilterEmptySetError) as excinfo:
+        await service._connect_with_fallback(
+            server_id="gh",
+            url="https://example.invalid/mcp/",
+        )
+
+    assert not isinstance(excinfo.value, MCPConnectionError)
+    assert excinfo.value.details["upstream_tool_count"] == 44
+    assert call_count["n"] == 1, (
+        "second transport must not be retried on empty-set abort — "
+        "retrying would re-emit the empty_set warning a second time"
+    )
+
+
+@pytest.mark.asyncio
+async def test_empty_set_abort_pops_lock_alongside_handlers_and_connections() -> None:
+    """``self.locks[server_id]`` is cleaned up on empty-set abort.
+
+    Regression: ``register_mcp_server`` creates ``self.locks[server_id]``
+    before any transport attempt. The empty-set abort path popped
+    ``handlers`` and ``connections`` but left the lock entry behind,
+    breaking the symmetry of partial-state cleanup. A subsequent
+    re-registration of the same ``server_id`` would reuse the stale
+    lock from a prior run rather than creating a fresh one.
+    """
+    from unittest.mock import AsyncMock, MagicMock, patch
+
+    from muxi.runtime.services.mcp.service import MCPService
+    from muxi.runtime.services.mcp.transports.base import MCPToolFilterEmptySetError
+
+    service = MCPService()
+    server_id = "gh"
+
+    # Mock MCPHandler so we don't touch the network or the transport
+    # factory — we only need its public surface (connect_server,
+    # list_tools, disconnect_server) for the empty-set branch to fire.
+    fake_handler = MagicMock()
+    fake_handler.connect_server = AsyncMock(return_value=True)
+    fake_handler.list_tools = AsyncMock(
+        return_value=[{"name": "create_issue"}, {"name": "delete_repo"}]
+    )
+    fake_handler.disconnect_server = AsyncMock(return_value=True)
+
+    # Spec that excludes every upstream tool — the trigger for the
+    # empty-set branch we're trying to exercise.
+    spec = ToolFilterSpec.from_config({"whitelist": ["nonexistent_*"]})
+
+    with patch(
+        "muxi.runtime.services.mcp.service.MCPHandler",
+        return_value=fake_handler,
+    ):
+        with pytest.raises(MCPToolFilterEmptySetError):
+            # ``register_mcp_server`` creates the lock at its top so we
+            # exercise the full lock-lifecycle, not just the inner
+            # function in isolation.
+            await service.register_mcp_server(
+                server_id=server_id,
+                url="https://example.invalid/mcp/",
+                transport_type="streamable_http",
+                tool_filter=spec,
+            )
+
+    # All three partial-state stores must be empty after the abort —
+    # the asymmetry was a stale entry in ``locks`` while the others
+    # were popped.
+    assert server_id not in service.handlers, "handlers leaked"
+    assert server_id not in service.connections, "connections leaked"
+    assert server_id not in service.locks, (
+        "locks leaked: ``self.locks.pop(server_id, None)`` is missing "
+        "from the empty-set abort cleanup path"
+    )
