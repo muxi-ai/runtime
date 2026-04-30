@@ -2,6 +2,51 @@
 
 ## [unreleased]
 
+### Hot-reload secrets without restarting the formation
+
+Adds an admin-only ``POST /secrets/reload`` endpoint that refreshes the
+running formation's in-memory secret cache from ``secrets.enc`` without
+restarting the process. Useful when secrets are rotated externally
+(e.g. CI redeploys the encrypted file) and you don't want to bounce a
+live formation just to pick up the new values.
+
+**Non-destructive merge semantics**
+Reload does not replace the cache wholesale. It performs an
+add-or-override merge:
+- secrets present on disk but missing in memory are added
+- secrets present in both places are overwritten with the disk value
+- secrets present only in memory are preserved and are NOT deleted
+
+The preservation rule is intentional: an in-memory-only secret may
+have been added through the API or be in active use by a running
+agent / MCP integration, and silently dropping it on reload would
+break those consumers.
+
+**Failure isolation**
+If decrypting or parsing ``secrets.enc`` fails, the existing
+in-memory cache is left untouched and the endpoint returns 500. The
+reload is performed under the existing ``SecretsManager`` async lock,
+so concurrent readers never see a partially-built cache.
+
+**Scope of effect**
+Reload affects future secret lookups that read from the live cache
+(e.g. ``get_secret``, ``interpolate_secrets``, skill env resolution,
+runtime user-credential resolution). It does NOT retroactively
+rewrite values that were already interpolated into formation config
+during initialization or into MCP auth at registration time — those
+remain fixed until a normal reload of the affected component.
+
+New pieces:
+- ``SecretsManager.reload()`` returning ``{added, overwritten,
+  preserved, count}``
+- ``Formation.reload_secrets()`` wrapper
+- ``APIEventType.SECRET_RELOADED`` (``secret.reloaded``)
+- ``POST /secrets/reload`` admin route emitting the merge summary
+
+Five new unit tests in
+``tests/unit/test_secrets_reload.py`` cover add, overwrite, preserve,
+failure-leaves-cache-intact, and missing-file behaviour.
+
 ### Cold-path latency cuts: classifier preload + SOP-template analyzer skip
 
 Two complementary changes that together shave ~16-18 s off the cold

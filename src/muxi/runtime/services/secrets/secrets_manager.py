@@ -558,6 +558,99 @@ class SecretsManager:
             )
             raise
 
+    async def reload(self) -> Dict[str, Any]:
+        """
+        Reload secrets from disk into the in-memory cache using non-destructive merge.
+
+        Merge semantics:
+        - Secrets present on disk but missing in memory are added.
+        - Secrets present in both places are overwritten with the disk value.
+        - Secrets present in memory but missing on disk are preserved (NOT deleted),
+          since they may still be in active use by the running formation.
+
+        On failure, the existing in-memory cache is left untouched.
+
+        Returns:
+            Summary dict with keys:
+              - "added": list of normalized secret names newly added from disk
+              - "overwritten": list of normalized secret names whose values changed
+              - "preserved": list of normalized secret names kept in memory only
+              - "count": total number of secrets in cache after reload
+        """
+        try:
+            if not self._fernet:
+                await self.initialize_encryption()
+
+            async with self._lock:
+                # Load fresh secrets from disk (raises on decrypt/parse failure,
+                # leaving the existing cache intact).
+                disk_secrets = (
+                    await self._load_secrets_from_file()
+                    if self.secrets_file_path.exists()
+                    else {}
+                )
+
+                current_cache = self._secrets_cache or {}
+
+                added: List[str] = []
+                overwritten: List[str] = []
+
+                # Build merged cache: start from current in-memory state,
+                # then add or overwrite from disk. Never delete.
+                merged: Dict[str, Any] = dict(current_cache)
+                for name, value in disk_secrets.items():
+                    if name not in current_cache:
+                        added.append(name)
+                    elif current_cache.get(name) != value:
+                        overwritten.append(name)
+                    merged[name] = value
+
+                preserved = sorted(set(current_cache.keys()) - set(disk_secrets.keys()))
+
+                # Atomically swap cache reference
+                self._secrets_cache = merged
+
+                summary = {
+                    "added": sorted(added),
+                    "overwritten": sorted(overwritten),
+                    "preserved": preserved,
+                    "count": len(merged),
+                }
+
+            observability.observe(
+                event_type=observability.SystemEvents.SECRET_OPERATION_COMPLETED,
+                level=observability.EventLevel.INFO,
+                description=(
+                    f"Secrets reloaded: {len(summary['added'])} added, "
+                    f"{len(summary['overwritten'])} overwritten, "
+                    f"{len(summary['preserved'])} preserved"
+                ),
+                data={
+                    "operation_type": "reload",
+                    "added_count": len(summary["added"]),
+                    "overwritten_count": len(summary["overwritten"]),
+                    "preserved_count": len(summary["preserved"]),
+                    "total_count": summary["count"],
+                    "success": True,
+                },
+            )
+
+            return summary
+
+        except Exception as e:
+            observability.observe(
+                event_type=observability.SystemEvents.SECRET_OPERATION_FAILED,
+                level=observability.EventLevel.ERROR,
+                description=f"Secret reload failed: {str(e)}",
+                data={
+                    "operation_type": "reload",
+                    "error": str(e),
+                    "error_type": type(e).__name__,
+                    "success": False,
+                },
+            )
+            raise
+
     async def import_secrets(self, secrets: Dict[str, Any], overwrite: bool = False) -> None:
         """
         Import multiple secrets from a dictionary.

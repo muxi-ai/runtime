@@ -34,6 +34,7 @@ class APIEventType(str, Enum):
     SECRET_UPDATED = "secret.updated"
     SECRET_DELETED = "secret.deleted"
     SECRET_LIST = "secret.list"
+    SECRET_RELOADED = "secret.reloaded"
 
     MEMORY_CREATED = "memory.created"
     MEMORY_RETRIEVED = "memory.retrieved"

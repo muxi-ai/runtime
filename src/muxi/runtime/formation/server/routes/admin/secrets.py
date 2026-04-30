@@ -127,6 +127,79 @@ async def create_secret(request: Request, secret: SecretCreate) -> JSONResponse:
     return JSONResponse(content=response.model_dump(), status_code=201)
 
 
+@router.post("/secrets/reload", response_model=APIResponse)
+async def reload_secrets(request: Request) -> JSONResponse:
+    """
+    Reload the in-memory secrets cache from secrets.enc using non-destructive merge.
+
+    Merge semantics:
+    - secrets present on disk but missing in memory are added
+    - secrets present in both places are overwritten with disk values
+    - secrets present only in memory are preserved (not deleted), since they may
+      still be in active use by the running formation
+
+    On failure, the existing in-memory cache is left untouched.
+
+    Returns:
+        Success response with merge summary (added / overwritten / preserved / count).
+    """
+    formation = request.app.state.formation
+    request_id = getattr(request.state, "request_id", None)
+
+    if not hasattr(formation, "secrets_manager") or not formation.secrets_manager:
+        response = create_error_response(
+            "SERVICE_UNAVAILABLE", "Secrets manager not available", None, request_id
+        )
+        return JSONResponse(content=response.model_dump(), status_code=503)
+
+    try:
+        summary = await formation.reload_secrets()
+        if summary is None:
+            response = create_error_response(
+                "SERVICE_UNAVAILABLE",
+                "Secrets manager not available",
+                None,
+                request_id,
+            )
+            return JSONResponse(content=response.model_dump(), status_code=503)
+    except Exception as e:
+        observability.observe(
+            event_type=observability.SystemEvents.SECRET_OPERATION_FAILED,
+            level=observability.EventLevel.ERROR,
+            data={"operation": "reload", "error": str(e), "error_type": type(e).__name__},
+            description=f"Secrets reload failed: {str(e)}",
+        )
+        response = create_error_response(
+            "SECRETS_RELOAD_FAILED",
+            f"Failed to reload secrets: {str(e)}",
+            None,
+            request_id,
+        )
+        return JSONResponse(content=response.model_dump(), status_code=500)
+
+    observability.observe(
+        event_type=observability.SystemEvents.CONFIG_FORMATION_LOADED,
+        level=observability.EventLevel.INFO,
+        data={"operation": "reload", **summary},
+        description=(
+            f"Secrets reloaded: {len(summary['added'])} added, "
+            f"{len(summary['overwritten'])} overwritten, "
+            f"{len(summary['preserved'])} preserved"
+        ),
+    )
+
+    response = create_success_response(
+        APIObjectType.SECRET,
+        APIEventType.SECRET_RELOADED,
+        {
+            "message": "Secrets reloaded successfully using add-or-override merge semantics",
+            **summary,
+        },
+        request_id,
+    )
+    return JSONResponse(content=response.model_dump(), status_code=200)
+
+
 @router.put("/secrets/{key}", response_model=APIResponse)
 async def update_secret(request: Request, key: str, secret: SecretUpdate) -> JSONResponse:
     """

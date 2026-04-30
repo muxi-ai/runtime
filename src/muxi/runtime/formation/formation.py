@@ -2082,6 +2082,25 @@ class Formation:
             print(f"Warning: Unexpected error deleting secret '{name}': {e}")
             return False
 
+    async def reload_secrets(self) -> Optional[Dict[str, Any]]:
+        """
+        Reload secrets from disk into the formation's in-memory cache.
+
+        Uses non-destructive merge semantics:
+        - new keys on disk are added to the cache
+        - existing keys are overwritten with disk values
+        - keys only present in memory are preserved (not deleted), since they
+          may still be in active use by the running formation
+
+        Returns:
+            Summary dict from SecretsManager.reload() on success, or None if the
+            secrets manager is unavailable.
+        """
+        if not await self.ensure_secrets_manager():
+            return None
+
+        return await self.secrets_manager.reload()
+
     async def interpolate_secrets(self, config: Dict[str, Any]) -> Dict[str, Any]:
         """
         Interpolate secrets in a configuration dictionary.
