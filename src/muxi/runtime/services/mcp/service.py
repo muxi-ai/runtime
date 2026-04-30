@@ -1307,6 +1307,20 @@ class MCPService:
 
                 return server_id
 
+            except MCPToolFilterEmptySetError:
+                # Intentional empty-set skip — the warning event
+                # (``MCP_TOOL_FILTER_EMPTY_SET``) and the operator-facing
+                # ``[ WARN ] Skipping MCP`` line have already been emitted
+                # from inside the inner try block, and ``self.locks`` /
+                # ``self.handlers`` / ``self.connections`` were already
+                # popped there. We MUST NOT fall through to the broad
+                # ``except Exception`` below — doing so would log a
+                # contradictory ERROR-level ``MCP_SERVER_REGISTRATION_FAILED``
+                # right after the WARNING ``empty_set`` event for the
+                # same configuration, mis-reporting an intentional
+                # configuration choice as a registration failure.
+                raise
+
             except Exception as e:
                 # Emit MCP server registration failed event
                 observability.observe(

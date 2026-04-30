@@ -649,3 +649,72 @@ async def test_empty_set_abort_pops_lock_alongside_handlers_and_connections() ->
         "locks leaked: ``self.locks.pop(server_id, None)`` is missing "
         "from the empty-set abort cleanup path"
     )
+
+
+@pytest.mark.asyncio
+async def test_empty_set_abort_does_not_emit_registration_failed_event() -> None:
+    """The outer ``except Exception`` in ``_connect_single_transport``
+    must NOT log ``MCP_SERVER_REGISTRATION_FAILED`` (ERROR) when the
+    inner block re-raises ``MCPToolFilterEmptySetError``.
+
+    Regression: before the fix, an intentional filter configuration
+    that yielded zero tools produced a contradictory log:
+
+        WARNING  mcp.tool_filter.empty_set    (intentional skip)
+        ERROR    mcp.server.registration_failed   (mis-reported)
+
+    Operators reading the event log would see ERROR-level alerts
+    fire for a clean, expected configuration outcome — exactly the
+    "noisy false positives" pattern the observability standards in
+    AGENTS.md call out as a hard-rule violation.
+    """
+    from unittest.mock import AsyncMock, MagicMock, patch
+
+    from muxi.runtime.services.mcp.service import MCPService
+    from muxi.runtime.services.mcp.transports.base import MCPToolFilterEmptySetError
+
+    service = MCPService()
+    server_id = "gh"
+
+    fake_handler = MagicMock()
+    fake_handler.connect_server = AsyncMock(return_value=True)
+    fake_handler.list_tools = AsyncMock(return_value=[{"name": "create_issue"}])
+    fake_handler.disconnect_server = AsyncMock(return_value=True)
+
+    spec = ToolFilterSpec.from_config({"whitelist": ["nothing_matches_this"]})
+
+    # Capture every observability call routed through the service module
+    # so we can assert by event_type kwarg.
+    with (
+        patch(
+            "muxi.runtime.services.mcp.service.MCPHandler",
+            return_value=fake_handler,
+        ),
+        patch("muxi.runtime.services.mcp.service.observability.observe") as observe_mock,
+    ):
+        with pytest.raises(MCPToolFilterEmptySetError):
+            await service.register_mcp_server(
+                server_id=server_id,
+                url="https://example.invalid/mcp/",
+                transport_type="streamable_http",
+                tool_filter=spec,
+            )
+
+    # Collect the event_type values across every observe() call.
+    emitted_events = [call.kwargs.get("event_type") for call in observe_mock.call_args_list]
+    emitted_names = [
+        ev.name if hasattr(ev, "name") else str(ev) for ev in emitted_events if ev is not None
+    ]
+
+    # The empty-set warning must fire (it is the operator's signal
+    # that the filter intentionally produced an empty registration).
+    assert any(
+        "MCP_TOOL_FILTER_EMPTY_SET" in n for n in emitted_names
+    ), f"empty-set warning missing from event log; emitted: {emitted_names}"
+
+    # The registration-failed ERROR must NOT fire — it would
+    # contradict the warning event for the same configuration.
+    assert not any("MCP_SERVER_REGISTRATION_FAILED" in n for n in emitted_names), (
+        "spurious MCP_SERVER_REGISTRATION_FAILED emitted on intentional "
+        f"empty-set skip; emitted: {emitted_names}"
+    )
