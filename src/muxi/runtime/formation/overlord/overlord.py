@@ -122,6 +122,7 @@ from ...services.llm import LLM
 # Built-in MCP imports
 from ...services.mcp.built_in import list_builtin_mcps
 from ...services.mcp.service import MCPService
+from ...services.mcp.transports.base import MCPToolFilterEmptySetError
 from ...services.memory.long_term import LongTermMemory
 from ...services.memory.memobase import Memobase
 from ...services.memory.working import WorkingMemory
@@ -2146,6 +2147,15 @@ class Overlord:
                 pass  # REMOVED: init-phase observe() call
 
                 results["successful"].append(server_id)
+
+            except MCPToolFilterEmptySetError:
+                # Filter excluded every upstream tool. Warning event + init
+                # log already emitted from inside MCPService — treat as a
+                # clean skip. Do NOT append to ``results["successful"]`` and
+                # do NOT fall through to the broad except block below (which
+                # would call ``sys.exit(1)`` and kill the entire formation
+                # over what is, by spec, an intentional configuration).
+                continue
 
             except (asyncio.CancelledError, Exception) as e:
                 # Fail fast - MCP server registration failed

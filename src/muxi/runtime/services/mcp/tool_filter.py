@@ -193,10 +193,19 @@ def apply_filter(
         resolutions.append((pattern, matches))
         matched_set.update(matches)
 
+    # Nameless / malformed tools (``_tool_name(t) is None``) are dropped in
+    # **both** modes. Without the explicit ``is not None`` guard, blacklist
+    # mode would silently let nameless tools through (``None not in
+    # matched_set`` is always True) — an asymmetry with whitelist mode
+    # where ``None in matched_set`` is always False. Since the filter
+    # cannot reason about a tool with no usable name, the conservative
+    # decision is the same in either direction: drop it.
     if spec.mode == "whitelist":
-        kept = [t for t in upstream_tools if _tool_name(t) in matched_set]
+        kept = [t for t in upstream_tools if (n := _tool_name(t)) is not None and n in matched_set]
     elif spec.mode == "blacklist":
-        kept = [t for t in upstream_tools if _tool_name(t) not in matched_set]
+        kept = [
+            t for t in upstream_tools if (n := _tool_name(t)) is not None and n not in matched_set
+        ]
     else:
         # is_active implies mode is set; this branch is defensive only.
         return list(upstream_tools), None

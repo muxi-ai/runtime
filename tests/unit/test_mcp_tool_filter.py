@@ -428,3 +428,110 @@ def test_filter_report_is_dataclass_with_expected_fields(
     assert isinstance(report.registered_tool_count, int)
     assert isinstance(report.pattern_resolutions, list)
     assert isinstance(report.unknown_patterns, list)
+
+
+# ---------------------------------------------------------------------------
+# Issue 2 fix — nameless tools dropped symmetrically in both modes.
+# ---------------------------------------------------------------------------
+
+
+def test_blacklist_drops_nameless_tools_symmetrically() -> None:
+    """Tools with missing/non-string ``name`` are dropped in BOTH modes.
+
+    Regression: before the fix, blacklist mode silently let through
+    malformed upstream tools because ``_tool_name(t) is None`` and
+    ``None not in matched_set`` is always True. Whitelist mode was
+    fine (``None in matched_set`` is always False). The asymmetry
+    meant a blacklist intended to block destructive tooling could
+    leak unnamed tools without any signal.
+    """
+    catalog: List[Dict[str, Any]] = [
+        {"name": "create_issue", "description": "real"},
+        {"description": "no name field"},  # nameless
+        {"name": None, "description": "explicit None"},  # nameless
+        {"name": 42, "description": "non-string name"},  # nameless
+        {"name": "", "description": "empty name"},  # nameless (empty)
+        {"name": "delete_repo", "description": "destructive"},
+    ]
+
+    # Blacklist: even though no nameless tool matches the pattern, they
+    # must still be dropped — we cannot reason about whether they are
+    # safe to expose without a name.
+    spec_b = ToolFilterSpec.from_config({"blacklist": ["delete_*"]})
+    kept_b, _ = apply_filter(catalog, spec_b)
+    kept_names = [t.get("name") for t in kept_b]
+    # Only the named, non-blacklisted tool survives.
+    assert kept_names == ["create_issue"]
+
+    # Whitelist mirror: same input, same outcome for nameless tools.
+    spec_w = ToolFilterSpec.from_config({"whitelist": ["create_issue"]})
+    kept_w, _ = apply_filter(catalog, spec_w)
+    assert [t.get("name") for t in kept_w] == ["create_issue"]
+
+
+# ---------------------------------------------------------------------------
+# Issue 3 fix — `_observe_filter_applied` suppresses INFO init line on
+# empty-set, unit-tested via the FilterReport contract that the helper
+# branches on.
+# ---------------------------------------------------------------------------
+
+
+def test_filter_report_signals_empty_set_via_count() -> None:
+    """``registered_tool_count == 0`` is the contract the service uses
+    to decide whether to print the ``[ INFO ]`` init line.
+
+    A whitelist that matches nothing must produce a report whose
+    ``registered_tool_count`` is exactly zero (not None, not a falsy
+    sentinel) so the service's ``> 0`` guard is unambiguous.
+    """
+    catalog = [{"name": "alpha"}, {"name": "beta"}]
+    spec = ToolFilterSpec.from_config({"whitelist": ["nonexistent_tool"]})
+    kept, report = apply_filter(catalog, spec)
+    assert kept == []
+    assert report is not None
+    assert report.registered_tool_count == 0
+    assert report.upstream_tool_count == 2
+    # Unknown-pattern suggestions still recorded so the audit-trail
+    # event in ``_observe_filter_applied`` can fire even on empty-set.
+    assert report.unknown_patterns
+    pattern, _suggestions = report.unknown_patterns[0]
+    assert pattern == "nonexistent_tool"
+
+
+# ---------------------------------------------------------------------------
+# Issue 1 fix — typed exception for empty-set registration abort.
+# ---------------------------------------------------------------------------
+
+
+def test_empty_set_error_inherits_from_mcp_error_family() -> None:
+    """``MCPToolFilterEmptySetError`` extends ``MCPError`` so it travels
+    through the same exception-handling layers as other MCP errors,
+    but is distinct from ``MCPConnectionError`` / ``MCPTimeoutError``
+    / ``MCPCancelledError`` so callers can branch on it specifically
+    (clean skip vs. registration failure)."""
+    from muxi.runtime.services.mcp.transports.base import (
+        MCPCancelledError,
+        MCPConnectionError,
+        MCPError,
+        MCPTimeoutError,
+        MCPToolFilterEmptySetError,
+    )
+
+    err = MCPToolFilterEmptySetError(
+        "MCP server 'gh' skipped: whitelist matched 0 of 44 upstream tools",
+        details={"server_id": "gh", "mode": "whitelist", "upstream_tool_count": 44},
+    )
+    # Inheritance — must reach generic Exception handlers and the MCP
+    # family root, but NOT be conflated with the existing leaf types.
+    assert isinstance(err, MCPError)
+    assert isinstance(err, Exception)
+    assert not isinstance(err, MCPConnectionError)
+    assert not isinstance(err, MCPTimeoutError)
+    assert not isinstance(err, MCPCancelledError)
+
+    # Payload — observability code reads ``details`` for structured
+    # event data; the message is human-readable.
+    assert err.details["server_id"] == "gh"
+    assert err.details["mode"] == "whitelist"
+    assert err.details["upstream_tool_count"] == 44
+    assert "skipped" in err.message

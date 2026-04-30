@@ -54,6 +54,7 @@ from .sampling.creator import MCPSamplingCreator
 from .templates.discovery import MCPTemplateDiscovery
 from .tool_filter import FilterReport, ToolFilterSpec, apply_filter
 from .transports import CancellationToken, ModernProtocolFeatures, TransportDetector
+from .transports.base import MCPToolFilterEmptySetError
 
 DEFAULT_CONNECTION_TTL = 300.0  # 5 minutes
 
@@ -443,13 +444,19 @@ class MCPService:
                 upstream tool catalog at registration time. When the filter
                 yields zero tools, the server is **not** registered (no
                 ``server_configs`` entry, no agent-visible tool registry
-                entries) and a warning is emitted.
+                entries), a warning is emitted, and
+                :class:`MCPToolFilterEmptySetError` is raised so the caller
+                can skip its success path.
 
         Returns:
             The server_id of the registered server
 
         Raises:
-            Exception: If the server registration fails
+            MCPToolFilterEmptySetError: If a configured tool filter excluded
+                every upstream tool. The warning event + init log have
+                already been emitted; the caller should treat this as a
+                clean skip rather than re-raise as a registration failure.
+            Exception: If the server registration fails for any other reason.
         """
         # Create lock for this handler
         self.locks[server_id] = asyncio.Lock()
@@ -624,18 +631,26 @@ class MCPService:
 
         # Init-time log line so the resolution is visible alongside the
         # "Connected to MCP" line operators are already used to scanning.
-        details = (
-            f"resolved {report.registered_tool_count}/"
-            f"{report.upstream_tool_count} tools via "
-            f"{report.mode}({len(report.patterns)} pattern"
-            f"{'s' if len(report.patterns) != 1 else ''})"
-        )
-        print(InitEventFormatter.format_info(f"MCP '{server_id}' tool filter", details))
-        for pattern, matches in report.pattern_resolutions:
-            preview = ", ".join(matches[:12])
-            if len(matches) > 12:
-                preview += f", ... (+{len(matches) - 12} more)"
-            print(f"           {report.mode}[{pattern!r}] -> {len(matches)} match(es): {preview}")
+        # Suppressed when the filter matched zero tools — the empty-set
+        # caller emits its own "[ WARN ] Skipping MCP" line, and printing
+        # an [ INFO ] "resolved 0/N" header just above it would suggest
+        # registration succeeded.
+        if report.registered_tool_count > 0:
+            details = (
+                f"resolved {report.registered_tool_count}/"
+                f"{report.upstream_tool_count} tools via "
+                f"{report.mode}({len(report.patterns)} pattern"
+                f"{'s' if len(report.patterns) != 1 else ''})"
+            )
+            print(InitEventFormatter.format_info(f"MCP '{server_id}' tool filter", details))
+            for pattern, matches in report.pattern_resolutions:
+                preview = ", ".join(matches[:12])
+                if len(matches) > 12:
+                    preview += f", ... (+{len(matches) - 12} more)"
+                print(
+                    f"           {report.mode}[{pattern!r}] "
+                    f"-> {len(matches)} match(es): {preview}"
+                )
 
     async def invoke_tool(
         self,
@@ -1116,11 +1131,22 @@ class MCPService:
                     # register the server. Per the PRD: "agents that reference
                     # it get no tools from this source." We disconnect, clean
                     # up the partial state populated above, emit the warning,
-                    # and return without writing to ``server_configs``. The
-                    # caller does not see this as an exception — but the
-                    # server simply isn't in the registry, and any later
-                    # ``invoke_tool`` will raise ``Unknown MCP server``.
+                    # and raise ``MCPToolFilterEmptySetError`` so the caller
+                    # can distinguish "registered OK" from "intentionally
+                    # skipped" — without it, the caller falls through to its
+                    # ``MCP_SERVER_REGISTERED`` emit + ``successful_servers``
+                    # append on a server that isn't actually live, producing
+                    # contradictory event streams and "Unknown MCP server"
+                    # errors downstream.
                     if filter_report is not None and filter_report.registered_tool_count == 0:
+                        # Audit-trail events (applied + unknown-pattern
+                        # suggestions) still fire so operators can diagnose
+                        # WHY the filter ended up empty (typo? overly tight
+                        # whitelist?). The "[ INFO ] tool filter resolved..."
+                        # init-line print is suppressed inside the helper
+                        # when registered_tool_count == 0 so stdout doesn't
+                        # show INFO immediately followed by WARN for the
+                        # same server.
                         self._observe_filter_applied(server_id, filter_report)
                         observability.observe(
                             event_type=observability.SystemEvents.MCP_TOOL_FILTER_EMPTY_SET,
@@ -1152,7 +1178,19 @@ class MCPService:
                             pass
                         self.handlers.pop(server_id, None)
                         self.connections.pop(server_id, None)
-                        return server_id
+                        raise MCPToolFilterEmptySetError(
+                            (
+                                f"MCP server '{server_id}' skipped: "
+                                f"{filter_report.mode} matched 0 of "
+                                f"{filter_report.upstream_tool_count} upstream tools"
+                            ),
+                            details={
+                                "server_id": server_id,
+                                "mode": filter_report.mode,
+                                "upstream_tool_count": filter_report.upstream_tool_count,
+                                "patterns": list(filter_report.patterns),
+                            },
+                        )
 
                     # Filter accepted (or absent): proceed with normal registry
                     # population over the (possibly trimmed) ``tools`` list.
@@ -1194,6 +1232,11 @@ class MCPService:
                     if filter_report is not None:
                         self._observe_filter_applied(server_id, filter_report)
 
+                except MCPToolFilterEmptySetError:
+                    # Empty-set abort: cleanup already done above, propagate
+                    # to the caller so it can skip the success path. Do NOT
+                    # fall through to the empty-registry fallback below.
+                    raise
                 except Exception:
                     self.tool_registry[server_id] = {}
 

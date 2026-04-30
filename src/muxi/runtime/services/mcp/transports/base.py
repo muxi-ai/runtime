@@ -83,6 +83,26 @@ class MCPCancelledError(MCPError):
     pass
 
 
+class MCPToolFilterEmptySetError(MCPError):
+    """
+    Raised when an MCP server's ``tools.{whitelist|blacklist}`` filter
+    excludes every upstream tool, leaving zero tools to register.
+
+    This is a *successful* filter outcome from the spec's point of view
+    (the operator asked for nothing), but it must abort registration:
+    a server with no tools cannot serve any request, and silently
+    returning would let the caller mistake the server for live and
+    later raise "Unknown MCP server" when a tool invocation hits the
+    empty registry.
+
+    Treated by callers as a clean skip — the warning + init log have
+    already been emitted from inside the service before this is raised,
+    so the caller does NOT re-emit a registration-failure event.
+    """
+
+    pass
+
+
 class CancellationToken:
     """
     A token that can be used to cancel async operations.
