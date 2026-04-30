@@ -71,6 +71,7 @@ from ..services.mcp.transports.base import (
     MCPConnectionError,
     MCPRequestError,
     MCPTimeoutError,
+    MCPToolFilterEmptySetError,
 )
 from ..services.secrets.secrets_manager import SecretsManager
 from ..services.telemetry import TelemetryService, set_telemetry
@@ -2419,6 +2420,19 @@ class Formation:
                 if "parameters" in server_config and isinstance(server_config["parameters"], dict):
                     registration_params["parameters"] = server_config["parameters"]
 
+                # Translate optional tools.{whitelist|blacklist} from the MCP
+                # `.afs` file into a ToolFilterSpec applied at registration
+                # time. Mutex / type validation already ran in
+                # ConfigValidator._validate_mcp_tools_block; we trust the
+                # block here. Inactive spec → passthrough (back-compat).
+                tools_block = server_config.get("tools")
+                if isinstance(tools_block, dict):
+                    from ..services.mcp.tool_filter import ToolFilterSpec
+
+                    spec = ToolFilterSpec.from_config(tools_block)
+                    if spec.is_active:
+                        registration_params["tool_filter"] = spec
+
                 # Register the server via MCP service
                 # Retry HTTP servers up to 3 times with backoff -- the external MCP
                 # process may still be starting when the formation initialises.
@@ -2458,6 +2472,15 @@ class Formation:
                     description=f"MCP server registered: {server_id}",
                 )
                 successful_servers.append(server_id)
+
+            except MCPToolFilterEmptySetError:
+                # Filter excluded every upstream tool. The warning event +
+                # init log were already emitted from inside the service; we
+                # must NOT also emit MCP_SERVER_REGISTERED nor append to
+                # ``successful_servers`` (the server is intentionally absent
+                # from the registry — any later code path that uses it would
+                # raise "Unknown MCP server"). Treat it as a clean skip.
+                continue
 
             except (MCPConnectionError, MCPTimeoutError, MCPCancelledError) as e:
                 # MCP registration failures - continue with graceful degradation

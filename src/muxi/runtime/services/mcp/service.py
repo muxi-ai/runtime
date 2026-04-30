@@ -52,7 +52,9 @@ from .prompts.discovery import MCPPromptDiscovery
 from .resources.discovery import MCPResourceDiscovery
 from .sampling.creator import MCPSamplingCreator
 from .templates.discovery import MCPTemplateDiscovery
+from .tool_filter import FilterReport, ToolFilterSpec, apply_filter
 from .transports import CancellationToken, ModernProtocolFeatures, TransportDetector
+from .transports.base import MCPToolFilterEmptySetError
 
 DEFAULT_CONNECTION_TTL = 300.0  # 5 minutes
 
@@ -417,6 +419,7 @@ class MCPService:
         original_credentials: Optional[Dict[str, Any]] = None,
         agent_id: Optional[str] = None,
         parameters: Optional[Dict[str, Any]] = None,
+        tool_filter: Optional[ToolFilterSpec] = None,
     ) -> str:
         """
         Register an MCP server with the service.
@@ -437,12 +440,23 @@ class MCPService:
             original_credentials: Original credentials with user placeholders (if any)
             agent_id: Optional agent ID for agent-specific MCP servers
             parameters: Optional default parameters injected into every tool call
+            tool_filter: Optional whitelist/blacklist filter applied to the
+                upstream tool catalog at registration time. When the filter
+                yields zero tools, the server is **not** registered (no
+                ``server_configs`` entry, no agent-visible tool registry
+                entries), a warning is emitted, and
+                :class:`MCPToolFilterEmptySetError` is raised so the caller
+                can skip its success path.
 
         Returns:
             The server_id of the registered server
 
         Raises:
-            Exception: If the server registration fails
+            MCPToolFilterEmptySetError: If a configured tool filter excluded
+                every upstream tool. The warning event + init log have
+                already been emitted; the caller should treat this as a
+                clean skip rather than re-raise as a registration failure.
+            Exception: If the server registration fails for any other reason.
         """
         # Create lock for this handler
         self.locks[server_id] = asyncio.Lock()
@@ -461,6 +475,7 @@ class MCPService:
                 original_credentials,
                 agent_id,
                 parameters,
+                tool_filter=tool_filter,
             )
 
         # Enhanced auto-detection with caching for HTTP-based servers
@@ -492,6 +507,7 @@ class MCPService:
                     original_credentials,
                     agent_id,
                     parameters,
+                    tool_filter=tool_filter,
                 )
 
             except MCPConnectionError as e:
@@ -536,6 +552,7 @@ class MCPService:
                 original_credentials,
                 agent_id,
                 parameters,
+                tool_filter=tool_filter,
             )
 
         # Proceed with explicitly specified transport type
@@ -551,7 +568,89 @@ class MCPService:
             original_credentials,
             agent_id,
             parameters,
+            tool_filter=tool_filter,
         )
+
+    def _observe_filter_applied(self, server_id: str, report: FilterReport) -> None:
+        """Emit observability + init log for one filter application.
+
+        Two events fire:
+
+        * ``mcp.tool_filter.applied`` (info) — full pattern resolutions so
+          operators can audit exactly which upstream tools each glob
+          expanded to. This is the **only** signal that protects against
+          silent scope expansion when an upstream adds a new tool that
+          newly matches a whitelist.
+        * ``mcp.tool_filter.unknown_tool`` (warning, **once per unknown
+          pattern**) — surfaces typos with ``difflib`` "did you mean?"
+          suggestions for literal patterns. Glob patterns that match
+          nothing emit an empty suggestion list.
+
+        Also prints a clean ``[ INFO ]`` init line summarising the
+        resolution so operators reviewing startup logs see scope
+        decisions inline next to the corresponding ``Connected to MCP``
+        line.
+        """
+        observability.observe(
+            event_type=observability.SystemEvents.MCP_TOOL_FILTER_APPLIED,
+            level=observability.EventLevel.INFO,
+            data={
+                "server_id": server_id,
+                "mode": report.mode,
+                "pattern_count": len(report.patterns),
+                "upstream_tool_count": report.upstream_tool_count,
+                "registered_tool_count": report.registered_tool_count,
+                "pattern_resolutions": [
+                    {"pattern": p, "matches": list(matches)}
+                    for p, matches in report.pattern_resolutions
+                ],
+            },
+            description=(
+                f"MCP '{server_id}' filter ({report.mode}) resolved "
+                f"{report.registered_tool_count}/{report.upstream_tool_count} "
+                "upstream tools"
+            ),
+        )
+
+        for pattern, suggestions in report.unknown_patterns:
+            observability.observe(
+                event_type=observability.SystemEvents.MCP_TOOL_FILTER_UNKNOWN_TOOL,
+                level=observability.EventLevel.WARNING,
+                data={
+                    "server_id": server_id,
+                    "pattern": pattern,
+                    "mode": report.mode,
+                    "suggestions": list(suggestions),
+                },
+                description=(
+                    f"MCP '{server_id}' {report.mode} pattern "
+                    f"'{pattern}' matched zero upstream tools"
+                    + (f" (did you mean: {', '.join(suggestions)}?)" if suggestions else "")
+                ),
+            )
+
+        # Init-time log line so the resolution is visible alongside the
+        # "Connected to MCP" line operators are already used to scanning.
+        # Suppressed when the filter matched zero tools — the empty-set
+        # caller emits its own "[ WARN ] Skipping MCP" line, and printing
+        # an [ INFO ] "resolved 0/N" header just above it would suggest
+        # registration succeeded.
+        if report.registered_tool_count > 0:
+            details = (
+                f"resolved {report.registered_tool_count}/"
+                f"{report.upstream_tool_count} tools via "
+                f"{report.mode}({len(report.patterns)} pattern"
+                f"{'s' if len(report.patterns) != 1 else ''})"
+            )
+            print(InitEventFormatter.format_info(f"MCP '{server_id}' tool filter", details))
+            for pattern, matches in report.pattern_resolutions:
+                preview = ", ".join(matches[:12])
+                if len(matches) > 12:
+                    preview += f", ... (+{len(matches) - 12} more)"
+                print(
+                    f"           {report.mode}[{pattern!r}] "
+                    f"-> {len(matches)} match(es): {preview}"
+                )
 
     async def invoke_tool(
         self,
@@ -883,6 +982,7 @@ class MCPService:
         original_credentials: Optional[Dict[str, Any]] = None,
         agent_id: Optional[str] = None,
         parameters: Optional[Dict[str, Any]] = None,
+        tool_filter: Optional[ToolFilterSpec] = None,
     ) -> str:
         """
         Attempt connection with automatic fallback between transports.
@@ -904,10 +1004,26 @@ class MCPService:
                     original_credentials,
                     agent_id,
                     parameters,
+                    tool_filter=tool_filter,
                 )
 
                 # Success - the transport type is already stored in cache by _connect_single_transport
                 return result
+
+            except MCPToolFilterEmptySetError:
+                # Filter excluded every upstream tool — this is a clean
+                # skip per spec, NOT a transport failure. The warning
+                # event + init log were already emitted from inside
+                # ``_connect_single_transport`` and partial state was
+                # cleaned. Without this re-raise the broad ``except
+                # Exception`` below would (a) log a spurious
+                # ``MCP_TRANSPORT_FAILED`` event, (b) retry on the next
+                # transport which would re-emit the warning a second
+                # time, and (c) ultimately raise ``MCPConnectionError``
+                # — which the overlord's broad handler converts to
+                # ``sys.exit(1)``, killing the formation over what is
+                # by design an intentional configuration.
+                raise
 
             except Exception as e:
                 errors[transport_type] = str(e)
@@ -965,6 +1081,7 @@ class MCPService:
         original_credentials: Optional[Dict[str, Any]] = None,
         agent_id: Optional[str] = None,
         parameters: Optional[Dict[str, Any]] = None,
+        tool_filter: Optional[ToolFilterSpec] = None,
     ) -> str:
         """
         Connect using a specific transport type.
@@ -1017,8 +1134,86 @@ class MCPService:
 
                 # Discover available tools with modern protocol features
                 try:
-                    tools = await handler.list_tools(server_name)
+                    upstream_tools = await handler.list_tools(server_name)
 
+                    # Apply optional whitelist/blacklist filter declared in the
+                    # MCP `.afs` ``tools`` block. Inactive spec → passthrough.
+                    tools, filter_report = apply_filter(
+                        upstream_tools, tool_filter or ToolFilterSpec()
+                    )
+
+                    # If the filter produced an empty post-filter set, do NOT
+                    # register the server. Per the PRD: "agents that reference
+                    # it get no tools from this source." We disconnect, clean
+                    # up the partial state populated above, emit the warning,
+                    # and raise ``MCPToolFilterEmptySetError`` so the caller
+                    # can distinguish "registered OK" from "intentionally
+                    # skipped" — without it, the caller falls through to its
+                    # ``MCP_SERVER_REGISTERED`` emit + ``successful_servers``
+                    # append on a server that isn't actually live, producing
+                    # contradictory event streams and "Unknown MCP server"
+                    # errors downstream.
+                    if filter_report is not None and filter_report.registered_tool_count == 0:
+                        # Audit-trail events (applied + unknown-pattern
+                        # suggestions) still fire so operators can diagnose
+                        # WHY the filter ended up empty (typo? overly tight
+                        # whitelist?). The "[ INFO ] tool filter resolved..."
+                        # init-line print is suppressed inside the helper
+                        # when registered_tool_count == 0 so stdout doesn't
+                        # show INFO immediately followed by WARN for the
+                        # same server.
+                        self._observe_filter_applied(server_id, filter_report)
+                        observability.observe(
+                            event_type=observability.SystemEvents.MCP_TOOL_FILTER_EMPTY_SET,
+                            level=observability.EventLevel.WARNING,
+                            data={
+                                "server_id": server_id,
+                                "mode": filter_report.mode,
+                                "upstream_tool_count": filter_report.upstream_tool_count,
+                                "patterns": list(filter_report.patterns),
+                            },
+                            description=(
+                                f"MCP server '{server_id}' tool filter "
+                                f"({filter_report.mode}) matched zero of "
+                                f"{filter_report.upstream_tool_count} upstream "
+                                "tools — server NOT registered."
+                            ),
+                        )
+                        print(
+                            InitEventFormatter.format_warn(
+                                f"Skipping MCP '{server_id}'",
+                                f"tool filter matched 0 of "
+                                f"{filter_report.upstream_tool_count} upstream tools",
+                            )
+                        )
+                        # Clean up partial registration state and bail.
+                        try:
+                            await handler.disconnect_server(server_name)
+                        except Exception:
+                            pass
+                        self.handlers.pop(server_id, None)
+                        self.connections.pop(server_id, None)
+                        # ``self.locks[server_id]`` was created at the
+                        # top of ``register_mcp_server`` before any
+                        # transport attempt — symmetric cleanup with
+                        # the other partial-state pops above.
+                        self.locks.pop(server_id, None)
+                        raise MCPToolFilterEmptySetError(
+                            (
+                                f"MCP server '{server_id}' skipped: "
+                                f"{filter_report.mode} matched 0 of "
+                                f"{filter_report.upstream_tool_count} upstream tools"
+                            ),
+                            details={
+                                "server_id": server_id,
+                                "mode": filter_report.mode,
+                                "upstream_tool_count": filter_report.upstream_tool_count,
+                                "patterns": list(filter_report.patterns),
+                            },
+                        )
+
+                    # Filter accepted (or absent): proceed with normal registry
+                    # population over the (possibly trimmed) ``tools`` list.
                     # Enhanced tool registry with display names and metadata
                     self.tool_registry[server_id] = {}
 
@@ -1052,6 +1247,16 @@ class MCPService:
                         else:
                             self.agent_tool_registry["_shared"][server_id][tool_name] = tool_data
 
+                    # Emit observability for an applied filter (after registry
+                    # writes so the event log reflects the final state).
+                    if filter_report is not None:
+                        self._observe_filter_applied(server_id, filter_report)
+
+                except MCPToolFilterEmptySetError:
+                    # Empty-set abort: cleanup already done above, propagate
+                    # to the caller so it can skip the success path. Do NOT
+                    # fall through to the empty-registry fallback below.
+                    raise
                 except Exception:
                     self.tool_registry[server_id] = {}
 
@@ -1101,6 +1306,20 @@ class MCPService:
                 print(InitEventFormatter.format_ok(f"Connected to MCP '{server_id}'", details))
 
                 return server_id
+
+            except MCPToolFilterEmptySetError:
+                # Intentional empty-set skip — the warning event
+                # (``MCP_TOOL_FILTER_EMPTY_SET``) and the operator-facing
+                # ``[ WARN ] Skipping MCP`` line have already been emitted
+                # from inside the inner try block, and ``self.locks`` /
+                # ``self.handlers`` / ``self.connections`` were already
+                # popped there. We MUST NOT fall through to the broad
+                # ``except Exception`` below — doing so would log a
+                # contradictory ERROR-level ``MCP_SERVER_REGISTRATION_FAILED``
+                # right after the WARNING ``empty_set`` event for the
+                # same configuration, mis-reporting an intentional
+                # configuration choice as a registration failure.
+                raise
 
             except Exception as e:
                 # Emit MCP server registration failed event

@@ -600,6 +600,83 @@ class FormationValidator:
         if "auth" in server_config:
             self._validate_mcp_auth_config(server_config["auth"], server_id or index)
 
+        # Validate optional tools.{whitelist|blacklist} filter block
+        if "tools" in server_config:
+            self._validate_mcp_tools_block(server_config["tools"], server_id or index)
+
+    def _validate_mcp_tools_block(
+        self, tools_block: Any, server_identifier: Union[str, int]
+    ) -> None:
+        """Validate the optional ``tools`` filter block on an MCP server.
+
+        Schema:
+        ``tools.whitelist`` and ``tools.blacklist`` are mutually exclusive
+        lists of fnmatch-style string patterns. Either both absent
+        (no filter, back-compat) or exactly one present.
+
+        Errors raised here block formation startup. Empty-list and
+        zero-match cases are *runtime* concerns surfaced via
+        ``mcp.tool_filter.{empty_set,unknown_tool}`` warning events; we
+        do not fail-fast on them because the upstream catalog isn't
+        known until the server connects.
+        """
+        if not isinstance(tools_block, dict):
+            self.result.add_error(
+                f"MCP server {server_identifier} 'tools' must be a mapping with "
+                "'whitelist' or 'blacklist' (not both)"
+            )
+            return
+
+        whitelist_present = "whitelist" in tools_block
+        blacklist_present = "blacklist" in tools_block
+
+        if whitelist_present and blacklist_present:
+            self.result.add_error(
+                f"MCP server {server_identifier} 'tools' must declare either "
+                "'whitelist' or 'blacklist', not both"
+            )
+            return
+
+        if not whitelist_present and not blacklist_present:
+            self.result.add_error(
+                f"MCP server {server_identifier} 'tools' block must contain "
+                "'whitelist' or 'blacklist' (got neither)"
+            )
+            return
+
+        mode = "whitelist" if whitelist_present else "blacklist"
+        patterns = tools_block[mode]
+
+        if not isinstance(patterns, list):
+            self.result.add_error(
+                f"MCP server {server_identifier} 'tools.{mode}' must be a list "
+                "of fnmatch-style string patterns"
+            )
+            return
+
+        if len(patterns) == 0:
+            # Treated as "no filter" at runtime, but worth surfacing as a
+            # warning since the operator clearly intended *something* by
+            # adding the empty key.
+            self.result.add_warning(
+                f"MCP server {server_identifier} 'tools.{mode}' is an empty "
+                "list — no filter will be applied (remove the block to silence "
+                "this warning)"
+            )
+            return
+
+        for i, pattern in enumerate(patterns):
+            if not isinstance(pattern, str):
+                self.result.add_error(
+                    f"MCP server {server_identifier} 'tools.{mode}[{i}]' must be a "
+                    f"string, got {type(pattern).__name__}"
+                )
+            elif not pattern.strip():
+                self.result.add_error(
+                    f"MCP server {server_identifier} 'tools.{mode}[{i}]' must be "
+                    "a non-empty pattern"
+                )
+
     def _validate_mcp_metadata_fields(
         self, server_config: Dict[str, Any], server_identifier: Union[str, int]
     ) -> None:

@@ -2,6 +2,117 @@
 
 ## [unreleased]
 
+### MCP tool filtering via ``tools.{whitelist|blacklist}``
+
+Adds an optional ``tools`` block on any MCP server config that lets
+operators register only a subset of an upstream catalog. Cuts both the
+runtime tool registry and the per-turn planning prompt down to the
+capabilities a formation actually needs — reducing token spend per
+planning call and preventing destructive upstream tools (e.g.
+``delete_repo``, ``force_push_branch``) from being plannable in the
+first place.
+
+**Schema.** Either ``tools.whitelist`` *or* ``tools.blacklist`` (mutually
+exclusive) on any MCP server ``.afs``:
+
+```yaml
+type: "http"
+endpoint: "https://api.githubcopilot.com/mcp/"
+auth: { type: "bearer", token: "${{ secrets.GITHUB_PAT }}" }
+tools:
+  whitelist:
+    - "search_*"
+    - "get_*"
+    - "list_*"
+    - "issue_*"
+    - "add_issue_comment"
+    - "create_or_update_file"
+```
+
+Patterns are fnmatch globs (``*``, ``?``, character ranges). Literal
+names are matched exactly. Both list members are case-sensitive to
+match the upstream MCP convention.
+
+**Pipeline.** Translation lives in a new pure module
+``services/mcp/tool_filter.py``: ``ToolFilterSpec.from_config`` is total
+and tolerant (malformed input → inactive spec); ``apply_filter`` is the
+single entry point used during registration. The filter runs *between*
+``tools/list`` and registry insertion in
+``MCPService._connect_single_transport`` so post-filter empty sets abort
+registration with a typed
+``mcp.tool_filter.empty_set`` warning instead of silently registering an
+agent with zero tools.
+
+**Wiring.** Both registration sites now honor the spec:
+
+* ``Formation._register_mcp_servers`` (formation-level, always-on
+  servers) — ``formation.py:2419``
+* ``Overlord._register_agent_mcp_servers`` (per-agent re-registration
+  during agent load) — ``overlord.py:2092``
+
+A dropped agent-level wiring would silently re-register the full
+upstream catalog after agents loaded, defeating the filter for any
+flow that reached the agent path. The live test caught it.
+
+**Observability.** Three new ``SystemEvents`` emitted per registration:
+
+* ``MCP_TOOL_FILTER_APPLIED`` (info) — full pattern resolution table so
+  operators can audit exactly which upstream tools each glob expanded
+  to. Critical for catching silent scope expansion when an upstream
+  adds a tool that newly matches a wildcard.
+* ``MCP_TOOL_FILTER_UNKNOWN_TOOL`` (warning, once per unknown literal
+  pattern) — surfaces typos with ``difflib`` "did you mean?"
+  suggestions. Glob patterns that match nothing emit an empty
+  suggestion list (suppressed to avoid noise).
+* ``MCP_TOOL_FILTER_EMPTY_SET`` (warning) — registration aborted because
+  the post-filter set is empty.
+
+A clean ``[ INFO ]`` init line also prints the resolution inline next
+to ``Connected to MCP``:
+
+```
+[ INFO ] MCP 'github-mcp' tool filter (resolved 29/44 tools via whitelist(9 patterns))
+           whitelist['search_*'] -> 5 match(es): search_code, search_issues, ...
+           whitelist['issue_*']  -> 2 match(es): issue_read, issue_write
+           whitelist['add_issue_comment'] -> 1 match(es): add_issue_comment
+[  OK  ] Connected to MCP 'github-mcp' (29 tools available via streamable http)
+```
+
+**Validation.** ``ConfigValidator._validate_mcp_tools_block`` enforces
+fail-fast load-time rules: mutex (``whitelist`` XOR ``blacklist``);
+list-of-strings; non-blank patterns. Empty pattern lists log a
+``no filter will be applied`` warning rather than failing — operators
+sometimes scaffold the block before populating it.
+
+**Live measurement on
+``example-formations/demo/hello-muxi``.** A 12-phrase variation battery
+against a capability-scoped whitelist (29 of 44 github-mcp tools
+registered) showed:
+
+* 0 errors, 0 warnings across all runs
+* 4/4 guestbook-comment paraphrases ("sign", "leave a note", "say hi",
+  "post a greeting on issue 50") routed correctly to the
+  ``community-greeter`` agent and posted to issue #50 via
+  ``add_issue_comment``
+* 4/4 muxi-expert concept questions ("what is muxi", "tell me about
+  the overlord", "explain formations", "what's an SOP") returned
+  MUXI-grounded answers
+* Per-request token footprint: ~12.0k for guestbook flows, ~13.5k for
+  concept Q&A — vs ~23.3k pre-filter for the same workload (~48%
+  reduction on a matched flow)
+
+**Test changes.**
+
+* ``tests/unit/test_mcp_tool_filter.py`` (new, 27 tests) — pure filter
+  semantics (literal, glob ``*``, glob ``?``, mixed lists, ordering,
+  unknown-pattern ``difflib`` suggestions, empty-set reporting,
+  pass-through field preservation), ``ToolFilterSpec.from_config``
+  tolerance (None / empty / both-keys / non-string entries), and
+  formation-level validator hooks (mutex, type, blank, empty, clean
+  whitelist, clean blacklist).
+
+Full unit suite: 979 passed, 3 skipped, 0 failed.
+
 ### Collapse three synthesis LLM passes into one persona call
 
 Removes the agent-level and workflow-level synthesis LLM calls and
