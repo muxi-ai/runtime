@@ -2,6 +2,73 @@
 
 ## [unreleased]
 
+### Collapse three synthesis LLM passes into one persona call
+
+Removes the agent-level and workflow-level synthesis LLM calls and
+replaces both with deterministic builders that feed structured input
+into the overlord's existing ``_apply_persona`` pass — which is now
+the single LLM hop on the way back to the user.
+
+**Before**: a workflow turn with N tasks made N agent-synthesis calls
+(one per task), one workflow-synthesis call to merge them, and one
+persona call to dress the merge for the user — all sequential, all
+cloud round-trips. A bare chat turn made one agent-synthesis call
+followed by the persona call. Three of those LLM hops were the
+runtime saying the same thing back to itself.
+
+**After**: agents emit raw structured output via a new
+``Agent._build_raw_response`` deterministic renderer (``### {placeholder}``
+sections, dict results expanded as ``key: value``, artifact filenames
+inline, delegated-agent prose appended verbatim). The overlord's
+``_synthesize_workflow_results`` delegates merging to a new
+``_consolidate_workflow_results`` helper that produces budget-bounded
+per-task sections via the existing ``_render_task_body`` — no LLM
+call. ``_apply_persona`` is the single user-facing LLM hop and its
+system prompt was extended with two contracts inherited from the
+deleted synthesis prompts: a raw-input acknowledgment that names the
+``### Task`` / ``### {placeholder}`` markers it should expect, and the
+date-preservation guardrail that previously lived in the workflow
+synthesis system prompt.
+
+Dead code removed: ``Overlord._create_synthesis_prompt``,
+``Overlord._get_workflow_synthesis_system_prompt``,
+``Overlord._fallback_synthesis``. Skip-synthesis observability events
+now emit ``reason: always_skip_v2`` (chat turn) and
+``reason: deterministic_consolidator`` (workflow turn) so operators
+can audit the new path.
+
+**Expected savings on the canonical hello-muxi cold path**: ~4 s on a
+chat turn (one agent-synthesis call eliminated), ~20 s on a 4-task
+workflow turn (four agent-synthesis calls + one workflow-synthesis
+call eliminated). Live end-to-end run on develop confirmed: Turn 2
+issue-listing dropped from 38.4 s to 34.0 s and Turn 3 multi-step
+delegation produced a 3934-character briefing in 86.6 s with zero
+``planning_response_synthesis_*`` events emitted.
+
+**Test changes.**
+
+* ``tests/unit/test_agent_skip_synthesis_always.py`` (new, 11 tests)
+  pins the always-skip contract, the ``_build_raw_response`` output
+  shape, and asserts the synthesis method body no longer references
+  ``self.model.chat``.
+* ``tests/unit/test_apply_persona_handles_raw.py`` (new, 4 tests)
+  pins the raw-input acknowledgment and date-preservation guardrails
+  in the persona system prompt source.
+* ``tests/unit/test_workflow_consolidator.py`` (renamed from
+  ``test_overlord_synthesis_prompt.py``, 16 tests) lifted from the
+  prior ``_create_synthesis_prompt`` suite to exercise the new
+  deterministic ``_consolidate_workflow_results`` helper.
+* ``tests/unit/test_workflow_date_preservation_prompts.py`` first
+  test repointed from the deleted
+  ``_get_workflow_synthesis_system_prompt`` to the new date guardrail
+  location inside ``_apply_persona``.
+
+Full unit suite: 925 pass, 1 skipped, 0 new failures.
+``validate_events.py``: 1214/1214 events enum-backed.
+``run_random_tests.py 20`` after merge: 20/20 pass across 11 areas
+(streaming, formatting, triggers, identities, api, skills,
+multimodal, mcp, orchestration, clarification, async).
+
 ### Hot-reload secrets without restarting the formation
 
 Adds an admin-only ``POST /secrets/reload`` endpoint that refreshes the

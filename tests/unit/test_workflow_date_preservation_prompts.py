@@ -1,18 +1,26 @@
-"""Tests for prompt guardrails that preserve exact dates during workflow synthesis."""
+"""Tests for prompt guardrails that preserve exact dates.
+
+The dedicated workflow-synthesis system prompt was retired when
+synthesis collapsed into ``_apply_persona``'s single LLM pass; date
+preservation guardrails now live in the persona system prompt itself.
+The first test below pins that guardrail in source so future edits to
+``_apply_persona`` don't silently strip it.
+"""
+
+import inspect
 
 from muxi.runtime.datatypes.workflow import SubTask
 from muxi.runtime.formation.overlord.overlord import Overlord
 from muxi.runtime.formation.workflow.executor import WorkflowExecutor
 
 
-def test_workflow_synthesis_system_prompt_preserves_absolute_dates():
-    overlord = object.__new__(Overlord)
+def test_apply_persona_system_prompt_preserves_absolute_dates():
+    """Date-preservation guardrail must be present in ``_apply_persona``."""
+    source = inspect.getsource(Overlord._apply_persona)
 
-    prompt = overlord._get_workflow_synthesis_system_prompt()
-
-    assert "Preserve explicit dates, weekdays, times, and time ranges exactly" in prompt
-    assert "Do not convert absolute dates or times into relative wording" in prompt
-    assert "'today', 'tomorrow', or 'yesterday'" in prompt
+    assert "Preserve explicit dates, weekdays, times, and time ranges exactly" in source
+    assert "Do not convert absolute dates or times into relative wording" in source
+    assert "'today', 'tomorrow', or 'yesterday'" in source
 
 
 def test_workflow_executor_task_prompt_keeps_prior_dates_and_adds_guardrail():

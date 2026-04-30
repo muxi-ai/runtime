@@ -973,50 +973,127 @@ class Agent:
     async def _synthesize_planning_execution_response(
         self, user_request: str, my_results: Dict[str, Any], planning_response_parts: List[str]
     ) -> Optional[str]:
-        """Synthesize a final response from planning execution results."""
+        """Build the agent's planning-execution response.
+
+        Historically this issued an LLM call to synthesize prose from
+        ``my_results`` and ``planning_response_parts``. That synthesis
+        step was redundant: the overlord's ``_apply_persona`` pass
+        always runs on the way back to the user and is now responsible
+        for absorbing structured input (see
+        ``Overlord._apply_persona`` and the workflow consolidator).
+
+        This method now returns a deterministic, structured raw
+        response — no LLM call, no extra latency. The signature is
+        preserved so existing call sites and test fixtures keep
+        working.
+        """
         observability.observe(
             event_type=observability.ConversationEvents.AGENT_PLANNING,
             level=observability.EventLevel.INFO,
             data={
                 "agent_id": self.agent_id,
-                "phase": "planning_response_synthesis_start",
+                "phase": "synthesis_skipped",
+                "reason": "always_skip_v2",
                 "tool_result_count": len(my_results),
                 "delegated_response_count": len(planning_response_parts),
             },
-            description=f"Agent {self.agent_id} starting planning response synthesis",
+            description=(
+                f"Agent {self.agent_id} skipped planning synthesis "
+                f"(always_skip_v2: {len(my_results)} results, "
+                f"{len(planning_response_parts)} delegations)"
+            ),
         )
 
-        synthesis_messages = [
-            {
-                "role": "system",
-                "content": self._get_planning_response_synthesis_system_prompt(),
-            },
-            {
-                "role": "user",
-                "content": self._build_planning_response_synthesis_prompt(
-                    user_request, my_results, planning_response_parts
-                ),
-            },
-        ]
+        raw_response = self._build_raw_response(my_results, planning_response_parts)
+        return raw_response or None
 
-        response_obj = await self.model.chat(synthesis_messages)
-        response_text = (
-            response_obj.content if hasattr(response_obj, "content") else str(response_obj)
-        )
-        response_text = response_text.strip()
+    @staticmethod
+    def _build_raw_response(
+        my_results: Dict[str, Any],
+        planning_response_parts: List[str],
+    ) -> str:
+        """Render planning execution results as a deterministic raw string.
 
-        observability.observe(
-            event_type=observability.ConversationEvents.AGENT_PLANNING,
-            level=observability.EventLevel.INFO,
-            data={
-                "agent_id": self.agent_id,
-                "phase": "planning_response_synthesis_completed",
-                "response_length": len(response_text),
-            },
-            description=f"Agent {self.agent_id} completed planning response synthesis",
-        )
+        The output is structured for the overlord's persona LLM to
+        absorb directly: each tool result rendered under its
+        placeholder name, each delegated agent response appended
+        verbatim, artifact filenames called out inline.
 
-        return response_text or None
+        Output format::
+
+            ### {placeholder_1}
+            {result text}
+
+            ### {placeholder_2}
+            {result text}
+            Files Attached: foo.pdf, bar.png
+
+            ### Delegated Response 1
+            {delegated agent prose}
+
+        No LLM call. No prompt template. Pure string formatting.
+        """
+        sections: List[str] = []
+
+        if my_results:
+            for placeholder, result in my_results.items():
+                section_lines: List[str] = [f"### {placeholder}"]
+
+                if isinstance(result, dict):
+                    artifact_meta = result.get("_artifact")
+                    raw_text = result.get("result", result.get("output"))
+                    if isinstance(raw_text, str) and raw_text.strip():
+                        section_lines.append(raw_text.strip())
+                    elif isinstance(raw_text, dict):
+                        for key, value in raw_text.items():
+                            if value is None or value == "":
+                                continue
+                            section_lines.append(f"{key}: {value}")
+                    elif raw_text is not None:
+                        stripped = str(raw_text).strip()
+                        if stripped:
+                            section_lines.append(stripped)
+                    else:
+                        # Dict result with no result/output key — render
+                        # the whole dict as key:value lines so nothing
+                        # actionable disappears.
+                        rendered_keys = [
+                            f"{k}: {v}"
+                            for k, v in result.items()
+                            if k != "_artifact" and v is not None and v != ""
+                        ]
+                        if rendered_keys:
+                            section_lines.extend(rendered_keys)
+                        elif artifact_meta is None:
+                            section_lines.append("(empty result)")
+
+                    if isinstance(artifact_meta, dict):
+                        filename = artifact_meta.get("filename") or artifact_meta.get("name")
+                        if filename:
+                            section_lines.append(f"Files Attached: {filename}")
+                else:
+                    section_lines.append(str(result).strip())
+
+                sections.append("\n".join(section_lines))
+
+        if planning_response_parts:
+            # Number only the delegated parts we actually emit so the
+            # persona LLM sees a contiguous 1..N sequence. Numbering by
+            # the original list position would leave gaps for empty /
+            # None entries (e.g. ``["", None, "X"]`` → "Delegated
+            # Response 3" with no 1 or 2), which carries no semantic
+            # meaning and just confuses the model.
+            delegated_idx = 0
+            for part in planning_response_parts:
+                if not part:
+                    continue
+                delegated_idx += 1
+                sections.append(f"### Delegated Response {delegated_idx}\n{part}")
+
+        if not sections:
+            return ""
+
+        return "\n\n".join(sections)
 
     @staticmethod
     def _is_pure_artifact_result(my_results: Dict[str, Any]) -> bool:

@@ -3248,6 +3248,88 @@ The codebase is well-structured with clear separation of concerns, comprehensive
 
 ## Appendix: Lessons Learned (Updated During E2E Testing)
 
+### 2026-04-30: Haiku 4-5 weights agent `description` far above `specialization_keywords` when routing
+
+A demo of `example-formations/demo/hello-muxi/` that worked one day
+returned the wrong agent the next, on byte-identical code, formation,
+and prompt. "Tell me about the overlord" routed to the built-in
+`muxi-generalist` (which has zero MUXI grounding) and produced a
+generic anime/D-Day answer instead of going to `muxi-expert`.
+
+Empirical bisect across three runtimes (`feature/synthesis-speedup`,
+`develop`, and a divergent local tag `demo-known-good-2026-04-29` /
+`496aef29`) all reproduced the misroute deterministically. None of
+the recent runtime commits touched `agent_router.py`, the classifier,
+or `generalist.yaml`. The runtime code was not the cause.
+
+**What actually controls the decision.**
+
+The `AgentRouter` prompt presents each agent as a card with these
+fields, in this order: `name`, `role`, `description`, `specialties`,
+`specialization_keywords`, `specialization_domain`. Haiku 4-5 looks
+almost exclusively at the prose `description` when picking, and
+treats the structured `specialization_keywords` list as advisory
+flavor. Sonnet 4-5 on the same prompt routed correctly using only
+the keywords — Haiku did not.
+
+The demo formation's `muxi-expert.afs` had:
+
+```yaml
+description: "Explains MUXI and formations using embedded knowledge..."
+specialties: ["muxi", "muxi docs", "web browsing"]
+# (no specialization_keywords)
+```
+
+No mention of "overlord", "agents", "MCPs", or "SOPs" in the prose.
+With Haiku as the router, "tell me about the overlord" had no
+description anchor → fell through to `muxi-generalist`.
+
+**What did not fix it.** Adding `specialization_keywords: [overlord,
+formation, agent, mcp, sop, ...]` had **no effect** on Haiku's
+choice — still 3/3 to generalist. The structured field is too weak a
+signal for Haiku.
+
+**What did fix it.** Editing the `description` to surface the same
+domain terms in prose:
+
+```yaml
+description: "Explains MUXI concepts — the overlord, agents, formations,
+  MCPs, and SOPs — using embedded knowledge and live documentation
+  via Firecrawl"
+```
+
+That single line change made Haiku route deterministically to
+`muxi-expert`. No code change.
+
+**Why this looked like a regression.** It wasn't a regression in the
+strict sense — the formation was always sitting on a knife edge with
+Haiku. Yesterday's correct routing was lucky, not robust. A small
+behavioral shift on Anthropic's side (the `claude-haiku-4-5` alias is
+a moving target — Anthropic ships silent calibration updates under
+the same name) was enough to flip the borderline decision. The
+runtime never changed. The fix is to remove the dependence on Haiku's
+mood by giving the router a deterministic anchor in prose.
+
+**Mental notes.**
+
+- For Haiku routing, **domain terms must live in the `description`
+  prose**, not just in `specialties` or `specialization_keywords`.
+  Treat keywords as belt-and-braces; do not rely on them alone.
+- Sonnet is materially more reliable than Haiku for routing across
+  weakly-anchored agent metadata. If a formation's specialists do
+  not have rich descriptions, Sonnet for routing + Haiku for
+  synthesis (via the `overlord.llm.{base, synthesis}` lattice) is a
+  safer default than Haiku for both.
+- "Same code, same prompt, different answer one day later" with
+  cloud LLMs is normal. It is not a runtime regression unless a
+  bisect proves it; if every recent commit reproduces the same
+  output, the change is on the model side.
+- The built-in `muxi-generalist` agent's `system_message` has no
+  MUXI grounding. When Haiku misroutes to it, the user gets a
+  hallucinated generic answer instead of a "I don't know" disclaimer.
+  Worth tightening the generalist prompt at some point so misroutes
+  fail loudly rather than fluently.
+
 ### 2026-04-28: Three bugs surfaced while debugging two e2e tests on develop
 
 While fixing `test_2d1_local_buffer_mode` and `test_9a3b_with_approval`
