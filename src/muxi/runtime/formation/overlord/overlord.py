@@ -2759,6 +2759,10 @@ class Overlord:
 Reformat the agent's response to match your persona while preserving all technical details and information.
 Make it conversational and friendly while keeping accuracy.
 
+The agent's response may be either polished prose OR raw structured tool outputs (JSON-like dicts, key/value blocks, or per-task sections starting with "### Task N:" / "### {{placeholder}}"). In either case, extract every fact, ID, URL, filename, and number, and present them as a clear, friendly reply in your persona's voice. Do not summarize away or omit specific data.
+
+Preserve explicit dates, weekdays, times, and time ranges exactly as they appear in the agent's response. Do not convert absolute dates or times into relative wording like 'today', 'tomorrow', or 'yesterday' unless those exact relative words are already present in the agent's response.
+
 CRITICAL: If the agent's response contains specific personal information about the user (like their name, favorite color, profession, preferences, etc.), you MUST preserve that information exactly. The agent has access to the user's stored memories - do NOT replace specific facts with "I don't know" or "I don't have access to personal information". Trust the agent's response.
 
 IMPORTANT: Match response length to the question complexity. Simple questions get brief answers.
@@ -9628,67 +9632,32 @@ Agent response: {raw_response}"""
                     metadata={"synthesis_method": "error_summary"},
                 )
 
-            # Try to use LLM for intelligent synthesis if available
-            synthesis_model_config = (
-                self._capability_models.get("text") if hasattr(self, "_capability_models") else None
+            # Deterministic consolidation — no LLM call here. The
+            # final user-facing prose is produced by ``_apply_persona``
+            # downstream, which now absorbs structured input directly
+            # (see Overlord._apply_persona). Saves one LLM hop per
+            # workflow turn (~2-5 s) on top of the agent-side savings.
+            consolidated = self._consolidate_workflow_results(successful_results, task_results)
+            observability.observe(
+                event_type=observability.ConversationEvents.AGENT_PLANNING,
+                level=observability.EventLevel.INFO,
+                data={
+                    "phase": "synthesis_skipped",
+                    "reason": "deterministic_consolidator",
+                    "successful_count": len(successful_results),
+                    "failed_count": len([r for r in task_results if r.get("status") == "failed"]),
+                    "workflow_id": workflow.id,
+                },
+                description=(
+                    f"Workflow {workflow.id} synthesis skipped "
+                    f"(deterministic_consolidator: {len(successful_results)} successful)"
+                ),
             )
-
-            if synthesis_model_config:
-                # Prepare synthesis prompt
-                synthesis_prompt = self._create_synthesis_prompt(
-                    original_request, successful_results, task_results
-                )
-
-                try:
-                    # Create LLM instance for synthesis
-                    from ...services.llm import LLM
-
-                    # Extract just the model name from the config
-                    model_name = (
-                        synthesis_model_config.get("model")
-                        if isinstance(synthesis_model_config, dict)
-                        else synthesis_model_config
-                    )
-                    synthesis_llm = LLM(
-                        model=model_name,
-                        temperature=0.7,
-                        max_tokens=2000,
-                        timeout=120.0,
-                    )
-
-                    # Use LLM to synthesize results
-                    synthesis_response = await synthesis_llm.chat(
-                        messages=[
-                            {
-                                "role": "system",
-                                "content": self._get_workflow_synthesis_system_prompt(),
-                            },
-                            {"role": "user", "content": synthesis_prompt},
-                        ],
-                        metadata={
-                            "operation": "workflow_synthesis",
-                            "workflow_id": workflow.id,
-                        },
-                    )
-
-                    if synthesis_response:
-                        return MuxiResponse(
-                            role="assistant",
-                            content=synthesis_response,
-                            metadata={"synthesis_method": "llm_synthesis"},
-                        )
-
-                except Exception as e:
-                    # Log but continue with fallback
-                    observability.observe(
-                        event_type=observability.ConversationEvents.DOCUMENT_PROCESSING_FAILED,
-                        level=observability.EventLevel.WARNING,
-                        data={"error": str(e), "workflow_id": workflow.id},
-                        description=f"LLM synthesis failed, using fallback: {str(e)}",
-                    )
-
-            # Fallback: Simple concatenation with structure
-            return self._fallback_synthesis(original_request, successful_results, task_results)
+            return MuxiResponse(
+                role="assistant",
+                content=consolidated,
+                metadata={"synthesis_method": "deterministic_consolidator"},
+            )
 
         except Exception as e:
             observability.observe(
@@ -9789,24 +9758,33 @@ Agent response: {raw_response}"""
 
         return body, hints, artifacts
 
-    def _create_synthesis_prompt(
+    def _consolidate_workflow_results(
         self,
-        original_request: str,
         successful_results: List[Dict[str, Any]],
         all_results: List[Dict[str, Any]],
     ) -> str:
-        """Create prompt for LLM synthesis of task results.
+        """Render workflow task results as a deterministic structured string.
 
-        Renders each task's ``outputs["main"]["result"]`` into the prompt
-        within per-task and total byte budgets. Regex-extracted IDs and
-        attached artifact filenames are surfaced as supplementary fields.
+        The output is consumed downstream by ``_apply_persona``, which is
+        the single LLM pass on the way back to the user. No LLM call
+        here. Per-task and total byte budgets are enforced via
+        ``_render_task_body`` so a 200-task workflow can't blow the
+        persona model's context window.
+
+        Output format::
+
+            ### Task 1: <description>
+            Result: <body excerpt>
+            Key Outcomes: <regex hints>
+            Files Attached: <artifact filenames>
+
+            ### Task 2: <description>
+            ...
+
+            ### Failed Tasks:
+            - <description>: <error>
         """
-        prompt_parts = [
-            f"Original User Request: {original_request}",
-            "",
-            "Workflow Execution Summary:",
-            "",
-        ]
+        parts: List[str] = []
 
         consumed = 0
         for i, result in enumerate(successful_results, 1):
@@ -9818,66 +9796,33 @@ Agent response: {raw_response}"""
 
             body, hints, artifacts = self._render_task_body(outputs, per_task)
 
-            prompt_parts.append(f"Task {i}: {task_desc}")
+            section: List[str] = [f"### Task {i}: {task_desc}"]
 
             if body:
-                prompt_parts.append(f"Result: {body}")
+                section.append(f"Result: {body}")
                 consumed += len(body)
             elif not hints and not artifacts:
-                # Nothing useful to render — preserve the legacy status
-                # line so the LLM still sees a per-task signal.
-                prompt_parts.append("Status: Completed successfully")
+                # Nothing useful to render — preserve a per-task signal
+                # so the persona model still acknowledges the task.
+                section.append("Status: Completed successfully")
 
             if hints:
-                prompt_parts.append(f"Key Outcomes: {hints}")
+                section.append(f"Key Outcomes: {hints}")
             if artifacts:
-                prompt_parts.append(f"Files Attached: {artifacts}")
-            prompt_parts.append("")
+                section.append(f"Files Attached: {artifacts}")
 
-        # Note any failed tasks
+            parts.append("\n".join(section))
+
         failed_tasks = [r for r in all_results if r.get("status") == "failed"]
         if failed_tasks:
-            prompt_parts.append("Failed Tasks:")
+            failed_lines: List[str] = ["### Failed Tasks:"]
             for task in failed_tasks:
-                prompt_parts.append(
-                    f"- {task.get('description', 'Task')}: {task.get('error', 'Unknown error')}"
+                failed_lines.append(
+                    f"- {task.get('description', 'Task')}: " f"{task.get('error', 'Unknown error')}"
                 )
-            prompt_parts.append("")
+            parts.append("\n".join(failed_lines))
 
-        prompt_parts.extend(
-            [
-                "Based on the original user request and the task results above, provide an appropriate response:",
-                "",
-                "- Preserve explicit dates, weekdays, times, and time ranges exactly as they appear in the task results.",
-                "- Do not rewrite absolute dates/times into relative labels like 'today', 'tomorrow', or 'yesterday'",
-                "  unless the task results already use those exact relative words.",
-                "",
-                "- If this appears to be a conversational request (greeting, casual inquiry, social interaction, etc.),",  # noqa: E501
-                "  provide a natural, conversational response. Respond directly as if having a conversation,",
-                "  not describing what tasks were completed.",
-                "",
-                "- If this is a task-oriented request with concrete deliverables, provide a brief confirmation that:",
-                "  1. Confirms what was accomplished (focus on concrete outcomes like created issues, documents, etc.)",
-                "  2. Mentions any specific IDs, URLs, or references the user needs",
-                "  3. Acknowledges any failures if relevant",
-                "  4. Keep it concise - 2-3 sentences maximum",
-                "",
-                "Response:",
-            ]
-        )
-
-        return "\n".join(prompt_parts)
-
-    def _get_workflow_synthesis_system_prompt(self) -> str:
-        """Return the system prompt used for final workflow synthesis."""
-        return (
-            "You are a helpful assistant that synthesizes multiple task results into a coherent, "
-            "comprehensive response. Focus on addressing the user's original request while "
-            "incorporating all relevant information from the tasks. Preserve explicit dates, "
-            "weekdays, times, and time ranges exactly as they appear in the task results. Do not "
-            "convert absolute dates or times into relative wording like 'today', 'tomorrow', or "
-            "'yesterday' unless the task results already use those exact relative terms."
-        )
+        return "\n\n".join(parts)
 
     def _extract_key_outcomes(self, outputs: Dict[str, Any], task_description: str) -> str:
         """
@@ -9947,54 +9892,6 @@ Agent response: {raw_response}"""
 
         # If we found key items, join them; otherwise return empty string
         return "; ".join(key_items) if key_items else ""
-
-    def _fallback_synthesis(
-        self,
-        original_request: str,
-        successful_results: List[Dict[str, Any]],
-        all_results: List[Dict[str, Any]],
-    ) -> MuxiResponse:
-        """Fallback synthesis when LLM is not available."""
-        response_parts = []
-
-        # Start with a brief summary
-        task_count = len(successful_results)
-        if task_count > 0:
-            response_parts.append(
-                f"✅ Successfully completed {task_count} task{'s' if task_count != 1 else ''}"
-            )
-            response_parts.append("")
-
-        # Extract key outcomes from successful tasks
-        key_outcomes = []
-        for result in successful_results:
-            task_desc = result.get("description", "Task")
-            outputs = result.get("outputs", {})
-            outcomes = self._extract_key_outcomes(outputs, task_desc)
-            if outcomes:
-                key_outcomes.append(f"• {task_desc}: {outcomes}")
-
-        if key_outcomes:
-            response_parts.append("**Key Outcomes:**")
-            response_parts.extend(key_outcomes)
-            response_parts.append("")
-
-        # Note any failed tasks briefly
-        failed_tasks = [r for r in all_results if r.get("status") == "failed"]
-        if failed_tasks:
-            response_parts.append(
-                f"⚠️ {len(failed_tasks)} task{'s' if len(failed_tasks) != 1 else ''} failed:"
-            )
-            for task in failed_tasks:
-                response_parts.append(
-                    f"• {task.get('description', 'Task')}: {task.get('error', 'Unknown error')}"
-                )
-
-        return MuxiResponse(
-            role="assistant",
-            content="\n".join(response_parts),
-            metadata={"synthesis_method": "structured_concatenation"},
-        )
 
     # ===================================================================
     # VALIDATION METHODS FOR TYPE SAFETY

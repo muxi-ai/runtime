@@ -98,7 +98,7 @@ WORKFLOW MODE (N tasks)
        (tool outputs, no synth)     (tool outputs, no synth)     (tool outputs, no synth)
               ▲                               ▲                               ▲
               │                               │                               │
-              └─────────────── decompose ←── overlord ──→ chat ──┘
+              └─────────────── decompose ←── overlord ──→ chat ───────────────┘
 ```
 
 One LLM pass at the end. Everything before it is mechanical.
