@@ -112,6 +112,7 @@ from .initialization import (
     initialize_rce,
     initialize_skills,
     load_agents_from_configuration,
+    probe_declared_models,
 )
 
 
@@ -1278,6 +1279,13 @@ class Formation:
 
         # 3. Initialize LLM configuration
         initialize_llm_config(self)
+
+        # 3b. Probe every declared model. Refuses formation startup if
+        # any slug surfaces a 404 / shape error from OneLLM (e.g. a
+        # bare-name local slug or a typo in a cloud model name) -
+        # otherwise the failure manifests only on first user request
+        # and silently degrades the affected capability.
+        await probe_declared_models(self)
 
         # 4. Initialize memory systems
         initialize_memory_systems(self)

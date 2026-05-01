@@ -292,6 +292,311 @@ def initialize_llm_config(formation) -> None:
     # Note: description variable removed as observability call was removed
 
 
+# ---------------------------------------------------------------------------
+# Model init probe
+#
+# Verifies every formation-declared model resolves through OneLLM at
+# formation init time. Catches the otherwise-silent failure mode where
+# a misspelled or shape-invalid slug (e.g. ``local/all-MiniLM-L6-v2``
+# instead of ``local/sentence-transformers/all-MiniLM-L6-v2``) only
+# manifests as ``InvalidConfigurationError`` on first user request and
+# silently degrades the relevant capability (semantic memory, vision,
+# etc.) for the lifetime of the formation.
+#
+# Failure classification:
+#   - ResourceNotFoundError, InvalidRequestError       -> FATAL (raise)
+#   - AuthenticationError, RateLimitError,             -> WARN (continue)
+#     ServiceUnavailableError, RequestTimeoutError,
+#     other OneLLMError subclasses
+#   - non-OneLLMError exceptions                       -> WARN (continue)
+#                                                          + ERROR-level log
+#                                                         (probe-machinery
+#                                                          bug, not user
+#                                                          error)
+#
+# Probes run **synchronously, serially**: load-order semantics are
+# preserved and the first fatal failure aborts before subsequent probes.
+# ---------------------------------------------------------------------------
+
+
+def _classify_probe_failure(exc: Exception) -> str:
+    """Return ``"fatal"`` or ``"warn"`` for a probe exception.
+
+    Pure function, no side effects, kept module-level so unit tests can
+    exercise the classification without spinning up a formation.
+
+    The two fatal classes are deterministic "this slug will never
+    resolve" failures:
+
+    - :class:`onellm.errors.ResourceNotFoundError` - HF 404 or provider
+      model-not-found.
+    - :class:`onellm.errors.InvalidRequestError` - HF validation error,
+      which is what bare-name local slugs (the dev's case) surface as.
+
+    Everything else (auth, rate limit, network, unknown) is classified
+    ``"warn"`` so a transient or environmental issue at init does not
+    brick a formation that would otherwise come up healthy.
+    """
+    from onellm.errors import (
+        InvalidRequestError,
+        ResourceNotFoundError,
+    )
+
+    if isinstance(exc, (ResourceNotFoundError, InvalidRequestError)):
+        return "fatal"
+    return "warn"
+
+
+def _event_level_for_failure(severity: str, is_onellm: bool) -> "EventLevel":
+    """Pure mapper: failure classification + origin -> emitted event level.
+
+    Two cases produce ``ERROR``:
+
+    - ``severity == "fatal"`` - formation is about to abort init; the
+      event is the operator's primary signal, must surface above
+      ``WARNING`` filtering thresholds.
+    - ``not is_onellm`` - a probe-machinery bug (``RuntimeError``,
+      ``ValueError``, etc.). The control-flow severity is ``"warn"``
+      (we continue formation init to avoid bricking on a probe defect),
+      but the event level is ``ERROR`` so an operator filtering on
+      ERROR alerts does not silently miss a defect in the probe layer
+      itself. The block-comment contract on this module promises
+      ``ERROR`` for non-``OneLLMError`` cases; this helper makes that
+      promise enforceable in tests.
+
+    All other cases (``severity == "warn"`` from a real ``OneLLMError`` -
+    auth, rate limit, transient network) emit at ``WARNING``.
+    """
+    if severity == "fatal" or not is_onellm:
+        return EventLevel.ERROR
+    return EventLevel.WARNING
+
+
+def _format_probe_fatal_message(model_slug: str, exc: Exception) -> str:
+    """Build the operator-facing message for a fatal probe failure.
+
+    The hint section is dynamic:
+
+    - For ``local/<bare-name>`` slugs (the dev's exact case) we surface
+      the bare-name -> owner/repo correction prominently.
+    - For other ``local/...`` slugs we still mention the
+      ``local/<owner>/<repo>`` shape requirement.
+    - For non-local slugs (cloud providers) the typo hint is emphasized
+      and the local hint is omitted entirely so the message stays
+      relevant.
+    """
+    base = (
+        f"Formation init failed: model '{model_slug}' could not be "
+        f"resolved by OneLLM.\n\n"
+        f"OneLLM reported:\n  {type(exc).__name__}: {exc}\n\n"
+    )
+
+    if model_slug.startswith("local/"):
+        post = model_slug[len("local/") :]
+        bare_name_likely = "/" not in post
+        if bare_name_likely:
+            return base + (
+                "Cause: the local slug is missing the owner/organization "
+                "segment. The runtime requires the full HuggingFace repo "
+                "id:\n"
+                "    local/<owner>/<repo>   "
+                "(e.g. local/sentence-transformers/all-MiniLM-L6-v2)\n"
+                f"NOT local/<repo>          "
+                f"(e.g. {model_slug})\n\n"
+                "Fix the formation's model declaration and restart.\n"
+            )
+        return base + (
+            "Common causes for local/* slugs:\n"
+            "  - Model genuinely missing from HuggingFace (typo in owner/repo).\n"
+            "  - Gated repo without a read token configured.\n\n"
+            "Fix the formation's model declaration and restart.\n"
+        )
+
+    return base + (
+        "Common causes for cloud slugs:\n"
+        "  - Typo in the model name (e.g. 'openai/gpt-4o-min' vs "
+        "'openai/gpt-4o-mini').\n"
+        "  - Model deprecated or genuinely missing from the provider.\n\n"
+        "Fix the formation's model declaration and restart.\n"
+    )
+
+
+def _build_unique_probes(
+    capability_models: Dict[str, Dict[str, Any]],
+) -> List[Dict[str, Any]]:
+    """Deduplicate ``capability_models`` into a list of unique probes.
+
+    Two capabilities pointing at the same ``(model_slug, probe_kind)``
+    pair are collapsed into a single probe; the ``capabilities`` field
+    on the resulting probe lists every capability that mapped to it so
+    observability events stay informative.
+
+    ``probe_kind`` is ``"embedding"`` for the ``embedding`` capability
+    and ``"chat"`` for everything else - this matches OneLLM's own
+    transport split and lets the same slug be probed twice if it is
+    legitimately used as both an embedding model and a chat model
+    (rare, but possible).
+
+    Returns the probes in a stable order keyed on the first capability
+    that introduced each unique probe, so error messages and tests are
+    deterministic.
+    """
+    seen: Dict[tuple, Dict[str, Any]] = {}
+    order: List[tuple] = []
+
+    for capability, cfg in capability_models.items():
+        model = cfg.get("model")
+        if not isinstance(model, str) or not model:
+            continue
+        kind = "embedding" if capability == "embedding" else "chat"
+        key = (model, kind)
+        if key not in seen:
+            seen[key] = {
+                "model": model,
+                "kind": kind,
+                "capabilities": [capability],
+            }
+            order.append(key)
+        else:
+            seen[key]["capabilities"].append(capability)
+
+    return [seen[key] for key in order]
+
+
+async def _execute_single_probe(model: str, kind: str) -> None:
+    """Issue the actual OneLLM call for a single probe.
+
+    Encapsulates the per-``kind`` transport split (Embedding vs
+    ChatCompletion) so :func:`probe_declared_models` stays focused on
+    the per-probe lifecycle (event emission, error classification,
+    serial fail-fast) and adding a new probe kind in the future is a
+    one-function change confined to this helper.
+
+    Behavior contract:
+
+    - Returns ``None`` on success (the response payload is irrelevant
+      to the probe; only the round-trip succeeded).
+    - Raises the underlying ``OneLLMError`` (or any other exception)
+      untouched so the caller can classify and emit the appropriate
+      event. Wrapping or swallowing here would defeat the
+      classification helper.
+    """
+    if kind == "embedding":
+        from onellm import Embedding
+
+        await Embedding.acreate(input="probe", model=model)
+    else:
+        from onellm import ChatCompletion
+
+        await ChatCompletion.acreate(
+            model=model,
+            messages=[{"role": "user", "content": "ping"}],
+            max_tokens=1,
+        )
+
+
+async def probe_declared_models(formation) -> None:
+    """Probe every formation-declared model and fail-fast on 404.
+
+    Iterates ``formation._capability_models`` after the text-fallback
+    cascade has run, issues a minimal OneLLM call per unique
+    ``(model_slug, probe_kind)`` pair, and converts deterministic
+    "this slug will never resolve" failures into a
+    :class:`ConfigurationValidationError` that aborts formation init.
+
+    Probes are serial: the first fatal failure aborts before later
+    probes run. Non-fatal failures (auth / network / rate-limit /
+    other ``OneLLMError`` subclasses / probe-machinery bugs) emit a
+    ``MODEL_INIT_PROBE_FAILED`` warning event and continue, so a
+    transient init blip does not brick an otherwise-healthy formation.
+
+    Raises:
+        ConfigurationValidationError: when any probe surfaces a fatal
+            error (``ResourceNotFoundError`` or ``InvalidRequestError``).
+            The message names the offending slug, embeds the underlying
+            OneLLM error verbatim, and surfaces operator-actionable
+            guidance for the most common causes.
+    """
+    import time
+
+    from onellm.errors import OneLLMError
+
+    capability_models = getattr(formation, "_capability_models", {}) or {}
+    probes = _build_unique_probes(capability_models)
+
+    if not probes:
+        return
+
+    for probe in probes:
+        model = probe["model"]
+        kind = probe["kind"]
+        capabilities = probe["capabilities"]
+
+        observability.observe(
+            event_type=observability.SystemEvents.MODEL_INIT_PROBE_STARTED,
+            level=EventLevel.INFO,
+            data={
+                "model": model,
+                "probe_kind": kind,
+                "capabilities": capabilities,
+            },
+            description=(f"Probing model '{model}' ({kind}) for capabilities " f"{capabilities}"),
+        )
+
+        start = time.perf_counter()
+        try:
+            await _execute_single_probe(model, kind)
+        except Exception as exc:  # noqa: BLE001 - intentional broad catch
+            elapsed_ms = int((time.perf_counter() - start) * 1000)
+            is_onellm = isinstance(exc, OneLLMError)
+            severity = _classify_probe_failure(exc) if is_onellm else "warn"
+
+            observability.observe(
+                event_type=observability.SystemEvents.MODEL_INIT_PROBE_FAILED,
+                level=_event_level_for_failure(severity, is_onellm),
+                data={
+                    "model": model,
+                    "probe_kind": kind,
+                    "capabilities": capabilities,
+                    "severity": severity,
+                    "exception_type": type(exc).__name__,
+                    "is_onellm_error": is_onellm,
+                    "duration_ms": elapsed_ms,
+                    "error": str(exc),
+                },
+                description=(
+                    f"Model probe failed: {model} ({kind}) -> " f"{type(exc).__name__}: {exc}"
+                ),
+            )
+
+            if severity == "fatal":
+                raise ConfigurationValidationError(
+                    [_format_probe_fatal_message(model, exc)],
+                    details={
+                        "model": model,
+                        "probe_kind": kind,
+                        "capabilities": capabilities,
+                        "exception_type": type(exc).__name__,
+                        "underlying_error": str(exc),
+                    },
+                ) from exc
+            # Non-fatal: continue to next probe.
+            continue
+
+        elapsed_ms = int((time.perf_counter() - start) * 1000)
+        observability.observe(
+            event_type=observability.SystemEvents.MODEL_INIT_PROBE_COMPLETED,
+            level=EventLevel.INFO,
+            data={
+                "model": model,
+                "probe_kind": kind,
+                "capabilities": capabilities,
+                "duration_ms": elapsed_ms,
+            },
+            description=(f"Model probe OK: {model} ({kind}) in {elapsed_ms}ms"),
+        )
+
+
 def initialize_memory_systems(formation) -> None:
     """
     Initialize all memory systems including buffer, working, and persistent memory.
