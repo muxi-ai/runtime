@@ -6,7 +6,6 @@ Verification tests for bugfixes:
 """
 
 import inspect
-import re
 from pathlib import Path
 from unittest.mock import MagicMock
 
@@ -253,9 +252,16 @@ class TestSchedulerOverlordCompletionAttribute:
         ``scheduler_service.complete_job_from_webhook`` on both the
         success and failure branches."""
         source = self._get_overlord_source()
+        # Bound the slice to the actual method instead of an arbitrary
+        # 30 KB window: if ``_execute_async_request`` ever grew past
+        # the magic number, the failure-branch call at the tail would
+        # silently drop out of the count and turn a regression into a
+        # silent pass. ``_execute_async_request`` has no inner ``async
+        # def`` closures, so the generic boundary lookup lands on the
+        # next outer method.
         method_start = source.index("async def _execute_async_request")
-        # Slice generously — there are two completion call sites.
-        method_body = source[method_start : method_start + 30000]
+        method_end = source.index("async def ", method_start + 1)
+        method_body = source[method_start:method_end]
         assert method_body.count("self.scheduler_service.complete_job_from_webhook") >= 2, (
             "Expected at least two ``scheduler_service.complete_job_from_webhook`` "
             "calls in _execute_async_request (success + failure branches)."
@@ -466,30 +472,44 @@ class TestScheduledExecutionMarker:
     def test_marker_not_applied_inside_buffer_turns(self):
         """Buffer turns (history) come from buffer memory which stores
         original user text, so they must NOT be re-marked. Lock the
-        comment that documents this so the policy is visible."""
+        invariant *behaviorally* — the previous comment-text check
+        could pass while the call-site enforcement was removed."""
         source = self._get_orchestrator_source()
         # Same boundary discipline as ``test_clean_chat_context_uses_helper``.
         method_start = source.index("async def _build_clean_chat_context")
         method_end = source.index("async def _extract_user_information_async")
         method_body = source[method_start:method_end]
 
-        # Normalize comment-marker noise + whitespace so phrases that
-        # straddle line breaks become continuous substrings. Required
-        # because Python's source layout splits e.g. ``is left\n
-        # # untouched`` across two lines, and a literal substring
-        # check on the raw body would never see ``"left untouched"`` —
-        # which is exactly the precedence/empty-substring bug this
-        # rewrite replaces.
-        flat = re.sub(r"\s*#\s*", " ", method_body)
-        flat = re.sub(r"\s+", " ", flat)
+        # Strip docstrings and comments first. Without this step the
+        # method's docstring (which legitimately mentions both
+        # ``_apply_scheduled_marker`` and ``"buffer_turns"``) would
+        # fool the behavioral slice — ``index('"buffer_turns"')``
+        # would land at the docstring's schema example rather than at
+        # the return-dict construction site.
+        live_code = _strip_comments_and_docstrings(method_body)
 
-        # Each clause is asserted independently — no boolean glue, so
-        # operator precedence cannot make any single check vacuous.
-        # All three phrases must appear in the documenting comment for
-        # the invariant to be considered locked in.
-        for phrase in ("buffer_turns", "left untouched", "without the marker"):
-            assert phrase in flat, (
-                "The buffer-turns-not-marked invariant must be documented "
-                "in the rendering function so a future edit can't quietly "
-                f"start double-marking history. Missing phrase: {phrase!r}."
-            )
+        # The first ``"buffer_turns"`` literal in *live code* is the
+        # return-dict key. Everything before that point is the
+        # buffer_turns build path: the inner ``_fetch_buffer_role_turns``
+        # closure plus the ``asyncio.gather(..., _fetch_buffer_role_turns())``
+        # call that produces the value. The marker helper must not be
+        # called anywhere on that path — it is only legitimately
+        # applied to ``current_user_message`` on the line after.
+        buffer_slice_end = live_code.index('"buffer_turns"')
+        assert "_apply_scheduled_marker" not in live_code[:buffer_slice_end], (
+            "_apply_scheduled_marker must not be called on the "
+            "buffer_turns build path. Buffer memory stores the "
+            "original user text, so prior scheduled invocations must "
+            "appear in history without the marker — re-marking would "
+            "double-stamp messages on every replay."
+        )
+
+        # Sanity: the marker IS expected to be applied to
+        # ``current_user_message`` in the return dict (i.e., somewhere
+        # *after* the slice end). This catches the symmetric mistake
+        # where a refactor strips the call entirely.
+        assert "_apply_scheduled_marker" in live_code[buffer_slice_end:], (
+            "_apply_scheduled_marker must still be called on "
+            "current_user_message in the return dict — see "
+            "test_clean_chat_context_uses_helper for the positive guard."
+        )
