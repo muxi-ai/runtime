@@ -1,7 +1,7 @@
 # MUXI Runtime Architecture Analysis
 
 **Generated:** 2026-03-10
-**Last Updated:** 2026-04-28 (local-classification Phase 1 + 2: 13 binary gates moved off the cloud; security-guard self-recall override; workflow-approval kv_set race; remote-buffer recency floor)
+**Last Updated:** 2026-05-01 (lean Docker variants on python:3.14-slim; markitdown extras narrowed to docx/pdf/pptx/xls/xlsx; SIF artifacts ~10-14% smaller; Apptainer-on-Mac /etc/localtime workaround documented)
 **Codebase:** `/Users/ran/Projects/muxi/code/runtime`  
 **Scope:** 290 Python files, ~119K lines
 
@@ -1025,11 +1025,21 @@ $HF_HOME/hub`. This keeps the bind-mount path 1:1 with the model cache path.
 Three Docker variants produce three SIFs from the same codebase (names match
 OneLLM's extras vocabulary — `cache` / `local-pytorch` / `local-cuda`):
 
-- `Dockerfile` (default, lean, ~500 MB) — ONNX Runtime via `onellm[cache]`.
-  No torch, no sentence-transformers. Selected when the embedding model
-  ships ONNX weights (Nomic v1.5, most sentence-transformers models). Any
-  host. `faissx` for the MUXI memory client's local backend (CPU FAISS).
-  Slug form: `muxi_runtime: "<version>"` (no suffix).
+- `Dockerfile` (default, lean, ~551 MB arm64 / ~607 MB amd64 SIF;
+  ~1.9 GB Docker image) — based on `python:3.14-slim` (Trixie). ONNX
+  Runtime via `onellm[cache]`. No torch, no sentence-transformers.
+  Selected when the embedding model ships ONNX weights (Nomic v1.5, most
+  sentence-transformers models). Any host. `faissx` for the MUXI memory
+  client's local backend (CPU FAISS). Slug form:
+  `muxi_runtime: "<version>"` (no suffix). Bumped from `python:3.10-slim`
+  on 2026-05-01; see appendix entry. Same date narrowed `markitdown[all]`
+  to `markitdown[docx,pdf,pptx,xls,xlsx]` in `pyproject.toml` to unblock
+  3.14 (the `[all]` superset's `youtube-transcript-api~=1.0.0` pin
+  declares `requires_python='<3.14'`). Kept extras cover every file
+  format MUXI's knowledge ingest dispatches to MarkItDown for; downstream
+  consumers needing the dropped extras (`audio-transcription`,
+  `az-doc-intel`, `outlook`, `youtube-transcription`) install
+  `markitdown[all]` explicitly alongside `muxi-runtime`.
 - `Dockerfile.pytorch` (~1.3 GB) — adds CPU PyTorch + sentence-transformers
   via `onellm[cache,local-pytorch]` on top of the lean image. Explicit
   `--index-url https://download.pytorch.org/whl/cpu` keeps torch CPU-only
@@ -2763,7 +2773,7 @@ class TelemetryService:
 
 **Dockerfile highlights:**
 ```dockerfile
-FROM python:3.10-slim
+FROM python:3.14-slim   # bumped from python:3.10-slim on 2026-05-01
 
 # Install PostgreSQL 17
 RUN apt-get install postgresql-17 postgresql-contrib-17
@@ -3332,6 +3342,46 @@ The codebase is well-structured with clear separation of concerns, comprehensive
 ---
 
 ## Appendix: Lessons Learned (Updated During E2E Testing)
+
+### 2026-05-01: Lean Docker variants jump python:3.10-slim -> python:3.14-slim; markitdown extras narrowed; Apptainer-on-Mac /etc/localtime workaround
+
+**Scope.** Three lean Dockerfiles (`Dockerfile`, `Dockerfile.production`, `e2e/docker/Dockerfile`) moved from `python:3.10-slim` to `python:3.14-slim` in a single PR. The library's own `requires-python` floor in `pyproject.toml` stays `>=3.10` — only the upper end of the supported interpreter range expands. Heavy variants (`Dockerfile.pytorch`, `Dockerfile.cuda`) still ride a parametrized `${BASE_IMAGE}:${BASE_TAG}` and stay gated separately on torch wheel availability; they were deliberately not touched. `Dockerfile.ci-test` is on `ubuntu:22.04` with Python via apt — also untouched. `black`/`ruff`/`mypy` target versions stayed at py310 because the bump is purely the Docker base image; no source-syntax features past 3.10 are required. CI matrix unchanged.
+
+**The actual blocker that forced the companion `pyproject.toml` change.** The first 3.14 install attempt hit a hard wheel-resolution failure inside `markitdown[all]`. Long story short: `markitdown 0.1.0`-`0.1.5` all pin `youtube-transcript-api~=1.0.0` (the `[all]` extra's `youtube-transcription` sub-extra), and every release of `youtube-transcript-api 1.0.x` declares `requires_python="<3.14,>=3.8"`. The 1.2.x line of `youtube-transcript-api` does support 3.14, but `markitdown`'s `~=1.0.0` pin is incompatible with it. Codebase audit confirmed zero direct imports of `youtube_transcript_api`, `pydub`, `speech_recognition`, `olefile`, or any Azure DI SDK. The fix was to switch from `markitdown[all]>=0.1.0` to `markitdown[docx,pdf,pptx,xls,xlsx]>=0.1.0` — kept extras cover every file format MUXI's knowledge ingest dispatches to MarkItDown for. Behavioural impact for downstream library users: anyone who previously relied on MUXI's transitive install of MarkItDown to pick up `.msg`, audio-transcription via MarkItDown, Azure DI, or YouTube transcripts now needs `markitdown[all]` alongside `muxi-runtime`. The trade-off is intentional — the previous behaviour silently shipped ~120 MB of unused-by-MUXI dependencies AND blocked `muxi-runtime` from installing on Python 3.14 in the first place.
+
+**Build verification.** `pip install --dry-run` against the core dep set on Python 3.14 / `manylinux_2_28` for both `x86_64` and `aarch64` resolves cleanly — no source builds, no system build deps added on top of what the lean Dockerfile already provides. Wheels confirmed at the versions the runtime actually loads: `faiss-cpu 1.13.2` (cp310 abi3 on manylinux_2_28), `pyzmq 27.1.0` (cp312 abi3 on manylinux_2_28; the published 3.14 standard-ABI wheel is `cp314-cp314t` for the free-threaded interpreter only, but the abi3 wheel covers the standard interpreter), `psycopg2-binary 2.9.12`, `spacy 3.8.13`, `lxml 6.1.0`, `mammoth 1.11.0`, `pdfminer.six 20251230`, `pdfplumber 0.11.9`, `python-pptx 1.0.2`, `openpyxl 3.1.5`, `xlrd 2.0.2`, `scipy 1.17.1`, `numpy 2.4.4`, `pandas 3.0.2`, `cryptography 47.0.0`, `Pillow 12.2.0`, `pydantic 2.13.3`, `protobuf 7.34.1`. The aarch64-specific `sqlite-vec` recompile in the builder stage uses `python -c "import sys; print(f'python{sys.version_info.major}.{sys.version_info.minor}')"` to derive the install path and is version-agnostic.
+
+**Size deltas (vs 3.10 baseline, same lean variant).**
+
+| Artifact | Before (3.10) | After (3.14) | Delta |
+|---|---|---|---|
+| Lean Docker image (any arch) | 2.11 GB | 1.9 GB | -10% |
+| arm64 SIF | 643 MB | 551 MB | -14% |
+| amd64 SIF | 643 MB | 607 MB | -5.6% |
+
+Most of the reduction comes from the dropped markitdown extras (~120 MB worth of deps) plus a slimmer Trixie base; the rest from updated wheel versions. The amd64 SIF shrinks less than arm64 because amd64 wheels for `scipy`/`numpy`/`pandas` are slightly larger than their aarch64 counterparts and `onnxruntime` ships a fatter amd64 binary.
+
+**Apptainer-on-Mac /etc/localtime quirk (smoke-test caveat, not a SIF defect).** Smoke-testing the amd64 SIF on an arm64 Mac under QEMU emulation through the runtime-runner Docker image fails on first try with: `FATAL: container creation failed: mount /etc/localtime->/etc/localtime error: while mounting /etc/localtime: mount source /etc/localtime doesn't exist`. The runtime-runner's linuxkit-based rootfs lacks `/etc/localtime`, and apptainer 4.1.1 auto-binds `/etc/localtime` from the host into the SIF as part of its default bind set. `--no-mount localtime` is rejected as an unknown mount type ("Ignoring unknown mount type 'localtime'"); `--containall` does NOT disable that auto-bind in the rootfs version we're using either. The working workaround for Mac smoke testing is to override the docker entrypoint to `sh`, create a stub localtime, and exec `/usr/bin/singularity` (note: the runtime-runner exposes `/usr/bin/singularity`, not `/usr/bin/apptainer`):
+
+```bash
+docker run --rm --privileged --entrypoint=sh \
+  -v "/path/to/runtime.sif:/sif/runtime.sif:ro" \
+  ghcr.io/muxi-ai/runtime-runner:latest \
+  -c '
+    set -e
+    echo UTC > /tmp/fake-tz
+    ln -sfn /tmp/fake-tz /etc/localtime 2>/dev/null || cp /tmp/fake-tz /etc/localtime 2>/dev/null || true
+    exec /usr/bin/singularity exec --writable-tmpfs /sif/runtime.sif python -c "<smoke-test code>"
+  '
+```
+
+On a real amd64 host where `/etc/localtime` exists in the host filesystem, the SIF runs unmodified — this is purely a Docker-wrapped-apptainer-on-arm64-Mac peculiarity and not something formations or end users will see in production. Worth documenting because the failure mode looks scary ("FATAL: container creation failed") even though the SIF itself is fine.
+
+**Mental notes for future bumps.**
+- "Mechanical FROM-line bump" sounds easy, but the combinatorics of the dep tree under a new interpreter version are not. Always run `pip install --dry-run --python-version=X.Y --platform=manylinux_2_28_x86_64 --only-binary=:all:` against the full transitive set BEFORE rebuilding the image; a single transitive `requires_python` pin can sink the whole change. The blocker here was three layers deep (`markitdown[all]` -> `youtube-transcription` extra -> `youtube-transcript-api~=1.0.0` -> `<3.14`), not visible in the top-level deps list.
+- For Docker base bumps that touch only the `FROM` line, the visible CHANGELOG entry should still document the full transitive resolve, image/SIF size deltas, and any interpreter-version-specific gotchas (like the cp314-cp314t wheel-publishing convention for free-threaded vs standard interpreters in `pyzmq`). Future-you re-running the bump for 3.15 will thank current-you.
+- The realistic end-user perf delta from a Python interpreter bump on this runtime is single-digit percent. MUXI's hot path is overwhelmingly I/O-bound (LLM round trips, MCP subprocess JSON-RPC, DB round trips, network embeddings); the orchestration glue that benefits from CPython 3.14's ~2x speedup over 3.10 is a small fraction of total wall time. Don't oversell version bumps as perf wins — the actual leverage almost always lives in call-graph shape (planning, SOP search, tool surface) not the interpreter.
+- When the change ships, the previous-arch SIFs in `~/.muxi/server/runtimes/` are preserved as `*-pre-<version>.sif` (e.g. `*-pre-314.sif`) so users can roll back if a SIF-side regression slips past local smoke tests.
 
 ### 2026-04-30: Haiku 4-5 weights agent `description` far above `specialization_keywords` when routing
 
