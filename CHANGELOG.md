@@ -687,188 +687,59 @@ The runtime SIF sets `HF_HOME=/opt/hf-cache` and `HF_HUB_OFFLINE=1`, then bind-m
 
 `mental-model.md` gained four new gotcha sections covering pre-routing gate ordering, the SIF embedding cache layout convergence, the runtime-runner bind-mount fix, and the chat-model embedding coupling that this release removed.
 
-## v0.20260424.0
-
-## v0.20260423.5
-
 ## v0.20260423.0-v0.20260423.3
 
 ### Runtime image + SIF packaging
 
-- **Dockerfile `HEALTHCHECK` now probes the real health path.** The formation API
-  mounts the health router under the `/v1` prefix (see
-  `formation/server/server.py`: `include_router(health_router, prefix="/v1")`),
-  so the previous `curl http://localhost:8000/health` probe returned 404 on every
-  boot and Docker reported the container as `unhealthy` forever. Probe is now
-  `curl -fsS http://localhost:8000/v1/health`. `--start-period` bumped from 30s
-  to 60s to cover cold-boot formation init (observed ~4s default, ~25s pytorch
-  under emulated amd64). Variant Dockerfiles inherit the fix via `FROM`.
-  Observed starting → healthy transition in ~110s under macOS/Rosetta on the
-  default variant (6 probes fail during start-period, which is expected and
-  does not count as a failing streak).
-- **`scripts/build/runtime.sh` and `scripts/build/sif.sh` are now variant-aware.**
-  Both scripts accept `--variant default|pytorch|cuda` and `--arch amd64|arm64`,
-  detect `apptainer` before `singularity` in the conversion path, read version
-  from `src/muxi/runtime/.version`, use the correct
-  `python -m muxi.runtime.utils.run_formation` module path in docs, and suffix
-  SIF filenames by variant so default/pytorch/cuda builds do not collide in
-  `sif-builds/`.
-- **SIF "Test the SIF" help corrected.** `--writable-tmpfs` is now documented as
-  required (SIF rootfs is read-only by design; without tmpfs the runtime fails
-  at `mkdir /root/.muxi/default/memory`). Both Option A (native apptainer) and
-  Option B (docker-wrapped via `runtime-runner`) are shown, and the health
-  check example uses `/v1/health` to match the HEALTHCHECK fix above.
-- **Platform guidance clarified.** Upstream Apptainer/Singularity publishes
-  linux/amd64 binaries only, so on macOS and Windows the correct SIF arch is
-  always `linux-amd64` regardless of host CPU — Rosetta (Apple Silicon) or
-  Hyper-V (Windows) handles the translation. `linux-arm64` SIFs only make
-  sense on a native arm64 Linux host with a self-built arm64 Apptainer (e.g.
-  AWS Graviton). `sif.sh` emits an early warning when it detects an arm64
-  build that will not be executable on a macOS/Windows host.
-- **CUDA variant marked EXPERIMENTAL.** `Dockerfile.cuda` now carries a
-  preview status note in its header. `scripts/build/runtime.sh` echoes the
-  experimental warning before starting a CUDA build. The image can be built
-  on linux/amd64 hosts with NVIDIA tooling, but the full runtime path
-  (CUDA torch + faiss-gpu + onnxruntime-gpu inside a SIF) has not been
-  end-to-end validated against live GPUs in CI.
+- **Dockerfile `HEALTHCHECK` now probes the real health path.** The formation API mounts the health router under the `/v1` prefix (see `formation/server/server.py`: `include_router(health_router, prefix="/v1")`), so the previous `curl http://localhost:8000/health` probe returned 404 on every boot and Docker reported the container as `unhealthy` forever. Probe is now `curl -fsS http://localhost:8000/v1/health`. `--start-period` bumped from 30s to 60s to cover cold-boot formation init (observed ~4s default, ~25s pytorch under emulated amd64). Variant Dockerfiles inherit the fix via `FROM`. Observed starting → healthy transition in ~110s under macOS/Rosetta on the default variant (6 probes fail during start-period, which is expected and does not count as a failing streak).
+- **`scripts/build/runtime.sh` and `scripts/build/sif.sh` are now variant-aware.** Both scripts accept `--variant default|pytorch|cuda` and `--arch amd64|arm64`, detect `apptainer` before `singularity` in the conversion path, read version from `src/muxi/runtime/.version`, use the correct `python -m muxi.runtime.utils.run_formation` module path in docs, and suffix SIF filenames by variant so default/pytorch/cuda builds do not collide in `sif-builds/`.
+- **SIF "Test the SIF" help corrected.** `--writable-tmpfs` is now documented as required (SIF rootfs is read-only by design; without tmpfs the runtime fails at `mkdir /root/.muxi/default/memory`). Both Option A (native apptainer) and Option B (docker-wrapped via `runtime-runner`) are shown, and the health check example uses `/v1/health` to match the HEALTHCHECK fix above.
+- **Platform guidance clarified.** Upstream Apptainer/Singularity publishes linux/amd64 binaries only, so on macOS and Windows the correct SIF arch is always `linux-amd64` regardless of host CPU — Rosetta (Apple Silicon) or Hyper-V (Windows) handles the translation. `linux-arm64` SIFs only make sense on a native arm64 Linux host with a self-built arm64 Apptainer (e.g. AWS Graviton). `sif.sh` emits an early warning when it detects an arm64 build that will not be executable on a macOS/Windows host.
+- **CUDA variant marked EXPERIMENTAL.** `Dockerfile.cuda` now carries a preview status note in its header. `scripts/build/runtime.sh` echoes the experimental warning before starting a CUDA build. The image can be built on linux/amd64 hosts with NVIDIA tooling, but the full runtime path (CUDA torch + faiss-gpu + onnxruntime-gpu inside a SIF) has not been end-to-end validated against live GPUs in CI.
 
 ### Embedding platform: single-path helper, Nomic v1.5 default
 
-The MUXI runtime now routes every embedding call through a single shared helper
-(`services/memory/embedding.py`) that wraps `onellm.Embedding.acreate`. The old
-`local_embeddings.py` alias shim (short-name → dimension map, direct
-`SentenceTransformer` instantiation) has been removed. Long-term memory, working
-memory, SQLite memory, fusion engine, SOP coordinator, and knowledge handler all
-flow through `embed()` / `probe_dimension()` in the helper.
+The MUXI runtime now routes every embedding call through a single shared helper (`services/memory/embedding.py`) that wraps `onellm.Embedding.acreate`. The old `local_embeddings.py` alias shim (short-name → dimension map, direct `SentenceTransformer` instantiation) has been removed. Long-term memory, working memory, SQLite memory, fusion engine, SOP coordinator, and knowledge handler all flow through `embed()` / `probe_dimension()` in the helper.
 
-**Default embedding model changed** to `local/nomic-ai/nomic-embed-text-v1.5`
-(768-dim, 8k context, Matryoshka 64–768, Apache-2.0). Previous default was the
-384-dim sentence-transformers MiniLM. Multilingual deployments can opt into
-`local/nomic-ai/nomic-embed-text-v2-moe`. Cloud providers (`openai/*`,
-`cohere/*`) continue to work unchanged; the helper strips `task` for cloud slugs
-so consumers can pass it unconditionally.
+**Default embedding model changed** to `local/nomic-ai/nomic-embed-text-v1.5` (768-dim, 8k context, Matryoshka 64–768, Apache-2.0). Previous default was the 384-dim sentence-transformers MiniLM. Multilingual deployments can opt into `local/nomic-ai/nomic-embed-text-v2-moe`. Cloud providers (`openai/*`, `cohere/*`) continue to work unchanged; the helper strips `task` for cloud slugs so consumers can pass it unconditionally.
 
-**BREAKING**: Formation configs that reference short-name local aliases
-(e.g. `local/all-mpnet-base-v2`) will no longer resolve. The short-name
-registry was removed upstream in OneLLM `0.20260421.0` and the runtime-side
-shim that previously papered over that is gone. Migrate formation configs
-to full HF repo ids:
+**BREAKING**: Formation configs that reference short-name local aliases (e.g. `local/all-mpnet-base-v2`) will no longer resolve. The short-name registry was removed upstream in OneLLM `0.20260421.0` and the runtime-side shim that previously papered over that is gone. Migrate formation configs to full HF repo ids:
 
-- `local/all-MiniLM-L6-v2` → `local/sentence-transformers/all-MiniLM-L6-v2`
-  (or prefer the new default `local/nomic-ai/nomic-embed-text-v1.5`)
-- `local/all-mpnet-base-v2` → `local/sentence-transformers/all-mpnet-base-v2`
-  (or the new default)
+- `local/all-MiniLM-L6-v2` → `local/sentence-transformers/all-MiniLM-L6-v2` (or prefer the new default `local/nomic-ai/nomic-embed-text-v1.5`)
+- `local/all-mpnet-base-v2` → `local/sentence-transformers/all-mpnet-base-v2` (or the new default)
 
-No database migration is required for existing `memories_1536` data (OpenAI
-users are unaffected). Switching from MiniLM 384-dim to Nomic v1.5 768-dim
-requires either (a) re-embedding via `scripts/migrate_embeddings.py`, or (b)
-explicitly configuring the old model in formation YAML.
+No database migration is required for existing `memories_1536` data (OpenAI users are unaffected). Switching from MiniLM 384-dim to Nomic v1.5 768-dim requires either (a) re-embedding via `scripts/migrate_embeddings.py`, or (b) explicitly configuring the old model in formation YAML.
 
-**Schema additions**: `memories_384`, `memories_768`, `memories_1024`,
-`memories_3072` tables are now pre-created by `init_schema.sql` (PostgreSQL +
-pgvector/ivfflat) and `init_schema_sqlite.sql` (SQLite + FTS5 + triggers), so
-formations using any of these dims work on a fresh DB without runtime DDL.
-Re-applying the schema to a populated `memories_1536` database is idempotent
-and non-destructive.
+**Schema additions**: `memories_384`, `memories_768`, `memories_1024`, `memories_3072` tables are now pre-created by `init_schema.sql` (PostgreSQL + pgvector/ivfflat) and `init_schema_sqlite.sql` (SQLite + FTS5 + triggers), so formations using any of these dims work on a fresh DB without runtime DDL. Re-applying the schema to a populated `memories_1536` database is idempotent and non-destructive.
 
-**New tests**: 7 integration test files under `tests/integration/` cover the
-helper's error contract (empty input, invalid slug), Matryoshka truncation,
-multilingual retrieval (Nomic v2 MoE, environment-gated), long-input
-truncation behavior, OpenAI regression (VAL-INTEG-003/VAL-CROSS-004), the
-`task`-stripping policy for cloud slugs (VAL-HELPER-012), schema upgrade
-idempotency (VAL-SCHEMA-005), and cross-dimension search behavior
-(VAL-CROSS-006). 15 new unit tests lock in formation config slug validation
-(`tests/unit/test_formation_config_validation.py`).
+**New tests**: 7 integration test files under `tests/integration/` cover the helper's error contract (empty input, invalid slug), Matryoshka truncation, multilingual retrieval (Nomic v2 MoE, environment-gated), long-input truncation behavior, OpenAI regression (VAL-INTEG-003/VAL-CROSS-004), the `task`-stripping policy for cloud slugs (VAL-HELPER-012), schema upgrade idempotency (VAL-SCHEMA-005), and cross-dimension search behavior (VAL-CROSS-006). 15 new unit tests lock in formation config slug validation (`tests/unit/test_formation_config_validation.py`).
 
 ### Embedding platform: revision pinning + SIF deployment contract
 
-Building on the single-path helper work above, this release prepares the
-runtime for SIF-based deployment with a host-managed HuggingFace cache.
+Building on the single-path helper work above, this release prepares the runtime for SIF-based deployment with a host-managed HuggingFace cache.
 
-**Slug-embedded revision pinning.** The embedding helper now accepts
-`local/<repo>:<revision>` notation — for example
-`local/nomic-ai/nomic-embed-text-v1.5:e04b7e4c5ea3e3d7e41e13d4c02fa5e29e0e3a0a`.
-The new `_parse_model_slug(slug)` function extracts `(model, revision)`
-and `embed()` / `probe_dimension()` forward the revision to OneLLM's
-`LocalProvider`, which in turn pins every downstream HuggingFace lookup
-(ONNX weights, PyTorch weights, tokenizer, config, max-length probe).
-OneLLM's LRU cache key is `(repo, revision)`, so a formation pinning one
-revision and another following `main` do not collide.
+**Slug-embedded revision pinning.** The embedding helper now accepts `local/<repo>:<revision>` notation — for example `local/nomic-ai/nomic-embed-text-v1.5:e04b7e4c5ea3e3d7e41e13d4c02fa5e29e0e3a0a`. The new `_parse_model_slug(slug)` function extracts `(model, revision)` and `embed()` / `probe_dimension()` forward the revision to OneLLM's `LocalProvider`, which in turn pins every downstream HuggingFace lookup (ONNX weights, PyTorch weights, tokenizer, config, max-length probe). OneLLM's LRU cache key is `(repo, revision)`, so a formation pinning one revision and another following `main` do not collide.
 
-Revision parsing is ONLY applied to `local/*` slugs. Cloud provider slugs
-may legitimately use `:` in model names (e.g. `ollama/llama2:7b` encodes
-a variant, not a revision) and pass through untouched. A trailing `:`
-with no revision fails fast with `InvalidRequestError` rather than
-resolving silently to `main` downstream.
+Revision parsing is ONLY applied to `local/*` slugs. Cloud provider slugs may legitimately use `:` in model names (e.g. `ollama/llama2:7b` encodes a variant, not a revision) and pass through untouched. A trailing `:` with no revision fails fast with `InvalidRequestError` rather than resolving silently to `main` downstream.
 
-Requires `onellm[cache]>=0.20260422.3` — the pin bump in this release
-picks up OneLLM's upstream fix that threads `revision=` through every
-LocalProvider code path (0.20260422.0 silently dropped the kwarg, fixed
-in 0.20260422.1) and the `local-cuda` extra that Dockerfile.cuda
-consumes (shipped in 0.20260422.3).
+Requires `onellm[cache]>=0.20260422.3` — the pin bump in this release picks up OneLLM's upstream fix that threads `revision=` through every LocalProvider code path (0.20260422.0 silently dropped the kwarg, fixed in 0.20260422.1) and the `local-cuda` extra that Dockerfile.cuda consumes (shipped in 0.20260422.3).
 
-**Host-managed HuggingFace cache (SIF deployment).** The runtime SIF no
-longer ships pre-downloaded model weights. Instead, `muxi-server`
-maintains `~/.muxi/server/cache` on the host (cross-platform, per-user)
-and bind-mounts it into the SIF at `/opt/hf-cache`. SIFs run with
-`HF_HUB_OFFLINE=1` and never reach the network; all `onellm download`
-calls happen on the host under the server's control.
+**Host-managed HuggingFace cache (SIF deployment).** The runtime SIF no longer ships pre-downloaded model weights. Instead, `muxi-server` maintains `~/.muxi/server/cache` on the host (cross-platform, per-user) and bind-mounts it into the SIF at `/opt/hf-cache`. SIFs run with `HF_HUB_OFFLINE=1` and never reach the network; all `onellm download` calls happen on the host under the server's control.
 
-- `Dockerfile` (lean variant): the three pre-downloaded sentence-transformers
-  models (`paraphrase-multilingual-MiniLM-L12-v2`, `all-MiniLM-L6-v2`,
-  `all-mpnet-base-v2`) have been removed. The explicit torch CPU-wheel
-  install is also gone — `onellm[cache]` is ONNX-based and nothing else
-  in the dep tree pulls torch as a transitive.
-- `Dockerfile` (HF env vars): `HF_HUB_CACHE=/opt/hf-cache` is now set
-  alongside `HF_HOME=/opt/hf-cache`. Without the explicit `HF_HUB_CACHE`
-  setting, HuggingFace resolves it as `$HF_HOME/hub` — placing models at
-  `/opt/hf-cache/hub/models--*` instead of `/opt/hf-cache/models--*` and
-  breaking 1:1 alignment with the bind-mount. Setting both to the same
-  path flattens the layout. Tokenizer/datasets subcaches still land
-  inside the bind-mount (writable).
-- `Dockerfile.pytorch` (new): layered on top of the lean image, adds
-  CPU-only PyTorch plus the `onellm[cache,local-pytorch]` extra. Selected
-  via formation `muxi_runtime: "<version>:pytorch"` when the embedding
-  model lacks ONNX weights (e.g. Nomic v2 MoE).
-- `Dockerfile.cuda` (new): GPU stack on top of the lean image. Uninstalls
-  the CPU-only faiss-cpu / faissx / onnxruntime wheels inherited from
-  the base, then installs `torch`/`torchvision` (CUDA 12.x wheels from
-  the default PyPI index on linux/amd64), `onellm[local-cuda,local-pytorch]`
-  (pulls onnxruntime-gpu, faiss-gpu-cu12, sentence-transformers), and
-  `faissx-gpu` (drop-in replacement for the faissx client with a
-  GPU-backed local FAISS). Build-time assertion verifies the
-  onnxruntime wheel has `CUDAExecutionProvider` compiled in. Selected
-  via formation `muxi_runtime: "<version>:cuda"` on hosts with NVIDIA
-  GPUs. The ~4–6 GB CUDA stack exceeds GitHub's 2 GB release upload
-  ceiling; distribution is via muxi-server's CDN rather than GitHub
-  releases. Linux x86_64 + CUDA 12.x only.
-- **pip extras mirror the Dockerfile matrix.** `pyproject.toml` now
-  declares `[pytorch]` and `[cuda]` optional-dependency extras so
-  operators can reproduce any variant's Python dependency set with a
-  single pip install:
+- `Dockerfile` (lean variant): the three pre-downloaded sentence-transformers models (`paraphrase-multilingual-MiniLM-L12-v2`, `all-MiniLM-L6-v2`, `all-mpnet-base-v2`) have been removed. The explicit torch CPU-wheel install is also gone — `onellm[cache]` is ONNX-based and nothing else in the dep tree pulls torch as a transitive.
+- `Dockerfile` (HF env vars): `HF_HUB_CACHE=/opt/hf-cache` is now set alongside `HF_HOME=/opt/hf-cache`. Without the explicit `HF_HUB_CACHE` setting, HuggingFace resolves it as `$HF_HOME/hub` — placing models at `/opt/hf-cache/hub/models--*` instead of `/opt/hf-cache/models--*` and breaking 1:1 alignment with the bind-mount. Setting both to the same path flattens the layout. Tokenizer/datasets subcaches still land inside the bind-mount (writable).
+- `Dockerfile.pytorch` (new): layered on top of the lean image, adds CPU-only PyTorch plus the `onellm[cache,local-pytorch]` extra. Selected via formation `muxi_runtime: "<version>:pytorch"` when the embedding model lacks ONNX weights (e.g. Nomic v2 MoE).
+- `Dockerfile.cuda` (new): GPU stack on top of the lean image. Uninstalls the CPU-only faiss-cpu / faissx / onnxruntime wheels inherited from the base, then installs `torch`/`torchvision` (CUDA 12.x wheels from the default PyPI index on linux/amd64), `onellm[local-cuda,local-pytorch]` (pulls onnxruntime-gpu, faiss-gpu-cu12, sentence-transformers), and `faissx-gpu` (drop-in replacement for the faissx client with a GPU-backed local FAISS). Build-time assertion verifies the onnxruntime wheel has `CUDAExecutionProvider` compiled in. Selected via formation `muxi_runtime: "<version>:cuda"` on hosts with NVIDIA GPUs. The ~4–6 GB CUDA stack exceeds GitHub's 2 GB release upload ceiling; distribution is via muxi-server's CDN rather than GitHub releases. Linux x86_64 + CUDA 12.x only.
+- **pip extras mirror the Dockerfile matrix.** `pyproject.toml` now declares `[pytorch]` and `[cuda]` optional-dependency extras so operators can reproduce any variant's Python dependency set with a single pip install:
   ```
   pip install muxi-runtime                   # default (lean, ONNX + CPU FAISS)
   pip install 'muxi-runtime[pytorch]'        # CPU torch + sentence-transformers
   pip install 'muxi-runtime[cuda]'           # GPU ONNX + GPU FAISS + CUDA torch
   ```
-  The `[cuda]` extra conflicts with the core `faiss-cpu` and `faissx`
-  deps (each owns the same top-level module name as its GPU sibling);
-  `Dockerfile.cuda` handles the uninstall-then-reinstall sequence
-  automatically, and users installing through pip directly should run
-  `pip uninstall -y faiss-cpu faissx onnxruntime` before the extras
-  install.
-- `docker-entrypoint.sh` (cache assertion): when the SIF detects SIF
-  mode (`APPTAINER_CONTAINER` / `SINGULARITY_CONTAINER` / `MUXI_SIF_MODE`),
-  it now asserts at least one `models--*` directory exists under
-  `/opt/hf-cache` before launching the formation server. An empty cache
-  fails fast with an actionable error instead of surfacing a confusing
-  "model not found" from inside HuggingFace's offline resolver.
+  The `[cuda]` extra conflicts with the core `faiss-cpu` and `faissx` deps (each owns the same top-level module name as its GPU sibling); `Dockerfile.cuda` handles the uninstall-then-reinstall sequence automatically, and users installing through pip directly should run `pip uninstall -y faiss-cpu faissx onnxruntime` before the extras install.
+- `docker-entrypoint.sh` (cache assertion): when the SIF detects SIF mode (`APPTAINER_CONTAINER` / `SINGULARITY_CONTAINER` / `MUXI_SIF_MODE`), it now asserts at least one `models--*` directory exists under `/opt/hf-cache` before launching the formation server. An empty cache fails fast with an actionable error instead of surfacing a confusing "model not found" from inside HuggingFace's offline resolver.
 
-These changes coordinate with parallel work in `muxi-server` (cache
-lifecycle commands, `onellm download` orchestration, bind-mount injection
-at launch) and `runtime-runner` (the Docker image that wraps Apptainer
-for SIF execution on non-Linux hosts, which forwards the bind-mount
-chain through a two-hop mount).
+These changes coordinate with parallel work in `muxi-server` (cache lifecycle commands, `onellm download` orchestration, bind-mount injection at launch) and `runtime-runner` (the Docker image that wraps Apptainer for SIF execution on non-Linux hosts, which forwards the bind-mount chain through a two-hop mount).
 
 ## v0.20260422.0
 
