@@ -466,11 +466,20 @@ def _build_unique_probes(
 async def _execute_single_probe(model: str, kind: str) -> None:
     """Issue the actual OneLLM call for a single probe.
 
-    Pulled out as its own coroutine so unit tests can patch it in
-    isolation without mocking ``onellm.Embedding`` or
-    ``onellm.ChatCompletion`` directly. Raises the underlying
-    ``OneLLMError`` (or any other exception) untouched so the caller
-    can classify and emit the appropriate event.
+    Encapsulates the per-``kind`` transport split (Embedding vs
+    ChatCompletion) so :func:`probe_declared_models` stays focused on
+    the per-probe lifecycle (event emission, error classification,
+    serial fail-fast) and adding a new probe kind in the future is a
+    one-function change confined to this helper.
+
+    Behavior contract:
+
+    - Returns ``None`` on success (the response payload is irrelevant
+      to the probe; only the round-trip succeeded).
+    - Raises the underlying ``OneLLMError`` (or any other exception)
+      untouched so the caller can classify and emit the appropriate
+      event. Wrapping or swallowing here would defeat the
+      classification helper.
     """
     if kind == "embedding":
         from onellm import Embedding

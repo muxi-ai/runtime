@@ -210,6 +210,11 @@ async def test_authentication_error_warns_and_continues_real_openai():
     """
     from onellm.config import set_api_key
 
+    # Read the prior key from the environment. ``os.environ.get`` returns
+    # ``None`` when the variable is unset - which we MUST distinguish
+    # from "set to empty string" so we can fully clear the in-memory
+    # OneLLM config in the finally block instead of leaking the bogus
+    # test key into the rest of the test session.
     original = os.environ.get("OPENAI_API_KEY")
     set_api_key(
         "sk-deliberately-invalid-test-key-for-probe-warning-suppression",
@@ -222,5 +227,11 @@ async def test_authentication_error_warns_and_continues_real_openai():
         # from the error class alone).
         await init_mod.probe_declared_models(formation)
     finally:
-        if original:
+        # Restore the prior key if there was one; otherwise clear the
+        # OneLLM in-memory key so the bogus test value does NOT survive
+        # this test and trigger spurious AuthenticationError on every
+        # subsequent OpenAI-using test in the same pytest session.
+        if original is not None:
             set_api_key(original, "openai")
+        else:
+            set_api_key("", "openai")
