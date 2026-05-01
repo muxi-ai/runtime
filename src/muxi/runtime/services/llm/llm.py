@@ -1335,16 +1335,20 @@ class LLM:
                         self._model = self.fallback_model
                     self.model_name = self.fallback_model
 
-                    # Try the fallback model (without retries to avoid double retry)
+                    # Try the fallback model (without retries to avoid
+                    # double retry). The inner chat function emits its
+                    # own MODEL_REQUEST_COMPLETED for the actual call;
+                    # here we only emit the resilience-layer transition
+                    # event so per-call event counts stay 1:1 with
+                    # MODEL_REQUEST_STARTED.
                     result = await _wrapped_func(*args, **kwargs)
 
                     observability.observe(
-                        event_type=observability.ConversationEvents.MODEL_REQUEST_COMPLETED,
+                        event_type=observability.ConversationEvents.MODEL_FALLBACK_SUCCESS,
                         level=observability.EventLevel.INFO,
                         data={
                             "primary_model": original_model,
                             "fallback_model": self.fallback_model,
-                            "fallback_success": True,
                         },
                         description=f"Fallback model {self.fallback_model} succeeded after {original_model} failed",
                     )

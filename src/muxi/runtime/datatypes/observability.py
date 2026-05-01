@@ -837,6 +837,12 @@ class ConversationEvents(Enum):
     MODEL_REQUEST_FAILED = "model.request.failed"
     # When LLM request fails
 
+    MODEL_FALLBACK_SUCCESS = "model.fallback.success"
+    # When primary LLM model fails and the configured fallback model
+    # succeeds. Distinct from MODEL_REQUEST_COMPLETED (which is per
+    # actual provider call) — this marks the resilience-layer
+    # transition. Mirrors MCP_TRANSPORT_FALLBACK_SUCCESS.
+
     MODEL_STREAMING_STARTED = "model.streaming.started"
     # When LLM streaming response begins
 
