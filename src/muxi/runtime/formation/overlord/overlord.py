@@ -7586,6 +7586,7 @@ Agent response: {raw_response}"""
                             use_async=use_async,
                             webhook_url=webhook_url,
                             bypass_workflow_approval=bypass_workflow_approval,
+                            original_message=actual_message,
                         )
                     else:
                         # SOP explicitly requested but not found - return error to user
