@@ -768,8 +768,14 @@ class SOPSystem:
                 # startup; buffer position carries no meaning for them.
                 # ``namespace="sops"`` triggers the cosine-similarity
                 # score path in WorkingMemory.search (see working.py).
+                # ``query=task_description`` is safe even though we
+                # provide ``query_vector``: ``WorkingMemory.search``
+                # only re-embeds ``query`` when ``query_vector is None``
+                # (working.py L731). Passing the real string avoids
+                # emitting a misleading ``query_length: 0`` in every
+                # observability event downstream.
                 results = await working_memory.search(
-                    query="",
+                    query=task_description,
                     query_vector=query_embedding,
                     limit=top_k,
                     recency_bias=0.0,
