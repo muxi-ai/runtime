@@ -35,6 +35,21 @@ class SystemEvents(Enum):
     LLM_INITIALIZED = "llm.initialized"
     # When LLM instance is initialized
 
+    MODEL_INIT_PROBE_STARTED = "model.init_probe.started"
+    # When the runtime begins probing a formation-declared model at init
+    # time to verify the slug resolves through OneLLM. Emitted once per
+    # distinct (provider, model) pair after dedup across capabilities.
+
+    MODEL_INIT_PROBE_COMPLETED = "model.init_probe.completed"
+    # When a formation-declared model probe succeeds. Includes timing and
+    # the OneLLM call shape (embedding vs chat) used.
+
+    MODEL_INIT_PROBE_FAILED = "model.init_probe.failed"
+    # When a formation-declared model probe fails. Severity is encoded in
+    # the event payload: 'fatal' fails formation init (404 / HF
+    # validation), 'warn' continues with a warning (auth / transient /
+    # other OneLLM errors / probe-machinery bugs).
+
     LLM_CACHE_CLEARED = "llm.cache.cleared"
     # When LLM response cache is cleared
 

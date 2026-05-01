@@ -2,6 +2,100 @@
 
 ## [unreleased]
 
+### Formation: probe declared models at init; refuse to load on 404
+
+Finding 5 from the 2026-04-29 MS365 testing run: the dev's formation
+declared ``embedding: local/all-MiniLM-L6-v2`` and the embedding
+service silently degraded to recency-only memory retrieval on every
+request, surfacing only an opaque ``InvalidConfigurationError`` deep
+in the runtime path. Two follow-up fix attempts by the dev failed
+because the failure mode masquerades as a "model not available"
+issue when the actual root cause is a slug-syntax problem: OneLLM's
+dispatcher splits the model name on the **first** ``/`` only, so
+``local/all-MiniLM-L6-v2`` is passed to HuggingFace as the bare
+repo id ``all-MiniLM-L6-v2``, which is not a valid HF identifier.
+The canonical form is ``local/sentence-transformers/all-MiniLM-L6-v2``,
+where everything after ``local/`` is the full ``<owner>/<repo>`` HF
+slug. OneLLM has no curated alias table - what you write is what
+gets sent to HF.
+
+The runtime's only previous defense was the after-the-fact
+``InvalidConfigurationError``. By the time it fired, the formation
+had already loaded, vector search was already broken, and the
+operator had no signal that the cause was a typo in their slug
+rather than a deeper environmental problem.
+
+This change introduces a fail-fast probe at formation init. After
+``initialize_llm_config()`` populates ``formation._capability_models``
+and the text-fallback cascade runs, ``probe_declared_models()`` is
+invoked. It iterates every distinct ``(model_slug, probe_kind)``
+pair, dedups across capabilities, and issues a minimal OneLLM call:
+``Embedding.acreate(input="probe", model=...)`` for the
+``embedding`` capability and
+``ChatCompletion.acreate(messages=[{"role":"user","content":"ping"}],
+max_tokens=1, model=...)`` for everything else (``text``,
+``vision``, ``audio``, ``documents``, ``streaming``, future
+capabilities).
+
+Failure classification is deliberate. Two error classes from OneLLM
+abort formation init via ``ConfigurationValidationError``:
+
+- ``ResourceNotFoundError`` (HF 404 / provider model-not-found)
+- ``InvalidRequestError`` (HF validation error - the dev's exact
+  bare-name slug case)
+
+Everything else (``AuthenticationError``, ``RateLimitError``,
+``ServiceUnavailableError``, ``RequestTimeoutError``, other
+``OneLLMError`` subclasses, and non-``OneLLMError`` exceptions
+indicating probe-machinery bugs) is logged at WARN and continues.
+This split is intentional: the two fatal classes are deterministic
+"this slug will never resolve" failures, while the rest is either
+transient or environmental, and bricking an otherwise-healthy
+formation on an init-time auth blip is worse than the silent
+degradation the probe is meant to prevent.
+
+Probes run **synchronously, serially**. The first fatal aborts
+before later probes execute, so an operator with multiple bad slugs
+fixes them one error message at a time rather than wading through a
+dozen entangled failures. ``ChatCompletion`` cost: ~50 input + 1
+output token per probe, fractions of a cent on cloud providers,
+zero on cached local models.
+
+The fatal error message is dynamic. For ``local/<bare-name>`` slugs
+(the exact failure mode the dev hit) the message names the
+correction explicitly:
+
+```
+Cause: the local slug is missing the owner/organization segment.
+The runtime requires the full HuggingFace repo id:
+    local/<owner>/<repo>   (e.g. local/sentence-transformers/all-MiniLM-L6-v2)
+NOT local/<repo>          (e.g. local/all-MiniLM-L6-v2)
+```
+
+For ``local/<owner>/<repo>`` slugs that 404, the message points at
+typo / gated-repo causes. For cloud slugs the local-specific hint
+is omitted entirely so the message stays relevant.
+
+Three new ``SystemEvents`` cover the lifecycle:
+``MODEL_INIT_PROBE_STARTED``, ``MODEL_INIT_PROBE_COMPLETED``, and
+``MODEL_INIT_PROBE_FAILED`` (with ``severity ∈ {fatal, warn}`` and
+the underlying ``OneLLMError`` class encoded in the payload). All
+1223 observe() calls validate; ``scripts/validate_events.py`` is
+clean.
+
+Test surface: 22 unit tests across three classes
+(``TestClassification`` for the pure failure-class mapping,
+``TestFatalMessageFormatting`` for the slug-shape-aware message
+builder, ``TestProbeBuilder`` for capability dedup and
+embedding-vs-chat probe selection, ``TestProbeOutcomes`` for the
+end-to-end behavior with ``_execute_single_probe`` mocked). The
+serial-fail-fast test asserts that when the first capability
+raises a 404 the second probe is **never invoked**, so the abort
+is cheap even on formations with a long capability list.
+
+No escape hatch was added. Correctness over convenience: a formation
+that won't actually work shouldn't pretend to be loading.
+
 ### MCP: translate misleading upstream errors into agent-actionable hints
 
 Findings 4 and 6 from the 2026-04-29 MS365 testing run both surfaced
