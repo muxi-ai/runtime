@@ -53,6 +53,7 @@ from .resources.discovery import MCPResourceDiscovery
 from .sampling.creator import MCPSamplingCreator
 from .templates.discovery import MCPTemplateDiscovery
 from .tool_filter import FilterReport, ToolFilterSpec, apply_filter
+from .tools.error_translator import translate_tool_error
 from .transports import CancellationToken, ModernProtocolFeatures, TransportDetector
 from .transports.base import MCPToolFilterEmptySetError
 
@@ -931,6 +932,32 @@ class MCPService:
                 # This handles structured output with isError field
                 processed_result = ModernProtocolFeatures.process_structured_output(result)
 
+                # Layer 2 of the MCP param funnel: when an upstream
+                # error message is misleading about its actual cause
+                # (e.g. Microsoft Graph's WAC-token error returned for
+                # a folder ID where a file ID was expected), append an
+                # agent-actionable hint to the result so the next-turn
+                # tool message gives the model a concrete correction
+                # path. The translator never blocks the call — it only
+                # annotates an existing failure.
+                translation = None
+                if processed_result.get("isError"):
+                    translation = translate_tool_error(
+                        tool_name=tool_name,
+                        arguments=parameters,
+                        error_text=str(processed_result.get("content", "")),
+                        server_id=server_id,
+                    )
+                    if translation is not None:
+                        processed_result["_runtime_hint"] = {
+                            "category": translation.category,
+                            "message": translation.hint,
+                        }
+                        processed_result["content"] = (
+                            f"{processed_result.get('content', '')}"
+                            f"\n\n[Runtime hint] {translation.hint}"
+                        )
+
                 # Enhanced observability with structured output info
                 observability.observe(
                     event_type=observability.ConversationEvents.MCP_TOOL_CALL_COMPLETED,
@@ -943,6 +970,9 @@ class MCPService:
                         "is_error": processed_result["isError"],
                         "success": not processed_result["isError"],
                         "protocol_version": "2025-06-18",
+                        "translation_category": (
+                            translation.category if translation is not None else None
+                        ),
                     },
                     description=(
                         f"MCP tool invocation completed with modern protocol: "
