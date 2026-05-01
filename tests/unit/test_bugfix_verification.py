@@ -312,3 +312,105 @@ class TestSchedulerPromptRewriterPreservesFraming:
             "framing — otherwise the LLM treats ``remind me`` as "
             "schedule words and drops them."
         )
+
+
+class TestScheduledExecutionMarker:
+    """Verify the scheduler injects a ``[SCHEDULED]`` marker into the
+    agent's view of the message (only) when ``session_id`` is in the
+    scheduler namespace. Without this marker, an LLM receiving
+    ``remind me to drink water`` cold reads it as a chat request to
+    *configure* a reminder, then politely declines (\"I can't set
+    reminders, use your phone\") — the rewriter fix alone wasn't
+    enough to disambiguate intent for all model classes.
+
+    Memory and observability stay clean: only the agent's view at
+    inference time gets the marker. The original message is preserved
+    via PR #165's ``EnhancedMessage(original, enhanced)`` threading."""
+
+    def _get_orchestrator_source(self):
+        path = SRC_ROOT / "muxi/runtime/formation/overlord/chat_orchestrator.py"
+        return path.read_text()
+
+    def test_marker_helper_exists(self):
+        """A single-source-of-truth helper must exist so both
+        rendering paths apply identical rules."""
+        from muxi.runtime.formation.overlord.chat_orchestrator import (
+            SCHEDULED_EXECUTION_MARKER,
+            _apply_scheduled_marker,
+        )
+
+        assert SCHEDULED_EXECUTION_MARKER == "[SCHEDULED] "
+        assert callable(_apply_scheduled_marker)
+
+    def test_marker_applied_for_job_session(self):
+        """Session IDs starting with ``job_`` get the marker."""
+        from muxi.runtime.formation.overlord.chat_orchestrator import (
+            _apply_scheduled_marker,
+        )
+
+        assert (
+            _apply_scheduled_marker("remind me to drink water", "job_abc123")
+            == "[SCHEDULED] remind me to drink water"
+        )
+
+    def test_marker_not_applied_for_normal_session(self):
+        """Non-scheduler sessions stay unchanged — must not regress
+        normal chat."""
+        from muxi.runtime.formation.overlord.chat_orchestrator import (
+            _apply_scheduled_marker,
+        )
+
+        for session_id in (None, "", "user-typed-bracket", "session_123", "abc"):
+            assert (
+                _apply_scheduled_marker("remind me to drink water", session_id)
+                == "remind me to drink water"
+            ), f"Marker leaked into non-scheduler session: {session_id!r}"
+
+    def test_enhance_message_uses_helper(self):
+        """``_enhance_message_with_context`` must apply the marker via
+        the centralized helper at the ``=== CURRENT REQUEST ===``
+        rendering site (not by re-implementing the rule inline)."""
+        source = self._get_orchestrator_source()
+        method_start = source.index("async def _enhance_message_with_context")
+        method_end = source.index("async def _build_clean_chat_context")
+        method_body = source[method_start:method_end]
+        assert (
+            "_apply_scheduled_marker" in method_body
+        ), "_enhance_message_with_context must call _apply_scheduled_marker."
+        # The marker should be applied to the rendered ``User: ...``
+        # line, not to the raw ``message`` (which feeds the
+        # EnhancedMessage.original field — must stay clean).
+        assert (
+            "EnhancedMessage(original=message, enhanced=enhanced_message)" in method_body
+            or "original=message" in method_body
+        ), "EnhancedMessage.original must remain the unprefixed input."
+
+    def test_clean_chat_context_uses_helper(self):
+        """``_build_clean_chat_context`` must apply the marker to
+        ``current_user_message`` before returning the bundle the agent
+        consumes."""
+        source = self._get_orchestrator_source()
+        method_start = source.index("async def _build_clean_chat_context")
+        method_body = source[method_start:]
+        assert (
+            "_apply_scheduled_marker" in method_body
+        ), "_build_clean_chat_context must call _apply_scheduled_marker."
+
+    def test_marker_not_applied_inside_buffer_turns(self):
+        """Buffer turns (history) come from buffer memory which stores
+        original user text, so they must NOT be re-marked. Lock the
+        comment that documents this so the policy is visible."""
+        source = self._get_orchestrator_source()
+        method_start = source.index("async def _build_clean_chat_context")
+        method_body = source[method_start:]
+        # The documented invariant lives in the ``return`` block comment.
+        assert "buffer_turns" in method_body
+        assert (
+            "buffer_turns" in method_body
+            and "left untouched" in method_body
+            or "without the marker" in method_body
+        ), (
+            "The buffer-turns-not-marked invariant must be documented in "
+            "the rendering function so a future edit can't quietly start "
+            "double-marking history."
+        )
