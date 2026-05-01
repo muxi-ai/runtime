@@ -13,6 +13,51 @@ from unittest.mock import MagicMock
 SRC_ROOT = Path(__file__).parent.parent.parent / "src"
 
 
+def _strip_comments_and_docstrings(source: str) -> str:
+    """Drop docstring blocks and comment-only / trailing-comment text so
+    regression *documentation* mentioning an old form does not trip
+    code-shape assertions.
+
+    Tracks multi-line docstring state via a triple-quote toggle: any
+    line whose stripped form starts with ``\"\"\"`` or ``'''`` flips
+    the toggle, and interior lines of an open docstring are dropped
+    entirely. This catches the case where a multi-line docstring
+    mentions the historical typo for context — a ``startswith('\"\"\"')``
+    check alone would miss the interior lines and treat them as live
+    code.
+
+    Module-level so every test class can share the same toggle logic
+    rather than each re-implementing it (the ad-hoc reimplementations
+    have historically been fragile)."""
+    out: list[str] = []
+    in_doc = False
+    for line in source.splitlines():
+        stripped = line.strip()
+        # Toggle on a triple-quote at the start of the stripped line.
+        # ``""" ... """`` on a single line flips and re-flips, ending
+        # in the same state — handled implicitly because we ``continue``
+        # without appending.
+        if stripped.startswith('"""') or stripped.startswith("'''"):
+            # A line that opens AND closes on the same line (``""" foo """``)
+            # is a one-line docstring; the toggle still ends balanced
+            # because we don't increment, we flip — flip-flip = no-op.
+            triple = '"""' if stripped.startswith('"""') else "'''"
+            opens_and_closes = (
+                len(stripped) >= 6 and stripped.endswith(triple) and stripped.count(triple) >= 2
+            )
+            if not opens_and_closes:
+                in_doc = not in_doc
+            continue
+        if in_doc:
+            continue
+        if stripped.startswith("#"):
+            continue
+        if "#" in line:
+            line = line.split("#", 1)[0]
+        out.append(line)
+    return "\n".join(out)
+
+
 class TestSchedulerRoutesFix:
     """Verify scheduler routes no longer reference formation._scheduler."""
 
@@ -185,15 +230,19 @@ class TestSchedulerOverlordCompletionAttribute:
 
     def test_no_underscore_scheduler_attribute_lookup(self):
         """Overlord must not reference ``self._scheduler`` — the
-        attribute is ``self.scheduler_service``."""
+        attribute is ``self.scheduler_service``. Historical mentions
+        inside docstrings or comments are allowed (the typo is
+        documented in regression notes), so we strip those before the
+        check via the module-level helper."""
         source = self._get_overlord_source()
-        # Attribute access (with optional whitespace), not comments.
-        # We allow it inside docstrings/comments (the historical typo
-        # is documented), so we look for live code references.
-        for line in source.splitlines():
-            stripped = line.strip()
-            if stripped.startswith("#") or stripped.startswith('"""'):
-                continue
+        # The previous inline strip only matched lines whose stripped
+        # form *starts* with ``\"\"\"``, which fails the moment a
+        # multi-line docstring contains the historical attribute on
+        # an interior line. ``_strip_comments_and_docstrings`` tracks
+        # docstring state via a triple-quote toggle and drops interior
+        # lines correctly.
+        live_code = _strip_comments_and_docstrings(source)
+        for line in live_code.splitlines():
             assert "self._scheduler" not in line, (
                 "Live code references ``self._scheduler`` (missing). "
                 "Use ``self.scheduler_service`` instead. Line: " + line.strip()
@@ -225,27 +274,9 @@ class TestSchedulerSessionIdNotDoubled:
 
     @staticmethod
     def _strip_comments_and_docstrings(method_body: str) -> str:
-        """Drop docstring blocks and comment-only / trailing-comment
-        text so regression *documentation* mentioning the old form
-        does not trip code-shape assertions."""
-        out: list[str] = []
-        in_doc = False
-        for line in method_body.splitlines():
-            stripped = line.strip()
-            # Toggle docstring state on triple-quote markers (handles
-            # the simple case of ``"""`` on its own line, which is
-            # what this codebase uses).
-            if stripped.startswith('"""') or stripped.startswith("'''"):
-                in_doc = not in_doc
-                continue
-            if in_doc:
-                continue
-            if stripped.startswith("#"):
-                continue
-            if "#" in line:
-                line = line.split("#", 1)[0]
-            out.append(line)
-        return "\n".join(out)
+        """Delegate to the module-level helper so all test classes
+        share a single toggle-based stripping implementation."""
+        return _strip_comments_and_docstrings(method_body)
 
     def test_no_double_prefix_in_execute_single_job(self):
         """``_execute_single_job`` must not construct
