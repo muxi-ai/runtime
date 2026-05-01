@@ -846,12 +846,31 @@ class WorkingMemory:
 
                 # Calculate combined score without session weighting
                 # (session_id is now a hard filter applied above)
-                semantic_score = 1.0 / (1.0 + float(distances[0][i]))
-                recency_score = 1.0 - (buffer_idx / len(self.buffer))
+                if namespace == "sops":
+                    # SOPs are indexed once at startup; their position in the
+                    # buffer is meaningless and the ``1 / (1 + L2²)`` transform
+                    # used below compresses the high-similarity range that
+                    # SOP-routing decisions live in. Return *true* cosine
+                    # similarity instead so the threshold callers compare
+                    # against (typically 0.7) means what operators expect.
+                    #
+                    # Vectors are unit-normalised (see L803), so for the
+                    # FAISS ``IndexFlatL2`` distance ``d``:
+                    #   d == ||a - b||² == 2 - 2·cos(a, b)
+                    #   cos == 1 - d / 2
+                    cos_sim = 1.0 - float(distances[0][i]) / 2.0
+                    # Clamp into [0, 1] — numerical noise on ``d ≈ 0`` or
+                    # ``d ≈ 2`` can drift fractionally outside the range.
+                    combined_score = max(0.0, min(1.0, cos_sim))
+                else:
+                    semantic_score = 1.0 / (1.0 + float(distances[0][i]))
+                    recency_score = 1.0 - (buffer_idx / len(self.buffer))
 
-                # Use original recency bias formula
-                # This preserves perfect scores for exact matches
-                combined_score = (1 - recency_bias) * semantic_score + recency_bias * recency_score
+                    # Use original recency bias formula
+                    # This preserves perfect scores for exact matches
+                    combined_score = (
+                        1 - recency_bias
+                    ) * semantic_score + recency_bias * recency_score
 
                 # Add score to the item
                 item["score"] = combined_score

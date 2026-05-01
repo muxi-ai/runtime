@@ -409,15 +409,33 @@ class SOPSystem:
                 pass
 
     async def _add_to_faiss(self, sop_id: str, embedding: Any):
-        """Add a single SOP to FAISS."""
+        """Add a single SOP to FAISS via WorkingMemory.
+
+        Historic regression: this site previously called
+        ``working_memory.add(namespace=, id=, embedding=, metadata=)`` —
+        none of those kwargs exist on ``WorkingMemory.add`` (the basic
+        ``add`` requires ``text`` and supports only ``metadata`` /
+        ``namespace``; pre-computed embeddings live on
+        ``add_with_embedding``). Every call raised ``TypeError``,
+        the broad except in ``_hydrate_working_memory`` swallowed it,
+        and SOPs were never written to FAISS. ``find_relevant_sops``
+        then searched an empty namespace and fell back to the tag-only
+        path silently. Both call shapes are now corrected.
+
+        ``sop_id`` is stored in ``metadata`` because ``WorkingMemory``
+        items don't carry a caller-supplied ``id`` field — search
+        results expose ``result["metadata"]["sop_id"]`` for round-trip
+        identification.
+        """
         working_memory = self._get_working_memory()
         if working_memory and sop_id in self.sops:
             sop = self.sops[sop_id]
-            await working_memory.add(
-                namespace="sops",
-                id=sop_id,
+            await working_memory.add_with_embedding(
+                text=sop["name"],
                 embedding=embedding,
+                namespace="sops",
                 metadata={
+                    "sop_id": sop_id,
                     "name": sop["name"],
                     "tags": sop["tags"],
                     "mode": sop.get("mode", "template"),
@@ -715,7 +733,17 @@ class SOPSystem:
         working_memory = self._get_working_memory()
         embedding_model = self._get_embedding_model()
 
-        # Use WorkingMemory if available
+        # Always run tag/name matching alongside semantic search. Tag and
+        # name matches are deterministic, fast, and produce score >= 1
+        # (well above any sensible semantic threshold). OR-ing the two
+        # guarantees that an SOP whose tag or name appears verbatim in
+        # the user's request fires regardless of what the semantic
+        # similarity comes out as. Without this, an SOP would silently
+        # not match if its embedding happens to land below threshold
+        # despite the user typing one of its declared tags.
+        tag_matches = self._find_by_tags(task_description, top_k)
+
+        semantic_matches: List[Dict] = []
         if working_memory and embedding_model:
             # Generate embedding for the task description using adapter's consistent
             # interface. Use ``task="search_query"`` to match the indexing task
@@ -727,24 +755,58 @@ class SOPSystem:
             )
             query_embedding = embeddings[0] if embeddings else None
 
-            # Search using WorkingMemory
-            results = await working_memory.search(
-                namespace="sops", query_embedding=query_embedding, top_k=top_k
-            )
+            if query_embedding is not None:
+                # Call ``WorkingMemory.search`` with its actual signature.
+                # Historically this site passed ``query_embedding=`` and
+                # ``top_k=``, neither of which exist on the method — every
+                # call raised TypeError, was caught by the broad except in
+                # ``_find_relevant_sop``, and returned None. SOP routing
+                # was silently dead through the semantic path. The kwargs
+                # below mirror the canonical knowledge-handler call site.
+                #
+                # ``recency_bias=0.0`` because SOPs are indexed once at
+                # startup; buffer position carries no meaning for them.
+                # ``namespace="sops"`` triggers the cosine-similarity
+                # score path in WorkingMemory.search (see working.py).
+                # ``query=task_description`` is safe even though we
+                # provide ``query_vector``: ``WorkingMemory.search``
+                # only re-embeds ``query`` when ``query_vector is None``
+                # (working.py L731). Passing the real string avoids
+                # emitting a misleading ``query_length: 0`` in every
+                # observability event downstream.
+                results = await working_memory.search(
+                    query=task_description,
+                    query_vector=query_embedding,
+                    limit=top_k,
+                    recency_bias=0.0,
+                    namespace="sops",
+                )
 
-            # Return SOPs with relevance scores
-            relevant_sops = []
-            for result in results:
-                sop_id = result["id"]
-                if sop_id in self.sops:
-                    sop = self.sops[sop_id].copy()
-                    sop["relevance_score"] = result["score"]
-                    relevant_sops.append(sop)
+                for result in results:
+                    # ``WorkingMemory`` items don't carry a caller-supplied
+                    # id field; the SOP id is stored in ``metadata`` by
+                    # ``_add_to_faiss`` and round-tripped here.
+                    sop_id = result.get("metadata", {}).get("sop_id")
+                    if sop_id and sop_id in self.sops:
+                        sop = self.sops[sop_id].copy()
+                        sop["relevance_score"] = result["score"]
+                        semantic_matches.append(sop)
 
-            return relevant_sops
-        else:
-            # Fallback to tag-based matching
-            return self._find_by_tags(task_description, top_k)
+        # Merge: prefer the higher score per SOP id. Tag/name matches use
+        # an integer score scale (>= 1) and semantic uses cosine [0, 1],
+        # so ``max`` favours the explicit-match signal whenever both
+        # paths fire — that is correct; an exact tag hit is a stronger
+        # routing signal than fuzzy semantic similarity.
+        merged: Dict[str, Dict] = {}
+        for sop in semantic_matches + tag_matches:
+            sop_id = sop["id"]
+            existing = merged.get(sop_id)
+            if existing is None or sop["relevance_score"] > existing["relevance_score"]:
+                merged[sop_id] = sop
+
+        # Sort by relevance and return the top_k.
+        ordered = sorted(merged.values(), key=lambda s: s["relevance_score"], reverse=True)
+        return ordered[:top_k]
 
     def _find_by_tags(self, task_description: str, top_k: int) -> List[Dict]:
         """Fallback tag-based matching when FAISS not available"""

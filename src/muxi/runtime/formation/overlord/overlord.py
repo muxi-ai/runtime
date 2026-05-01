@@ -3021,22 +3021,36 @@ Agent response: {raw_response}"""
             )
             self.plan_approval_threshold = workflow_config_data.get("plan_approval_threshold", 7)
 
-            # Now that workflow config is loaded, set up SOP system path if workflows are enabled
-            if self.auto_decomposition:
-                formation_path = self._configured_services.get("formation_path")
-                if formation_path:
-                    self._sop_formation_path = formation_path
-                    observability.observe(
-                        event_type=observability.SystemEvents.SERVICE_STARTED,
-                        level=observability.EventLevel.INFO,
-                        data={
-                            "service": "sop_system_init",
-                            "auto_decomposition": self.auto_decomposition,
-                            "formation_path": str(formation_path),
-                            "status": "deferred",
-                        },
-                        description=f"SOP system initialization deferred (path={formation_path})",
-                    )
+            # Set up the SOP system path whenever a formation path is configured.
+            # Whether SOPs actually exist on disk is decided downstream by
+            # ``SOPSystem.__init__``, which scans ``sops/`` and sets
+            # ``self.enabled = True`` only if it finds files with
+            # ``type: sop`` frontmatter — so this is presence-based.
+            #
+            # Historic regression: this used to be gated by
+            # ``auto_decomposition``. That gate was wrong: SOP matching
+            # is a routing concern (which procedure does this request
+            # belong to?), while ``auto_decomposition`` controls whether
+            # the LLM-driven workflow decomposer fires for *unmatched*
+            # requests. Coupling them at load time meant a formation
+            # could ship a populated ``sops/`` directory and have it
+            # silently do nothing because an unrelated flag was off —
+            # a footgun with no upside. Decoupling here makes the file
+            # system the configuration: drop a ``sops/`` directory in
+            # and the runtime uses it.
+            formation_path = self._configured_services.get("formation_path")
+            if formation_path:
+                self._sop_formation_path = formation_path
+                observability.observe(
+                    event_type=observability.SystemEvents.SERVICE_STARTED,
+                    level=observability.EventLevel.INFO,
+                    data={
+                        "service": "sop_system_init",
+                        "formation_path": str(formation_path),
+                        "status": "deferred",
+                    },
+                    description=f"SOP system initialization deferred (path={formation_path})",
+                )
             if workflow_config_data is not None:
                 # Create WorkflowConfig from formation data
                 # Parse retry configuration
@@ -7323,17 +7337,22 @@ Agent response: {raw_response}"""
             description="Checking workflow analysis conditions",
         )
 
-        # Check if we should analyze for workflow complexity
-        # Only trigger if:
-        # 1. No specific agent was requested (agent_name is None)
-        # 2. auto_decomposition is enabled
-        # 3. Not a clarification response
+        # Check if we should analyze for workflow complexity.
+        # Trigger when:
+        # 1. No specific agent was requested (agent_name is None), AND
+        # 2. EITHER ``auto_decomposition`` is enabled (LLM-driven
+        #    decomposition for any sufficiently complex request), OR a
+        #    SOP has already matched this request earlier in
+        #    ``process_request``. A matched SOP encodes the formation
+        #    author's explicit intent — "here is the procedure for this
+        #    case" — and that intent overrides ``auto_decomposition``,
+        #    which is fundamentally a knob about *unmatched* requests.
 
         # Initialize analysis variable (used later for scheduler routing)
         analysis = None
 
         # Check for workflow analysis and decomposition (complexity-based routing)
-        if agent_name is None and self.auto_decomposition:
+        if agent_name is None and (self.auto_decomposition or _matched_sop is not None):
             # Analyze request complexity
             try:
                 # Extract the actual user message from formatted context if needed
@@ -7625,6 +7644,30 @@ Agent response: {raw_response}"""
                             role="assistant",
                             content=error_msg,
                         )
+
+                # SOP procedure execution: when a SOP matched earlier in
+                # this request, run its procedure now. The user declared
+                # exactly how this case should be handled, so we bypass
+                # the analyzer's complexity verdict entirely — the SOP
+                # IS the plan. Without this short-circuit the
+                # SOP-template fast-path stub (complexity_score == 4.0)
+                # falls below the default complexity_threshold (7.0),
+                # the existing SOP-bypass at L7665 is skipped, and we
+                # silently demote a declared procedure to single-agent
+                # routing. That demotion was the second half of the
+                # SOP regression: matching worked, execution didn't.
+                if _matched_sop is not None:
+                    return await self._process_with_workflow(
+                        message=message,
+                        analysis=analysis,
+                        user_id=user_id,
+                        session_id=session_id,
+                        request_id=request_id,
+                        use_async=use_async,
+                        webhook_url=webhook_url,
+                        relevant_sop=_matched_sop,
+                        bypass_workflow_approval=bypass_workflow_approval,
+                    )
 
                 # Check if complexity exceeds threshold
                 # Use workflow config threshold if available, otherwise fall back to overlord threshold
