@@ -730,7 +730,11 @@ class SchedulerService:
             job: Job data dict
         """
         job_id = job["id"]
-        session_id = f"job_{job_id}"
+        # Job IDs are already prefixed with ``job_`` by the manager,
+        # so the session_id is just the job_id verbatim. (Previously
+        # this was ``f"job_{job_id}"`` which produced double-prefixed
+        # ``job_job_<id>`` strings in observability events.)
+        session_id = job_id
         self._active_executions.add(session_id)  # Track by session_id, not job_id
 
         try:
@@ -991,7 +995,8 @@ class SchedulerService:
         Called by webhook handler to complete a job execution.
 
         Args:
-            session_id: Session ID (format: "job_{job_id}")
+            session_id: Session ID — this is the job_id verbatim
+                (already prefixed with ``job_`` by the job manager).
             success: Whether the execution was successful
             result: Result text if successful
             error: Error message if failed
@@ -1002,11 +1007,13 @@ class SchedulerService:
         if session_id not in self._active_executions:
             return False
 
-        # Extract job_id from session_id (format: "job_{job_id}")
+        # Sanity check the namespace; non-job sessions are not ours.
         if not session_id.startswith("job_"):
             return False
 
-        job_id = session_id[4:]  # Remove "job_" prefix
+        # session_id IS the job_id (no slicing required since the
+        # scheduler stopped double-prefixing in _execute_single_job).
+        job_id = session_id
         self._active_executions.discard(session_id)
 
         # Get job details for logging
