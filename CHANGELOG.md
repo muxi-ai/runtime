@@ -4,195 +4,64 @@
 
 ### Docker: bump lean variants to ``python:3.14-slim`` (and narrow markitdown extras)
 
-The lean Dockerfiles (``Dockerfile``, ``Dockerfile.production``,
-``e2e/docker/Dockerfile``) move from ``python:3.10-slim`` to
-``python:3.14-slim``. The library's own ``requires-python`` floor
-in ``pyproject.toml`` stays at ``>=3.10`` - the upper end of the
-supported interpreter range expands; the lower end is unchanged.
+The lean Dockerfiles (``Dockerfile``, ``Dockerfile.production``, ``e2e/docker/Dockerfile``) move from ``python:3.10-slim`` to ``python:3.14-slim``. The library's own ``requires-python`` floor in ``pyproject.toml`` stays at ``>=3.10`` - the upper end of the supported interpreter range expands; the lower end is unchanged.
 
-Why the bump: third-party benchmarks measure CPython 3.14 at
-~2.0-2.4x faster than 3.10 on pure-Python loops (with the largest
-single jump at the 3.10 -> 3.11 cliff). MUXI's hot path is
-overwhelmingly I/O-bound (LLM round trips, MCP subprocess JSON-RPC,
-DB round trips, network embeddings), so the realistic end-user
-delta is in the single-digit percent range - but the change is
-mechanical and the orchestration glue (planning loops, JSON
-manipulation in the agent tool-call loop, prompt builders, SOP /
-workflow planning) does benefit on every request.
+Why the bump: third-party benchmarks measure CPython 3.14 at ~2.0-2.4x faster than 3.10 on pure-Python loops (with the largest single jump at the 3.10 -> 3.11 cliff). MUXI's hot path is overwhelmingly I/O-bound (LLM round trips, MCP subprocess JSON-RPC, DB round trips, network embeddings), so the realistic end-user delta is in the single-digit percent range - but the change is mechanical and the orchestration glue (planning loops, JSON manipulation in the agent tool-call loop, prompt builders, SOP / workflow planning) does benefit on every request.
 
-Companion change in ``pyproject.toml``: the ``markitdown[all]``
-dependency is narrowed to ``markitdown[docx,pdf,pptx,xls,xlsx]``.
-This is necessary to unblock 3.14 and is independently a hygiene
-win - the previous ``[all]`` superset pulled four extras MUXI does
-not actually use:
+Companion change in ``pyproject.toml``: the ``markitdown[all]`` dependency is narrowed to ``markitdown[docx,pdf,pptx,xls,xlsx]``. This is necessary to unblock 3.14 and is independently a hygiene win - the previous ``[all]`` superset pulled four extras MUXI does not actually use:
 
-- ``audio-transcription`` (pydub + speechrecognition) - audio
-  transcription in MUXI goes through OneLLM, not MarkItDown
-  (see ``services/multimodal/fusion_engine.py``).
+- ``audio-transcription`` (pydub + speechrecognition) - audio transcription in MUXI goes through OneLLM, not MarkItDown (see ``services/multimodal/fusion_engine.py``).
 - ``az-doc-intel`` (azure-ai-documentintelligence + azure-identity)
   - no Azure Document Intelligence ingest path exists.
 - ``outlook`` (olefile) - no ``.msg`` ingest path exists.
-- ``youtube-transcription`` (youtube-transcript-api~=1.0.0) - no
-  YouTube URL ingest path exists, and this transitive is what
-  blocked 3.14: every release of ``youtube-transcript-api 1.0.x``
-  declares ``requires_python = "<3.14,>=3.8"``. Newer 1.2.x
-  supports 3.14, but ``markitdown[all]``'s ``~=1.0.0`` pin holds
-  pip to the 1.0.x line. Codebase audit confirmed zero direct
-  imports of ``youtube_transcript_api``, ``mammoth`` (used only
-  via the kept ``docx`` extra), ``pdfminer`` / ``pdfplumber``
-  (used only via the kept ``pdf`` extra), ``pydub``,
-  ``speech_recognition``, ``olefile``, or any Azure DI SDK.
+- ``youtube-transcription`` (youtube-transcript-api~=1.0.0) - no YouTube URL ingest path exists, and this transitive is what blocked 3.14: every release of ``youtube-transcript-api 1.0.x`` declares ``requires_python = "<3.14,>=3.8"``. Newer 1.2.x supports 3.14, but ``markitdown[all]``'s ``~=1.0.0`` pin holds pip to the 1.0.x line. Codebase audit confirmed zero direct imports of ``youtube_transcript_api``, ``mammoth`` (used only via the kept ``docx`` extra), ``pdfminer`` / ``pdfplumber`` (used only via the kept ``pdf`` extra), ``pydub``, ``speech_recognition``, ``olefile``, or any Azure DI SDK.
 
-Behavioural impact for downstream library users: ``MarkItDown``
-still converts every file format MUXI's knowledge ingest dispatches
-to (``.docx``, ``.pdf``, ``.pptx``, ``.xls``, ``.xlsx``). Users
-who previously relied on MUXI's transitive install of MarkItDown
-to pick up Outlook ``.msg`` ingest, audio transcription via
-MarkItDown, Azure DI, or YouTube transcripts now need to install
-``markitdown[all]`` explicitly alongside ``muxi-runtime``. The
-trade-off is intentional: the previous behaviour silently shipped
-~120 MB of unused-by-MUXI dependencies on every install AND blocked
-``muxi-runtime`` from installing on Python 3.14 in the first place.
+Behavioural impact for downstream library users: ``MarkItDown`` still converts every file format MUXI's knowledge ingest dispatches to (``.docx``, ``.pdf``, ``.pptx``, ``.xls``, ``.xlsx``). Users who previously relied on MUXI's transitive install of MarkItDown to pick up Outlook ``.msg`` ingest, audio transcription via MarkItDown, Azure DI, or YouTube transcripts now need to install ``markitdown[all]`` explicitly alongside ``muxi-runtime``. The trade-off is intentional: the previous behaviour silently shipped ~120 MB of unused-by-MUXI dependencies on every install AND blocked ``muxi-runtime`` from installing on Python 3.14 in the first place.
 
 What changed:
 
-- ``Dockerfile`` (lean / default, both builder and runtime stages):
-  ``python:3.10-slim`` -> ``python:3.14-slim``.
-- ``Dockerfile.production`` (lean + bundled PostgreSQL 17 + FAISSx
-  via supervisor): ``python:3.10-slim`` -> ``python:3.14-slim``.
-- ``e2e/docker/Dockerfile`` (E2E test harness with all services and
-  the test runtime): ``python:3.10-slim`` -> ``python:3.14-slim``.
-- ``pyproject.toml``: ``markitdown[all]>=0.1.0`` ->
-  ``markitdown[docx,pdf,pptx,xls,xlsx]>=0.1.0``.
+- ``Dockerfile`` (lean / default, both builder and runtime stages): ``python:3.10-slim`` -> ``python:3.14-slim``.
+- ``Dockerfile.production`` (lean + bundled PostgreSQL 17 + FAISSx via supervisor): ``python:3.10-slim`` -> ``python:3.14-slim``.
+- ``e2e/docker/Dockerfile`` (E2E test harness with all services and the test runtime): ``python:3.10-slim`` -> ``python:3.14-slim``.
+- ``pyproject.toml``: ``markitdown[all]>=0.1.0`` -> ``markitdown[docx,pdf,pptx,xls,xlsx]>=0.1.0``.
 
 What did NOT change:
 
-- ``Dockerfile.pytorch`` and ``Dockerfile.cuda`` use a parametrized
-  ``${BASE_IMAGE}:${BASE_TAG}`` and are gated separately on torch
-  wheel availability. They stay on whatever their callers pin and
-  are not touched here.
-- ``Dockerfile.ci-test`` is built on ``ubuntu:22.04`` with Python
-  installed via apt; the ``FROM`` line does not reference a
-  ``python:`` tag. Unchanged.
-- ``pyproject.toml::requires-python = ">=3.10"``. Bumping the
-  library minimum is a breaking change for downstream users with
-  no offsetting benefit.
-- ``black target-version`` (``[py310, py311, py312, py313]``),
-  ``ruff target-version`` (``py310``), ``mypy python_version``
-  (``3.10``). The Docker bump does not require source-syntax
-  features past 3.10. Adding 3.14 to these target lists is a
-  separate decision.
+- ``Dockerfile.pytorch`` and ``Dockerfile.cuda`` use a parametrized ``${BASE_IMAGE}:${BASE_TAG}`` and are gated separately on torch wheel availability. They stay on whatever their callers pin and are not touched here.
+- ``Dockerfile.ci-test`` is built on ``ubuntu:22.04`` with Python installed via apt; the ``FROM`` line does not reference a ``python:`` tag. Unchanged.
+- ``pyproject.toml::requires-python = ">=3.10"``. Bumping the library minimum is a breaking change for downstream users with no offsetting benefit.
+- ``black target-version`` (``[py310, py311, py312, py313]``), ``ruff target-version`` (``py310``), ``mypy python_version`` (``3.10``). The Docker bump does not require source-syntax features past 3.10. Adding 3.14 to these target lists is a separate decision.
 - CI matrix. Adding 3.14 to the CI matrix is a separate decision.
 
 Verification:
 
-- **Resolver**: full ``pip install --dry-run`` against the core
-  dep set on Python 3.14 / ``manylinux_2_28`` for both ``x86_64``
-  and ``aarch64`` resolves cleanly - all wheels available, no
-  source builds.
-- **Build, arm64**: native ``docker build`` on the local Apple
-  Silicon host succeeds. Image size: 1.9 GB (down from 2.11 GB on
-  3.10 - ~10% reduction from the dropped extras + slimmer Trixie
-  base + newer wheels).
-- **Build, amd64**: cross-build via ``docker build --platform
-  linux/amd64`` (BuildKit + QEMU) succeeds. The aarch64-specific
-  ``sqlite-vec`` recompile in the builder stage uses ``python -c
-  "import sys; print(f'python{sys.version_info.major}.
-  {sys.version_info.minor}')"`` to derive the install path; this
-  branch was exercised on the arm64 build and is version-agnostic.
-- **SIF, arm64**: ``./scripts/build/sif.sh --arch arm64`` produces
-  a 551 MB SIF (down from 643 MB on 3.10 - 14% smaller).
-- **SIF, amd64**: ``./scripts/build/sif.sh --arch amd64`` produces
-  a 607 MB SIF (down from 643 MB on 3.10 - 5.6% smaller). The
-  smaller delta on amd64 is expected - amd64 wheels for
-  ``scipy`` / ``numpy`` / ``pandas`` are slightly larger than
-  their aarch64 counterparts and ``onnxruntime`` ships a fatter
-  amd64 binary. SIF deployed to ``~/.muxi/server/runtimes/`` and
-  smoke-tested via ``runtime-runner:latest`` under QEMU emulation
-  on the Mac host: passes (Python 3.14.4 / x86_64; faiss 1.13.2;
-  pyzmq 27.1.0; markitdown + the kept extras' backends import OK
+- **Resolver**: full ``pip install --dry-run`` against the core dep set on Python 3.14 / ``manylinux_2_28`` for both ``x86_64`` and ``aarch64`` resolves cleanly - all wheels available, no source builds.
+- **Build, arm64**: native ``docker build`` on the local Apple Silicon host succeeds. Image size: 1.9 GB (down from 2.11 GB on 3.10 - ~10% reduction from the dropped extras + slimmer Trixie base + newer wheels).
+- **Build, amd64**: cross-build via ``docker build --platform linux/amd64`` (BuildKit + QEMU) succeeds. The aarch64-specific ``sqlite-vec`` recompile in the builder stage uses ``python -c "import sys; print(f'python{sys.version_info.major}. {sys.version_info.minor}')"`` to derive the install path; this branch was exercised on the arm64 build and is version-agnostic.
+- **SIF, arm64**: ``./scripts/build/sif.sh --arch arm64`` produces a 551 MB SIF (down from 643 MB on 3.10 - 14% smaller).
+- **SIF, amd64**: ``./scripts/build/sif.sh --arch amd64`` produces a 607 MB SIF (down from 643 MB on 3.10 - 5.6% smaller). The smaller delta on amd64 is expected - amd64 wheels for ``scipy`` / ``numpy`` / ``pandas`` are slightly larger than their aarch64 counterparts and ``onnxruntime`` ships a fatter amd64 binary. SIF deployed to ``~/.muxi/server/runtimes/`` and smoke-tested via ``runtime-runner:latest`` under QEMU emulation on the Mac host: passes (Python 3.14.4 / x86_64; faiss 1.13.2; pyzmq 27.1.0; markitdown + the kept extras' backends import OK
   - mammoth, pdfminer.six, pdfplumber, python-pptx, openpyxl,
-  xlrd; the four dropped extras confirmed absent;
-  ``muxi.runtime.formation.initialization.probe_declared_models``
-  callable; ``SystemEvents`` enum reports 127 entries).
-- **Wheels confirmed in the built image**: ``faiss-cpu 1.13.2``
-  (cp310 abi3 on manylinux_2_28), ``pyzmq 27.1.0`` (cp312 abi3
-  on manylinux_2_28; the 3.14 standard-ABI wheel is published as
-  ``cp314-cp314t`` for the free-threaded interpreter only, but
-  the abi3 wheel covers the standard interpreter),
-  ``psycopg2-binary 2.9.12``, ``spacy 3.8.13``, ``lxml 6.1.0``,
-  ``mammoth 1.11.0``, ``pdfminer.six 20251230``, ``pdfplumber
-  0.11.9``, ``python-pptx 1.0.2``, ``openpyxl 3.1.5``, ``xlrd
-  2.0.2``, ``scipy 1.17.1``, ``numpy 2.4.4``, ``pandas 3.0.2``,
-  ``cryptography 47.0.0``, ``Pillow 12.2.0``, ``pydantic 2.13.3``,
-  ``protobuf 7.34.1``.
-
-Future direction: if a downstream consumer needs the dropped
-``[all]`` extras back, that's purely additive work - either layer
-the install or add a corresponding extra to ``muxi-runtime`` itself.
+  xlrd; the four dropped extras confirmed absent; ``muxi.runtime.formation.initialization.probe_declared_models`` callable; ``SystemEvents`` enum reports 127 entries).
+- **Wheels confirmed in the built image**: ``faiss-cpu 1.13.2`` (cp310 abi3 on manylinux_2_28), ``pyzmq 27.1.0`` (cp312 abi3 on manylinux_2_28; the 3.14 standard-ABI wheel is published as ``cp314-cp314t`` for the free-threaded interpreter only, but the abi3 wheel covers the standard interpreter), ``psycopg2-binary 2.9.12``, ``spacy 3.8.13``, ``lxml 6.1.0``, ``mammoth 1.11.0``, ``pdfminer.six 20251230``, ``pdfplumber 0.11.9``, ``python-pptx 1.0.2``, ``openpyxl 3.1.5``, ``xlrd 2.0.2``, ``scipy 1.17.1``, ``numpy 2.4.4``, ``pandas 3.0.2``, ``cryptography 47.0.0``, ``Pillow 12.2.0``, ``pydantic 2.13.3``, ``protobuf 7.34.1``.
 
 ### Formation: probe declared models at init; refuse to load on 404
 
-Finding 5 from the 2026-04-29 MS365 testing run: the dev's formation
-declared ``embedding: local/all-MiniLM-L6-v2`` and the embedding
-service silently degraded to recency-only memory retrieval on every
-request, surfacing only an opaque ``InvalidConfigurationError`` deep
-in the runtime path. Two follow-up fix attempts by the dev failed
-because the failure mode masquerades as a "model not available"
-issue when the actual root cause is a slug-syntax problem: OneLLM's
-dispatcher splits the model name on the **first** ``/`` only, so
-``local/all-MiniLM-L6-v2`` is passed to HuggingFace as the bare
-repo id ``all-MiniLM-L6-v2``, which is not a valid HF identifier.
-The canonical form is ``local/sentence-transformers/all-MiniLM-L6-v2``,
-where everything after ``local/`` is the full ``<owner>/<repo>`` HF
-slug. OneLLM has no curated alias table - what you write is what
-gets sent to HF.
+Finding 5 from the 2026-04-29 MS365 testing run: the dev's formation declared ``embedding: local/all-MiniLM-L6-v2`` and the embedding service silently degraded to recency-only memory retrieval on every request, surfacing only an opaque ``InvalidConfigurationError`` deep in the runtime path. Two follow-up fix attempts by the dev failed because the failure mode masquerades as a "model not available" issue when the actual root cause is a slug-syntax problem: OneLLM's dispatcher splits the model name on the **first** ``/`` only, so ``local/all-MiniLM-L6-v2`` is passed to HuggingFace as the bare repo id ``all-MiniLM-L6-v2``, which is not a valid HF identifier. The canonical form is ``local/sentence-transformers/all-MiniLM-L6-v2``, where everything after ``local/`` is the full ``<owner>/<repo>`` HF slug. OneLLM has no curated alias table - what you write is what gets sent to HF.
 
-The runtime's only previous defense was the after-the-fact
-``InvalidConfigurationError``. By the time it fired, the formation
-had already loaded, vector search was already broken, and the
-operator had no signal that the cause was a typo in their slug
-rather than a deeper environmental problem.
+The runtime's only previous defense was the after-the-fact ``InvalidConfigurationError``. By the time it fired, the formation had already loaded, vector search was already broken, and the operator had no signal that the cause was a typo in their slug rather than a deeper environmental problem.
 
-This change introduces a fail-fast probe at formation init. After
-``initialize_llm_config()`` populates ``formation._capability_models``
-and the text-fallback cascade runs, ``probe_declared_models()`` is
-invoked. It iterates every distinct ``(model_slug, probe_kind)``
-pair, dedups across capabilities, and issues a minimal OneLLM call:
-``Embedding.acreate(input="probe", model=...)`` for the
-``embedding`` capability and
-``ChatCompletion.acreate(messages=[{"role":"user","content":"ping"}],
-max_tokens=1, model=...)`` for everything else (``text``,
-``vision``, ``audio``, ``documents``, ``streaming``, future
-capabilities).
+This change introduces a fail-fast probe at formation init. After ``initialize_llm_config()`` populates ``formation._capability_models`` and the text-fallback cascade runs, ``probe_declared_models()`` is invoked. It iterates every distinct ``(model_slug, probe_kind)`` pair, dedups across capabilities, and issues a minimal OneLLM call: ``Embedding.acreate(input="probe", model=...)`` for the ``embedding`` capability and ``ChatCompletion.acreate(messages=[{"role":"user","content":"ping"}], max_tokens=1, model=...)`` for everything else (``text``, ``vision``, ``audio``, ``documents``, ``streaming``, future capabilities).
 
-Failure classification is deliberate. Two error classes from OneLLM
-abort formation init via ``ConfigurationValidationError``:
+Failure classification is deliberate. Two error classes from OneLLM abort formation init via ``ConfigurationValidationError``:
 
 - ``ResourceNotFoundError`` (HF 404 / provider model-not-found)
-- ``InvalidRequestError`` (HF validation error - the dev's exact
-  bare-name slug case)
+- ``InvalidRequestError`` (HF validation error - the dev's exact bare-name slug case)
 
-Everything else (``AuthenticationError``, ``RateLimitError``,
-``ServiceUnavailableError``, ``RequestTimeoutError``, other
-``OneLLMError`` subclasses, and non-``OneLLMError`` exceptions
-indicating probe-machinery bugs) is logged at WARN and continues.
-This split is intentional: the two fatal classes are deterministic
-"this slug will never resolve" failures, while the rest is either
-transient or environmental, and bricking an otherwise-healthy
-formation on an init-time auth blip is worse than the silent
-degradation the probe is meant to prevent.
+Everything else (``AuthenticationError``, ``RateLimitError``, ``ServiceUnavailableError``, ``RequestTimeoutError``, other ``OneLLMError`` subclasses, and non-``OneLLMError`` exceptions indicating probe-machinery bugs) is logged at WARN and continues. This split is intentional: the two fatal classes are deterministic "this slug will never resolve" failures, while the rest is either transient or environmental, and bricking an otherwise-healthy formation on an init-time auth blip is worse than the silent degradation the probe is meant to prevent.
 
-Probes run **synchronously, serially**. The first fatal aborts
-before later probes execute, so an operator with multiple bad slugs
-fixes them one error message at a time rather than wading through a
-dozen entangled failures. ``ChatCompletion`` cost: ~50 input + 1
-output token per probe, fractions of a cent on cloud providers,
-zero on cached local models.
+Probes run **synchronously, serially**. The first fatal aborts before later probes execute, so an operator with multiple bad slugs fixes them one error message at a time rather than wading through a dozen entangled failures. ``ChatCompletion`` cost: ~50 input + 1 output token per probe, fractions of a cent on cloud providers, zero on cached local models.
 
-The fatal error message is dynamic. For ``local/<bare-name>`` slugs
-(the exact failure mode the dev hit) the message names the
-correction explicitly:
+The fatal error message is dynamic. For ``local/<bare-name>`` slugs (the exact failure mode the dev hit) the message names the correction explicitly:
 
 ```
 Cause: the local slug is missing the owner/organization segment.
@@ -201,70 +70,23 @@ The runtime requires the full HuggingFace repo id:
 NOT local/<repo>          (e.g. local/all-MiniLM-L6-v2)
 ```
 
-For ``local/<owner>/<repo>`` slugs that 404, the message points at
-typo / gated-repo causes. For cloud slugs the local-specific hint
-is omitted entirely so the message stays relevant.
+For ``local/<owner>/<repo>`` slugs that 404, the message points at typo / gated-repo causes. For cloud slugs the local-specific hint is omitted entirely so the message stays relevant.
 
-Three new ``SystemEvents`` cover the lifecycle:
-``MODEL_INIT_PROBE_STARTED``, ``MODEL_INIT_PROBE_COMPLETED``, and
-``MODEL_INIT_PROBE_FAILED`` (with ``severity ∈ {fatal, warn}`` and
-the underlying ``OneLLMError`` class encoded in the payload). All
-1223 observe() calls validate; ``scripts/validate_events.py`` is
-clean.
+Three new ``SystemEvents`` cover the lifecycle: ``MODEL_INIT_PROBE_STARTED``, ``MODEL_INIT_PROBE_COMPLETED``, and ``MODEL_INIT_PROBE_FAILED`` (with ``severity ∈ {fatal, warn}`` and the underlying ``OneLLMError`` class encoded in the payload).
 
-Test surface: 22 unit tests across three classes
-(``TestClassification`` for the pure failure-class mapping,
-``TestFatalMessageFormatting`` for the slug-shape-aware message
-builder, ``TestProbeBuilder`` for capability dedup and
-embedding-vs-chat probe selection, ``TestProbeOutcomes`` for the
-end-to-end behavior with ``_execute_single_probe`` mocked). The
-serial-fail-fast test asserts that when the first capability
-raises a 404 the second probe is **never invoked**, so the abort
-is cheap even on formations with a long capability list.
+Tests cover failure-class mapping, slug-shape-aware error formatting, capability dedup, and end-to-end probe outcomes. The serial-fail-fast invariant -- first 404 aborts before later probes run -- is locked in.
 
-No escape hatch was added. Correctness over convenience: a formation
-that won't actually work shouldn't pretend to be loading.
+No escape hatch was added. Correctness over convenience: a formation that won't actually work shouldn't pretend to be loading.
 
 ### MCP: translate misleading upstream errors into agent-actionable hints
 
-Findings 4 and 6 from the 2026-04-29 MS365 testing run both surfaced
-the same defect from the agent's perspective: an Excel tool call
-(``list-excel-worksheets`` and ``excel-write-range`` respectively)
-received a ``driveItemId`` / ``file_id`` that pointed to a folder
-rather than a workbook. Microsoft Graph returned 403 with the
-message ``"Could not obtain a WAC access token."`` — a WAC-token
-error that, read at face value, looks like an auth failure. The
-agent surfaced it to the user as a permissions problem rather than
-re-resolving the file ID.
+Findings 4 and 6 from the 2026-04-29 MS365 testing run both surfaced the same defect from the agent's perspective: an Excel tool call (``list-excel-worksheets`` and ``excel-write-range`` respectively) received a ``driveItemId`` / ``file_id`` that pointed to a folder rather than a workbook. Microsoft Graph returned 403 with the message ``"Could not obtain a WAC access token."`` — a WAC-token error that, read at face value, looks like an auth failure. The agent surfaced it to the user as a permissions problem rather than re-resolving the file ID.
 
-The runtime's parameter-funnel work in 0.20260410.0 already covers
-the *common* failure modes for this flow: ``parameters`` defaults
-on MCP server declarations remove the LLM's need to infer org-level
-constants like ``driveId``, and
-``_validate_inferred_parameters_against_results()`` rejects
-LLM-fabricated IDs not found in any prior successful result.
+The runtime's parameter-funnel work in 0.20260410.0 already covers the *common* failure modes for this flow: ``parameters`` defaults on MCP server declarations remove the LLM's need to infer org-level constants like ``driveId``, and ``_validate_inferred_parameters_against_results()`` rejects LLM-fabricated IDs not found in any prior successful result.
 
-But the WAC case sits in a fourth class the funnel doesn't catch:
-the agent picks a *real* ID from a *real* prior tool result — it's
-just the **wrong type** for the next tool's contract. The Attachments
-folder ID does appear in ``list-folder-files`` output, so it isn't
-fabricated; the required param isn't missing; clean-context binding
-is irrelevant. The runtime can't disambiguate folder-vs-file inside
-a generic list response without per-MCP semantics — that line stays
-on the model side. But the runtime *can* spot the misleading error
-pattern after the fact and tell the agent what likely happened, so
-the next turn carries an actionable correction instead of a
-confusing auth-flavored error.
+But the WAC case sits in a fourth class the funnel doesn't catch: the agent picks a *real* ID from a *real* prior tool result — it's just the **wrong type** for the next tool's contract. The Attachments folder ID does appear in ``list-folder-files`` output, so it isn't fabricated; the required param isn't missing; clean-context binding is irrelevant. The runtime can't disambiguate folder-vs-file inside a generic list response without per-MCP semantics — that line stays on the model side. But the runtime *can* spot the misleading error pattern after the fact and tell the agent what likely happened, so the next turn carries an actionable correction instead of a confusing auth-flavored error.
 
-**Implementation.** New module ``services/mcp/tools/error_translator.py``
-with a small registry of ``_ErrorPattern`` declarations. Each pattern
-gates on three signals — content regex (case-insensitive search of
-the upstream error text), required arg keys (at least one of these
-must be in the tool call's arguments — prevents matching unrelated
-tools), and an optional server_id regex (for server-specific
-patterns; default ``None`` means server-agnostic). First-match-wins
-on overlap. The single shipped pattern catches the WAC-token case
-gated on ``driveItemId`` or ``file_id`` being present:
+**Implementation.** New module ``services/mcp/tools/error_translator.py`` with a small registry of ``_ErrorPattern`` declarations. Each pattern gates on three signals — content regex (case-insensitive search of the upstream error text), required arg keys (at least one of these must be in the tool call's arguments — prevents matching unrelated tools), and an optional server_id regex (for server-specific patterns; default ``None`` means server-agnostic). First-match-wins on overlap. The single shipped pattern catches the WAC-token case gated on ``driveItemId`` or ``file_id`` being present:
 
 ```
 category:           excel_wac_token_folder_id
@@ -278,89 +100,28 @@ hint:               "Likely cause: the supplied driveItemId/file_id
                      not a folder such as 'Attachments'."
 ```
 
-**Wiring.** ``services/mcp/service.py::_invoke_tool_with_resolved_credentials``
-calls ``translate_tool_error`` on the processed result whenever
-``isError`` is True (right after
-``ModernProtocolFeatures.process_structured_output``). On a match,
-two writes to the agent-bound payload:
+**Wiring.** ``services/mcp/service.py::_invoke_tool_with_resolved_credentials`` calls ``translate_tool_error`` on the processed result whenever ``isError`` is True (right after ``ModernProtocolFeatures.process_structured_output``). On a match, two writes to the agent-bound payload:
 
-* Structured ``_runtime_hint = {"category": ..., "message": ...}``
-  field for observability and any future structured consumer.
-* Inline append to ``content``: ``"\n\n[Runtime hint] {hint}"`` so
-  the model literally reads the correction in the tool message on
-  the next turn (most reliable surface for self-correction).
+* Structured ``_runtime_hint = {"category": ..., "message": ...}`` field for observability and any future structured consumer.
+* Inline append to ``content``: ``"\n\n[Runtime hint] {hint}"`` so the model literally reads the correction in the tool message on the next turn (most reliable surface for self-correction).
 
-The translator never blocks the call. It only annotates an existing
-failure — at worst, the agent reads an extra sentence and ignores
-it. Original upstream error text is preserved verbatim.
+The translator never blocks the call. It only annotates an existing failure — at worst, the agent reads an extra sentence and ignores it. Original upstream error text is preserved verbatim.
 
-**Observability.** Reuses ``MCP_TOOL_CALL_COMPLETED`` (no new event
-type) with a new ``translation_category`` metadata field. ``None``
-when no pattern fired; the category string when one did. Lets us
-track in production which translations are actually firing without
-adding event type churn.
+**Observability.** Reuses ``MCP_TOOL_CALL_COMPLETED`` (no new event type) with a new ``translation_category`` metadata field. ``None`` when no pattern fired; the category string when one did. Lets us track in production which translations are actually firing without adding event type churn.
 
-**What this fix is NOT.** It does not validate parameters before
-sending — that's already done by the
-``_validate_inferred_parameters_against_results()`` machinery
-shipped in 0.20260410.0 for the fabricated-ID class, and the
-``parameters`` field on MCP server declarations for the org-level
-defaults class. It also does not attempt to disambiguate
-folder-vs-file at parameter inference time — that requires per-MCP
-semantic knowledge the runtime should not own.
+**What this fix is NOT.** It does not validate parameters before sending — that's already done by the ``_validate_inferred_parameters_against_results()`` machinery shipped in 0.20260410.0 for the fabricated-ID class, and the ``parameters`` field on MCP server declarations for the org-level defaults class. It also does not attempt to disambiguate folder-vs-file at parameter inference time — that requires per-MCP semantic knowledge the runtime should not own.
 
-**What this fix DOES require.** Formations using ms365-mcp must
-declare ``parameters: { driveId: ..., siteId: ..., tenantId: ... }``
-on the server block to fully benefit from the parameter funnel —
-the WAC-translation hint covers the wrong-typed-ID case, but
-upstream failures from missing org-level constants are a config gap
-the formation must close.
+**What this fix DOES require.** Formations using ms365-mcp must declare ``parameters: { driveId: ..., siteId: ..., tenantId: ... }`` on the server block to fully benefit from the parameter funnel — the WAC-translation hint covers the wrong-typed-ID case, but upstream failures from missing org-level constants are a config gap the formation must close.
 
-**Test coverage.** New ``tests/unit/test_mcp_error_translator.py``
-with 13 tests across four classes:
-
-* ``TestErrorTranslationContract`` — frozen-dataclass shape, stable
-  category id, non-empty hint string.
-* ``TestExcelWACPattern`` — positive matches with both arg-key
-  variants (``driveItemId`` and ``file_id``), case-insensitive
-  matching, server-agnostic firing across ``ms365-mcp``,
-  ``todo-helper-mcp``, and unknown servers.
-* ``TestNegativeGates`` — independent verification of each gate
-  (missing arg keys, non-matching content, empty inputs, non-dict
-  arguments).
-* ``TestServerIdGate`` — locks the ``server_id_regex`` semantics
-  via a probe pattern injected by ``monkeypatch`` (no shipped
-  pattern uses it yet, but the gate is part of the contract).
-* ``TestRegistryOrdering`` — first-match-wins on category overlap.
-
-Plus end-to-end injection sanity: a simulated Graph WAC response
-fed through ``ModernProtocolFeatures.process_structured_output`` →
-translator → result envelope produced an agent payload containing
-both the structured ``_runtime_hint`` field and the inline
-``[Runtime hint]`` suffix on ``content`` with the expected
-``folder`` and ``.xlsx`` markers.
-
-ruff/black clean, ``validate_events`` clean (no new event types),
-13/13 translator tests pass, full unit suite 1019 passed (the one
-pre-existing RCE auth failure unchanged on develop).
+**Tests** in ``tests/unit/test_mcp_error_translator.py`` cover the frozen-dataclass contract, the WAC pattern (positive matches with both ``driveItemId`` and ``file_id``, case-insensitive content match, server-agnostic firing), the three negative gates (missing arg keys, non-matching content, non-dict arguments), the ``server_id_regex`` semantics, registry first-match-wins on category overlap, and end-to-end injection through ``ModernProtocolFeatures.process_structured_output`` confirming both the structured ``_runtime_hint`` field and the inline ``[Runtime hint]`` suffix on ``content``.
 
 ### Scheduler: restore job stat persistence + collapse doubled session_id + preserve delivery framing + disambiguate scheduled execution at agent boundary
 
-Three independent scheduler bugs surfaced by user testing on a recurring
-``*/3 * * * *`` reminder job. After two confirmed successful runs the
-``scheduled_jobs`` row showed ``last_run_at NULL``, ``total_runs 0``,
-``last_run_status`` empty — yet the user's external webhook receiver
-*had* recorded the result text in their ``job_results`` table. From the
-outside the scheduler looked broken; from the inside it looked like the
-job had never run.
+Three independent scheduler bugs surfaced by user testing on a recurring ``*/3 * * * *`` reminder job. After two confirmed successful runs the ``scheduled_jobs`` row showed ``last_run_at NULL``, ``total_runs 0``, ``last_run_status`` empty — yet the user's external webhook receiver *had* recorded the result text in their ``job_results`` table. From the outside the scheduler looked broken; from the inside it looked like the job had never run.
 
 **1. Job stats never persisted (the root cause).**
 
-``Overlord._execute_async_request`` referenced ``self._scheduler`` (with
-a leading underscore) at four sites — but the scheduler is stored as
-``self.scheduler_service``. ``hasattr(self, "_scheduler")`` returned
-False on every scheduled run, so the entire completion-handler block
-was silently skipped:
+``Overlord._execute_async_request`` referenced ``self._scheduler`` (with a leading underscore) at four sites — but the scheduler is stored as ``self.scheduler_service``. ``hasattr(self, "_scheduler")`` returned False on every scheduled run, so the entire completion-handler block was silently skipped:
 
 ```python
 if (
@@ -377,24 +138,13 @@ Effect on every successful scheduled run:
 * ``mark_job_execution_success`` never called → ``total_runs`` stayed 0
 * ``scheduled.job.completed`` event never emitted
 * ``last_run_at`` / ``last_run_status`` never updated
-* External webhook *was* delivered (control fell through to the
-  standard delivery branch once the inner ``if`` was skipped) — which
-  is why the user's external receiver had the result and made it look
-  like the job worked
+* External webhook *was* delivered (control fell through to the standard delivery branch once the inner ``if`` was skipped) — which is why the user's external receiver had the result and made it look like the job worked
 
-The four references were renamed to ``self.scheduler_service``
-(``getattr(self, "scheduler_service", None)`` to keep the original
-defensive shape during early init). The accompanying silent
-``except Exception: pass`` blocks — which were how this typo hid for
-months — were replaced with logged ``ERROR.INTERNAL_ERROR`` warnings,
-so any future breakage on this path surfaces in observability instead
-of vanishing.
+The four references were renamed to ``self.scheduler_service`` (``getattr(self, "scheduler_service", None)`` to keep the original defensive shape during early init). The accompanying silent ``except Exception: pass`` blocks — which were how this typo hid for months — were replaced with logged ``ERROR.INTERNAL_ERROR`` warnings, so any future breakage on this path surfaces in observability instead of vanishing.
 
 **2. Doubled ``job_`` prefix in ``session_id`` (cosmetic).**
 
-``_execute_single_job`` constructed
-``session_id = f"job_{job_id}"`` — but job IDs are already prefixed by
-the manager, producing ``job_job_<id>`` in every observability event:
+``_execute_single_job`` constructed ``session_id = f"job_{job_id}"`` — but job IDs are already prefixed by the manager, producing ``job_job_<id>`` in every observability event:
 
 ```json
 {
@@ -406,69 +156,38 @@ the manager, producing ``job_job_<id>`` in every observability event:
 }
 ```
 
-``complete_job_from_webhook`` papered over the doubling with
-``job_id = session_id[4:]`` (strips the first ``job_`` and recovers
-the real job_id), so the lookup *worked* and the dev-reported
-hypothesis that this caused the missing stat updates was incorrect —
-both ends used the same doubled string. But the relationship between
-session_id and job_id was no longer obvious to anyone reading code or
-logs. Now: ``session_id = job_id`` directly, and the strip in
-``complete_job_from_webhook`` becomes ``job_id = session_id`` (the
-``startswith("job_")`` namespace guard stays).
+``complete_job_from_webhook`` papered over the doubling with ``job_id = session_id[4:]`` (strips the first ``job_`` and recovers the real job_id), so the lookup *worked* and the dev-reported hypothesis that this caused the missing stat updates was incorrect — both ends used the same doubled string. But the relationship between session_id and job_id was no longer obvious to anyone reading code or logs. Now: ``session_id = job_id`` directly, and the strip in ``complete_job_from_webhook`` becomes ``job_id = session_id`` (the ``startswith("job_")`` namespace guard stays).
 
 **3. Prompt rewriter strips delivery framing (behavioral).**
 
-The scheduler's prompt rewriter over-compresses scheduled prompts.
-A user scheduling
+The scheduler's prompt rewriter over-compresses scheduled prompts. A user scheduling
 
 > ``remind me to drink water every 3 minutes``
 
-ended up with an execution prompt of bare ``drink water``. The agent,
-receiving that as a fresh user message with no scheduling context,
-interpreted it as a confirmation and replied:
+ended up with an execution prompt of bare ``drink water``. The agent, receiving that as a fresh user message with no scheduling context, interpreted it as a confirmation and replied:
 
 > "Got it. Drinking water now? Want me to set up a daily reminder?"
 
-— a recursive offer to schedule the exact reminder it was already
-executing. Reminders, notifications, and "send me a summary of"
-scheduled tasks were silently non-functional whenever their intent
-lived in the framing.
+— a recursive offer to schedule the exact reminder it was already executing. Reminders, notifications, and "send me a summary of" scheduled tasks were silently non-functional whenever their intent lived in the framing.
 
-Root cause: the rewriter prompt told the model to "Strip away ALL
-scheduling patterns" but never explicitly told it to *preserve*
-delivery framing (``remind me``, ``notify me``, ``send me``,
-``tell me``, ``show me``, ``alert me``). A 12B model interprets "all
-scheduling patterns" generously and treats ``remind me to`` as
-metadata.
+Root cause: the rewriter prompt told the model to "Strip away ALL scheduling patterns" but never explicitly told it to *preserve* delivery framing (``remind me``, ``notify me``, ``send me``, ``tell me``, ``show me``, ``alert me``). A 12B model interprets "all scheduling patterns" generously and treats ``remind me to`` as metadata.
 
 The rewriter prompt was rewritten to:
 
-* Frame the rewrite for the agent's perspective: "the agent will
-  receive your output as a fresh user message — with NO knowledge
-  that it was scheduled" — drives home why framing matters.
-* Explicitly call out delivery-framing words as part of the action,
-  NOT scheduling.
-* Provide a side-by-side correct/wrong table including the exact
-  failure case (``remind me to drink water`` → keep, NOT strip).
+* Frame the rewrite for the agent's perspective: "the agent will receive your output as a fresh user message — with NO knowledge that it was scheduled" — drives home why framing matters.
+* Explicitly call out delivery-framing words as part of the action, NOT scheduling.
+* Provide a side-by-side correct/wrong table including the exact failure case (``remind me to drink water`` → keep, NOT strip).
 * Spell out the recipient pronoun (``remind ME``, ``tell US``).
 
-**4. Disambiguate scheduled execution at the agent boundary
-(behavioral, second-order).**
+**4. Disambiguate scheduled execution at the agent boundary (behavioral, second-order).**
 
-Live-testing the rewriter fix surfaced a second-order problem.
-Rewriter output for ``remind me to drink water every hour`` is now
-correctly ``remind me to drink water`` — but when the cron fires and
-that string lands in the agent as a fresh user message with no
-context, Claude Sonnet 4.6 treats it as a chat request to *configure*
-a reminder and politely declines:
+Live-testing the rewriter fix surfaced a second-order problem. Rewriter output for ``remind me to drink water every hour`` is now correctly ``remind me to drink water`` — but when the cron fires and that string lands in the agent as a fresh user message with no context, Claude Sonnet 4.6 treats it as a chat request to *configure* a reminder and politely declines:
 
 > "Can't set reminders directly — no access to your clock or
 > notification system. Quickest fix: just tell your phone's
 > assistant 'Remind me to drink water every hour' and you're done."
 
-A recursive offer to schedule the exact reminder it was already
-executing. The rewriter is correct; the agent is missing the
-context that this is a *firing*, not a *configuration request*.
+A recursive offer to schedule the exact reminder it was already executing. The rewriter is correct; the agent is missing the context that this is a *firing*, not a *configuration request*.
 
 Live-tested four marker variants on hello-muxi. The minimum form
 
@@ -476,15 +195,9 @@ Live-tested four marker variants on hello-muxi. The minimum form
 [SCHEDULED] remind me to drink water
 ```
 
-worked perfectly with no system-prompt change required. The agent
-produced direct reminder content (``💧 Water break! Hey, time to grab
-a glass of water``) and even self-tagged the response with
-``Scheduled reminder ✓``. Longer preambles accidentally triggered
-SOP routing (variant C posted to GitHub), so the marker has to stay
-minimal.
+worked perfectly with no system-prompt change required. The agent produced direct reminder content (``💧 Water break! Hey, time to grab a glass of water``) and even self-tagged the response with ``Scheduled reminder ✓``. Longer preambles accidentally triggered SOP routing (variant C posted to GitHub), so the marker has to stay minimal.
 
-Implemented as a single-source-of-truth helper in
-``chat_orchestrator.py``:
+Implemented as a single-source-of-truth helper in ``chat_orchestrator.py``:
 
 ```python
 SCHEDULED_EXECUTION_MARKER = "[SCHEDULED] "
@@ -495,33 +208,13 @@ def _apply_scheduled_marker(message: str, session_id: Optional[str]) -> str:
     return message
 ```
 
-Wired into both message-rendering paths: the analyzer-pipeline
-``=== CURRENT REQUEST ===`` rendering inside
-``_enhance_message_with_context``, and the agent-LLM
-``current_user_message`` field returned by
-``_build_clean_chat_context``. ``buffer_turns`` (history rendered
-from buffer memory) is intentionally left untouched — past
-scheduled invocations appear in history as the original user text,
-since the assistant's prior responses already encode the
-scheduled-execution behavior.
+Wired into both message-rendering paths: the analyzer-pipeline ``=== CURRENT REQUEST ===`` rendering inside ``_enhance_message_with_context``, and the agent-LLM ``current_user_message`` field returned by ``_build_clean_chat_context``. ``buffer_turns`` (history rendered from buffer memory) is intentionally left untouched — past scheduled invocations appear in history as the original user text, since the assistant's prior responses already encode the scheduled-execution behavior.
 
-**Memory and observability stay clean.** PR #165's
-``EnhancedMessage(original, enhanced)`` threading pays off here: the
-``original`` field is the raw user text the marker is applied *on
-top of*, so:
+**Memory and observability stay clean.** PR #165's ``EnhancedMessage(original, enhanced)`` threading pays off here: the ``original`` field is the raw user text the marker is applied *on top of*, so:
 
-* Buffer memory stores the unprefixed message (``remind me to drink
-  water``) — no marker pollution in conversation history.
-* Observability events emit ``message_preview`` from the original,
-  not the enhanced/marked form — the
-  ``clarification.request.sent`` and
-  ``overlord.agent.selection_started`` events on a scheduled run
-  show ``"message_preview": "remind me to drink water"`` (verified
-  live).
-* Only the agent's view at inference time gets the marker — visible
-  in the ``agent.planning`` event's ``request`` field, which is the
-  correct place since that event records what the agent is planning
-  *against*.
+* Buffer memory stores the unprefixed message (``remind me to drink water``) — no marker pollution in conversation history.
+* Observability events emit ``message_preview`` from the original, not the enhanced/marked form — the ``clarification.request.sent`` and ``overlord.agent.selection_started`` events on a scheduled run show ``"message_preview": "remind me to drink water"`` (verified live).
+* Only the agent's view at inference time gets the marker — visible in the ``agent.planning`` event's ``request`` field, which is the correct place since that event records what the agent is planning *against*.
 
 **Live verification matrix on hello-muxi (Claude Sonnet 4.6):**
 
@@ -532,51 +225,13 @@ top of*, so:
 | Streaming scheduled | ``job_stream_test`` | reminder content via stream | ✓ ``💧 Water check!`` |
 | Adversarial — user types ``[SCHEDULED]`` in normal chat | ``user-typed-bracket`` | agent ignores marker, answers normally | ✓ answered the question, no exploit surface |
 
-**Test changes.**
-
-Four new test classes added to
-``tests/unit/test_bugfix_verification.py`` (mirroring the existing
-source-shape testing pattern in that file):
-
-* ``TestSchedulerOverlordCompletionAttribute`` — asserts no live code
-  references ``self._scheduler`` (with comment / docstring stripping
-  so historical regression notes don't trip the test); asserts
-  ``_execute_async_request`` calls
-  ``scheduler_service.complete_job_from_webhook`` on both the success
-  and failure branches.
-* ``TestSchedulerSessionIdNotDoubled`` — asserts ``_execute_single_job``
-  uses ``session_id = job_id`` directly; asserts
-  ``complete_job_from_webhook`` does not slice with ``session_id[4:]``
-  (the strip was only correct for the doubled prefix and would now
-  strip the legitimate ``job_`` prefix).
-* ``TestSchedulerPromptRewriterPreservesFraming`` — asserts the
-  rewriter prompt mentions ``remind me``, carries ``drink water`` as a
-  guard example, and explicitly warns against stripping framing.
-* ``TestScheduledExecutionMarker`` — asserts the centralized helper
-  exists with the expected ``[SCHEDULED] `` literal; asserts the
-  helper applies / does not apply correctly across job and
-  non-job session IDs (including ``None``, empty string, and
-  arbitrary non-prefixed IDs); asserts both rendering paths call
-  the helper rather than re-implementing the rule inline; locks the
-  ``buffer_turns left untouched`` invariant via a comment-shape
-  assertion.
-
-28/28 tests in test_bugfix_verification pass. Full unit suite:
-1005 passed, 1 skipped (the one pre-existing RCE auth failure
-unchanged on develop).
+**Tests** in ``tests/unit/test_bugfix_verification.py`` lock the four invariants: no live code references ``self._scheduler``; ``_execute_single_job`` uses ``session_id = job_id`` directly (and ``complete_job_from_webhook`` no longer slices with ``[4:]``); the rewriter prompt explicitly preserves delivery framing; and the centralized ``[SCHEDULED] `` marker helper applies on job session IDs and not on non-job ones, with both rendering paths calling the helper rather than re-implementing the rule.
 
 ### MCP tool filtering via ``tools.{whitelist|blacklist}``
 
-Adds an optional ``tools`` block on any MCP server config that lets
-operators register only a subset of an upstream catalog. Cuts both the
-runtime tool registry and the per-turn planning prompt down to the
-capabilities a formation actually needs — reducing token spend per
-planning call and preventing destructive upstream tools (e.g.
-``delete_repo``, ``force_push_branch``) from being plannable in the
-first place.
+Adds an optional ``tools`` block on any MCP server config that lets operators register only a subset of an upstream catalog. Cuts both the runtime tool registry and the per-turn planning prompt down to the capabilities a formation actually needs — reducing token spend per planning call and preventing destructive upstream tools (e.g. ``delete_repo``, ``force_push_branch``) from being plannable in the first place.
 
-**Schema.** Either ``tools.whitelist`` *or* ``tools.blacklist`` (mutually
-exclusive) on any MCP server ``.afs``:
+**Schema.** Either ``tools.whitelist`` *or* ``tools.blacklist`` (mutually exclusive) on any MCP server ``.afs``:
 
 ```yaml
 type: "http"
@@ -592,46 +247,24 @@ tools:
     - "create_or_update_file"
 ```
 
-Patterns are fnmatch globs (``*``, ``?``, character ranges). Literal
-names are matched exactly. Both list members are case-sensitive to
-match the upstream MCP convention.
+Patterns are fnmatch globs (``*``, ``?``, character ranges). Literal names are matched exactly. Both list members are case-sensitive to match the upstream MCP convention.
 
-**Pipeline.** Translation lives in a new pure module
-``services/mcp/tool_filter.py``: ``ToolFilterSpec.from_config`` is total
-and tolerant (malformed input → inactive spec); ``apply_filter`` is the
-single entry point used during registration. The filter runs *between*
-``tools/list`` and registry insertion in
-``MCPService._connect_single_transport`` so post-filter empty sets abort
-registration with a typed
-``mcp.tool_filter.empty_set`` warning instead of silently registering an
-agent with zero tools.
+**Pipeline.** Translation lives in a new pure module ``services/mcp/tool_filter.py``: ``ToolFilterSpec.from_config`` is total and tolerant (malformed input → inactive spec); ``apply_filter`` is the single entry point used during registration. The filter runs *between* ``tools/list`` and registry insertion in ``MCPService._connect_single_transport`` so post-filter empty sets abort registration with a typed ``mcp.tool_filter.empty_set`` warning instead of silently registering an agent with zero tools.
 
 **Wiring.** Both registration sites now honor the spec:
 
-* ``Formation._register_mcp_servers`` (formation-level, always-on
-  servers) — ``formation.py:2419``
-* ``Overlord._register_agent_mcp_servers`` (per-agent re-registration
-  during agent load) — ``overlord.py:2092``
+* ``Formation._register_mcp_servers`` (formation-level, always-on servers) — ``formation.py:2419``
+* ``Overlord._register_agent_mcp_servers`` (per-agent re-registration during agent load) — ``overlord.py:2092``
 
-A dropped agent-level wiring would silently re-register the full
-upstream catalog after agents loaded, defeating the filter for any
-flow that reached the agent path. The live test caught it.
+A dropped agent-level wiring would silently re-register the full upstream catalog after agents loaded, defeating the filter for any flow that reached the agent path. The live test caught it.
 
 **Observability.** Three new ``SystemEvents`` emitted per registration:
 
-* ``MCP_TOOL_FILTER_APPLIED`` (info) — full pattern resolution table so
-  operators can audit exactly which upstream tools each glob expanded
-  to. Critical for catching silent scope expansion when an upstream
-  adds a tool that newly matches a wildcard.
-* ``MCP_TOOL_FILTER_UNKNOWN_TOOL`` (warning, once per unknown literal
-  pattern) — surfaces typos with ``difflib`` "did you mean?"
-  suggestions. Glob patterns that match nothing emit an empty
-  suggestion list (suppressed to avoid noise).
-* ``MCP_TOOL_FILTER_EMPTY_SET`` (warning) — registration aborted because
-  the post-filter set is empty.
+* ``MCP_TOOL_FILTER_APPLIED`` (info) — full pattern resolution table so operators can audit exactly which upstream tools each glob expanded to. Critical for catching silent scope expansion when an upstream adds a tool that newly matches a wildcard.
+* ``MCP_TOOL_FILTER_UNKNOWN_TOOL`` (warning, once per unknown literal pattern) — surfaces typos with ``difflib`` "did you mean?" suggestions. Glob patterns that match nothing emit an empty suggestion list (suppressed to avoid noise).
+* ``MCP_TOOL_FILTER_EMPTY_SET`` (warning) — registration aborted because the post-filter set is empty.
 
-A clean ``[ INFO ]`` init line also prints the resolution inline next
-to ``Connected to MCP``:
+A clean ``[ INFO ]`` init line also prints the resolution inline next to ``Connected to MCP``:
 
 ```
 [ INFO ] MCP 'github-mcp' tool filter (resolved 29/44 tools via whitelist(9 patterns))
@@ -641,364 +274,126 @@ to ``Connected to MCP``:
 [  OK  ] Connected to MCP 'github-mcp' (29 tools available via streamable http)
 ```
 
-**Validation.** ``ConfigValidator._validate_mcp_tools_block`` enforces
-fail-fast load-time rules: mutex (``whitelist`` XOR ``blacklist``);
-list-of-strings; non-blank patterns. Empty pattern lists log a
-``no filter will be applied`` warning rather than failing — operators
-sometimes scaffold the block before populating it.
+**Validation.** ``ConfigValidator._validate_mcp_tools_block`` enforces fail-fast load-time rules: mutex (``whitelist`` XOR ``blacklist``); list-of-strings; non-blank patterns. Empty pattern lists log a ``no filter will be applied`` warning rather than failing — operators sometimes scaffold the block before populating it.
 
-**Live measurement on
-``example-formations/demo/hello-muxi``.** A 12-phrase variation battery
-against a capability-scoped whitelist (29 of 44 github-mcp tools
-registered) showed:
+**Live measurement on ``example-formations/demo/hello-muxi``.** A 12-phrase variation battery against a capability-scoped whitelist (29 of 44 github-mcp tools registered) showed:
 
 * 0 errors, 0 warnings across all runs
-* 4/4 guestbook-comment paraphrases ("sign", "leave a note", "say hi",
-  "post a greeting on issue 50") routed correctly to the
-  ``community-greeter`` agent and posted to issue #50 via
-  ``add_issue_comment``
-* 4/4 muxi-expert concept questions ("what is muxi", "tell me about
-  the overlord", "explain formations", "what's an SOP") returned
-  MUXI-grounded answers
-* Per-request token footprint: ~12.0k for guestbook flows, ~13.5k for
-  concept Q&A — vs ~23.3k pre-filter for the same workload (~48%
-  reduction on a matched flow)
+* 4/4 guestbook-comment paraphrases ("sign", "leave a note", "say hi", "post a greeting on issue 50") routed correctly to the ``community-greeter`` agent and posted to issue #50 via ``add_issue_comment``
+* 4/4 muxi-expert concept questions ("what is muxi", "tell me about the overlord", "explain formations", "what's an SOP") returned MUXI-grounded answers
+* Per-request token footprint: ~12.0k for guestbook flows, ~13.5k for concept Q&A — vs ~23.3k pre-filter for the same workload (~48% reduction on a matched flow)
 
-**Test changes.**
-
-* ``tests/unit/test_mcp_tool_filter.py`` (new, 27 tests) — pure filter
-  semantics (literal, glob ``*``, glob ``?``, mixed lists, ordering,
-  unknown-pattern ``difflib`` suggestions, empty-set reporting,
-  pass-through field preservation), ``ToolFilterSpec.from_config``
-  tolerance (None / empty / both-keys / non-string entries), and
-  formation-level validator hooks (mutex, type, blank, empty, clean
-  whitelist, clean blacklist).
-
-Full unit suite: 979 passed, 3 skipped, 0 failed.
+**Tests** in ``tests/unit/test_mcp_tool_filter.py`` cover pure filter semantics (literal, glob ``*`` / ``?``, mixed lists, ordering, unknown-pattern ``difflib`` suggestions, empty-set reporting, pass-through field preservation), ``ToolFilterSpec.from_config`` tolerance, and the formation-level validator hooks (mutex, type, blank, empty, clean whitelist, clean blacklist).
 
 ### Collapse three synthesis LLM passes into one persona call
 
-Removes the agent-level and workflow-level synthesis LLM calls and
-replaces both with deterministic builders that feed structured input
-into the overlord's existing ``_apply_persona`` pass — which is now
-the single LLM hop on the way back to the user.
+Removes the agent-level and workflow-level synthesis LLM calls and replaces both with deterministic builders that feed structured input into the overlord's existing ``_apply_persona`` pass — which is now the single LLM hop on the way back to the user.
 
-**Before**: a workflow turn with N tasks made N agent-synthesis calls
-(one per task), one workflow-synthesis call to merge them, and one
-persona call to dress the merge for the user — all sequential, all
-cloud round-trips. A bare chat turn made one agent-synthesis call
-followed by the persona call. Three of those LLM hops were the
-runtime saying the same thing back to itself.
+**Before**: a workflow turn with N tasks made N agent-synthesis calls (one per task), one workflow-synthesis call to merge them, and one persona call to dress the merge for the user — all sequential, all cloud round-trips. A bare chat turn made one agent-synthesis call followed by the persona call. Three of those LLM hops were the runtime saying the same thing back to itself.
 
-**After**: agents emit raw structured output via a new
-``Agent._build_raw_response`` deterministic renderer (``### {placeholder}``
-sections, dict results expanded as ``key: value``, artifact filenames
-inline, delegated-agent prose appended verbatim). The overlord's
-``_synthesize_workflow_results`` delegates merging to a new
-``_consolidate_workflow_results`` helper that produces budget-bounded
-per-task sections via the existing ``_render_task_body`` — no LLM
-call. ``_apply_persona`` is the single user-facing LLM hop and its
-system prompt was extended with two contracts inherited from the
-deleted synthesis prompts: a raw-input acknowledgment that names the
-``### Task`` / ``### {placeholder}`` markers it should expect, and the
-date-preservation guardrail that previously lived in the workflow
-synthesis system prompt.
+**After**: agents emit raw structured output via a new ``Agent._build_raw_response`` deterministic renderer (``### {placeholder}`` sections, dict results expanded as ``key: value``, artifact filenames inline, delegated-agent prose appended verbatim). The overlord's ``_synthesize_workflow_results`` delegates merging to a new ``_consolidate_workflow_results`` helper that produces budget-bounded per-task sections via the existing ``_render_task_body`` — no LLM call. ``_apply_persona`` is the single user-facing LLM hop and its system prompt was extended with two contracts inherited from the deleted synthesis prompts: a raw-input acknowledgment that names the ``### Task`` / ``### {placeholder}`` markers it should expect, and the date-preservation guardrail that previously lived in the workflow synthesis system prompt.
 
-Dead code removed: ``Overlord._create_synthesis_prompt``,
-``Overlord._get_workflow_synthesis_system_prompt``,
-``Overlord._fallback_synthesis``. Skip-synthesis observability events
-now emit ``reason: always_skip_v2`` (chat turn) and
-``reason: deterministic_consolidator`` (workflow turn) so operators
-can audit the new path.
+Dead code removed: ``Overlord._create_synthesis_prompt``, ``Overlord._get_workflow_synthesis_system_prompt``, ``Overlord._fallback_synthesis``. Skip-synthesis observability events now emit ``reason: always_skip_v2`` (chat turn) and ``reason: deterministic_consolidator`` (workflow turn) so operators can audit the new path.
 
-**Expected savings on the canonical hello-muxi cold path**: ~4 s on a
-chat turn (one agent-synthesis call eliminated), ~20 s on a 4-task
-workflow turn (four agent-synthesis calls + one workflow-synthesis
-call eliminated). Live end-to-end run on develop confirmed: Turn 2
-issue-listing dropped from 38.4 s to 34.0 s and Turn 3 multi-step
-delegation produced a 3934-character briefing in 86.6 s with zero
-``planning_response_synthesis_*`` events emitted.
+**Expected savings on the canonical hello-muxi cold path**: ~4 s on a chat turn (one agent-synthesis call eliminated), ~20 s on a 4-task workflow turn (four agent-synthesis calls + one workflow-synthesis call eliminated). Live end-to-end run on develop confirmed: Turn 2 issue-listing dropped from 38.4 s to 34.0 s and Turn 3 multi-step delegation produced a 3934-character briefing in 86.6 s with zero ``planning_response_synthesis_*`` events emitted.
 
-**Test changes.**
-
-* ``tests/unit/test_agent_skip_synthesis_always.py`` (new, 11 tests)
-  pins the always-skip contract, the ``_build_raw_response`` output
-  shape, and asserts the synthesis method body no longer references
-  ``self.model.chat``.
-* ``tests/unit/test_apply_persona_handles_raw.py`` (new, 4 tests)
-  pins the raw-input acknowledgment and date-preservation guardrails
-  in the persona system prompt source.
-* ``tests/unit/test_workflow_consolidator.py`` (renamed from
-  ``test_overlord_synthesis_prompt.py``, 16 tests) lifted from the
-  prior ``_create_synthesis_prompt`` suite to exercise the new
-  deterministic ``_consolidate_workflow_results`` helper.
-* ``tests/unit/test_workflow_date_preservation_prompts.py`` first
-  test repointed from the deleted
-  ``_get_workflow_synthesis_system_prompt`` to the new date guardrail
-  location inside ``_apply_persona``.
-
-Full unit suite: 925 pass, 1 skipped, 0 new failures.
-``validate_events.py``: 1214/1214 events enum-backed.
-``run_random_tests.py 20`` after merge: 20/20 pass across 11 areas
-(streaming, formatting, triggers, identities, api, skills,
-multimodal, mcp, orchestration, clarification, async).
+**Tests** pin the always-skip contract on the agent path, the ``_build_raw_response`` deterministic output shape, the persona system prompt's raw-input acknowledgment and date-preservation guardrails, and the new ``_consolidate_workflow_results`` helper (lifted from the prior ``_create_synthesis_prompt`` suite).
 
 ### Hot-reload secrets without restarting the formation
 
-Adds an admin-only ``POST /secrets/reload`` endpoint that refreshes the
-running formation's in-memory secret cache from ``secrets.enc`` without
-restarting the process. Useful when secrets are rotated externally
-(e.g. CI redeploys the encrypted file) and you don't want to bounce a
-live formation just to pick up the new values.
+Adds an admin-only ``POST /secrets/reload`` endpoint that refreshes the running formation's in-memory secret cache from ``secrets.enc`` without restarting the process. Useful when secrets are rotated externally (e.g. CI redeploys the encrypted file) and you don't want to bounce a live formation just to pick up the new values.
 
-**Non-destructive merge semantics**
-Reload does not replace the cache wholesale. It performs an
-add-or-override merge:
+**Non-destructive merge semantics** Reload does not replace the cache wholesale. It performs an add-or-override merge:
 - secrets present on disk but missing in memory are added
 - secrets present in both places are overwritten with the disk value
 - secrets present only in memory are preserved and are NOT deleted
 
-The preservation rule is intentional: an in-memory-only secret may
-have been added through the API or be in active use by a running
-agent / MCP integration, and silently dropping it on reload would
-break those consumers.
+The preservation rule is intentional: an in-memory-only secret may have been added through the API or be in active use by a running agent / MCP integration, and silently dropping it on reload would break those consumers.
 
-**Failure isolation**
-If decrypting or parsing ``secrets.enc`` fails, the existing
-in-memory cache is left untouched and the endpoint returns 500. The
-reload is performed under the existing ``SecretsManager`` async lock,
-so concurrent readers never see a partially-built cache.
+**Failure isolation** If decrypting or parsing ``secrets.enc`` fails, the existing in-memory cache is left untouched and the endpoint returns 500. The reload is performed under the existing ``SecretsManager`` async lock, so concurrent readers never see a partially-built cache.
 
-**Scope of effect**
-Reload affects future secret lookups that read from the live cache
-(e.g. ``get_secret``, ``interpolate_secrets``, skill env resolution,
-runtime user-credential resolution). It does NOT retroactively
-rewrite values that were already interpolated into formation config
-during initialization or into MCP auth at registration time — those
-remain fixed until a normal reload of the affected component.
+**Scope of effect** Reload affects future secret lookups that read from the live cache (e.g. ``get_secret``, ``interpolate_secrets``, skill env resolution, runtime user-credential resolution). It does NOT retroactively rewrite values that were already interpolated into formation config during initialization or into MCP auth at registration time — those remain fixed until a normal reload of the affected component.
 
 New pieces:
-- ``SecretsManager.reload()`` returning ``{added, overwritten,
-  preserved, count}``
+- ``SecretsManager.reload()`` returning ``{added, overwritten, preserved, count}``
 - ``Formation.reload_secrets()`` wrapper
 - ``APIEventType.SECRET_RELOADED`` (``secret.reloaded``)
 - ``POST /secrets/reload`` admin route emitting the merge summary
 
-Five new unit tests in
-``tests/unit/test_secrets_reload.py`` cover add, overwrite, preserve,
-failure-leaves-cache-intact, and missing-file behaviour.
+Five new unit tests in ``tests/unit/test_secrets_reload.py`` cover add, overwrite, preserve, failure-leaves-cache-intact, and missing-file behaviour.
 
 ### Cold-path latency cuts: classifier preload + SOP-template analyzer skip
 
-Two complementary changes that together shave ~16-18 s off the cold
-hello-muxi demo path without touching the workflow executor or model
-selection. Both are pure additions; nothing in the existing flow is
-removed and there is a fallback for every new fast path.
+Two complementary changes that together shave ~16-18 s off the cold hello-muxi demo path without touching the workflow executor or model selection. Both are pure additions; nothing in the existing flow is removed and there is a fallback for every new fast path.
 
-**Local classifier preloaded at formation startup**
-The local prototype-similarity classifier (``Xenova/multilingual-e5-small``,
-introduced in PR #160) lazy-loaded on first user request, costing
-~10 s on the very first chat turn — easily the worst-feeling part of
-the demo. ``Overlord._async_startup`` now awaits
-``_get_local_classifier()`` immediately after the routing/extraction
-models are ready, moving that cost off the critical path. The
-existing process-wide ``services.classification.get_classifier()``
-singleton means subsequent overlord/scheduler/credential consumers
-adopt the warmed instance for free. Failures during preload degrade
-to the legacy lazy-init path with a warning event, never block
-startup.
+**Local classifier preloaded at formation startup** The local prototype-similarity classifier (``Xenova/multilingual-e5-small``, introduced in PR #160) lazy-loaded on first user request, costing ~10 s on the very first chat turn — easily the worst-feeling part of the demo. ``Overlord._async_startup`` now awaits ``_get_local_classifier()`` immediately after the routing/extraction models are ready, moving that cost off the critical path. The existing process-wide ``services.classification.get_classifier()`` singleton means subsequent overlord/scheduler/credential consumers adopt the warmed instance for free. Failures during preload degrade to the legacy lazy-init path with a warning event, never block startup.
 
-**SOP-template fast path skips the LLM request analyzer**
-When an SOP has been matched earlier in a request AND is in
-deterministic ``template`` mode, the analyzer's complexity score and
-topic tags are not consulted by the downstream workflow — the SOP
-itself is the plan. ``_process_sync_chat`` now skips the ~6-8 s
-``request_analyzer.analyze_request`` LLM call and substitutes a stub
-``RequestAnalysis`` with ``requires_decomposition=True``,
-``is_security_threat=False``, and empty topics.
+**SOP-template fast path skips the LLM request analyzer** When an SOP has been matched earlier in a request AND is in deterministic ``template`` mode, the analyzer's complexity score and topic tags are not consulted by the downstream workflow — the SOP itself is the plan. ``_process_sync_chat`` now skips the ~6-8 s ``request_analyzer.analyze_request`` LLM call and substitutes a stub ``RequestAnalysis`` with ``requires_decomposition=True``, ``is_security_threat=False``, and empty topics.
 
-Security is not regressed: a fast heuristic regex screen
-(``_looks_heuristically_suspicious``) runs against the actual user
-message before the skip is taken. The pattern set covers the
-canonical prompt-injection / jailbreak phrasings ("ignore previous
-instructions", "reveal your system prompt", "you are now DAN", role-
-override prefixes like ``<|im_start|>system``, content-policy
-override attempts, etc.). When any pattern matches, the gate falls
-through to the full LLM analyzer so the higher-confidence verdict
-still runs and can block the request.
+Security is not regressed: a fast heuristic regex screen (``_looks_heuristically_suspicious``) runs against the actual user message before the skip is taken. The pattern set covers the canonical prompt-injection / jailbreak phrasings ("ignore previous instructions", "reveal your system prompt", "you are now DAN", role- override prefixes like ``<|im_start|>system``, content-policy override attempts, etc.). When any pattern matches, the gate falls through to the full LLM analyzer so the higher-confidence verdict still runs and can block the request.
 
-A new debug-level ``WORKFLOW_ANALYSIS_SKIPPED`` event fires whenever
-the fast path is taken, tagged with ``reason: sop_template_match``,
-``sop_id``, ``sop_name``, and ``skipped_stage: request_analyzer_llm``,
-so operators can audit how often the override is biting.
+A new debug-level ``WORKFLOW_ANALYSIS_SKIPPED`` event fires whenever the fast path is taken, tagged with ``reason: sop_template_match``, ``sop_id``, ``sop_name``, and ``skipped_stage: request_analyzer_llm``, so operators can audit how often the override is biting.
 
-22 new unit tests in ``tests/unit/test_overlord_sop_template_analyzer_skip.py``
-pin the heuristic screen (8 attack patterns must flag, 7 benign
-inputs must not), the stub ``RequestAnalysis`` shape (safe defaults,
-reasonable complexity/confidence), and the composed gate (benign +
-template = fast path; attack + template = falls through; guide-mode
-SOP never takes fast path; no SOP never takes fast path).
+22 new unit tests in ``tests/unit/test_overlord_sop_template_analyzer_skip.py`` pin the heuristic screen (8 attack patterns must flag, 7 benign inputs must not), the stub ``RequestAnalysis`` shape (safe defaults, reasonable complexity/confidence), and the composed gate (benign + template = fast path; attack + template = falls through; guide-mode SOP never takes fast path; no SOP never takes fast path).
 
 ### Synthesis capability in AFS schema (companion spec)
 
-Adds an optional ``synthesis`` capability to the formation LLM model
-list, with the same shape and options as ``text``: ``api_key``
-override plus ``settings.{temperature, max_tokens, timeout_seconds,
-max_retries, fallback_model}``. When present, agents route the
-post-tool-call response synthesis stage through this model; when
-absent, agents fall back to ``text`` (existing behavior). Pure spec
-addition for now — runtime resolution is a follow-up.
+Adds an optional ``synthesis`` capability to the formation LLM model list, with the same shape and options as ``text``: ``api_key`` override plus ``settings.{temperature, max_tokens, timeout_seconds, max_retries, fallback_model}``. When present, agents route the post-tool-call response synthesis stage through this model; when absent, agents fall back to ``text`` (existing behavior). Pure spec addition for now — runtime resolution is a follow-up.
 
-Documented in ``afs-spec/schemas/formation.afs`` and the SCHEMA_GUIDE
-override hierarchy section.
+Documented in ``afs-spec/schemas/formation.afs`` and the SCHEMA_GUIDE override hierarchy section.
 
 ### Maintenance: FastAPI deprecation + OneLLM startup warning
 
-* ``audit`` admin route: replaced ``Query(regex=...)`` with
-  ``Query(pattern=...)``. FastAPI deprecated ``regex=`` in favor of
-  ``pattern=``; the runtime now emits the right keyword and the
-  startup deprecation warning is gone.
-* ``llm.py``: registered a ``warnings.filterwarnings`` for the
-  ``onellm.cache`` UserWarning that fires when OneLLM's default
-  semantic-cache embedding model lacks ONNX weights and PyTorch
-  isn't installed. The cache correctly falls back to hash-only mode
-  and the runtime ships ``Xenova/multilingual-e5-small`` for actual
-  semantic similarity work, so the warning is noise that scared
-  users on every formation startup. Filter is registered
-  immediately before the ``onellm_init_cache`` call in
-  ``initialize_onellm_cache`` so it stays scoped to the cache
-  module.
+* ``audit`` admin route: replaced ``Query(regex=...)`` with ``Query(pattern=...)``. FastAPI deprecated ``regex=`` in favor of ``pattern=``; the runtime now emits the right keyword and the startup deprecation warning is gone.
+* ``llm.py``: registered a ``warnings.filterwarnings`` for the ``onellm.cache`` UserWarning that fires when OneLLM's default semantic-cache embedding model lacks ONNX weights and PyTorch isn't installed. The cache correctly falls back to hash-only mode and the runtime ships ``Xenova/multilingual-e5-small`` for actual semantic similarity work, so the warning is noise that scared users on every formation startup. Filter is registered immediately before the ``onellm_init_cache`` call in ``initialize_onellm_cache`` so it stays scoped to the cache module.
 
 ### SOP-aware actionability gate (post-PR-#160 regression)
 
-Fixes a demo regression where the hello-muxi formation would silently
-swallow a matched SOP. Replaying the demo flow:
+Fixes a demo regression where the hello-muxi formation would silently swallow a matched SOP. Replaying the demo flow:
 
 * User says "onboard me"
 * `sop.matched` fires at +1.1s for SOP `onboarding` (mode `template`)
 * Clarification analyzer returns `action: execute`
-* `_is_actionable_message` (the new local prototype-similarity
-  classifier from PR #160) returns `False` for the bare two-word
-  phrase
+* `_is_actionable_message` (the new local prototype-similarity classifier from PR #160) returns `False` for the bare two-word phrase
 * Overlord takes the persona fast path, returns a chat-style reply
-* No `agent.planning`, no `overlord.routing.completed`, no GitHub
-  issue comment — the matched SOP is dropped on the floor
+* No `agent.planning`, no `overlord.routing.completed`, no GitHub issue comment — the matched SOP is dropped on the floor
 
-The classifier replacement was the right call for filtering bare
-social chatter ("hi" / "thanks" / "got it") at ~50 ms instead of a
-cloud LLM round-trip, but it is deliberately conservative on short
-verb-light phrases. Pre-PR-#160 the LLM-based check correctly read
-"onboard me" as a procedure trigger; the new heuristic does not.
+The classifier replacement was the right call for filtering bare social chatter ("hi" / "thanks" / "got it") at ~50 ms instead of a cloud LLM round-trip, but it is deliberately conservative on short verb-light phrases. Pre-PR-#160 the LLM-based check correctly read "onboard me" as a procedure trigger; the new heuristic does not.
 
-Fix: extracted the actionability decision in
-`overlord._process_sync_chat` into a small helper
-`_resolve_actionability(message, matched_sop)`. Behavior:
+Fix: extracted the actionability decision in `overlord._process_sync_chat` into a small helper `_resolve_actionability(message, matched_sop)`. Behavior:
 
-* No SOP match → defer to `_is_actionable_message` verbatim
-  (preserves the PR #160 latency win for greetings/acks)
+* No SOP match → defer to `_is_actionable_message` verbatim (preserves the PR #160 latency win for greetings/acks)
 * SOP match + classifier says actionable → no-op, return `True`
-* SOP match + classifier says non-actionable → **force `True`** and
-  emit a debug-level `SOP_MATCHED` event tagged
-  `stage: actionability_override` so operators can audit how often
-  the override is biting
+* SOP match + classifier says non-actionable → **force `True`** and emit a debug-level `SOP_MATCHED` event tagged `stage: actionability_override` so operators can audit how often the override is biting
 
-A matched SOP is by definition actionable: we already know what to
-do. The classifier verdict cannot override an explicit procedure
-match.
+A matched SOP is by definition actionable: we already know what to do. The classifier verdict cannot override an explicit procedure match.
 
-5 new unit tests in
-`tests/unit/test_overlord_actionability_sop_override.py` pin all
-four classifier × SOP combinations plus the `name`-fallback
-metadata shape. Full unit suite: 891 passed / 1 skipped (one
-pre-existing rce-token-validation failure unrelated to this change).
+Tests in `tests/unit/test_overlord_actionability_sop_override.py` pin all four classifier x SOP combinations plus the `name`-fallback metadata shape.
 
 ### Pure-chat multi-turn context fix (clean role-turn bundle)
 
-Fixes cross-turn context loss in pure-chat sessions where
-honesty-trained models (Sonnet 4.6 most prominently) would respond
-"I'm missing the context here" to a simple follow-up question
-(`"What about the language thing though?"`) on turn 3 of an
-otherwise normal four-turn conversation, despite the buffer memory
-holding the full prior exchange.
+Fixes cross-turn context loss in pure-chat sessions where honesty-trained models (Sonnet 4.6 most prominently) would respond "I'm missing the context here" to a simple follow-up question (`"What about the language thing though?"`) on turn 3 of an otherwise normal four-turn conversation, despite the buffer memory holding the full prior exchange.
 
-Root cause: every pure-chat turn was sent to the agent's LLM as a
-**single user message** wrapping the request inside a
-`=== CURRENT REQUEST ===` block, with the prior conversation
-re-serialized as a flat `[12:30] User: ...` blob inside a
-`=== CONVERSATION CONTEXT ===` section of that *same* user message.
-GPT-class models pattern-match through this; honesty-trained models
-read the explicit "CURRENT REQUEST" framing as an isolated query and
-treat the surrounding prose as ambient metadata, not history. The
-result was correct context retrieval but a confused model.
+Root cause: every pure-chat turn was sent to the agent's LLM as a **single user message** wrapping the request inside a `=== CURRENT REQUEST ===` block, with the prior conversation re-serialized as a flat `[12:30] User: ...` blob inside a `=== CONVERSATION CONTEXT ===` section of that *same* user message. GPT-class models pattern-match through this; honesty-trained models read the explicit "CURRENT REQUEST" framing as an isolated query and treat the surrounding prose as ambient metadata, not history. The result was correct context retrieval but a confused model.
 
 Fix:
 
-* **`ChatOrchestrator._build_clean_chat_context`** — new helper that
-  builds a structured bundle alongside the existing marker-formatted
-  `enhanced_message` (kept verbatim because the analyzer pipeline —
-  clarification, classifier text extraction, planning intent
-  extraction — depends on the marker contract). The bundle carries
-  buffer history as proper role turns (`{"role": "user"|"assistant",
-  "content": ...}`), the un-enhanced current user message, plus
-  `user_profile_text` / `long_term_memories` / `file_results` as
-  separate fields. `chat()` now `gather()`s both representations in
-  parallel and threads the bundle through `_create_stream_generator`
-  → `_process_sync_chat`.
-* **`Overlord._process_sync_chat`** — accepts and forwards
-  `clean_chat_context` to `Agent.process_message`.
-* **`Agent._assemble_messages_from_clean_context`** — new helper
-  that produces a chat-API-shape `[system_with_addendum, ...buffer
-  turns, current_user]` list. Profile, memories and file-results
-  land in a *system addendum*, not embedded inside the user turn.
-* **`Agent.process_message`** — when a clean bundle is supplied,
-  prefers the raw user text from the bundle and rebuilds
-  `self._messages` via the helper each turn rather than appending
-  marker-formatted blobs into agent-instance state. This produces a
-  transcript shape that matches a normal direct LLM call.
-* **`Agent.process_message` `direct_simple_response` path
-  (line ~2229)** — the empty-plan synthesis path was constructing
-  its own `[system, current_user]` pair from scratch, which silently
-  bypassed the freshly-rebuilt `self._messages`. Now reuses the
-  fully-assembled transcript when a clean bundle is present, falling
-  back to the legacy two-message pair for non-chat callers.
+* **`ChatOrchestrator._build_clean_chat_context`** — new helper that builds a structured bundle alongside the existing marker-formatted `enhanced_message` (kept verbatim because the analyzer pipeline — clarification, classifier text extraction, planning intent extraction — depends on the marker contract). The bundle carries buffer history as proper role turns (`{"role": "user"|"assistant", "content": ...}`), the un-enhanced current user message, plus `user_profile_text` / `long_term_memories` / `file_results` as separate fields. `chat()` now `gather()`s both representations in parallel and threads the bundle through `_create_stream_generator` → `_process_sync_chat`.
+* **`Overlord._process_sync_chat`** — accepts and forwards `clean_chat_context` to `Agent.process_message`.
+* **`Agent._assemble_messages_from_clean_context`** — new helper that produces a chat-API-shape `[system_with_addendum, ...buffer turns, current_user]` list. Profile, memories and file-results land in a *system addendum*, not embedded inside the user turn.
+* **`Agent.process_message`** — when a clean bundle is supplied, prefers the raw user text from the bundle and rebuilds `self._messages` via the helper each turn rather than appending marker-formatted blobs into agent-instance state. This produces a transcript shape that matches a normal direct LLM call.
+* **`Agent.process_message` `direct_simple_response` path (line ~2229)** — the empty-plan synthesis path was constructing its own `[system, current_user]` pair from scratch, which silently bypassed the freshly-rebuilt `self._messages`. Now reuses the fully-assembled transcript when a clean bundle is present, falling back to the legacy two-message pair for non-chat callers.
 
-Verification: replayed the same four-turn solo-trip transcript
-against Sonnet 4.6 (`anthropic/claude-sonnet-4-6`). Turn 3 now
-opens "You'll be totally fine in Lisbon" and turn 4 builds on the
-prior anchor-mornings advice. Input token count grows turn over
-turn (8703 → 9406 → 9027 → 9560) where it was previously flat at
-~8000 every turn — confirming the model is actually receiving the
-accumulated history rather than re-processing the same isolated
-turn.
+Verification: replayed the same four-turn solo-trip transcript against Sonnet 4.6 (`anthropic/claude-sonnet-4-6`). Turn 3 now opens "You'll be totally fine in Lisbon" and turn 4 builds on the prior anchor-mornings advice. Input token count grows turn over turn (8703 → 9406 → 9027 → 9560) where it was previously flat at ~8000 every turn — confirming the model is actually receiving the accumulated history rather than re-processing the same isolated turn.
 
-14 new unit tests in
-`tests/unit/test_chat_orchestrator_clean_context.py` pin the bundle
-shape, chronological reversal of recency-first buffer rows, the
-race-filter that drops the current user message if the buffer
-stored it ahead of us, role/empty-text filtering, and the
-agent-side assembly invariants (system addendum, no double history
-in any user turn). Full unit suite: 885 passed / 3 skipped.
+Tests in `tests/unit/test_chat_orchestrator_clean_context.py` pin the bundle shape, chronological reversal of recency-first buffer rows, the race-filter that drops the current user message if the buffer stored it ahead of us, role/empty-text filtering, and the agent-side assembly invariants (system addendum, no double history in any user turn).
 
 ### Review hardening (PR #160)
 
 Two follow-ups from greptile code review:
 
-* **Deleted dead `get_default_classifier()`** in
-  `services/classification/local_classifier.py`. The function declared its
-  own competing `_default_classifier` / `_default_lock` singleton but was
-  never imported or called anywhere — all consumers (`overlord`,
-  `scheduler`, `fusion_engine`) go through `get_classifier()` in
-  `classification/__init__.py`. Per AGENTS.md "no dead code" rule, removed
-  the dead function entirely along with the now-unused `Optional` import.
-* **Added minimum-margin gate** to both Group B clarification fast paths.
-  New module-level constant `MIN_FAST_PATH_MARGIN = 0.05` in
-  `clarification.py`. `_analyze_request` STEP 1.5 and `_check_need_more`
-  STEP 0 now skip the LLM only when the classifier is **both** confident
-  in "no clarification" **and** the margin clears the threshold. On a
-  near-zero margin (uncertain centroids) the call falls through to the
-  LLM, preserving the clarification-on-ambiguity guarantee. Below-
-  threshold cases emit a `logger.debug` line so operators can audit how
-  often the threshold is biting; no new event types or config surface.
+* **Deleted dead `get_default_classifier()`** in `services/classification/local_classifier.py`. The function declared its own competing `_default_classifier` / `_default_lock` singleton but was never imported or called anywhere — all consumers (`overlord`, `scheduler`, `fusion_engine`) go through `get_classifier()` in `classification/__init__.py`. Per AGENTS.md "no dead code" rule, removed the dead function entirely along with the now-unused `Optional` import.
+* **Added minimum-margin gate** to both Group B clarification fast paths. New module-level constant `MIN_FAST_PATH_MARGIN = 0.05` in `clarification.py`. `_analyze_request` STEP 1.5 and `_check_need_more` STEP 0 now skip the LLM only when the classifier is **both** confident in "no clarification" **and** the margin clears the threshold. On a near-zero margin (uncertain centroids) the call falls through to the LLM, preserving the clarification-on-ambiguity guarantee. Below- threshold cases emit a `logger.debug` line so operators can audit how often the threshold is biting; no new event types or config surface.
 
   ```python
   if not needs_clar and margin > MIN_FAST_PATH_MARGIN:
@@ -1009,44 +404,23 @@ Two follow-ups from greptile code review:
 
 ### Fix: synthesis LLM hallucinated "the file didn't come through" on mixed-result artifact plans
 
-Surfaced from a hello-muxi demo trace: `create a bar chart showing pretend
-quarterly sales of acme corp` returned the chart attachment **and** a
-synthesis paragraph saying the file didn't come through. The attachment
-WAS there; the prose contradicted reality.
+Surfaced from a hello-muxi demo trace: `create a bar chart showing pretend quarterly sales of acme corp` returned the chart attachment **and** a synthesis paragraph saying the file didn't come through. The attachment WAS there; the prose contradicted reality.
 
-**Root cause.**
-`Agent._serialize_planning_result_for_synthesis` strips the `_artifact`
-key from each `my_results` entry before serializing for the synthesis
-LLM:
+**Root cause.** `Agent._serialize_planning_result_for_synthesis` strips the `_artifact` key from each `my_results` entry before serializing for the synthesis LLM:
 
 ```python
 serializable_result.pop("_artifact", None)
 ```
 
-That left the synthesis prompt with **zero ground-truth signal** that any
-file was attached. The pure-artifact synthesis-skip fast path
-(`439b9271`, v0.20260427.0) didn't fire either, because the plan had two
-steps — `activate_skill(file-generation)` produces a non-`_artifact`
-instruction blob, and `generate_file` produces the artifact-bearing
-result. Mixed-shape `my_results` correctly fail the `every entry has
-_artifact` gate, so synthesis ran. With nothing in the prompt to confirm
-the file existed and a SOUL coaching the model to "be honest if
-something's broken," Sonnet 4.6 took the metadata-only view as failure
-evidence and wrote the contradiction.
+That left the synthesis prompt with **zero ground-truth signal** that any file was attached. The pure-artifact synthesis-skip fast path (`439b9271`, v0.20260427.0) didn't fire either, because the plan had two steps — `activate_skill(file-generation)` produces a non-`_artifact` instruction blob, and `generate_file` produces the artifact-bearing result. Mixed-shape `my_results` correctly fail the `every entry has _artifact` gate, so synthesis ran. With nothing in the prompt to confirm the file existed and a SOUL coaching the model to "be honest if something's broken," Sonnet 4.6 took the metadata-only view as failure evidence and wrote the contradiction.
 
-**Fix.** Surface the attached artifacts as a dedicated block in the
-synthesis prompt — explicitly so the LLM knows the file IS surfacing in
-the user's UI and cannot hallucinate failure.
+**Fix.** Surface the attached artifacts as a dedicated block in the synthesis prompt — explicitly so the LLM knows the file IS surfacing in the user's UI and cannot hallucinate failure.
 
-* New `Agent._collect_attached_artifact_lines(my_results)` helper. Walks
-  result values, pulls every `_artifact` (handles both `MuxiArtifact`
-  Pydantic instances and dict-shaped fallbacks), and renders one line
-  per artifact:
+* New `Agent._collect_attached_artifact_lines(my_results)` helper. Walks result values, pulls every `_artifact` (handles both `MuxiArtifact` Pydantic instances and dict-shaped fallbacks), and renders one line per artifact:
   ```
   - acme_corp_quarterly_sales.png (image/png, 56.4 KB)
   ```
-* `Agent._build_planning_response_synthesis_prompt` calls the helper.
-  When non-empty, it injects:
+* `Agent._build_planning_response_synthesis_prompt` calls the helper. When non-empty, it injects:
   ```
   FILES ALREADY ATTACHED TO THIS RESPONSE:
   - acme_corp_quarterly_sales.png (image/png, 56.4 KB)
@@ -1056,74 +430,30 @@ the user's UI and cannot hallucinate failure.
   through, or that generation failed when this list is non-empty. You MAY mention
   the filename(s) naturally in your reply.
   ```
-  …right before the existing closing instructions. Pure-text plans (no
-  artifacts at all) get no block — the conditional keeps prompt size
-  unchanged for the common case.
+  …right before the existing closing instructions. Pure-text plans (no artifacts at all) get no block — the conditional keeps prompt size unchanged for the common case.
 
-The serializer is left as-is — it correctly avoids dumping the full
-`MuxiArtifact` (binary `data_url`, base64 thumbnails) into the LLM
-context. The new block carries only the user-facing identifying data
-(filename, type/format, size).
+The serializer is left as-is — it correctly avoids dumping the full `MuxiArtifact` (binary `data_url`, base64 thumbnails) into the LLM context. The new block carries only the user-facing identifying data (filename, type/format, size).
 
 **Out of scope (deliberate):**
 
-* **Did not loosen the synthesis-skip gate** to treat `activate_skill`
-  results as transparent. That's a fine follow-up if the demo team
-  wants `activate_skill + generate_file` to skip synthesis entirely,
-  but Option B addresses the structurally weaker path: the case where
-  synthesis runs anyway. Both Options A and B can coexist.
-* **Did not modify `hello-muxi/SOUL.md`.** The bug was in the prompt,
-  not the persona — the SOUL's "be honest" coaching is correct
-  guidance; the LLM was just lacking the ground truth it needed to be
-  honest about.
+* **Did not loosen the synthesis-skip gate** to treat `activate_skill` results as transparent. That's a fine follow-up if the demo team wants `activate_skill + generate_file` to skip synthesis entirely, but Option B addresses the structurally weaker path: the case where synthesis runs anyway. Both Options A and B can coexist.
+* **Did not modify `hello-muxi/SOUL.md`.** The bug was in the prompt, not the persona — the SOUL's "be honest" coaching is correct guidance; the LLM was just lacking the ground truth it needed to be honest about.
 
-**Tests** (`tests/unit/test_agent_planning_helpers.py`, 7 new):
-extraction from a real `MuxiArtifact` instance, dict-shaped fallback
-extraction with `format` + `metadata.size_bytes`, partial metadata
-(missing format, missing size, missing filename → "(unnamed file)"),
-non-`_artifact` results skipped (the mixed-plan case), empty-input
-returns `[]`, end-to-end mixed-plan prompt contains the FILES ATTACHED
-block + filename + no-hallucinate guard before the closing
-instructions, pure-text-plan prompt does NOT contain the block. Full
-unit suite green: 847 passed, 1 skipped, 0 regressions.
-
-**File of record:**
-`src/muxi/runtime/formation/agents/agent.py` — helper added; prompt
-builder extended.
+**Tests** in `tests/unit/test_agent_planning_helpers.py` cover extraction from a real `MuxiArtifact` instance, dict-shaped fallback with `format` + `metadata.size_bytes`, partial metadata (missing format/size/filename), non-`_artifact` results skipped (the mixed-plan case), and end-to-end mixed-plan vs pure-text-plan prompts (block present in the former, absent in the latter).
 
 ### Performance: localize 13 binary classification gates — heavy PDF median 60.4 s → 50.7 s (-16 %)
 
-The pre-planning critical path was emitting 4-5 cloud LLM calls per
-non-trivial request — actionability detection, workflow eligibility,
-clarification analysis, simple-question detection, recall-question
-detection, plus credential and scheduler binary checks deeper in the
-flow. Every one of those was structurally a **binary** decision
-(yes/no, label/no-label) or a pure semantic-similarity score. None of
-them needed a cloud LLM. A 384-dim multilingual embedder pinned
-against curated prototype exemplars classifies them in ~60 ms with
-deterministic accuracy on the eval set, and ships as part of the
-runtime — no extra service, no API key, no network round-trip.
+The pre-planning critical path was emitting 4-5 cloud LLM calls per non-trivial request — actionability detection, workflow eligibility, clarification analysis, simple-question detection, recall-question detection, plus credential and scheduler binary checks deeper in the flow. Every one of those was structurally a **binary** decision (yes/no, label/no-label) or a pure semantic-similarity score. None of them needed a cloud LLM. A 384-dim multilingual embedder pinned against curated prototype exemplars classifies them in ~60 ms with deterministic accuracy on the eval set, and ships as part of the runtime — no extra service, no API key, no network round-trip.
 
 **The architecture.** New `services/classification/` module:
 
-* `prototypes.py` — 11 `IntentSpec` definitions, each carrying 8-15
-  positive + 8-15 negative exemplars (with 1-2 multilingual entries per
-  spec where the call site is multilingual).
-* `local_classifier.py` — `classify_binary(intent, text)` and
-  `pairwise_similarity(text_a, text_b)`.
-* `__init__.py` — public API + a process-wide singleton accessor
-  (`await get_classifier()`).
+* `prototypes.py` — 11 `IntentSpec` definitions, each carrying 8-15 positive + 8-15 negative exemplars (with 1-2 multilingual entries per spec where the call site is multilingual).
+* `local_classifier.py` — `classify_binary(intent, text)` and `pairwise_similarity(text_a, text_b)`.
+* `__init__.py` — public API + a process-wide singleton accessor (`await get_classifier()`).
 
-The model is `local/Xenova/multilingual-e5-small` (384-dim, ONNX,
-multilingual), auto-downloaded by OneLLM on first use, cached under
-the standard HuggingFace cache directory. Classifier warmup batch-
-embeds all positive and negative exemplars once at first use,
-computes L2-normalized centroid pairs per intent, and caches them
-in-process. Per-call cost: ~60 ms median on Apple Silicon ONNX
-Runtime. Process warmup is ~13 s, amortized.
+The model is `local/Xenova/multilingual-e5-small` (384-dim, ONNX, multilingual), auto-downloaded by OneLLM on first use, cached under the standard HuggingFace cache directory. Classifier warmup batch- embeds all positive and negative exemplars once at first use, computes L2-normalized centroid pairs per intent, and caches them in-process. Per-call cost: ~60 ms median on Apple Silicon ONNX Runtime. Process warmup is ~13 s, amortized.
 
-**Phase 1 (commits `3acd09e9`, `1ca9b3be`) — six pre-planning gates
-moved local:**
+**Phase 1 (commits `3acd09e9`, `1ca9b3be`) — six pre-planning gates moved local:**
 
 * `Overlord._is_actionable_message`
 * `Overlord._is_non_actionable_for_workflow`
@@ -1132,79 +462,35 @@ moved local:**
 * `UnifiedClarificationSystem._check_stop_intent`
 * The recall-question detection at STEP 1 of `_analyze_request`
 
-**Phase 2 (commits `3fc8d8c1` → `cd39e50c`) — seven more gates in
-three patterns:**
+**Phase 2 (commits `3fc8d8c1` → `cd39e50c`) — seven more gates in three patterns:**
 
-* **Group A — full replacements (no LLM fallback when classifier is
-  healthy).**
+* **Group A — full replacements (no LLM fallback when classifier is healthy).**
   * `CredentialHandler.is_credential_request`
-  * `CredentialHandler._is_cancellation` (multilingual: en/es/fr/ja
-    exemplars)
+  * `CredentialHandler._is_cancellation` (multilingual: en/es/fr/ja exemplars)
   * `CredentialHandler._is_help_request` (multilingual)
-  * `JobManager._is_significant_prompt_change` →
-    `pairwise_similarity(old, new) < 0.88` (calibrated threshold).
+  * `JobManager._is_significant_prompt_change` → `pairwise_similarity(old, new) < 0.88` (calibrated threshold).
 * **Group D — direct cosine replacement.**
-  * `MultiModalFusionEngine._calculate_semantic_similarity` →
-    `pairwise_similarity(source_desc, target_desc)`. The LLM was being
-    asked to score 0.0-1.0 similarity; that *is* cosine in an
-    embedding space, so we compute it directly.
-* **Group B — fast-path skip (split text generation from
-  classification decision).**
-  The clarification analyzer (`mt=250-1000`) and the inner "do we
-  need more info?" gate produce a `{needs_X: bool, question: str}`
-  structured output. The classifier owns the binary; the LLM only
-  fires on the positive branch (where it has to *generate* the
-  clarifying question). On a confident-no the LLM never runs.
-  Wired in `UnifiedClarificationSystem._analyze_request` (STEP 1.5)
-  and `_check_need_more` (STEP 0).
+  * `MultiModalFusionEngine._calculate_semantic_similarity` → `pairwise_similarity(source_desc, target_desc)`. The LLM was being asked to score 0.0-1.0 similarity; that *is* cosine in an embedding space, so we compute it directly.
+* **Group B — fast-path skip (split text generation from classification decision).** The clarification analyzer (`mt=250-1000`) and the inner "do we need more info?" gate produce a `{needs_X: bool, question: str}` structured output. The classifier owns the binary; the LLM only fires on the positive branch (where it has to *generate* the clarifying question). On a confident-no the LLM never runs. Wired in `UnifiedClarificationSystem._analyze_request` (STEP 1.5) and `_check_need_more` (STEP 0).
 
 **Deferred (intentional, not regressions):**
 
-* **Agent router** (`AgentRouter.select_agent_for_message`,
-  sequential, ~8 s on heavy PDF). Skipped for defense-in-depth
-  security reasons — the router doubles as a defense surface against
-  malicious agent-name injection in user input.
-* **Topic extraction** in `RequestAnalyzer` (parallel, ~1.5 s).
-  Skipped because the analyzer LLM still runs for 11 other
-  structured-output fields — replacing topics alone breaks the call
-  into two round-trips and saves nothing.
-* **`IntentDetectionService`** (4+ multi-class call sites).
-  Skipped: bigger blast radius; would need a `classify_multiclass`
-  method and per-`IntentType` prototype curation.
+* **Agent router** (`AgentRouter.select_agent_for_message`, sequential, ~8 s on heavy PDF). Skipped for defense-in-depth security reasons — the router doubles as a defense surface against malicious agent-name injection in user input.
+* **Topic extraction** in `RequestAnalyzer` (parallel, ~1.5 s). Skipped because the analyzer LLM still runs for 11 other structured-output fields — replacing topics alone breaks the call into two round-trips and saves nothing.
+* **`IntentDetectionService`** (4+ multi-class call sites). Skipped: bigger blast radius; would need a `classify_multiclass` method and per-`IntentType` prototype curation.
 
-**Failure modes — every wired gate falls back to the prior behavior
-on classifier-fail.** Group A credential gates fall back to the
-preserved keyword fallback from the legacy LLM-fail branches. Group
-A scheduler gate falls back to `True` (consider all changes
-significant — same conservative default the prior LLM-fail branch
-used; better to spawn a fresh job than silently reassign one). Group
-D fusion engine falls back to neutral 0.5. Group B fast-paths fall
-through to the existing LLM call path. This fall-through is the
-safety net, not a feature flag — a transient classifier outage
-degrades gracefully back to pre-Phase-2 behavior with no config
-surface to keep in sync.
+**Failure modes — every wired gate falls back to the prior behavior on classifier-fail.** Group A credential gates fall back to the preserved keyword fallback from the legacy LLM-fail branches. Group A scheduler gate falls back to `True` (consider all changes significant — same conservative default the prior LLM-fail branch used; better to spawn a fresh job than silently reassign one). Group D fusion engine falls back to neutral 0.5. Group B fast-paths fall through to the existing LLM call path. This fall-through is the safety net, not a feature flag — a transient classifier outage degrades gracefully back to pre-Phase-2 behavior with no config surface to keep in sync.
 
-**Observability.** New
-`SystemEvents.LOCAL_CLASSIFIER_INITIALIZED` (emitted once per process
-the first time the classifier warms; carries `warmup_ms` and the list
-of warmed intents). Group B fast-path skips reuse
-`ConversationEvents.CLARIFICATION_SKIPPED` with
-`method: "local_classifier_fast_path"` and `margin: <float>` so
-operators can audit how often they fire and what the classifier's
-confidence looked like.
+**Observability.** New `SystemEvents.LOCAL_CLASSIFIER_INITIALIZED` (emitted once per process the first time the classifier warms; carries `warmup_ms` and the list of warmed intents). Group B fast-path skips reuse `ConversationEvents.CLARIFICATION_SKIPPED` with `method: "local_classifier_fast_path"` and `margin: <float>` so operators can audit how often they fire and what the classifier's confidence looked like.
 
-**Measured impact** on the canonical
-`hello-muxi → "create a one-page PDF about MUXI"` workload, three
-runs per condition, same prompts in same order:
+**Measured impact** on the canonical `hello-muxi → "create a one-page PDF about MUXI"` workload, three runs per condition, same prompts in same order:
 
 | Stage | Heavy PDF wall (median) |
 |---|---:|
 | Phase 0 (post-perf, pre-classifier) | 60.353 s |
 | Phase 1 + 2 (today) | **50.709 s** |
 
-Wall-time delta vs Phase 0: **-9.6 s, -16 %.** Cumulative delta vs the
-original 108 s baseline: **-57.3 s, -53 %.** LLM call buckets across
-the three runs:
+Wall-time delta vs Phase 0: **-9.6 s, -16 %.** Cumulative delta vs the original 108 s baseline: **-57.3 s, -53 %.** LLM call buckets across the three runs:
 
 | Bucket | Phase 0 | Phase 2 |
 |---|---:|---:|
@@ -1212,193 +498,66 @@ the three runs:
 | synthesis (`mt <= 4000`) | 8 | 9 |
 | planning (`mt > 4000`) | 2 | 1 |
 
-The cleanest signal is `classification` going to **zero** across all
-three Phase 2 runs — direct confirmation that the binary gates are
-now exclusively local. The +1 in synthesis is the clarification
-analyzer (`mt=250`) still firing on runs where the classifier defers;
-the Group B fast-path is opportunistic by design, not aggressive.
+The cleanest signal is `classification` going to **zero** across all three Phase 2 runs — direct confirmation that the binary gates are now exclusively local. The +1 in synthesis is the clarification analyzer (`mt=250`) still firing on runs where the classifier defers; the Group B fast-path is opportunistic by design, not aggressive.
 
-The 9.6 s improvement comes almost entirely from the **Group B
-fast-path on the clarification analyzer**, which was the bottleneck
-of the parallel pre-planning batch in the Phase 0 trace. The four
-parallel gates ran via `asyncio.gather` and the wall clock was bound
-by the slowest call (~5 s clarification analyzer). Phase 2 collapses
-that to ~60 ms when the classifier is confident no clarification is
-needed (which it should be, and is, on "create a one-page PDF about
-MUXI").
+The 9.6 s improvement comes almost entirely from the **Group B fast-path on the clarification analyzer**, which was the bottleneck of the parallel pre-planning batch in the Phase 0 trace. The four parallel gates ran via `asyncio.gather` and the wall clock was bound by the slowest call (~5 s clarification analyzer). Phase 2 collapses that to ~60 ms when the classifier is confident no clarification is needed (which it should be, and is, on "create a one-page PDF about MUXI").
 
-The remaining ~50 s on the heavy PDF path is downstream of
-pre-planning — agent router (~8 s), topic extraction (~1.5 s), the
-planning round-trip itself (~30-40 s on Sonnet-class models for
-16 K-token planning prompts with 56 MCP tools in scope), plus
-post-planning execution + synthesis. None of those are
-binary-classification-shaped, so none of them are this pass's target.
+The remaining ~50 s on the heavy PDF path is downstream of pre-planning — agent router (~8 s), topic extraction (~1.5 s), the planning round-trip itself (~30-40 s on Sonnet-class models for 16 K-token planning prompts with 56 MCP tools in scope), plus post-planning execution + synthesis. None of those are binary-classification-shaped, so none of them are this pass's target.
 
-**Microbench (server-free)** in `bench/classifier_microbench.py`
-exercises the classifier in isolation:
+**Microbench (server-free)** in `bench/classifier_microbench.py` exercises the classifier in isolation:
 
 | Op | Median | Per-call speedup vs cloud LLM |
 |---|---:|---:|
 | `classify_binary` (across all 11 intents) | 51-79 ms | ~12-13× |
 | `pairwise_similarity` (10 paraphrase pairs) | 53 ms | ~12× |
 
-(The reference cloud cost is ~750 ms median for `mt <= 1000`
-`gpt-4o-mini` calls, measured on the same network during Phase 0
-baselining.)
+(The reference cloud cost is ~750 ms median for `mt <= 1000` `gpt-4o-mini` calls, measured on the same network during Phase 0 baselining.)
 
-**Tests.** `tests/unit/test_local_classifier.py` adds 45 tests covering:
-spec invariants (disjoint pos/neg sets, length cap), accuracy floors
-(≥85 % per IntentSpec eval set), pairwise correctness (identical near
-1.0, paraphrase ≥0.95, cross-language same-task ≥0.85, same-vs-
-different gap ≥0.10, symmetry within 1e-5, empty input raises),
-failure modes (unknown intent, register idempotency), diagnostic
-snapshot, and singleton accessor identity. Full unit suite: 864
-passed, 3 skipped, zero regressions. Event validation 1210/1210
-(100 %).
-
-**Files of record:**
-
-* `src/muxi/runtime/services/classification/{prototypes.py,
-  local_classifier.py, __init__.py}` — new
-* `src/muxi/runtime/formation/overlord/overlord.py` — singleton
-  accessor + 3 Phase 1 gates
-* `src/muxi/runtime/formation/overlord/clarification.py` — 3 Phase 1
-  gates + 2 Phase 2 Group B fast-paths
-* `src/muxi/runtime/formation/credentials/handler.py` — 3 Phase 2
-  Group A credential gates
-* `src/muxi/runtime/services/scheduler/manager.py` — Phase 2 Group A
-  scheduler pairwise gate
-* `src/muxi/runtime/services/multimodal/fusion_engine.py` — Phase 2
-  Group D pairwise replacement
-* `src/muxi/runtime/datatypes/observability.py` —
-  `LOCAL_CLASSIFIER_INITIALIZED` event
-* `tests/unit/test_local_classifier.py` — 45 tests
-* `bench/run_baseline.py`, `bench/compare_phase2.py`,
-  `bench/classifier_microbench.py` — measurement harnesses
-* `bench/local_classification_baseline.{json,md}`,
-  `bench/local_classification_phase2.{json,md}`,
-  `bench/classifier_microbench.{json,md}` — measurement artifacts
+**Tests** in `tests/unit/test_local_classifier.py` cover spec invariants (disjoint pos/neg sets, length cap), per-intent accuracy floors (>=85%), pairwise correctness (identical near 1.0, paraphrase >=0.95, cross-language same-task >=0.85, same-vs-different gap >=0.10, symmetry within 1e-5, empty input raises), failure modes, diagnostic snapshot, and singleton accessor identity. New module: `src/muxi/runtime/services/classification/`. Wiring: overlord, clarification, credentials, scheduler, fusion engine. New event: `LOCAL_CLASSIFIER_INITIALIZED`. Measurement harnesses and artifacts live under `bench/`.
 
 ### Fix: remote-buffer recall in `_enhance_message_with_context`
 
-Symptom: in remote-buffer / FAISSx mode
-(``memory.buffer.vector_search: true``), follow-up and meta-recall
-questions ("list back the technical skills I mentioned earlier",
-"summarise what we've discussed") would receive a "I don't have access
-to your prior details" response even when the relevant turns were
-still in the buffer. Local-buffer mode worked fine for the same
-prompts.
+Symptom: in remote-buffer / FAISSx mode (``memory.buffer.vector_search: true``), follow-up and meta-recall questions ("list back the technical skills I mentioned earlier", "summarise what we've discussed") would receive a "I don't have access to your prior details" response even when the relevant turns were still in the buffer. Local-buffer mode worked fine for the same prompts.
 
-Root cause: ``ChatOrchestrator._enhance_message_with_context`` chose
-the buffer-search query based on ``vector_search``:
+Root cause: ``ChatOrchestrator._enhance_message_with_context`` chose the buffer-search query based on ``vector_search``:
 
-* ``vector_search=False`` (local default): ``query=""`` → recency-only
-  fast path → always returns the most recent buffer items.
-* ``vector_search=True`` (remote default): ``query=<current message>``
-  → vector + recency_bias=0.3 hybrid.
+* ``vector_search=False`` (local default): ``query=""`` → recency-only fast path → always returns the most recent buffer items.
+* ``vector_search=True`` (remote default): ``query=<current message>`` → vector + recency_bias=0.3 hybrid.
 
-For meta-recall questions the embedding of the QUERY does not match
-the embeddings of the CONTENT messages it wants to recall — the 0.3
-recency bias alone is too weak to surface them and the LLM gets no
-buffer context.
+For meta-recall questions the embedding of the QUERY does not match the embeddings of the CONTENT messages it wants to recall — the 0.3 recency bias alone is too weak to surface them and the LLM gets no buffer context.
 
-Fix: when ``vector_search`` is enabled the orchestrator now issues
-both passes concurrently (``asyncio.gather``) and merges them. Vector
-results keep their relevance ordering at the head; recency-only items
-missing from the vector pass append at the tail. Items appearing in
-both passes are de-duplicated by ``(text, timestamp)``. The local-mode
-path is unchanged — single empty-query call, no extra round-trip.
+Fix: when ``vector_search`` is enabled the orchestrator now issues both passes concurrently (``asyncio.gather``) and merges them. Vector results keep their relevance ordering at the head; recency-only items missing from the vector pass append at the tail. Items appearing in both passes are de-duplicated by ``(text, timestamp)``. The local-mode path is unchanged — single empty-query call, no extra round-trip.
 
 ### Fix: downgrade user-self-recall false-positives in security analyzers; await workflow-approval kv_set
 
 Two real bugs surfaced while triaging unrelated e2e test fragility:
 
-1. **``information_extraction`` false-positives on user-self-recall.**
-   Both LLM-based security analyzers
-   (``RequestAnalyzer._llm_analyze_request`` and
-   ``AgentRouter._parse_routing_response``) intermittently classified
-   benign user-self-recall messages ("list back the role I mentioned
-   earlier", "summarize my profession", "what's my name?") as
-   ``information_extraction`` attacks and short-circuited with
-   "I can't process that request." — the LLM never saw buffer context.
-   Both prompts already carved this out in plain English; the
-   classifier just would not comply on borderline phrasings.
+1. **``information_extraction`` false-positives on user-self-recall.** Both LLM-based security analyzers (``RequestAnalyzer._llm_analyze_request`` and ``AgentRouter._parse_routing_response``) intermittently classified benign user-self-recall messages ("list back the role I mentioned earlier", "summarize my profession", "what's my name?") as ``information_extraction`` attacks and short-circuited with "I can't process that request." — the LLM never saw buffer context. Both prompts already carved this out in plain English; the classifier just would not comply on borderline phrasings.
 
-   Added a deterministic post-LLM heuristic
-   ``RequestAnalyzer._heuristic_is_user_self_recall`` that downgrades
-   the classification only when **all three** hold: (a) the message
-   contains a first-person possessor anchored to the user themselves,
-   (b) it contains a recall verb / "mentioned earlier" anchor pointing
-   back at the conversation, and (c) it does NOT name a system-state
-   target (system prompt, config, internal tools, credentials, …).
-   Wired into both call sites:
+   Added a deterministic post-LLM heuristic ``RequestAnalyzer._heuristic_is_user_self_recall`` that downgrades the classification only when **all three** hold: (a) the message contains a first-person possessor anchored to the user themselves, (b) it contains a recall verb / "mentioned earlier" anchor pointing back at the conversation, and (c) it does NOT name a system-state target (system prompt, config, internal tools, credentials, …). Wired into both call sites:
 
-   * ``RequestAnalyzer._llm_analyze_request`` only downgrades the
-     ``information_extraction`` threat type — ``prompt_injection``,
-     ``credential_fishing``, ``jailbreak`` are untouched.
-   * ``AgentRouter.select_agent_for_message`` treats SECURITY_BLOCK on
-     user-self-recall as a null routing decision so the intelligent
-     fallback picks an agent. Real attack messages still propagate
-     ``SecurityViolation``.
+   * ``RequestAnalyzer._llm_analyze_request`` only downgrades the ``information_extraction`` threat type — ``prompt_injection``, ``credential_fishing``, ``jailbreak`` are untouched.
+   * ``AgentRouter.select_agent_for_message`` treats SECURITY_BLOCK on user-self-recall as a null routing decision so the intelligent fallback picks an agent. Real attack messages still propagate ``SecurityViolation``.
 
-   Strengthened both LLM prompts with a more explicit not-a-threat
-   carve-out covering the recall phrasings the LLM was previously
-   missing.
+   Strengthened both LLM prompts with a more explicit not-a-threat carve-out covering the recall phrasings the LLM was previously missing.
 
-2. **Workflow-approval pending state lost to a fire-and-forget race.**
-   ``_handle_workflow_approval`` used the fire-and-forget
-   ``_set_pending_clarification`` on the hand-off back to the user.
-   Because the user's reply ("Yes, please proceed") arrives almost
-   immediately, the kv_set could race past the response: the next
-   request reads ``_get_pending_clarification`` → ``None``, the
-   workflow_approval branch is skipped, and the approval message is
-   treated as a fresh, contextless prompt ("Could you share more
-   about the plan?"). The ``ambiguous_credential`` path already used
-   the synchronous variant for exactly this reason; applied the same
-   fix here with a comment referencing both call sites so future
-   drive-by edits don't regress.
+2. **Workflow-approval pending state lost to a fire-and-forget race.** ``_handle_workflow_approval`` used the fire-and-forget ``_set_pending_clarification`` on the hand-off back to the user. Because the user's reply ("Yes, please proceed") arrives almost immediately, the kv_set could race past the response: the next request reads ``_get_pending_clarification`` → ``None``, the workflow_approval branch is skipped, and the approval message is treated as a fresh, contextless prompt ("Could you share more about the plan?"). The ``ambiguous_credential`` path already used the synchronous variant for exactly this reason; applied the same fix here with a comment referencing both call sites so future drive-by edits don't regress.
 
 ### E2E test fixes: `test_2d1_local_buffer_mode` and `test_9a3b_with_approval`
 
-Both tests had been failing on develop for reasons unrelated to recent
-performance work. Investigation surfaced three real fragility sources:
+Both tests had been failing on develop for reasons unrelated to recent performance work. Investigation surfaced three real fragility sources:
 
-1. **Missing ``session_id`` on ``overlord.chat()`` calls** in
-   ``test_2d1``. Per AGENTS.md "ID hierarchy", ``session_id`` scopes
-   buffer-memory filtering; without one, every turn got an
-   auto-generated session and prior buffer context was invisible.
-   Pinned a stable ``session_id`` per test case.
-2. **Single-turn buffer anchoring is unreliable.** With only one prior
-   turn the LLM frequently responds about its own capabilities rather
-   than the conversation. Added an explicit follow-up turn before
-   each recall probe so the buffer has at least two anchored content
-   messages.
-3. **``test_9a3b``'s primary criterion is auto-async approval
-   detection on complex tasks.** The legacy keyword check was
-   actually testing post-approval workflow content — a separate
-   surface that exposed bug #2 above. Reframed the post-approval
-   content match as a non-blocking secondary observation so the
-   primary auto-async criterion can pass cleanly when the approval
-   prompt is correctly emitted.
+1. **Missing ``session_id`` on ``overlord.chat()`` calls** in ``test_2d1``. Per AGENTS.md "ID hierarchy", ``session_id`` scopes buffer-memory filtering; without one, every turn got an auto-generated session and prior buffer context was invisible. Pinned a stable ``session_id`` per test case.
+2. **Single-turn buffer anchoring is unreliable.** With only one prior turn the LLM frequently responds about its own capabilities rather than the conversation. Added an explicit follow-up turn before each recall probe so the buffer has at least two anchored content messages.
+3. **``test_9a3b``'s primary criterion is auto-async approval detection on complex tasks.** The legacy keyword check was actually testing post-approval workflow content — a separate surface that exposed bug #2 above. Reframed the post-approval content match as a non-blocking secondary observation so the primary auto-async criterion can pass cleanly when the approval prompt is correctly emitted.
 
 ### Performance: enable OneLLM HTTP/2 connection pooling at runtime startup
 
-OneLLM ships an opt-in connection pool
-(``onellm.init_pooling()``) that switches the per-request httpx client
-to a shared, HTTP/2-multiplexed pool. With pooling on, bursts of
-parallel calls to the same provider reuse one TLS connection (h2 via
-ALPN), and sequential calls amortize the TCP+TLS handshake across the
-keepalive window instead of paying it on every request.
+OneLLM ships an opt-in connection pool (``onellm.init_pooling()``) that switches the per-request httpx client to a shared, HTTP/2-multiplexed pool. With pooling on, bursts of parallel calls to the same provider reuse one TLS connection (h2 via ALPN), and sequential calls amortize the TCP+TLS handshake across the keepalive window instead of paying it on every request.
 
-Until now, the runtime never called ``init_pooling()`` — so the dev
-build of OneLLM with HTTP/2 was installed but dormant. ``run_formation``
-now initializes the pool before formation load (or skips silently on
-older OneLLM versions without ``init_pooling``) and tears it down in
-the cleanup path.
+Until now, the runtime never called ``init_pooling()`` — so the dev build of OneLLM with HTTP/2 was installed but dormant. ``run_formation`` now initializes the pool before formation load (or skips silently on older OneLLM versions without ``init_pooling``) and tears it down in the cleanup path.
 
-**Measured impact** on the canonical
-``hello-muxi → "create a one-page PDF about MUXI"`` test
-(3-run sequence per condition, same prompts in same order):
+**Measured impact** on the canonical ``hello-muxi → "create a one-page PDF about MUXI"`` test (3-run sequence per condition, same prompts in same order):
 
 | Run        | HTTP/2 ON | HTTP/2 OFF | Δ            |
 |------------|-----------|------------|--------------|
@@ -1407,378 +566,126 @@ the cleanup path.
 | 3 (warm)   | 19.7s     | 21.9s      | -2.2s  (-10%)|
 | **total**  | **106.0s**| **119.9s** | **-13.9s (-12%)** |
 
-Disable via ``MUXI_HTTP_POOL_DISABLED=1`` if pooling causes issues
-with a specific provider; the runtime falls back to the
-per-request-client behavior cleanly.
+Disable via ``MUXI_HTTP_POOL_DISABLED=1`` if pooling causes issues with a specific provider; the runtime falls back to the per-request-client behavior cleanly.
 
 ### Performance: skip the post-planning synthesis call for pure-artifact responses
 
-After planning execution, the agent fires a *second* LLM call —
-``_synthesize_planning_execution_response`` — to weave tool/delegation
-results into a user-facing prose response. For artifact-heavy requests
-("create a one-page PDF", "generate a chart", "make a CSV") the
-synthesized prose is mostly boilerplate ("Here's your file:") because
-the artifact itself is the answer. The synthesis call adds 3-10s of
-wall time on Sonnet-class models for content the user is not actually
-reading.
+After planning execution, the agent fires a *second* LLM call — ``_synthesize_planning_execution_response`` — to weave tool/delegation results into a user-facing prose response. For artifact-heavy requests ("create a one-page PDF", "generate a chart", "make a CSV") the synthesized prose is mostly boilerplate ("Here's your file:") because the artifact itself is the answer. The synthesis call adds 3-10s of wall time on Sonnet-class models for content the user is not actually reading.
 
-**Fix:** when both gates open, the agent now substitutes a
-deterministic acknowledgment ("Done — I've created report.pdf for
-you.") for the synthesis call. Both gates must hold to bypass:
+**Fix:** when both gates open, the agent now substitutes a deterministic acknowledgment ("Done — I've created report.pdf for you.") for the synthesis call. Both gates must hold to bypass:
 
-* **Pure-artifact result.** Every entry in ``my_results`` must carry
-  an ``_artifact`` key. Mixed text+artifact results still run synthesis
-  because the LLM has real data to explain. An empty result set also
-  runs synthesis (an empty response is more likely a problem than a
-  silent success).
-* **Active streaming.** Either ``overlord.response.streaming = true``
-  in the formation YAML, or the current request id is registered with
-  the streaming manager. With streaming on, the user has been seeing
-  real-time tool progress events; without streaming, the synthesized
-  prose is the only narrative they receive and we keep it.
+* **Pure-artifact result.** Every entry in ``my_results`` must carry an ``_artifact`` key. Mixed text+artifact results still run synthesis because the LLM has real data to explain. An empty result set also runs synthesis (an empty response is more likely a problem than a silent success).
+* **Active streaming.** Either ``overlord.response.streaming = true`` in the formation YAML, or the current request id is registered with the streaming manager. With streaming on, the user has been seeing real-time tool progress events; without streaming, the synthesized prose is the only narrative they receive and we keep it.
 
-The bypass emits an ``AGENT_PLANNING`` observability event with
-``phase=synthesis_skipped`` and ``reason=pure_artifact_with_streaming``
-so production traces clearly show when the fast path fires. Streaming
-detection is best-effort — any failure falls back to the safe behavior
-(run synthesis) so a broken streaming module cannot regress chat
-responses.
+The bypass emits an ``AGENT_PLANNING`` observability event with ``phase=synthesis_skipped`` and ``reason=pure_artifact_with_streaming`` so production traces clearly show when the fast path fires. Streaming detection is best-effort — any failure falls back to the safe behavior (run synthesis) so a broken streaming module cannot regress chat responses.
 
-17 new unit tests cover pure-artifact detection (empty / mixed /
-non-dict / missing key), the deterministic acknowledgment (single /
-multiple files, missing filename, ``name`` vs ``filename`` field), the
-streaming gate (formation config, per-request, exception swallowing),
-a static guard against accidental call-site removal, and three
-integration scenarios verifying that synthesis is *not* called on the
-skip path and *is* called on each guarded path.
+17 new unit tests cover pure-artifact detection (empty / mixed / non-dict / missing key), the deterministic acknowledgment (single / multiple files, missing filename, ``name`` vs ``filename`` field), the streaming gate (formation config, per-request, exception swallowing), a static guard against accidental call-site removal, and three integration scenarios verifying that synthesis is *not* called on the skip path and *is* called on each guarded path.
 
 ### Performance: cache MCP tool results within a workflow window
 
-Many tool plans repeat the same read-only call within a single chat
-session — e.g. listing a repo's files at the start of planning and
-again during execution, or fetching the same Slack channel metadata
-multiple times during a multi-step workflow. Each repeat paid the full
-MCP round-trip cost (network + provider + serialization).
+Many tool plans repeat the same read-only call within a single chat session — e.g. listing a repo's files at the start of planning and again during execution, or fetching the same Slack channel metadata multiple times during a multi-step workflow. Each repeat paid the full MCP round-trip cost (network + provider + serialization).
 
-**Fix:** `Agent.invoke_tool` now wraps the underlying MCP call in a
-short-lived in-process result cache (5-minute TTL, formation+user
-scoped). The cache is deliberately conservative:
+**Fix:** `Agent.invoke_tool` now wraps the underlying MCP call in a short-lived in-process result cache (5-minute TTL, formation+user scoped). The cache is deliberately conservative:
 
-* **Default-deny classifier.** A new `services.mcp.tool_cache` module
-  inspects the tool's verb token (`read_*`, `get_*`, `list_*`,
-  `search_*`, etc.) and only caches names that match a known read
-  vocabulary. Mutator verbs (`create_*`, `update_*`, `delete_*`,
-  `send_*`, `post_*`, `set_*`, `add_*`, `run_*`, `execute_*`,
-  `start_*`, `stop_*`, etc.) are never cached. Tools matching neither
-  vocabulary default-deny — false negatives only cost latency, false
-  positives can produce incorrect application behavior.
-* **Built-in side-effect tools** (`generate_file`, `activate_skill`,
-  `run_skill`) are always denied because they have process-level side
-  effects (artifact creation, RCE execution, skill state mutation).
-* **Formation- and user-scoped keys.** The cache key includes
-  `formation_id` and `user_id` so two formations or two users in the
-  same process never share results, even for tools with identical
-  parameters. Per-user tools (mailboxes, vaults, credential-bound APIs)
-  are protected by construction.
-* **Errors are never cached.** A tool that returns
-  `_is_tool_execution_error(result) == True` skips the store step;
-  serving a stale rate-limit or network-blip error across the TTL
-  would extend the failure window unnecessarily.
-* **Token-based name matching.** `is_cacheable("lookup_address")`
-  correctly returns `True` instead of false-positive matching the
-  substring `_add` inside `address`. Names are tokenized
-  snake_case + camelCase before classification.
+* **Default-deny classifier.** A new `services.mcp.tool_cache` module inspects the tool's verb token (`read_*`, `get_*`, `list_*`, `search_*`, etc.) and only caches names that match a known read vocabulary. Mutator verbs (`create_*`, `update_*`, `delete_*`, `send_*`, `post_*`, `set_*`, `add_*`, `run_*`, `execute_*`, `start_*`, `stop_*`, etc.) are never cached. Tools matching neither vocabulary default-deny — false negatives only cost latency, false positives can produce incorrect application behavior.
+* **Built-in side-effect tools** (`generate_file`, `activate_skill`, `run_skill`) are always denied because they have process-level side effects (artifact creation, RCE execution, skill state mutation).
+* **Formation- and user-scoped keys.** The cache key includes `formation_id` and `user_id` so two formations or two users in the same process never share results, even for tools with identical parameters. Per-user tools (mailboxes, vaults, credential-bound APIs) are protected by construction.
+* **Errors are never cached.** A tool that returns `_is_tool_execution_error(result) == True` skips the store step; serving a stale rate-limit or network-blip error across the TTL would extend the failure window unnecessarily.
+* **Token-based name matching.** `is_cacheable("lookup_address")` correctly returns `True` instead of false-positive matching the substring `_add` inside `address`. Names are tokenized snake_case + camelCase before classification.
 
-A new `MCP_TOOL_CACHE_HIT` observability event surfaces hit rates and
-the running counters (`hits`/`misses`/`stores`/`skipped`) for
-production monitoring.
+A new `MCP_TOOL_CACHE_HIT` observability event surfaces hit rates and the running counters (`hits`/`misses`/`stores`/`skipped`) for production monitoring.
 
-The cache is process-local, has no LRU eviction (TTL-only), and dies
-with the runtime — same characteristics as the existing LLM response
-cache, kept consistent on purpose. 50 new unit tests cover key
-determinism, scope isolation, TTL expiry, the verb classifier, and
-counter increments.
+The cache is process-local, has no LRU eviction (TTL-only), and dies with the runtime — same characteristics as the existing LLM response cache, kept consistent on purpose. 50 new unit tests cover key determinism, scope isolation, TTL expiry, the verb classifier, and counter increments.
 
 ## v0.20260427.0
 
 ### Performance: kill the 30s wasted-timeout cycle and the 12s buffer-memory cold start
 
-End-to-end production trace of *"create a one-page PDF about MUXI"* on
-the hello-muxi formation showed 108 seconds of wall time for what
-ended up being a single-tool plan (activate_skill + generate_file).
-Two specific costs dominated the trace:
+End-to-end production trace of *"create a one-page PDF about MUXI"* on the hello-muxi formation showed 108 seconds of wall time for what ended up being a single-tool plan (activate_skill + generate_file). Two specific costs dominated the trace:
 
-1. **Wasted 30s timeout on every complex planning call** (saves ~45s).
-   `LLM._execute_with_resilience` was passing `messages=None` to
-   `calculate_adaptive_timeout`, with a `# Known limitation` comment
-   acknowledging the helper couldn't see the real payload. The result:
-   every chat call got the bare 30s base timeout regardless of how much
-   context it carried. A planning prompt with 58 tool definitions plus
-   ~15K tokens of input genuinely needs ~34s on Sonnet 4.6 — so the
-   first attempt timed out at 30s, the resilience layer retried with a
-   1.5x escalation (45s budget), and the retry succeeded ~34s later.
-   Fix: the chat-path closures now thread their `messages`, `files`,
-   and `max_tokens` through `_execute_with_resilience` via internal
-   kwargs (`_adaptive_messages`, `_adaptive_files`,
-   `_adaptive_max_tokens`) which are popped before reaching the wrapped
-   provider call. `messages` is the input-size signal (1s per ~1000
-   tokens); `max_tokens` is the output-size signal (2s per 1000) and
-   was the second-order bug surfaced during vanilla validation: input
-   scaling alone gave the planning call 36.8s — still 6s short of what
-   Sonnet 4.6 actually needed — so the first attempt still timed out
-   and the retry escalated to 55.2s. Adding the output-size signal
-   pushes the first-attempt budget for a planning call (16K
-   max_tokens) to ~70s, eliminating the wasted retry entirely.
-   Embedding and transcription paths still pass `None` and rely on the
-   operation-type modifier alone — they don't suffer from the same bug.
+1. **Wasted 30s timeout on every complex planning call** (saves ~45s). `LLM._execute_with_resilience` was passing `messages=None` to `calculate_adaptive_timeout`, with a `# Known limitation` comment acknowledging the helper couldn't see the real payload. The result: every chat call got the bare 30s base timeout regardless of how much context it carried. A planning prompt with 58 tool definitions plus ~15K tokens of input genuinely needs ~34s on Sonnet 4.6 — so the first attempt timed out at 30s, the resilience layer retried with a 1.5x escalation (45s budget), and the retry succeeded ~34s later. Fix: the chat-path closures now thread their `messages`, `files`, and `max_tokens` through `_execute_with_resilience` via internal kwargs (`_adaptive_messages`, `_adaptive_files`, `_adaptive_max_tokens`) which are popped before reaching the wrapped provider call. `messages` is the input-size signal (1s per ~1000 tokens); `max_tokens` is the output-size signal (2s per 1000) and was the second-order bug surfaced during vanilla validation: input scaling alone gave the planning call 36.8s — still 6s short of what Sonnet 4.6 actually needed — so the first attempt still timed out and the retry escalated to 55.2s. Adding the output-size signal pushes the first-attempt budget for a planning call (16K max_tokens) to ~70s, eliminating the wasted retry entirely. Embedding and transcription paths still pass `None` and rely on the operation-type modifier alone — they don't suffer from the same bug.
 
-2. **Knowledge-handler cold start moved off the user's first message**
-   (saves ~20s on first request). `Agent._ensure_knowledge_initialized`
-   was lazy — the `KnowledgeHandler` (and the Nomic embedder it
-   transitively loads) wasn't constructed until the first user message
-   landed. That deferred ~8s of chunking+embedding plus the ~12s Nomic
-   model cold-start onto the user's first chat request, producing a
-   visible "first message is sluggish" artifact in production traces.
-   Fix: `Overlord._create_agent_from_config` now eagerly calls
-   `await agent._ensure_knowledge_initialized()` for any agent with a
-   `knowledge` config block immediately after MCP-server registration.
-   This shifts both costs to formation `up` (where operators expect a
-   brief warmup) and warms the Nomic embedder in the same pass — the
-   working-memory write of the user's first message used to trigger
-   the same cold start in parallel, dropping that 12s spike too.
-   Failures during eager init propagate (matches the existing
-   MCP-register fail-fast policy) and emit a `SERVICE_UNAVAILABLE`
-   event tagged `phase=knowledge_eager_init` so operators can
-   distinguish startup vs runtime knowledge failures.
+2. **Knowledge-handler cold start moved off the user's first message** (saves ~20s on first request). `Agent._ensure_knowledge_initialized` was lazy — the `KnowledgeHandler` (and the Nomic embedder it transitively loads) wasn't constructed until the first user message landed. That deferred ~8s of chunking+embedding plus the ~12s Nomic model cold-start onto the user's first chat request, producing a visible "first message is sluggish" artifact in production traces. Fix: `Overlord._create_agent_from_config` now eagerly calls `await agent._ensure_knowledge_initialized()` for any agent with a `knowledge` config block immediately after MCP-server registration. This shifts both costs to formation `up` (where operators expect a brief warmup) and warms the Nomic embedder in the same pass — the working-memory write of the user's first message used to trigger the same cold start in parallel, dropping that 12s spike too. Failures during eager init propagate (matches the existing MCP-register fail-fast policy) and emit a `SERVICE_UNAVAILABLE` event tagged `phase=knowledge_eager_init` so operators can distinguish startup vs runtime knowledge failures.
 
-Vanilla measurement on the same query (hello-muxi formation, macOS,
-Sonnet 4.6, RCE on localhost:7891) confirmed: **108s → 65.9s
-(~40% reduction)**. Buffer-memory write on first message dropped from
-12.3s to 0.6s (47x). Planning round-trip dropped from 80.9s to 36.1s
-(45s saved) — single attempt, no retry cycle.
+Vanilla measurement on the same query (hello-muxi formation, macOS, Sonnet 4.6, RCE on localhost:7891) confirmed: **108s → 65.9s (~40% reduction)**. Buffer-memory write on first message dropped from 12.3s to 0.6s (47x). Planning round-trip dropped from 80.9s to 36.1s (45s saved) — single attempt, no retry cycle.
 
-14 new unit tests across `tests/unit/test_llm_adaptive_timeout.py` (10
-tests covering timeout scaling math including `max_tokens`, kwarg-leak
-prevention, and call-site forwarding for both `chat` and
-`chat_with_tools` paths) and `tests/unit/test_overlord_eager_knowledge.py`
-(4 static guards on the eager-init call site, await contract,
-observability tagging, and fail-fast propagation).
+14 new unit tests across `tests/unit/test_llm_adaptive_timeout.py` (10 tests covering timeout scaling math including `max_tokens`, kwarg-leak prevention, and call-site forwarding for both `chat` and `chat_with_tools` paths) and `tests/unit/test_overlord_eager_knowledge.py` (4 static guards on the eager-init call site, await contract, observability tagging, and fail-fast propagation).
 
 ### Deferred: parallel knowledge-source loading
 
-`KnowledgeHandler.load_sources_from_config` still iterates sources
-sequentially. Naively wrapping the for-loop in `asyncio.gather` would
-race two writers through `WorkingMemory.add_with_embedding` — that
-method does `await self._ensure_dim()` and then mutates `self.index`
-without holding a lock, and the broad `except` at the FAISS `.add()`
-site silently drops chunks if a shape mismatch happens during a
-concurrent dim-probe. The expected win is small (~1-2s per formation
-up — Nomic inference is GIL-serialized so we'd only overlap markitdown
-+ file I/O). The fix is now blocked on adding an `asyncio.Lock`
-around the `_ensure_dim`/`index.add` critical section in working
-memory; tracking via a `TODO(perf-round-2)` comment in the
-`load_sources_from_config` body.
+`KnowledgeHandler.load_sources_from_config` still iterates sources sequentially. Naively wrapping the for-loop in `asyncio.gather` would race two writers through `WorkingMemory.add_with_embedding` — that method does `await self._ensure_dim()` and then mutates `self.index` without holding a lock, and the broad `except` at the FAISS `.add()` site silently drops chunks if a shape mismatch happens during a concurrent dim-probe. The expected win is small (~1-2s per formation up — Nomic inference is GIL-serialized so we'd only overlap markitdown + file I/O). The fix is now blocked on adding an `asyncio.Lock` around the `_ensure_dim`/`index.add` critical section in working memory; tracking via a `TODO(perf-round-2)` comment in the `load_sources_from_config` body.
 
 ## v0.20260426.1
 
 ### Artifacts: reject comment-only / no-op `generate_file.code`
 
-A user query like *"create a PRD with a brief on muxi"* would surface a
-helpful narrative response — the planning fix from v0.20260426.0 was
-working, the agent was honest about *"the PDF generation hit a snag"* —
-but no PDF artifact came back. Tracing the planning event showed the
-LLM (Sonnet 4.6 in this case, but any model is susceptible) emitted
-`generate_file.code` values like:
+A user query like *"create a PRD with a brief on muxi"* would surface a helpful narrative response — the planning fix from v0.20260426.0 was working, the agent was honest about *"the PDF generation hit a snag"* — but no PDF artifact came back. Tracing the planning event showed the LLM (Sonnet 4.6 in this case, but any model is susceptible) emitted `generate_file.code` values like:
 
 ```python
 # Generate PRD for MUXI -- populated after doc scrape
 # Content will be injected from {{MUXI_DOCS}} at runtime
 ```
 
-i.e. *intent* expressed as comments, with the LLM apparently believing
-the runtime would expand `{{MUXI_DOCS}}` into the multi-line Python
-source on its behalf. It does not — placeholder substitution applies to
-scalar leaf values in OTHER tools (URLs, IDs), not to author-supplied
-Python source. The sandbox would dutifully run the comment-only no-op
-script, produce zero files, and the artifact extractor would surface
-the confusing `"No file was generated"` error masking the real cause.
+i.e. *intent* expressed as comments, with the LLM apparently believing the runtime would expand `{{MUXI_DOCS}}` into the multi-line Python source on its behalf. It does not — placeholder substitution applies to scalar leaf values in OTHER tools (URLs, IDs), not to author-supplied Python source. The sandbox would dutifully run the comment-only no-op script, produce zero files, and the artifact extractor would surface the confusing `"No file was generated"` error masking the real cause.
 
 Two-part fix:
 
-- `ArtifactService._validate_code` now runs an executable-content guard
-  immediately after a successful `ast.parse(code)`. Modules whose body
-  is empty (comment-only file), or whose body consists ONLY of
-  docstrings / imports / `pass` / `...`, are rejected with the precise,
-  actionable message: *"Code contains no executable statements (only
-  comments, docstrings, or imports). The `code` parameter must be
-  complete, executable Python that writes its output file to the
-  current directory."* This fires BEFORE the existing whitelist /
-  dangerous-call scans, so the import and call guards remain unchanged.
-- `_infer_tool_parameters` constraints prompt for `generate_file` was
-  tightened with an explicit "EXECUTABLE-CODE CONTRACT" section that
-  spells out: (a) `code` must be complete executable Python at planning
-  time — no second-pass fill-in; (b) `{{PLACEHOLDER}}` references are
-  NOT substituted inside the multi-line `code` body; (c) if the file's
-  content depends on data the LLM doesn't have at planning time, it
-  must either write the content verbatim from training knowledge OR
-  have the Python itself fetch via `requests` / `urllib`.
+- `ArtifactService._validate_code` now runs an executable-content guard immediately after a successful `ast.parse(code)`. Modules whose body is empty (comment-only file), or whose body consists ONLY of docstrings / imports / `pass` / `...`, are rejected with the precise, actionable message: *"Code contains no executable statements (only comments, docstrings, or imports). The `code` parameter must be complete, executable Python that writes its output file to the current directory."* This fires BEFORE the existing whitelist / dangerous-call scans, so the import and call guards remain unchanged.
+- `_infer_tool_parameters` constraints prompt for `generate_file` was tightened with an explicit "EXECUTABLE-CODE CONTRACT" section that spells out: (a) `code` must be complete executable Python at planning time — no second-pass fill-in; (b) `{{PLACEHOLDER}}` references are NOT substituted inside the multi-line `code` body; (c) if the file's content depends on data the LLM doesn't have at planning time, it must either write the content verbatim from training knowledge OR have the Python itself fetch via `requests` / `urllib`.
 
-15 new unit tests in `tests/unit/test_artifact_service_validate_code.py`
-cover both the actual production failure shapes (multi-line and one-line
-intent comments referencing unresolved placeholders) and edge cases:
-empty string, whitespace, docstring-only, imports-only, `pass`-only,
-`...`-only, mixed imports+docstring. Five accept-side tests guard
-against false positives on legitimate code (minimal file write,
-realistic reportlab snippet, docstring-then-real-code, function
-def+call, etc.). Two end-to-end tests confirm the existing
-import-whitelist and dangerous-call guards still fire correctly when
-the new check passes.
+15 new unit tests in `tests/unit/test_artifact_service_validate_code.py` cover both the actual production failure shapes (multi-line and one-line intent comments referencing unresolved placeholders) and edge cases: empty string, whitespace, docstring-only, imports-only, `pass`-only, `...`-only, mixed imports+docstring. Five accept-side tests guard against false positives on legitimate code (minimal file write, realistic reportlab snippet, docstring-then-real-code, function def+call, etc.). Two end-to-end tests confirm the existing import-whitelist and dangerous-call guards still fire correctly when the new check passes.
 
 ## v0.20260426.0
 
 ### Planning: `_finalize_execution_plan` no longer drops `my_steps` when LLM omits `steps`
 
-A user query like *"create a one-page pdf about muxi"* would result in
-the agent narrating the work it was about to do (*"I'll activate the
-file-generation skill, then scrape the docs, then build the PDF…"*) but
-**no tool was ever invoked** and no PDF artifact came back. Tracing the
-planning observability events showed the LLM (Haiku) had emitted three
-correct actions in `my_steps` (`activate_skill`, `firecrawl_scrape`,
-`generate_file`) but with `"steps": []` because of the prompt's
-*"ALL steps MUST go in `my_steps`"* line, which Haiku interpreted
-literally.
+A user query like *"create a one-page pdf about muxi"* would result in the agent narrating the work it was about to do (*"I'll activate the file-generation skill, then scrape the docs, then build the PDF…"*) but **no tool was ever invoked** and no PDF artifact came back. Tracing the planning observability events showed the LLM (Haiku) had emitted three correct actions in `my_steps` (`activate_skill`, `firecrawl_scrape`, `generate_file`) but with `"steps": []` because of the prompt's *"ALL steps MUST go in `my_steps`"* line, which Haiku interpreted literally.
 
-`_finalize_execution_plan` rebuilds `my_steps` by iterating
-`plan["steps"]`, then unconditionally writes the rebuilt list back via
-`plan["my_steps"] = rebuilt_my_steps`. With `steps == []`, the rebuilt
-list was `[]` — and the LLM's three real actions were silently
-overwritten before the executor ever saw them. The reconciliation logic
-at line ~1313 only handled the inverse case (`steps` populated, `my_steps`
-shorter); the empty-`steps` recovery was missing.
+`_finalize_execution_plan` rebuilds `my_steps` by iterating `plan["steps"]`, then unconditionally writes the rebuilt list back via `plan["my_steps"] = rebuilt_my_steps`. With `steps == []`, the rebuilt list was `[]` — and the LLM's three real actions were silently overwritten before the executor ever saw them. The reconciliation logic at line ~1313 only handled the inverse case (`steps` populated, `my_steps` shorter); the empty-`steps` recovery was missing.
 
 Fix:
 
-- `_finalize_execution_plan` now detects the
-  `"steps": [], "my_steps": [...]` shape (`my_steps_is_authoritative`)
-  and treats `my_steps` as canonical for that plan: parameters and
-  output placeholders are kept verbatim, unknown tools are dropped to
-  avoid downstream "tool not found" errors, and a WARNING-level
-  observability event records the recovery for postmortem traceability.
-  The existing two-array path is unchanged when `steps` is populated.
-- `agent_planning.md` replaces the misleading single-line *"ALL steps
-  MUST go in my_steps"* instruction with explicit guidance: every action
-  MUST appear in **both** `steps` (with `can_i_do_this: true`) AND
-  `my_steps` (with concrete `parameters`). The runtime documents that
-  the empty-`steps` path is a recovery fallback, not the contract.
-- Three regression tests in `tests/unit/test_agent_planning_helpers.py`:
-  empty-`steps` recovery preserves and filters my_steps; both arrays
-  empty stays empty (no actions invented); both populated keeps the
-  existing canonical-`steps` behavior (extras in `my_steps` don't
-  smuggle in).
+- `_finalize_execution_plan` now detects the `"steps": [], "my_steps": [...]` shape (`my_steps_is_authoritative`) and treats `my_steps` as canonical for that plan: parameters and output placeholders are kept verbatim, unknown tools are dropped to avoid downstream "tool not found" errors, and a WARNING-level observability event records the recovery for postmortem traceability. The existing two-array path is unchanged when `steps` is populated.
+- `agent_planning.md` replaces the misleading single-line *"ALL steps MUST go in my_steps"* instruction with explicit guidance: every action MUST appear in **both** `steps` (with `can_i_do_this: true`) AND `my_steps` (with concrete `parameters`). The runtime documents that the empty-`steps` path is a recovery fallback, not the contract.
+- Three regression tests in `tests/unit/test_agent_planning_helpers.py`: empty-`steps` recovery preserves and filters my_steps; both arrays empty stays empty (no actions invented); both populated keeps the existing canonical-`steps` behavior (extras in `my_steps` don't smuggle in).
 
-End-to-end verification: re-running *"create a one-page pdf about
-muxi"* now fires `tool.invoked` events for all three planned steps. The
-agent's narrative response no longer claims work that didn't happen.
-(The new `generate_file` failure observed during verification —
-`Import not allowed: subprocess` — is a separate, unrelated artifact
-service constraint and will be tracked separately.)
+End-to-end verification: re-running *"create a one-page pdf about muxi"* now fires `tool.invoked` events for all three planned steps. The agent's narrative response no longer claims work that didn't happen. (The new `generate_file` failure observed during verification — `Import not allowed: subprocess` — is a separate, unrelated artifact service constraint and will be tracked separately.)
 
 ### Routing: pre-routing gates are now agent-aware
 
-The two pre-routing gates that run before agent selection
-(`_is_actionable_message` and `clarification.needs_clarification`) were
-deciding whether to short-circuit a request without ever seeing the
-formation's specialist registry. On a formation like `hello-muxi`
-(Overlord plus a domain expert agent), this meant informational queries
-like *"What is MUXI?"* or *"Tell me about the overlord."* would get
-classified as non-actionable and answered by the Overlord's persona
-instead of routed to `muxi-expert` — even though a perfectly capable
-specialist was right there.
+The two pre-routing gates that run before agent selection (`_is_actionable_message` and `clarification.needs_clarification`) were deciding whether to short-circuit a request without ever seeing the formation's specialist registry. On a formation like `hello-muxi` (Overlord plus a domain expert agent), this meant informational queries like *"What is MUXI?"* or *"Tell me about the overlord."* would get classified as non-actionable and answered by the Overlord's persona instead of routed to `muxi-expert` — even though a perfectly capable specialist was right there.
 
-- New `_format_specialist_registry()` helper renders the available
-  agents (id, role, description, capabilities) into a compact block
-  that's now injected into both gate prompts.
-- `_is_actionable_message` rewritten with explicit informational-query
-  examples and a "if a specialist exists for this topic, route to them"
-  rule.
-- `clarification_analysis.md` gained a `SPECIALIST AGENTS AVAILABLE`
-  section with companion routing rules.
-- `clarification._analyze_request` now passes `specialist_agents=` so
-  the gate prompt is rendered with the live registry.
+- New `_format_specialist_registry()` helper renders the available agents (id, role, description, capabilities) into a compact block that's now injected into both gate prompts.
+- `_is_actionable_message` rewritten with explicit informational-query examples and a "if a specialist exists for this topic, route to them" rule.
+- `clarification_analysis.md` gained a `SPECIALIST AGENTS AVAILABLE` section with companion routing rules.
+- `clarification._analyze_request` now passes `specialist_agents=` so the gate prompt is rendered with the live registry.
 
-Result: domain-grounded responses on formations whose agents define
-specialized expertise. Pure-Overlord formations are unaffected because
-the registry block is empty for them.
+Result: domain-grounded responses on formations whose agents define specialized expertise. Pure-Overlord formations are unaffected because the registry block is empty for them.
 
 ### Knowledge ingestion no longer requires an OpenAI API key
 
-`Agent._initialize_knowledge` resolved the knowledge handler's embedding
-function via `self.model.generate_embeddings` — i.e. it asked the agent's
-*chat* LLM to embed knowledge text. That conflated two orthogonal
-capabilities (chat and embedding) and dragged knowledge ingestion into
-`LLM.generate_embeddings`, which itself defaulted to
-`openai/text-embedding-3-small` when no `model=` kwarg was passed.
+`Agent._initialize_knowledge` resolved the knowledge handler's embedding function via `self.model.generate_embeddings` — i.e. it asked the agent's *chat* LLM to embed knowledge text. That conflated two orthogonal capabilities (chat and embedding) and dragged knowledge ingestion into `LLM.generate_embeddings`, which itself defaulted to `openai/text-embedding-3-small` when no `model=` kwarg was passed.
 
-A formation that only declared an Anthropic chat key would therefore
-silently die on knowledge ingestion with `Authentication failed: OpenAI
-API key is required` even though the runtime ships and bind-mounts a
-local Nomic embedder.
+A formation that only declared an Anthropic chat key would therefore silently die on knowledge ingestion with `Authentication failed: OpenAI API key is required` even though the runtime ships and bind-mounts a local Nomic embedder.
 
 Two-layer fix:
 
-- `Agent._initialize_knowledge` now builds `embedding_fn` from
-  `OneLLMEmbeddingAdapter` (the same adapter SOP search uses), with the
-  slug resolved as
-  `working_memory.embedding_model_name` → `DEFAULT_EMBEDDING_MODEL`
-  (= `local/nomic-ai/nomic-embed-text-v1.5`). The adapter delegates every
-  embed call to `services.memory.embedding.embed` — the documented
-  "single choke point" — so the knowledge handler now flows through the
-  same provider-routing logic as every other memory consumer.
-- `LLM.generate_embeddings` and `LLM.embed` (singular) now default to
-  `DEFAULT_EMBEDDING_MODEL` instead of OpenAI. Defense-in-depth: any
-  future caller landing on these without an explicit `model=` stays
-  offline-safe.
+- `Agent._initialize_knowledge` now builds `embedding_fn` from `OneLLMEmbeddingAdapter` (the same adapter SOP search uses), with the slug resolved as `working_memory.embedding_model_name` → `DEFAULT_EMBEDDING_MODEL` (= `local/nomic-ai/nomic-embed-text-v1.5`). The adapter delegates every embed call to `services.memory.embedding.embed` — the documented "single choke point" — so the knowledge handler now flows through the same provider-routing logic as every other memory consumer.
+- `LLM.generate_embeddings` and `LLM.embed` (singular) now default to `DEFAULT_EMBEDDING_MODEL` instead of OpenAI. Defense-in-depth: any future caller landing on these without an explicit `model=` stays offline-safe.
 
-`tests/unit/test_agent_knowledge_embedding.py` (8 tests) statically
-guards against the chat-model-embedding regression inside
-`_initialize_knowledge` and the local default on both `LLM` paths.
+`tests/unit/test_agent_knowledge_embedding.py` (8 tests) statically guards against the chat-model-embedding regression inside `_initialize_knowledge` and the local default on both `LLM` paths.
 
 ### SIF embeddings: HF Hub layout, no shim needed
 
-The runtime SIF sets `HF_HOME=/opt/hf-cache` and `HF_HUB_OFFLINE=1`, then
-bind-mounts `~/.muxi/server/cache` at `/opt/hf-cache`. Earlier
-muxi-server `pkg/hfcache/hfcache.go` wrote a flat custom layout
-(`<cacheDir>/<org>--<repo>/...`) that `huggingface_hub.hf_hub_download`
-couldn't read offline (it expects
-`models--<org>--<repo>/snapshots/<sha>/...`), so embedding loads inside
-the SIF would fail with "Repo has no ONNX weights" even though the
-weights were right there in the bind mount.
+The runtime SIF sets `HF_HOME=/opt/hf-cache` and `HF_HUB_OFFLINE=1`, then bind-mounts `~/.muxi/server/cache` at `/opt/hf-cache`. Earlier muxi-server `pkg/hfcache/hfcache.go` wrote a flat custom layout (`<cacheDir>/<org>--<repo>/...`) that `huggingface_hub.hf_hub_download` couldn't read offline (it expects `models--<org>--<repo>/snapshots/<sha>/...`), so embedding loads inside the SIF would fail with "Repo has no ONNX weights" even though the weights were right there in the bind mount.
 
-- Added `utils/hf_cache_shim.py` — a startup shim that detects the legacy
-  flat layout under `HF_HOME`/`HF_HUB_CACHE` and projects it into HF Hub
-  layout via symlinks under `/tmp/muxi-hf-hub`, then re-exports
-  `HF_HUB_CACHE` and `HF_HOME` to point at the projection. Wired into
-  `utils/run_formation.py`'s SIF-mode env-setup block so it runs
-  *before* any HF / onellm / transformers import (those libraries cache
-  the cache-dir resolution at import time).
-- The shim is now a backwards-compat fallback. muxi-server
-  `pkg/hfcache/hfcache.go` v0.20260426.0 writes HF Hub layout natively
-  (`models--<org>--<repo>/snapshots/main/<file>` plus `refs/main`), so
-  freshly-init'd servers no longer need the shim. Older servers with
-  flat caches on disk continue to work via the shim path.
-- The bind-mount itself produced a benign Apptainer warning
-  (`destination is already in the mount point list`) on the
-  Docker-wrapped path; this is fixed in runtime-runner v0.20260426.0,
-  which dropped its `ENV SINGULARITY_BINDPATH=/opt/hf-cache:/opt/hf-cache`
-  so muxi-server's explicit `--bind /opt/hf-cache` is the single source
-  of truth.
+- Added `utils/hf_cache_shim.py` — a startup shim that detects the legacy flat layout under `HF_HOME`/`HF_HUB_CACHE` and projects it into HF Hub layout via symlinks under `/tmp/muxi-hf-hub`, then re-exports `HF_HUB_CACHE` and `HF_HOME` to point at the projection. Wired into `utils/run_formation.py`'s SIF-mode env-setup block so it runs *before* any HF / onellm / transformers import (those libraries cache the cache-dir resolution at import time).
+- The shim is now a backwards-compat fallback. muxi-server `pkg/hfcache/hfcache.go` v0.20260426.0 writes HF Hub layout natively (`models--<org>--<repo>/snapshots/main/<file>` plus `refs/main`), so freshly-init'd servers no longer need the shim. Older servers with flat caches on disk continue to work via the shim path.
+- The bind-mount itself produced a benign Apptainer warning (`destination is already in the mount point list`) on the Docker-wrapped path; this is fixed in runtime-runner v0.20260426.0, which dropped its `ENV SINGULARITY_BINDPATH=/opt/hf-cache:/opt/hf-cache` so muxi-server's explicit `--bind /opt/hf-cache` is the single source of truth.
 
 ### Mental model
 
-`mental-model.md` gained four new gotcha sections covering pre-routing
-gate ordering, the SIF embedding cache layout convergence, the
-runtime-runner bind-mount fix, and the chat-model embedding coupling
-that this release removed.
+`mental-model.md` gained four new gotcha sections covering pre-routing gate ordering, the SIF embedding cache layout convergence, the runtime-runner bind-mount fix, and the chat-model embedding coupling that this release removed.
 
 ## v0.20260424.0
 
