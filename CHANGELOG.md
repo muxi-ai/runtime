@@ -2,6 +2,227 @@
 
 ## [unreleased]
 
+### Scheduler: restore job stat persistence + collapse doubled session_id + preserve delivery framing + disambiguate scheduled execution at agent boundary
+
+Three independent scheduler bugs surfaced by user testing on a recurring
+``*/3 * * * *`` reminder job. After two confirmed successful runs the
+``scheduled_jobs`` row showed ``last_run_at NULL``, ``total_runs 0``,
+``last_run_status`` empty — yet the user's external webhook receiver
+*had* recorded the result text in their ``job_results`` table. From the
+outside the scheduler looked broken; from the inside it looked like the
+job had never run.
+
+**1. Job stats never persisted (the root cause).**
+
+``Overlord._execute_async_request`` referenced ``self._scheduler`` (with
+a leading underscore) at four sites — but the scheduler is stored as
+``self.scheduler_service``. ``hasattr(self, "_scheduler")`` returned
+False on every scheduled run, so the entire completion-handler block
+was silently skipped:
+
+```python
+if (
+    hasattr(self, "_scheduler")   # ← always False
+    and self._scheduler           # ← never evaluated
+    and session_id
+    and session_id.startswith("job_")
+):
+    handled = await self._scheduler.complete_job_from_webhook(...)
+```
+
+Effect on every successful scheduled run:
+
+* ``mark_job_execution_success`` never called → ``total_runs`` stayed 0
+* ``scheduled.job.completed`` event never emitted
+* ``last_run_at`` / ``last_run_status`` never updated
+* External webhook *was* delivered (control fell through to the
+  standard delivery branch once the inner ``if`` was skipped) — which
+  is why the user's external receiver had the result and made it look
+  like the job worked
+
+The four references were renamed to ``self.scheduler_service``
+(``getattr(self, "scheduler_service", None)`` to keep the original
+defensive shape during early init). The accompanying silent
+``except Exception: pass`` blocks — which were how this typo hid for
+months — were replaced with logged ``ERROR.INTERNAL_ERROR`` warnings,
+so any future breakage on this path surfaces in observability instead
+of vanishing.
+
+**2. Doubled ``job_`` prefix in ``session_id`` (cosmetic).**
+
+``_execute_single_job`` constructed
+``session_id = f"job_{job_id}"`` — but job IDs are already prefixed by
+the manager, producing ``job_job_<id>`` in every observability event:
+
+```json
+{
+  "event": "scheduled.job.started",
+  "data": {
+    "job_id":     "job_JmYB5QuDisCdBpLU",
+    "session_id": "job_job_JmYB5QuDisCdBpLU"
+  }
+}
+```
+
+``complete_job_from_webhook`` papered over the doubling with
+``job_id = session_id[4:]`` (strips the first ``job_`` and recovers
+the real job_id), so the lookup *worked* and the dev-reported
+hypothesis that this caused the missing stat updates was incorrect —
+both ends used the same doubled string. But the relationship between
+session_id and job_id was no longer obvious to anyone reading code or
+logs. Now: ``session_id = job_id`` directly, and the strip in
+``complete_job_from_webhook`` becomes ``job_id = session_id`` (the
+``startswith("job_")`` namespace guard stays).
+
+**3. Prompt rewriter strips delivery framing (behavioral).**
+
+The scheduler's prompt rewriter over-compresses scheduled prompts.
+A user scheduling
+
+> ``remind me to drink water every 3 minutes``
+
+ended up with an execution prompt of bare ``drink water``. The agent,
+receiving that as a fresh user message with no scheduling context,
+interpreted it as a confirmation and replied:
+
+> "Got it. Drinking water now? Want me to set up a daily reminder?"
+
+— a recursive offer to schedule the exact reminder it was already
+executing. Reminders, notifications, and "send me a summary of"
+scheduled tasks were silently non-functional whenever their intent
+lived in the framing.
+
+Root cause: the rewriter prompt told the model to "Strip away ALL
+scheduling patterns" but never explicitly told it to *preserve*
+delivery framing (``remind me``, ``notify me``, ``send me``,
+``tell me``, ``show me``, ``alert me``). A 12B model interprets "all
+scheduling patterns" generously and treats ``remind me to`` as
+metadata.
+
+The rewriter prompt was rewritten to:
+
+* Frame the rewrite for the agent's perspective: "the agent will
+  receive your output as a fresh user message — with NO knowledge
+  that it was scheduled" — drives home why framing matters.
+* Explicitly call out delivery-framing words as part of the action,
+  NOT scheduling.
+* Provide a side-by-side correct/wrong table including the exact
+  failure case (``remind me to drink water`` → keep, NOT strip).
+* Spell out the recipient pronoun (``remind ME``, ``tell US``).
+
+**4. Disambiguate scheduled execution at the agent boundary
+(behavioral, second-order).**
+
+Live-testing the rewriter fix surfaced a second-order problem.
+Rewriter output for ``remind me to drink water every hour`` is now
+correctly ``remind me to drink water`` — but when the cron fires and
+that string lands in the agent as a fresh user message with no
+context, Claude Sonnet 4.6 treats it as a chat request to *configure*
+a reminder and politely declines:
+
+> "Can't set reminders directly — no access to your clock or
+> notification system. Quickest fix: just tell your phone's
+> assistant 'Remind me to drink water every hour' and you're done."
+
+A recursive offer to schedule the exact reminder it was already
+executing. The rewriter is correct; the agent is missing the
+context that this is a *firing*, not a *configuration request*.
+
+Live-tested four marker variants on hello-muxi. The minimum form
+
+```
+[SCHEDULED] remind me to drink water
+```
+
+worked perfectly with no system-prompt change required. The agent
+produced direct reminder content (``💧 Water break! Hey, time to grab
+a glass of water``) and even self-tagged the response with
+``Scheduled reminder ✓``. Longer preambles accidentally triggered
+SOP routing (variant C posted to GitHub), so the marker has to stay
+minimal.
+
+Implemented as a single-source-of-truth helper in
+``chat_orchestrator.py``:
+
+```python
+SCHEDULED_EXECUTION_MARKER = "[SCHEDULED] "
+
+def _apply_scheduled_marker(message: str, session_id: Optional[str]) -> str:
+    if session_id and session_id.startswith("job_"):
+        return f"{SCHEDULED_EXECUTION_MARKER}{message}"
+    return message
+```
+
+Wired into both message-rendering paths: the analyzer-pipeline
+``=== CURRENT REQUEST ===`` rendering inside
+``_enhance_message_with_context``, and the agent-LLM
+``current_user_message`` field returned by
+``_build_clean_chat_context``. ``buffer_turns`` (history rendered
+from buffer memory) is intentionally left untouched — past
+scheduled invocations appear in history as the original user text,
+since the assistant's prior responses already encode the
+scheduled-execution behavior.
+
+**Memory and observability stay clean.** PR #165's
+``EnhancedMessage(original, enhanced)`` threading pays off here: the
+``original`` field is the raw user text the marker is applied *on
+top of*, so:
+
+* Buffer memory stores the unprefixed message (``remind me to drink
+  water``) — no marker pollution in conversation history.
+* Observability events emit ``message_preview`` from the original,
+  not the enhanced/marked form — the
+  ``clarification.request.sent`` and
+  ``overlord.agent.selection_started`` events on a scheduled run
+  show ``"message_preview": "remind me to drink water"`` (verified
+  live).
+* Only the agent's view at inference time gets the marker — visible
+  in the ``agent.planning`` event's ``request`` field, which is the
+  correct place since that event records what the agent is planning
+  *against*.
+
+**Live verification matrix on hello-muxi (Claude Sonnet 4.6):**
+
+| Scenario | session_id | Expected | Result |
+|---|---|---|---|
+| Scheduled job firing | ``job_test1`` | reminder content | ✓ ``💧 Water break!`` |
+| Normal chat | ``normal-chat`` | no regression | ✓ same as pre-fix |
+| Streaming scheduled | ``job_stream_test`` | reminder content via stream | ✓ ``💧 Water check!`` |
+| Adversarial — user types ``[SCHEDULED]`` in normal chat | ``user-typed-bracket`` | agent ignores marker, answers normally | ✓ answered the question, no exploit surface |
+
+**Test changes.**
+
+Four new test classes added to
+``tests/unit/test_bugfix_verification.py`` (mirroring the existing
+source-shape testing pattern in that file):
+
+* ``TestSchedulerOverlordCompletionAttribute`` — asserts no live code
+  references ``self._scheduler`` (with comment / docstring stripping
+  so historical regression notes don't trip the test); asserts
+  ``_execute_async_request`` calls
+  ``scheduler_service.complete_job_from_webhook`` on both the success
+  and failure branches.
+* ``TestSchedulerSessionIdNotDoubled`` — asserts ``_execute_single_job``
+  uses ``session_id = job_id`` directly; asserts
+  ``complete_job_from_webhook`` does not slice with ``session_id[4:]``
+  (the strip was only correct for the doubled prefix and would now
+  strip the legitimate ``job_`` prefix).
+* ``TestSchedulerPromptRewriterPreservesFraming`` — asserts the
+  rewriter prompt mentions ``remind me``, carries ``drink water`` as a
+  guard example, and explicitly warns against stripping framing.
+* ``TestScheduledExecutionMarker`` — asserts the centralized helper
+  exists with the expected ``[SCHEDULED] `` literal; asserts the
+  helper applies / does not apply correctly across job and
+  non-job session IDs (including ``None``, empty string, and
+  arbitrary non-prefixed IDs); asserts both rendering paths call
+  the helper rather than re-implementing the rule inline; locks the
+  ``buffer_turns left untouched`` invariant via a comment-shape
+  assertion.
+
+28/28 tests in test_bugfix_verification pass. Full unit suite:
+1005 passed, 1 skipped (the one pre-existing RCE auth failure
+unchanged on develop).
+
 ### MCP tool filtering via ``tools.{whitelist|blacklist}``
 
 Adds an optional ``tools`` block on any MCP server config that lets

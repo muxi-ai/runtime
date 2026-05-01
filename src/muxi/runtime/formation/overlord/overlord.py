@@ -5860,20 +5860,37 @@ Agent response: {raw_response}"""
             # Check if this is a scheduled job completion (wrap in try-except to prevent errors)
             try:
                 if (
-                    hasattr(self, "_scheduler")
-                    and self._scheduler
+                    getattr(self, "scheduler_service", None)
                     and session_id
                     and session_id.startswith("job_")
                 ):
                     # This is a scheduled job - handle completion through scheduler
-                    handled = await self._scheduler.complete_job_from_webhook(
+                    handled = await self.scheduler_service.complete_job_from_webhook(
                         session_id, success=True, result=result_content, error=None
                     )
                     if handled:
                         return  # Don't send normal webhook for scheduled jobs
-            except Exception:
-                # If scheduler handling fails, continue with normal webhook
-                pass
+            except Exception as scheduler_completion_error:
+                # If scheduler handling fails, log and continue with normal
+                # webhook delivery — but make the failure visible. Silently
+                # swallowing was how the original ``self._scheduler`` typo
+                # hid for so long.
+                observability.observe(
+                    event_type=observability.ErrorEvents.INTERNAL_ERROR,
+                    level=observability.EventLevel.WARNING,
+                    data={
+                        "request_id": request_id,
+                        "session_id": session_id,
+                        "error": str(scheduler_completion_error),
+                        "error_type": type(scheduler_completion_error).__name__,
+                        "operation": "scheduler_complete_job_from_webhook_success",
+                    },
+                    description=(
+                        "Scheduler completion (success path) raised; "
+                        "falling back to normal webhook delivery: "
+                        f"{scheduler_completion_error}"
+                    ),
+                )
 
             webhook_url = await self._get_webhook_url_for_request(request_id)
             if webhook_url:
@@ -5957,8 +5974,7 @@ Agent response: {raw_response}"""
             # Check if this is a scheduled job failure (wrap in try-except to prevent secondary errors)
             try:
                 if (
-                    hasattr(self, "_scheduler")
-                    and self._scheduler
+                    getattr(self, "scheduler_service", None)
                     and session_id
                     and session_id.startswith("job_")
                 ):
@@ -5966,14 +5982,30 @@ Agent response: {raw_response}"""
                     formatted_error = await self._apply_persona(
                         f"An error occurred: {str(e)}", message
                     )
-                    handled = await self._scheduler.complete_job_from_webhook(
+                    handled = await self.scheduler_service.complete_job_from_webhook(
                         session_id, success=False, result=None, error=formatted_error
                     )
                     if handled:
                         return  # Don't send normal webhook for scheduled jobs
-            except Exception:
-                # If scheduler handling fails, continue with normal webhook
-                pass
+            except Exception as scheduler_completion_error:
+                # If scheduler handling fails, log and continue with normal
+                # webhook delivery — but make the failure visible.
+                observability.observe(
+                    event_type=observability.ErrorEvents.INTERNAL_ERROR,
+                    level=observability.EventLevel.WARNING,
+                    data={
+                        "request_id": request_id,
+                        "session_id": session_id,
+                        "error": str(scheduler_completion_error),
+                        "error_type": type(scheduler_completion_error).__name__,
+                        "operation": "scheduler_complete_job_from_webhook_failure",
+                    },
+                    description=(
+                        "Scheduler completion (failure path) raised; "
+                        "falling back to normal webhook delivery: "
+                        f"{scheduler_completion_error}"
+                    ),
+                )
 
             # Send failure webhook if URL is configured
             # NOTE: Must get webhook URL BEFORE removing request from tracker

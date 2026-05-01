@@ -40,6 +40,37 @@ class EnhancedMessage(NamedTuple):
     enhanced: str
 
 
+# Marker prefix the agent sees in front of a scheduled-execution message.
+# Resolves the ambiguity where ``remind me to X`` reads as a chat request
+# to *configure* a reminder rather than as the reminder firing right now.
+# Applied only at the agent's view of the message — buffer memory and
+# observability still see the raw user text. See
+# ``_apply_scheduled_marker`` for the single-place rule.
+SCHEDULED_EXECUTION_MARKER = "[SCHEDULED] "
+
+
+def _apply_scheduled_marker(message: str, session_id: Optional[str]) -> str:
+    """Return ``message`` with the scheduled-execution marker if and only
+    if ``session_id`` belongs to the scheduler namespace.
+
+    Centralized so both message-rendering paths
+    (``_enhance_message_with_context`` and ``_build_clean_chat_context``)
+    apply the same rule, and so a single source-shape assertion can lock
+    the policy.
+
+    Idempotent: if ``message`` already starts with the marker (e.g. a
+    user copy-pasted a prior scheduled-firing transcript into a new
+    scheduled job, or two render paths chain the helper through the
+    same string), the marker is not doubled. Double-prefixing is
+    harmless for well-behaved models but still a silent edge case
+    worth guarding against.
+    """
+    if session_id and session_id.startswith("job_"):
+        if not message.startswith(SCHEDULED_EXECUTION_MARKER):
+            return f"{SCHEDULED_EXECUTION_MARKER}{message}"
+    return message
+
+
 class ChatOrchestrator:
     """
     Handles chat orchestration for the Overlord.
@@ -1384,9 +1415,14 @@ class ChatOrchestrator:
         # Build enhanced message with priority ordering (most important first)
         enhanced_parts = []
 
-        # 1. Current request (highest priority - always preserved)
+        # 1. Current request (highest priority - always preserved).
+        # Apply the scheduled-execution marker only at the rendering
+        # layer — the ``message`` variable (and the EnhancedMessage
+        # ``original`` field returned below) stays unchanged so memory
+        # storage and observability emits keep the raw user text.
+        display_message = _apply_scheduled_marker(message, session_id)
         enhanced_parts.append("=== CURRENT REQUEST ===")
-        enhanced_parts.append(f"User: {message}")
+        enhanced_parts.append(f"User: {display_message}")
         enhanced_parts.append("")
 
         # 2. User profile (high priority - provides context about the user)
@@ -1463,11 +1499,19 @@ class ChatOrchestrator:
 
             {
               "buffer_turns": [{"role": "user"|"assistant", "content": "..."}],
-              "current_user_message": "<raw text, no markers>",
+              "current_user_message": "<user text, optionally prefixed
+                                       with '[SCHEDULED] ' when
+                                       session_id belongs to the
+                                       scheduler namespace>",
               "user_profile_text": "...",
               "long_term_memories": "...",
               "file_results": "...",
             }
+
+        ``current_user_message`` is the only field the marker is applied
+        to — ``buffer_turns`` mirrors buffer memory's stored shape (the
+        original user text, no marker) and the remaining fields carry
+        no user input. See ``_apply_scheduled_marker`` for the rule.
 
         in contrast to ``_enhance_message_with_context`` which produces a
         single flat string with ``=== CURRENT REQUEST ===`` /
@@ -1602,9 +1646,17 @@ class ChatOrchestrator:
             _fetch_buffer_role_turns(),
         )
 
+        # Apply the scheduled-execution marker only at the agent's
+        # view of the current message. ``buffer_turns`` is left
+        # untouched — those rows came from buffer memory which stores
+        # the original user text, so prior scheduled invocations
+        # appear in history without the marker (correct: only the
+        # *current* turn needs the marker to disambiguate intent;
+        # past turns' assistant responses already encode the
+        # scheduled-execution behavior).
         return {
             "buffer_turns": buffer_turns,
-            "current_user_message": current_user_message,
+            "current_user_message": _apply_scheduled_marker(current_user_message, session_id),
             "user_profile_text": user_profile_text,
             "long_term_memories": long_term_memories,
             "file_results": file_results or "",
