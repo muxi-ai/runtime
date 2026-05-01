@@ -6,26 +6,23 @@ shape-invalid slugs (e.g. ``local/all-MiniLM-L6-v2`` instead of
 ``local/sentence-transformers/all-MiniLM-L6-v2``) abort startup
 rather than degrading silently on first user request.
 
-Failure classification under test:
+This file holds **pure-function** unit tests only. End-to-end probe
+behavior (real OneLLM calls, real HF / OpenAI errors, real fatal
+abort path) lives in
+``tests/integration/test_model_init_probe_integration.py`` per the
+project's "no mocks" testing standard - pure functions are safe
+ground for fast unit assertions; behavior tests use real services.
 
-- ``ResourceNotFoundError``      -> FATAL (raises ConfigurationValidationError)
-- ``InvalidRequestError``        -> FATAL  (HF validation = bare-name slug)
-- ``AuthenticationError``        -> WARN   (continue; can't distinguish
-                                            missing vs invalid key reliably)
-- ``RateLimitError``             -> WARN   (transient)
-- non-OneLLMError exceptions     -> WARN   (probe-machinery bug)
+Coverage:
 
-Plus structural tests for capability dedup, probe-shape selection
-(embedding vs chat), serial fail-fast ordering, and that the bare-name
-fatal message includes the operator-actionable hint.
+- ``TestClassification``        - failure-class -> severity mapping
+- ``TestEventLevelMapping``     - severity + origin -> EventLevel
+- ``TestFatalMessageFormatting``- slug-shape -> hint in fatal message
+- ``TestProbeBuilder``          - capability dedup + probe-kind picking
 """
 
 from __future__ import annotations
 
-from types import SimpleNamespace
-from unittest.mock import AsyncMock, patch
-
-import pytest
 from onellm.errors import (
     AuthenticationError,
     InvalidRequestError,
@@ -34,13 +31,8 @@ from onellm.errors import (
     ResourceNotFoundError,
 )
 
-from muxi.runtime.datatypes.exceptions import ConfigurationValidationError
+from muxi.runtime.datatypes.observability import EventLevel
 from muxi.runtime.formation import initialization as init_mod
-
-
-def _make_formation(capability_models: dict) -> SimpleNamespace:
-    """Build a minimal formation stand-in with just the field the probe reads."""
-    return SimpleNamespace(_capability_models=capability_models)
 
 
 class TestClassification:
@@ -153,116 +145,44 @@ class TestProbeBuilder:
         assert probes[0]["model"] == "openai/gpt-4o-mini"
 
 
-class TestProbeOutcomes:
-    """End-to-end probe behavior with the OneLLM call mocked."""
+class TestEventLevelMapping:
+    """``_event_level_for_failure`` is pure - lock the level contract.
 
-    @pytest.mark.asyncio
-    async def test_all_probes_succeed_no_raise(self):
-        formation = _make_formation({"text": {"model": "openai/gpt-4o-mini"}})
-        with patch.object(init_mod, "_execute_single_probe", new=AsyncMock()) as mock_exec:
-            await init_mod.probe_declared_models(formation)
-        mock_exec.assert_awaited_once_with("openai/gpt-4o-mini", "chat")
+    The block-comment in ``initialization.py`` promises ERROR-level
+    events for non-``OneLLMError`` exceptions (probe-machinery bugs).
+    Without these tests an operator filtering ERROR alerts would
+    silently miss a defect in the probe layer itself, since the
+    control-flow severity is "warn" (continue) but the operational
+    severity is ERROR (something is broken).
+    """
 
-    @pytest.mark.asyncio
-    async def test_resource_not_found_aborts_with_config_error(self):
-        formation = _make_formation({"text": {"model": "openai/gpt-4o-min"}})  # typo
-        exc = ResourceNotFoundError("404", provider="openai", status_code=404)
-        with patch.object(init_mod, "_execute_single_probe", new=AsyncMock(side_effect=exc)):
-            with pytest.raises(ConfigurationValidationError) as excinfo:
-                await init_mod.probe_declared_models(formation)
+    def test_fatal_onellm_emits_error(self):
+        # 404 / shape error from OneLLM - operator's primary signal.
+        assert init_mod._event_level_for_failure("fatal", is_onellm=True) == EventLevel.ERROR
 
-        # Message names the offending slug and embeds the OneLLM error.
-        msg = str(excinfo.value)
-        assert "openai/gpt-4o-min" in msg
-        assert "ResourceNotFoundError" in msg
+    def test_warn_onellm_emits_warning(self):
+        # auth / rate-limit / transient OneLLM error - non-fatal,
+        # informational only.
+        assert init_mod._event_level_for_failure("warn", is_onellm=True) == EventLevel.WARNING
 
-    @pytest.mark.asyncio
-    async def test_bare_name_local_slug_surfaces_owner_hint(self):
-        # The dev's exact failure - must produce the hint that names
-        # the canonical form.
-        formation = _make_formation({"embedding": {"model": "local/all-MiniLM-L6-v2"}})
-        exc = InvalidRequestError(
-            "[local/all-MiniLM-L6-v2] Invalid HuggingFace repo id.",
-            provider="local",
-            status_code=400,
+    def test_warn_non_onellm_emits_error(self):
+        # The reviewer's flagged case: a probe-machinery bug
+        # (RuntimeError, ValueError, etc.) is non-fatal at the
+        # control-flow level but MUST emit at ERROR so log filtering
+        # doesn't hide it.
+        assert init_mod._event_level_for_failure("warn", is_onellm=False) == EventLevel.ERROR
+
+    def test_fatal_non_onellm_emits_error(self):
+        # Defensive: the classifier never produces "fatal" for a
+        # non-OneLLMError today, but if it ever did we still want
+        # ERROR (loudest signal wins).
+        assert init_mod._event_level_for_failure("fatal", is_onellm=False) == EventLevel.ERROR
+
+    def test_unrecognized_severity_treated_as_non_fatal(self):
+        # Future-proofing: an unknown severity string from a
+        # classifier extension should NOT silently emit ERROR.
+        # Falls into the "warn" branch via the inverted condition.
+        assert (
+            init_mod._event_level_for_failure("future-severity", is_onellm=True)
+            == EventLevel.WARNING
         )
-        with patch.object(init_mod, "_execute_single_probe", new=AsyncMock(side_effect=exc)):
-            with pytest.raises(ConfigurationValidationError) as excinfo:
-                await init_mod.probe_declared_models(formation)
-
-        msg = str(excinfo.value)
-        assert "local/all-MiniLM-L6-v2" in msg
-        assert "local/sentence-transformers/all-MiniLM-L6-v2" in msg
-        assert "owner/organization" in msg
-
-    @pytest.mark.asyncio
-    async def test_authentication_error_does_not_abort(self):
-        formation = _make_formation({"text": {"model": "openai/gpt-4o-mini"}})
-        exc = AuthenticationError("bad key", provider="openai", status_code=401)
-        with patch.object(init_mod, "_execute_single_probe", new=AsyncMock(side_effect=exc)):
-            # Must not raise - auth failures are warn-and-continue.
-            await init_mod.probe_declared_models(formation)
-
-    @pytest.mark.asyncio
-    async def test_rate_limit_does_not_abort(self):
-        formation = _make_formation({"text": {"model": "anthropic/claude-3-5-sonnet"}})
-        exc = RateLimitError("429", provider="anthropic", status_code=429)
-        with patch.object(init_mod, "_execute_single_probe", new=AsyncMock(side_effect=exc)):
-            await init_mod.probe_declared_models(formation)
-
-    @pytest.mark.asyncio
-    async def test_non_onellm_exception_does_not_abort(self):
-        # A bug in the probe machinery (RuntimeError, ValueError, ...)
-        # must NOT brick formations - log loudly, continue.
-        formation = _make_formation({"text": {"model": "openai/gpt-4o-mini"}})
-        with patch.object(
-            init_mod,
-            "_execute_single_probe",
-            new=AsyncMock(side_effect=RuntimeError("probe machinery bug")),
-        ):
-            await init_mod.probe_declared_models(formation)
-
-    @pytest.mark.asyncio
-    async def test_first_fatal_aborts_before_subsequent_probes_run(self):
-        # text raises 404; embedding (a separate probe) MUST NOT be
-        # called because we fail-fast on the first fatal.
-        formation = _make_formation(
-            {
-                "text": {"model": "openai/gpt-4o-min"},  # typo, will 404
-                "embedding": {"model": "openai/text-embedding-3-small"},
-            }
-        )
-
-        call_log: list[tuple] = []
-
-        async def fake_probe(model: str, kind: str) -> None:
-            call_log.append((model, kind))
-            if model == "openai/gpt-4o-min":
-                raise ResourceNotFoundError("404", provider="openai", status_code=404)
-
-        with patch.object(init_mod, "_execute_single_probe", new=fake_probe):
-            with pytest.raises(ConfigurationValidationError):
-                await init_mod.probe_declared_models(formation)
-
-        assert call_log == [("openai/gpt-4o-min", "chat")]
-
-    @pytest.mark.asyncio
-    async def test_empty_capability_models_is_a_noop(self):
-        formation = _make_formation({})
-        with patch.object(init_mod, "_execute_single_probe", new=AsyncMock()) as mock_exec:
-            await init_mod.probe_declared_models(formation)
-        mock_exec.assert_not_called()
-
-    @pytest.mark.asyncio
-    async def test_dedup_runs_one_probe_for_two_capabilities(self):
-        # vision cascading from text - both point at gpt-4o-mini, only
-        # one probe should fire.
-        formation = _make_formation(
-            {
-                "text": {"model": "openai/gpt-4o-mini"},
-                "vision": {"model": "openai/gpt-4o-mini"},
-            }
-        )
-        with patch.object(init_mod, "_execute_single_probe", new=AsyncMock()) as mock_exec:
-            await init_mod.probe_declared_models(formation)
-        assert mock_exec.await_count == 1

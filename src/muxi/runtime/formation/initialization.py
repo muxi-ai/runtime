@@ -347,6 +347,31 @@ def _classify_probe_failure(exc: Exception) -> str:
     return "warn"
 
 
+def _event_level_for_failure(severity: str, is_onellm: bool) -> "EventLevel":
+    """Pure mapper: failure classification + origin -> emitted event level.
+
+    Two cases produce ``ERROR``:
+
+    - ``severity == "fatal"`` - formation is about to abort init; the
+      event is the operator's primary signal, must surface above
+      ``WARNING`` filtering thresholds.
+    - ``not is_onellm`` - a probe-machinery bug (``RuntimeError``,
+      ``ValueError``, etc.). The control-flow severity is ``"warn"``
+      (we continue formation init to avoid bricking on a probe defect),
+      but the event level is ``ERROR`` so an operator filtering on
+      ERROR alerts does not silently miss a defect in the probe layer
+      itself. The block-comment contract on this module promises
+      ``ERROR`` for non-``OneLLMError`` cases; this helper makes that
+      promise enforceable in tests.
+
+    All other cases (``severity == "warn"`` from a real ``OneLLMError`` -
+    auth, rate limit, transient network) emit at ``WARNING``.
+    """
+    if severity == "fatal" or not is_onellm:
+        return EventLevel.ERROR
+    return EventLevel.WARNING
+
+
 def _format_probe_fatal_message(model_slug: str, exc: Exception) -> str:
     """Build the operator-facing message for a fatal probe failure.
 
@@ -519,7 +544,7 @@ async def probe_declared_models(formation) -> None:
 
             observability.observe(
                 event_type=observability.SystemEvents.MODEL_INIT_PROBE_FAILED,
-                level=EventLevel.ERROR if severity == "fatal" else EventLevel.WARNING,
+                level=_event_level_for_failure(severity, is_onellm),
                 data={
                     "model": model,
                     "probe_kind": kind,
