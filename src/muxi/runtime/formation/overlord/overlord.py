@@ -5679,6 +5679,7 @@ Agent response: {raw_response}"""
         agent_name: Optional[str],
         user_id: Any,
         session_id: Optional[str] = None,
+        original_message: Optional[str] = None,
     ) -> None:
         """
         Execute async request in background.
@@ -5686,6 +5687,10 @@ Agent response: {raw_response}"""
         This method runs the actual chat processing in the background for async requests,
         updating the request tracker with progress and delivering webhook notifications
         upon completion or failure.
+
+        ``original_message`` carries the bare user text alongside the
+        marker-formatted ``message``. Used so downstream observability
+        emits log the user's actual request rather than the wrapper.
         """
 
         observability.observe(
@@ -5780,6 +5785,7 @@ Agent response: {raw_response}"""
                 request_id=request_id,
                 use_async=True,
                 webhook_url=webhook_url,
+                original_message=original_message,
             )
             processing_time = time.time() - start_time
 
@@ -6209,6 +6215,7 @@ Agent response: {raw_response}"""
         webhook_url: Optional[str] = None,
         bypass_workflow_approval: bool = False,
         clean_chat_context: Optional[Dict[str, Any]] = None,
+        original_message: Optional[str] = None,
     ) -> MuxiResponse:
         """
         Process chat synchronously using existing infrastructure.
@@ -6226,10 +6233,31 @@ Agent response: {raw_response}"""
         ``ChatOrchestrator._build_clean_chat_context`` for the bundle
         shape and rationale.
 
+        ``original_message`` carries the raw user request alongside
+        ``message`` (which is the marker-formatted enhanced blob). It
+        is used directly for observability emits and for any analyzer
+        path that needs the bare user text — replacing the
+        re-parse-the-wrapper pattern that used to be repeated across
+        this function. Recursive callers that already have the bare
+        text (clarification re-entries) pass it through unchanged.
+        ``ChatOrchestrator._enhance_message_with_context`` returns
+        ``EnhancedMessage(original, enhanced)`` and the orchestrator
+        threads both fields here.
+
         ENHANCED: Now detects and handles agent clarification requests.
         """
         # Track processing time
         start_time = time.time()
+
+        # Single source of truth for the bare user request. Every
+        # downstream observability emit and analyzer hop that wants
+        # "what did the user actually say?" reads this value instead
+        # of regex-extracting it back out of the marker wrapper. When
+        # ``original_message`` was not supplied (legacy internal callers
+        # that pass already-bare text as ``message``), the input is
+        # already the raw text — this is also true for clarification
+        # recursive re-entries below where ``message=original_message``.
+        actual_message: str = original_message if original_message is not None else message
 
         # Check for cancellation at start of sync processing
         if request_id and self.request_tracker.is_cancelled(request_id):
@@ -6287,30 +6315,10 @@ Agent response: {raw_response}"""
         # Check if streaming is enabled for this request
         is_streaming = streaming_manager.is_streaming_enabled(request_id) if request_id else False
 
-        # Extract clean message for streaming display (only if streaming is enabled)
-        display_msg = message
-        if is_streaming and "=== CURRENT REQUEST ===" in message and "User:" in message:
-            lines = message.split("\n")
-            for i, line in enumerate(lines):
-                if line.strip() == "=== CURRENT REQUEST ===" and i + 1 < len(lines):
-                    next_line = lines[i + 1].strip()
-                    if next_line.startswith("User:"):
-                        # Handle multi-line messages
-                        content_lines = []
-                        first_line_content = next_line[5:].strip()
-                        if first_line_content:
-                            content_lines.append(first_line_content)
-                        # Collect subsequent lines until we hit another section
-                        for j in range(i + 2, len(lines)):
-                            line_content = lines[j].strip()
-                            if line_content.startswith("===") or (
-                                not line_content and len(content_lines) > 0
-                            ):
-                                break
-                            if line_content:
-                                content_lines.append(line_content)
-                        display_msg = " ".join(content_lines)
-                        break
+        # Clean message for streaming display — already extracted at the source
+        # via the ``EnhancedMessage(original, enhanced)`` contract; no
+        # re-parsing the wrapper here.
+        display_msg = actual_message if is_streaming else message
 
         # Emit streaming event for processing start
         import random
@@ -6448,15 +6456,20 @@ Agent response: {raw_response}"""
 
                             # If we have the original message, retry it now with credentials stored
                             if original_message:
-                                # Recursively call _process_sync_chat with the original message
-                                # IMPORTANT: Skip clarification to avoid infinite loop
+                                # Recursively call _process_sync_chat with the original message.
+                                # IMPORTANT: Skip clarification to avoid infinite loop.
+                                # ``message`` and ``original_message`` are both the bare
+                                # user text here — the wrapper hasn't been re-applied for
+                                # this re-entry, and downstream observability emits read
+                                # ``actual_message`` which now equals the user's request.
                                 return await self._process_sync_chat(
                                     message=original_message,
                                     user_id=user_id,
                                     session_id=session_id,
                                     request_id=request_id,
                                     agent_name=agent_name,
-                                    skip_clarification=True,  # Prevent infinite clarification loop
+                                    skip_clarification=True,
+                                    original_message=original_message,
                                 )
                             else:
                                 # Fallback if no original message stored
@@ -6493,20 +6506,10 @@ Agent response: {raw_response}"""
                     # Parse the user's selection
                     selected_credential = None
                     try:
-                        # Extract just the user's message from the formatted context
-                        actual_message = message
-                        if "=== CURRENT REQUEST ===" in message and "User:" in message:
-                            # Extract the user's actual message from the formatted context
-                            lines = message.split("\n")
-                            for i, line in enumerate(lines):
-                                if line.strip() == "=== CURRENT REQUEST ===" and i + 1 < len(lines):
-                                    next_line = lines[i + 1].strip()
-                                    if next_line.startswith("User:"):
-                                        actual_message = next_line[
-                                            5:
-                                        ].strip()  # Remove "User: " prefix
-                                        break
-
+                        # ``actual_message`` is the bare user request, computed once
+                        # at the top of ``_process_sync_chat`` from the
+                        # ``original_message`` parameter (or fallback). No inline
+                        # extraction here.
                         import re
 
                         numbers = re.findall(r"\d+", actual_message.strip())
@@ -6569,7 +6572,8 @@ Agent response: {raw_response}"""
                                     session_id=session_id,
                                     request_id=request_id,
                                     agent_name=agent_name,
-                                    skip_clarification=True,  # Prevent infinite clarification loop
+                                    skip_clarification=True,
+                                    original_message=original_message,
                                 )
                             else:
                                 return MuxiResponse(
@@ -6625,18 +6629,12 @@ Agent response: {raw_response}"""
                     response_result = None
                     if self.clarification and clarification_info.get("request_id"):
                         try:
-                            # Extract the raw user message (strip buffer context markers)
-                            clean_response = message
-                            if "=== CURRENT REQUEST ===" in message and "User:" in message:
-                                for _line in message.split("\n"):
-                                    _line_s = _line.strip()
-                                    if _line_s.startswith("User:"):
-                                        clean_response = _line_s[5:].strip()
-                                        break
-
+                            # ``actual_message`` is already the bare user response
+                            # — see the top-of-function destructure of
+                            # ``original_message``. No re-parsing needed.
                             response_result = await self.clarification.handle_response(
                                 request_id=clarification_info.get("request_id"),
-                                response=clean_response,
+                                response=actual_message,
                             )
 
                             # ALWAYS clear the pending clarification after handling response
@@ -6684,7 +6682,10 @@ Agent response: {raw_response}"""
                                         ctx.get("user_id", user_id),
                                     )
 
-                                # Process the enhanced/final request
+                                # Process the enhanced/final request. ``response_result.request``
+                                # is the bare user text (the unified clarification system has
+                                # not re-applied the marker wrapper), so it doubles as the
+                                # original for observability.
                                 return await self._process_sync_chat(
                                     message=response_result.request,
                                     agent_name=agent_name,
@@ -6692,6 +6693,7 @@ Agent response: {raw_response}"""
                                     session_id=session_id,
                                     request_id=request_id,
                                     skip_clarification=True,
+                                    original_message=response_result.request,
                                 )
 
                         except Exception as e:
@@ -6714,7 +6716,7 @@ Agent response: {raw_response}"""
                         data={
                             "session_id": session_id,
                             "workflow_id": clarification_info.get("workflow_id"),
-                            "user_response": message[:200],
+                            "user_response": actual_message[:200],
                             "request_id": request_id,
                         },
                         description="Received user response to workflow approval request",
@@ -6942,11 +6944,11 @@ Agent response: {raw_response}"""
         # or ask for more info.
         _matched_sop = None
         if not skip_clarification and self._ensure_sop_system():
-            import re as _re
-
-            _sop_match = _re.search(r"User:\s*([^\n]+)", message)
-            _sop_message = _sop_match.group(1).strip() if _sop_match else message
-            _matched_sop = await self._find_relevant_sop(_sop_message)
+            # Match against the bare user request — ``actual_message`` was
+            # destructured at the top of the function from
+            # ``original_message``. The previous regex-based inline
+            # extraction was lossy on multi-line messages.
+            _matched_sop = await self._find_relevant_sop(actual_message)
             if _matched_sop:
                 _sop_display = _matched_sop.get("name", _matched_sop["id"])
                 streaming.stream(
@@ -7043,13 +7045,17 @@ Agent response: {raw_response}"""
 
                                 # If there's an original message to replay, process it now
                                 if response.get("continue_with"):
-                                    # Recursively process the original request now that credentials are stored
+                                    # Recursively process the original request now that
+                                    # credentials are stored. ``response["continue_with"]``
+                                    # is the saved bare user text from the credential
+                                    # handler.
                                     continuation_response = await self._process_sync_chat(
                                         message=response["continue_with"],
                                         user_id=user_id,
                                         agent_name=agent_name,
                                         session_id=session_id,
                                         request_id=request_id,
+                                        original_message=response["continue_with"],
                                     )
                                     # Combine the success message with the continuation response
                                     combined_content = f"{success_response.content}\n\n{continuation_response.content}"
@@ -7332,7 +7338,7 @@ Agent response: {raw_response}"""
                 "has_pending_clarifications": (
                     bool(await self._get_pending_clarification(session_id)) if session_id else False
                 ),
-                "message_preview": message[:100],
+                "message_preview": actual_message[:200],
             },
             description="Checking workflow analysis conditions",
         )
@@ -7355,35 +7361,8 @@ Agent response: {raw_response}"""
         if agent_name is None and (self.auto_decomposition or _matched_sop is not None):
             # Analyze request complexity
             try:
-                # Extract the actual user message from formatted context if needed
-                actual_message = message
-                if "=== CURRENT REQUEST ===" in message and "User:" in message:
-                    # Extract the user's actual message from the formatted context
-                    lines = message.split("\n")
-                    for i, line in enumerate(lines):
-                        if line.strip() == "=== CURRENT REQUEST ===" and i + 1 < len(lines):
-                            next_line = lines[i + 1].strip()
-                            if next_line.startswith("User:"):
-                                # Handle multi-line messages: collect all content after "User:"
-                                content_lines = []
-                                # First, get any content on the same line as "User:"
-                                first_line_content = next_line[5:].strip()
-                                if first_line_content:
-                                    content_lines.append(first_line_content)
-
-                                # Then collect subsequent lines until we hit another section or end
-                                for j in range(i + 2, len(lines)):
-                                    line_content = lines[j].strip()
-                                    # Stop if we hit another section marker or empty line
-                                    if line_content.startswith("===") or (
-                                        not line_content and len(content_lines) > 0
-                                    ):
-                                        break
-                                    if line_content:  # Only add non-empty lines
-                                        content_lines.append(line_content)
-
-                                actual_message = " ".join(content_lines)
-                                break
+                # ``actual_message`` is the bare user request, computed once at
+                # the top of this function from ``original_message``.
 
                 # Build context with available SOPs for the analyzer
                 analysis_context = {"request_tracker": self.request_tracker}
@@ -7667,6 +7646,7 @@ Agent response: {raw_response}"""
                         webhook_url=webhook_url,
                         relevant_sop=_matched_sop,
                         bypass_workflow_approval=bypass_workflow_approval,
+                        original_message=actual_message,
                     )
 
                 # Check if complexity exceeds threshold
@@ -7697,6 +7677,7 @@ Agent response: {raw_response}"""
                             webhook_url=webhook_url,
                             relevant_sop=relevant_sop,
                             bypass_workflow_approval=bypass_workflow_approval,
+                            original_message=actual_message,
                         )
 
                     # No SOP found - apply normal protection logic
@@ -7725,6 +7706,7 @@ Agent response: {raw_response}"""
                                 webhook_url=webhook_url,
                                 relevant_sop=None,
                                 bypass_workflow_approval=bypass_workflow_approval,
+                                original_message=actual_message,
                             )
             except RequestCancelledException:
                 # Re-raise cancellation exceptions - don't catch them here
@@ -7751,7 +7733,7 @@ Agent response: {raw_response}"""
                 "planning",
                 "Determining the best agent to handle this request...",
                 stage="agent_selection",
-                message_preview=message[:500],
+                message_preview=actual_message[:500],
                 agent_requested=agent_name,
             )
 
@@ -7759,30 +7741,15 @@ Agent response: {raw_response}"""
             observability.observe(
                 event_type=observability.ConversationEvents.OVERLORD_AGENT_SELECTION_STARTED,
                 level=observability.EventLevel.INFO,
-                data={"message": message[:200]},
+                data={"message": actual_message[:200]},
                 description="Starting agent selection process",
             )
 
-            # Extract clean user message for routing to avoid security false positives
-            # The enhanced message contains protocol instructions that can trigger security checks
-            routing_message = message
-            if "=== CURRENT REQUEST ===" in message and "User:" in message:
-                lines = message.split("\n")
-                for i, line in enumerate(lines):
-                    if line.strip() == "=== CURRENT REQUEST ===":
-                        request_lines = []
-                        for request_line in lines[i + 1 :]:
-                            stripped_line = request_line.strip()
-                            if stripped_line.startswith("===") and stripped_line.endswith("==="):
-                                break
-                            if request_line.startswith("User:"):
-                                request_lines.append(request_line[5:].strip())
-                            elif request_lines:
-                                request_lines.append(request_line)
-                        candidate_message = "\n".join(request_lines).strip()
-                        if candidate_message:
-                            routing_message = candidate_message
-                            break
+            # Use the bare user request for routing — the enhanced wrapper
+            # contains protocol instructions that can trigger security checks
+            # as false positives. ``actual_message`` was destructured at the
+            # top of the function from ``original_message``.
+            routing_message = actual_message
 
             try:
                 agent_name = await self.select_agent_for_message(
@@ -7892,19 +7859,10 @@ Agent response: {raw_response}"""
             # Check if this is a credential error that needs clarification
             from ..credentials import AmbiguousCredentialError, MissingCredentialError
 
-            # Extract the actual user message from formatted context if needed (for credential errors)
-            actual_message_for_credential = message
-            if "=== CURRENT REQUEST ===" in message and "User:" in message:
-                # Extract the user's actual message from the formatted context
-                lines = message.split("\n")
-                for i, line in enumerate(lines):
-                    if line.strip() == "=== CURRENT REQUEST ===" and i + 1 < len(lines):
-                        next_line = lines[i + 1].strip()
-                        if next_line.startswith("User:"):
-                            actual_message_for_credential = next_line[
-                                5:
-                            ].strip()  # Remove "User: " prefix
-                            break
+            # ``actual_message`` is the bare user request for credential-error
+            # bookkeeping (we store it in clarification_info["original_message"]
+            # so the recursive retry below has the un-wrapped text).
+            actual_message_for_credential = actual_message
 
             if isinstance(e, MissingCredentialError):
                 # Use unified system to handle credential request based on configuration
@@ -8289,6 +8247,7 @@ Agent response: {raw_response}"""
         use_async: Optional[bool] = None,
         webhook_url: Optional[str] = None,
         bypass_workflow_approval: bool = False,
+        original_message: Optional[str] = None,
     ) -> MuxiResponse:
         """
         Process a complex request using workflow orchestration.
@@ -8302,7 +8261,11 @@ Agent response: {raw_response}"""
         emit events during workflow execution for real-time progress updates.
 
         Args:
-            message: The user's original message
+            message: The user's request — typically already the bare text by
+                the time we reach the workflow path (callers extract from the
+                marker wrapper before invoking us), but treat ``message`` as
+                potentially-wrapped legacy and ``original_message`` as the
+                canonical bare value when supplied.
             analysis: RequestAnalysis object containing complexity score and decomposition hints
             user_id: User identifier
             session_id: Optional session identifier
@@ -8310,6 +8273,8 @@ Agent response: {raw_response}"""
             relevant_sop: Optional SOP to use for workflow
             use_async: Optional async execution preference
             webhook_url: Optional webhook URL for async results
+            original_message: Bare user text — used for observability emits
+                so they don't dump the marker wrapper.
 
         Returns:
             MuxiResponse containing either workflow results or approval request
@@ -8318,6 +8283,11 @@ Agent response: {raw_response}"""
         self._validate_workflow_inputs(message, user_id, session_id, request_id)
         self._validate_workflow_analysis(analysis)
 
+        # ``actual_message`` is the bare user request for observability.
+        # Recursive callers pass ``original_message`` explicitly; legacy
+        # callers fall back to ``message``.
+        actual_message: str = original_message if original_message is not None else message
+
         try:
             # Emit streaming event for workflow planning
             streaming.stream(
@@ -8325,7 +8295,7 @@ Agent response: {raw_response}"""
                 "This is a complex request. Let me break it down into steps...",
                 stage="workflow_decomposition",
                 complexity_score=analysis.complexity_score if analysis else None,
-                message_preview=message[:500],
+                message_preview=actual_message[:500],
             )
 
             # Emit workflow orchestration started event
@@ -8364,7 +8334,7 @@ Agent response: {raw_response}"""
                     "plan_approval_threshold": self.plan_approval_threshold,
                     "needs_approval": needs_approval,
                     "bypass_workflow_approval": bypass_workflow_approval,
-                    "message_preview": redact_message_preview(message, 100),
+                    "message_preview": redact_message_preview(actual_message, 200),
                 },
                 description=f"Workflow approval decision: {'REQUIRED' if needs_approval else 'NOT REQUIRED'}"
                 + (" (bypassed by flag)" if bypass_workflow_approval else ""),
@@ -8432,7 +8402,7 @@ Agent response: {raw_response}"""
                 )
             elif self._ensure_sop_system():
                 # Fallback: search for SOPs if none was passed (shouldn't happen in normal flow)
-                fallback_sop = await self._find_relevant_sop(message)
+                fallback_sop = await self._find_relevant_sop(actual_message)
                 if fallback_sop:
                     # Recursive call with the found SOP
                     return await self._process_with_workflow(
@@ -8443,6 +8413,7 @@ Agent response: {raw_response}"""
                         request_id=request_id,
                         relevant_sop=fallback_sop,
                         bypass_workflow_approval=bypass_workflow_approval,
+                        original_message=actual_message,
                     )
 
             # Fall back to standard decomposition if no SOP found
@@ -10365,8 +10336,16 @@ Agent response: {raw_response}"""
                     f"{original_message}\n\nAdditional context: {clarification_response}"
                 )
 
-            # Re-process with enhanced message
-            result = await self._process_sync_chat(enhanced_message, agent_name, user_id)
+            # Re-process with enhanced message. ``enhanced_message`` here is bare text
+            # (original + appended clarification response), not marker-wrapped — pass it
+            # as both ``message`` and ``original_message`` so observability emits read
+            # the user-readable string.
+            result = await self._process_sync_chat(
+                enhanced_message,
+                agent_name,
+                user_id,
+                original_message=enhanced_message,
+            )
 
             # Emit completion event
             observability.observe(

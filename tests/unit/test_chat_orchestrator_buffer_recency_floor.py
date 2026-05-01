@@ -55,9 +55,7 @@ def _make_orchestrator(
     orch = ChatOrchestrator.__new__(ChatOrchestrator)
 
     overlord = MagicMock()
-    overlord.formation_config = {
-        "memory": {"buffer": {"size": 5, "vector_search": vector_search}}
-    }
+    overlord.formation_config = {"memory": {"buffer": {"size": 5, "vector_search": vector_search}}}
     overlord.is_multi_user = False
     overlord.long_term_memory = None
     overlord.persistent_memory_manager = None
@@ -95,12 +93,14 @@ async def test_remote_mode_merges_recency_floor_with_vector_results() -> None:
         search_results={user_msg: vector_only, "": recency_only},
     )
 
-    result = await orch._enhance_message_with_context(
-        message=user_msg,
-        user_id="bob",
-        session_id="sess",
-        file_results=None,
-    )
+    result = (
+        await orch._enhance_message_with_context(
+            message=user_msg,
+            user_id="bob",
+            session_id="sess",
+            file_results=None,
+        )
+    ).enhanced
 
     # Two distinct calls: vector pass + recency pass.
     calls = orch.overlord.buffer_memory_manager.search_buffer_memory.await_args_list
@@ -128,12 +128,14 @@ async def test_local_mode_unchanged_uses_recency_only_search() -> None:
         search_results={user_msg: [], "": recency_only},
     )
 
-    result = await orch._enhance_message_with_context(
-        message=user_msg,
-        user_id="bob",
-        session_id="sess",
-        file_results=None,
-    )
+    result = (
+        await orch._enhance_message_with_context(
+            message=user_msg,
+            user_id="bob",
+            session_id="sess",
+            file_results=None,
+        )
+    ).enhanced
 
     # Only one call — recency pass only. Local mode must NOT issue a
     # second call to keep the fast path lean.
@@ -160,9 +162,11 @@ async def test_remote_mode_dedupes_overlap_between_vector_and_recency() -> None:
         vector_search=True,
         search_results={user_msg: vector, "": recency},
     )
-    result = await orch._enhance_message_with_context(
-        message=user_msg, user_id="u", session_id="s", file_results=None
-    )
+    result = (
+        await orch._enhance_message_with_context(
+            message=user_msg, user_id="u", session_id="s", file_results=None
+        )
+    ).enhanced
 
     # All three distinct items present.
     assert "V1 high-relevance" in result
