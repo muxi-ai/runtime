@@ -9,7 +9,7 @@ import asyncio
 import time
 import traceback
 from contextlib import suppress
-from typing import Any, AsyncGenerator, Dict, List, Optional, Union
+from typing import Any, AsyncGenerator, Dict, List, NamedTuple, Optional, Union
 
 from ...datatypes.response import MuxiResponse
 from ...services import observability, streaming
@@ -22,6 +22,22 @@ from ...services.observability.context import (
 from ...utils.id_generator import generate_nanoid
 from ..background.cancellation import RequestCancelledException
 from ..background.request_tracker import RequestState, RequestStatus
+
+
+class EnhancedMessage(NamedTuple):
+    """Pair of (original, enhanced) messages produced by context enrichment.
+
+    The marker-formatted ``enhanced`` blob is the analyzer-pipeline contract
+    (clarification analyzer, planning, intent extraction, and other
+    pre-agent text-parsing hops still expect the legacy shape). The
+    ``original`` is the raw user text — the value we want to surface in
+    observability events. Returning both at the source kills the
+    re-parse-the-wrapper pattern that used to be repeated 5+ times across
+    overlord internals.
+    """
+
+    original: str
+    enhanced: str
 
 
 class ChatOrchestrator:
@@ -558,7 +574,7 @@ class ChatOrchestrator:
             #   double-encoding of conversation history that broke
             #   Sonnet 4.6's pure-chat behavior on PR #160's casual
             #   chat test.
-            enhanced_message, clean_chat_context = await asyncio.gather(
+            enhanced_pair, clean_chat_context = await asyncio.gather(
                 self._enhance_message_with_context(
                     message=message,
                     user_id=user_id,
@@ -572,6 +588,13 @@ class ChatOrchestrator:
                     file_results=file_results,
                 ),
             )
+            # ``enhanced_pair.original`` is just ``message`` — we destructure
+            # for symmetry with ``enhanced`` and to make the data contract
+            # visible at the call site. Both values are threaded through
+            # the call chain so observability emits can log the bare user
+            # request without re-parsing the marker wrapper.
+            enhanced_message = enhanced_pair.enhanced
+            original_message = enhanced_pair.original
 
             # Extract user information from enhanced message (fire-and-forget)
             # Only if persistent memory is configured
@@ -636,6 +659,7 @@ class ChatOrchestrator:
                     request_id=request_id,
                     webhook_url=webhook_url,
                     timestamp=timestamp,
+                    original_message=original_message,
                 )
 
                 # Record framework mode telemetry (async requests are always "successful" at queue time)
@@ -671,7 +695,7 @@ class ChatOrchestrator:
                 # Return the streaming generator (delegates to separate function with yield)
                 return self._create_stream_generator(
                     enhanced_message=enhanced_message,
-                    original_message=message,
+                    original_message=original_message,
                     agent_name=agent_name,
                     user_id=stream_user_id,
                     session_id=stream_session_id,
@@ -693,7 +717,7 @@ class ChatOrchestrator:
                     user_id=user_id,
                     session_id=session_id,
                     request_id=request_id,
-                    original_message=message,  # Pass original for extraction
+                    original_message=original_message,
                     use_async=use_async,
                     webhook_url=webhook_url,
                     bypass_workflow_approval=bypass_workflow_approval,
@@ -751,18 +775,23 @@ class ChatOrchestrator:
         request_id: str,
         webhook_url: Optional[str],
         timestamp: float,
+        original_message: Optional[str] = None,
     ) -> Dict[str, Any]:
         """
         Execute a request asynchronously.
 
         Args:
-            message: The user's message
+            message: Marker-formatted enhanced blob
             agent_name: Optional specific agent
             user_id: Optional user ID
             session_id: Optional session ID
             request_id: Unique request ID
             webhook_url: Optional webhook URL
             timestamp: Request timestamp
+            original_message: Bare user text (no markers) — stored on
+                ``RequestState`` so that downstream observability events
+                in the async background path read the actual user
+                request rather than the wrapper.
 
         Returns:
             Dictionary with async request information
@@ -772,7 +801,7 @@ class ChatOrchestrator:
             id=request_id,
             status=RequestStatus.PROCESSING,
             start_time=timestamp,
-            original_message=message,
+            original_message=original_message if original_message is not None else message,
             user_id=user_id,
             webhook_url=webhook_url,
             session_id=session_id,
@@ -811,6 +840,7 @@ class ChatOrchestrator:
                 agent_name=agent_name,
                 user_id=user_id,
                 session_id=session_id,
+                original_message=original_message,
             )
 
         self.overlord._create_tracked_task(
@@ -877,6 +907,7 @@ class ChatOrchestrator:
                 user_id=user_id,
                 session_id=session_id,
                 request_id=request_id,
+                original_message=original_message,
                 use_async=use_async,
                 webhook_url=webhook_url,
                 bypass_workflow_approval=bypass_workflow_approval,
@@ -1070,7 +1101,7 @@ class ChatOrchestrator:
         user_id: Any,
         session_id: Optional[str],
         file_results: Optional[str] = None,
-    ) -> str:
+    ) -> EnhancedMessage:
         """
         Enhance user message with conversation context.
 
@@ -1078,18 +1109,25 @@ class ChatOrchestrator:
         Implements priority ordering: current request → file results → conversation context.
 
         Args:
-            message: The current user message
+            message: The current user message (raw, no markers)
             user_id: User identifier for filtering
             session_id: Optional session identifier for filtering
             file_results: Optional file processing results to include
 
         Returns:
-            Enhanced message with context in priority order
+            ``EnhancedMessage(original, enhanced)`` — the raw user request
+            alongside the marker-formatted analyzer blob. Returning both
+            here (instead of just the enhanced string) is what lets every
+            downstream observability event log the bare user text without
+            re-parsing the wrapper out of it.
         """
-        # Check if message is already enhanced to prevent double enhancement
+        # Check if message is already enhanced to prevent double enhancement.
+        # In this defensive branch we cannot recover the *true* original
+        # (whoever pre-enhanced lost it), so we surface the wrapper as both
+        # fields. Callers normally never hit this branch; it exists as a
+        # safety rail against double-enhancement.
         if "=== CURRENT REQUEST ===" in message:
-            # Message is already enhanced, return as-is
-            return message
+            return EnhancedMessage(original=message, enhanced=message)
 
         def _is_profile_recall_request(current_message: str) -> bool:
             normalized = current_message.strip().lower()
@@ -1408,7 +1446,7 @@ class ChatOrchestrator:
 
         enhanced_message = "\n".join(enhanced_parts)
 
-        return enhanced_message
+        return EnhancedMessage(original=message, enhanced=enhanced_message)
 
     async def _build_clean_chat_context(
         self,

@@ -837,6 +837,12 @@ class ConversationEvents(Enum):
     MODEL_REQUEST_FAILED = "model.request.failed"
     # When LLM request fails
 
+    MODEL_FALLBACK_SUCCESS = "model.fallback.success"
+    # When primary LLM model fails and the configured fallback model
+    # succeeds. Distinct from MODEL_REQUEST_COMPLETED (which is per
+    # actual provider call) — this marks the resilience-layer
+    # transition. Mirrors MCP_TRANSPORT_FALLBACK_SUCCESS.
+
     MODEL_STREAMING_STARTED = "model.streaming.started"
     # When LLM streaming response begins
 
@@ -1351,26 +1357,43 @@ class ErrorEvents(Enum):
 
 @dataclass
 class TokenUsage:
-    """Enhanced token usage tracking with cache support using self-documenting arrays."""
+    """Enhanced token usage tracking with cache support using self-documenting arrays.
+
+    Uses a single short vocabulary across both the legend and per-call
+    event payloads: ``total / in / out / total_cached / in_cached /
+    out_cached``. The provider boundary in
+    ``_extract_tokens_from_response`` translates from the OpenAI/OneLLM
+    convention (``prompt_tokens`` / ``completion_tokens``) into this
+    shape so every downstream consumer sees one vocabulary instead of
+    two parallel ones.
+    """
 
     # Field definitions (class constant for self-documentation)
-    FIELDS = ["total", "input", "output", "total_cached", "input_cached", "output_cached"]
+    FIELDS = ["total", "in", "out", "total_cached", "in_cached", "out_cached"]
 
     # Internal storage as arrays matching FIELDS order
     total: List[int] = field(default_factory=lambda: [0, 0, 0, 0, 0, 0])
     breakdown: Dict[str, List[int]] = field(default_factory=dict)
 
     def add_tokens(self, model: str, usage_data: Dict[str, int]) -> None:
-        """Add comprehensive token usage data in array format."""
+        """Add comprehensive token usage data in array format.
+
+        ``usage_data`` is the short-name dict produced by
+        ``LLMService._extract_tokens_from_response`` — keys
+        ``total / in / out / in_cached / out_cached``. ``total_cached``
+        is derived (sum of the cached pair) so the caller never has to
+        pass it.
+        """
         # Extract values in FIELDS order
+        in_cached = usage_data.get("in_cached", 0)
+        out_cached = usage_data.get("out_cached", 0)
         values = [
-            usage_data.get("total_tokens", 0),
-            usage_data.get("prompt_tokens", 0),
-            usage_data.get("completion_tokens", 0),
-            usage_data.get("prompt_tokens_cached", 0)
-            + usage_data.get("completion_tokens_cached", 0),  # total_cached
-            usage_data.get("prompt_tokens_cached", 0),
-            usage_data.get("completion_tokens_cached", 0),
+            usage_data.get("total", 0),
+            usage_data.get("in", 0),
+            usage_data.get("out", 0),
+            in_cached + out_cached,  # total_cached (derived)
+            in_cached,
+            out_cached,
         ]
 
         # Update totals (element-wise addition)

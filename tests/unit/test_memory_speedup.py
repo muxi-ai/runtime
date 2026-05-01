@@ -308,11 +308,13 @@ class TestUserSynopsisFastPath:
         )
         orchestrator = ChatOrchestrator(overlord)
 
-        enhanced = await orchestrator._enhance_message_with_context(
-            message="What is my current user profile?",
-            user_id="tester",
-            session_id="sess-1",
-        )
+        enhanced = (
+            await orchestrator._enhance_message_with_context(
+                message="What is my current user profile?",
+                user_id="tester",
+                session_id="sess-1",
+            )
+        ).enhanced
 
         assert "=== USER PROFILE ===" in enhanced
         assert overlord.persistent_memory_manager.search_long_term_memory.await_count == 0
@@ -343,11 +345,13 @@ class TestUserSynopsisFastPath:
         orchestrator = ChatOrchestrator(overlord)
 
         with patch.object(PromptLoader, "get", return_value="Use these memories."):
-            enhanced = await orchestrator._enhance_message_with_context(
-                message="What do you know about me?",
-                user_id="tester",
-                session_id="sess-1",
-            )
+            enhanced = (
+                await orchestrator._enhance_message_with_context(
+                    message="What do you know about me?",
+                    user_id="tester",
+                    session_id="sess-1",
+                )
+            ).enhanced
 
         assert "=== RELEVANT MEMORIES ===" in enhanced
         assert "Corey is the founder of MUXI" in enhanced

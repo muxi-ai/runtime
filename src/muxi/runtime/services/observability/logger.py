@@ -170,10 +170,12 @@ class EventLogger:
                 "duration_ms": request_context.duration_ms,
                 "formation_id": request_context.formation_id,
                 "user_id": request_context.user_id,
-                "tokens": {
-                    "total": request_context.tokens.total,
-                    "breakdown": request_context.tokens.breakdown,
-                },
+                # ``TokenUsage.to_dict`` emits the self-documenting
+                # ``fields`` legend alongside the array values so
+                # consumers know which position is total/input/output/
+                # cached without reading the source. See manager.py for
+                # the same fix.
+                "tokens": request_context.tokens.to_dict(),
             }
 
             # Track parent relationship
