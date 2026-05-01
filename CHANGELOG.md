@@ -2,6 +2,135 @@
 
 ## [unreleased]
 
+### Docker: bump lean variants to ``python:3.14-slim`` (and narrow markitdown extras)
+
+The lean Dockerfiles (``Dockerfile``, ``Dockerfile.production``,
+``e2e/docker/Dockerfile``) move from ``python:3.10-slim`` to
+``python:3.14-slim``. The library's own ``requires-python`` floor
+in ``pyproject.toml`` stays at ``>=3.10`` - the upper end of the
+supported interpreter range expands; the lower end is unchanged.
+
+Why the bump: third-party benchmarks measure CPython 3.14 at
+~2.0-2.4x faster than 3.10 on pure-Python loops (with the largest
+single jump at the 3.10 -> 3.11 cliff). MUXI's hot path is
+overwhelmingly I/O-bound (LLM round trips, MCP subprocess JSON-RPC,
+DB round trips, network embeddings), so the realistic end-user
+delta is in the single-digit percent range - but the change is
+mechanical and the orchestration glue (planning loops, JSON
+manipulation in the agent tool-call loop, prompt builders, SOP /
+workflow planning) does benefit on every request.
+
+Companion change in ``pyproject.toml``: the ``markitdown[all]``
+dependency is narrowed to ``markitdown[docx,pdf,pptx,xls,xlsx]``.
+This is necessary to unblock 3.14 and is independently a hygiene
+win - the previous ``[all]`` superset pulled four extras MUXI does
+not actually use:
+
+- ``audio-transcription`` (pydub + speechrecognition) - audio
+  transcription in MUXI goes through OneLLM, not MarkItDown
+  (see ``services/multimodal/fusion_engine.py``).
+- ``az-doc-intel`` (azure-ai-documentintelligence + azure-identity)
+  - no Azure Document Intelligence ingest path exists.
+- ``outlook`` (olefile) - no ``.msg`` ingest path exists.
+- ``youtube-transcription`` (youtube-transcript-api~=1.0.0) - no
+  YouTube URL ingest path exists, and this transitive is what
+  blocked 3.14: every release of ``youtube-transcript-api 1.0.x``
+  declares ``requires_python = "<3.14,>=3.8"``. Newer 1.2.x
+  supports 3.14, but ``markitdown[all]``'s ``~=1.0.0`` pin holds
+  pip to the 1.0.x line. Codebase audit confirmed zero direct
+  imports of ``youtube_transcript_api``, ``mammoth`` (used only
+  via the kept ``docx`` extra), ``pdfminer`` / ``pdfplumber``
+  (used only via the kept ``pdf`` extra), ``pydub``,
+  ``speech_recognition``, ``olefile``, or any Azure DI SDK.
+
+Behavioural impact for downstream library users: ``MarkItDown``
+still converts every file format MUXI's knowledge ingest dispatches
+to (``.docx``, ``.pdf``, ``.pptx``, ``.xls``, ``.xlsx``). Users
+who previously relied on MUXI's transitive install of MarkItDown
+to pick up Outlook ``.msg`` ingest, audio transcription via
+MarkItDown, Azure DI, or YouTube transcripts now need to install
+``markitdown[all]`` explicitly alongside ``muxi-runtime``. The
+trade-off is intentional: the previous behaviour silently shipped
+~120 MB of unused-by-MUXI dependencies on every install AND blocked
+``muxi-runtime`` from installing on Python 3.14 in the first place.
+
+What changed:
+
+- ``Dockerfile`` (lean / default, both builder and runtime stages):
+  ``python:3.10-slim`` -> ``python:3.14-slim``.
+- ``Dockerfile.production`` (lean + bundled PostgreSQL 17 + FAISSx
+  via supervisor): ``python:3.10-slim`` -> ``python:3.14-slim``.
+- ``e2e/docker/Dockerfile`` (E2E test harness with all services and
+  the test runtime): ``python:3.10-slim`` -> ``python:3.14-slim``.
+- ``pyproject.toml``: ``markitdown[all]>=0.1.0`` ->
+  ``markitdown[docx,pdf,pptx,xls,xlsx]>=0.1.0``.
+
+What did NOT change:
+
+- ``Dockerfile.pytorch`` and ``Dockerfile.cuda`` use a parametrized
+  ``${BASE_IMAGE}:${BASE_TAG}`` and are gated separately on torch
+  wheel availability. They stay on whatever their callers pin and
+  are not touched here.
+- ``Dockerfile.ci-test`` is built on ``ubuntu:22.04`` with Python
+  installed via apt; the ``FROM`` line does not reference a
+  ``python:`` tag. Unchanged.
+- ``pyproject.toml::requires-python = ">=3.10"``. Bumping the
+  library minimum is a breaking change for downstream users with
+  no offsetting benefit.
+- ``black target-version`` (``[py310, py311, py312, py313]``),
+  ``ruff target-version`` (``py310``), ``mypy python_version``
+  (``3.10``). The Docker bump does not require source-syntax
+  features past 3.10. Adding 3.14 to these target lists is a
+  separate decision.
+- CI matrix. Adding 3.14 to the CI matrix is a separate decision.
+
+Verification:
+
+- **Resolver**: full ``pip install --dry-run`` against the core
+  dep set on Python 3.14 / ``manylinux_2_28`` for both ``x86_64``
+  and ``aarch64`` resolves cleanly - all wheels available, no
+  source builds.
+- **Build, arm64**: native ``docker build`` on the local Apple
+  Silicon host succeeds. Image size: 1.9 GB (down from 2.11 GB on
+  3.10 - ~10% reduction from the dropped extras + slimmer Trixie
+  base + newer wheels).
+- **Build, amd64**: cross-build via ``docker build --platform
+  linux/amd64`` (BuildKit + QEMU) succeeds. The aarch64-specific
+  ``sqlite-vec`` recompile in the builder stage uses ``python -c
+  "import sys; print(f'python{sys.version_info.major}.
+  {sys.version_info.minor}')"`` to derive the install path; this
+  branch was exercised on the arm64 build and is version-agnostic.
+- **SIF, arm64**: ``./scripts/build/sif.sh --arch arm64`` produces
+  a 551 MB SIF (down from 643 MB on 3.10 - 14% smaller).
+- **SIF, amd64**: ``./scripts/build/sif.sh --arch amd64`` produces
+  a 607 MB SIF (down from 643 MB on 3.10 - 5.6% smaller). The
+  smaller delta on amd64 is expected - amd64 wheels for
+  ``scipy`` / ``numpy`` / ``pandas`` are slightly larger than
+  their aarch64 counterparts and ``onnxruntime`` ships a fatter
+  amd64 binary. SIF deployed to ``~/.muxi/server/runtimes/`` and
+  smoke-tested via ``runtime-runner:latest`` under QEMU emulation
+  on the Mac host: passes (Python 3.14.4 / x86_64; faiss 1.13.2;
+  pyzmq 27.1.0; markitdown + the kept extras' backends import OK
+  - mammoth, pdfminer.six, pdfplumber, python-pptx, openpyxl,
+  xlrd; the four dropped extras confirmed absent;
+  ``muxi.runtime.formation.initialization.probe_declared_models``
+  callable; ``SystemEvents`` enum reports 127 entries).
+- **Wheels confirmed in the built image**: ``faiss-cpu 1.13.2``
+  (cp310 abi3 on manylinux_2_28), ``pyzmq 27.1.0`` (cp312 abi3
+  on manylinux_2_28; the 3.14 standard-ABI wheel is published as
+  ``cp314-cp314t`` for the free-threaded interpreter only, but
+  the abi3 wheel covers the standard interpreter),
+  ``psycopg2-binary 2.9.12``, ``spacy 3.8.13``, ``lxml 6.1.0``,
+  ``mammoth 1.11.0``, ``pdfminer.six 20251230``, ``pdfplumber
+  0.11.9``, ``python-pptx 1.0.2``, ``openpyxl 3.1.5``, ``xlrd
+  2.0.2``, ``scipy 1.17.1``, ``numpy 2.4.4``, ``pandas 3.0.2``,
+  ``cryptography 47.0.0``, ``Pillow 12.2.0``, ``pydantic 2.13.3``,
+  ``protobuf 7.34.1``.
+
+Future direction: if a downstream consumer needs the dropped
+``[all]`` extras back, that's purely additive work - either layer
+the install or add a corresponding extra to ``muxi-runtime`` itself.
+
 ### Formation: probe declared models at init; refuse to load on 404
 
 Finding 5 from the 2026-04-29 MS365 testing run: the dev's formation
