@@ -2,6 +2,125 @@
 
 ## [unreleased]
 
+### MCP: translate misleading upstream errors into agent-actionable hints
+
+Findings 4 and 6 from the 2026-04-29 MS365 testing run both surfaced
+the same defect from the agent's perspective: an Excel tool call
+(``list-excel-worksheets`` and ``excel-write-range`` respectively)
+received a ``driveItemId`` / ``file_id`` that pointed to a folder
+rather than a workbook. Microsoft Graph returned 403 with the
+message ``"Could not obtain a WAC access token."`` — a WAC-token
+error that, read at face value, looks like an auth failure. The
+agent surfaced it to the user as a permissions problem rather than
+re-resolving the file ID.
+
+The runtime's parameter-funnel work in 0.20260410.0 already covers
+the *common* failure modes for this flow: ``parameters`` defaults
+on MCP server declarations remove the LLM's need to infer org-level
+constants like ``driveId``, and
+``_validate_inferred_parameters_against_results()`` rejects
+LLM-fabricated IDs not found in any prior successful result.
+
+But the WAC case sits in a fourth class the funnel doesn't catch:
+the agent picks a *real* ID from a *real* prior tool result — it's
+just the **wrong type** for the next tool's contract. The Attachments
+folder ID does appear in ``list-folder-files`` output, so it isn't
+fabricated; the required param isn't missing; clean-context binding
+is irrelevant. The runtime can't disambiguate folder-vs-file inside
+a generic list response without per-MCP semantics — that line stays
+on the model side. But the runtime *can* spot the misleading error
+pattern after the fact and tell the agent what likely happened, so
+the next turn carries an actionable correction instead of a
+confusing auth-flavored error.
+
+**Implementation.** New module ``services/mcp/tools/error_translator.py``
+with a small registry of ``_ErrorPattern`` declarations. Each pattern
+gates on three signals — content regex (case-insensitive search of
+the upstream error text), required arg keys (at least one of these
+must be in the tool call's arguments — prevents matching unrelated
+tools), and an optional server_id regex (for server-specific
+patterns; default ``None`` means server-agnostic). First-match-wins
+on overlap. The single shipped pattern catches the WAC-token case
+gated on ``driveItemId`` or ``file_id`` being present:
+
+```
+category:           excel_wac_token_folder_id
+content_regex:      r"could not obtain a wac access token" (IGNORECASE)
+required_arg_keys:  ("driveItemId", "file_id")
+hint:               "Likely cause: the supplied driveItemId/file_id
+                     refers to a folder rather than a workbook (.xlsx)
+                     file. […] Re-resolve the workbook ID via
+                     list-folder-files (or the equivalent listing tool)
+                     and select the item whose name ends in '.xlsx' —
+                     not a folder such as 'Attachments'."
+```
+
+**Wiring.** ``services/mcp/service.py::_invoke_tool_with_resolved_credentials``
+calls ``translate_tool_error`` on the processed result whenever
+``isError`` is True (right after
+``ModernProtocolFeatures.process_structured_output``). On a match,
+two writes to the agent-bound payload:
+
+* Structured ``_runtime_hint = {"category": ..., "message": ...}``
+  field for observability and any future structured consumer.
+* Inline append to ``content``: ``"\n\n[Runtime hint] {hint}"`` so
+  the model literally reads the correction in the tool message on
+  the next turn (most reliable surface for self-correction).
+
+The translator never blocks the call. It only annotates an existing
+failure — at worst, the agent reads an extra sentence and ignores
+it. Original upstream error text is preserved verbatim.
+
+**Observability.** Reuses ``MCP_TOOL_CALL_COMPLETED`` (no new event
+type) with a new ``translation_category`` metadata field. ``None``
+when no pattern fired; the category string when one did. Lets us
+track in production which translations are actually firing without
+adding event type churn.
+
+**What this fix is NOT.** It does not validate parameters before
+sending — that's already done by the
+``_validate_inferred_parameters_against_results()`` machinery
+shipped in 0.20260410.0 for the fabricated-ID class, and the
+``parameters`` field on MCP server declarations for the org-level
+defaults class. It also does not attempt to disambiguate
+folder-vs-file at parameter inference time — that requires per-MCP
+semantic knowledge the runtime should not own.
+
+**What this fix DOES require.** Formations using ms365-mcp must
+declare ``parameters: { driveId: ..., siteId: ..., tenantId: ... }``
+on the server block to fully benefit from the parameter funnel —
+the WAC-translation hint covers the wrong-typed-ID case, but
+upstream failures from missing org-level constants are a config gap
+the formation must close.
+
+**Test coverage.** New ``tests/unit/test_mcp_error_translator.py``
+with 13 tests across four classes:
+
+* ``TestErrorTranslationContract`` — frozen-dataclass shape, stable
+  category id, non-empty hint string.
+* ``TestExcelWACPattern`` — positive matches with both arg-key
+  variants (``driveItemId`` and ``file_id``), case-insensitive
+  matching, server-agnostic firing across ``ms365-mcp``,
+  ``todo-helper-mcp``, and unknown servers.
+* ``TestNegativeGates`` — independent verification of each gate
+  (missing arg keys, non-matching content, empty inputs, non-dict
+  arguments).
+* ``TestServerIdGate`` — locks the ``server_id_regex`` semantics
+  via a probe pattern injected by ``monkeypatch`` (no shipped
+  pattern uses it yet, but the gate is part of the contract).
+* ``TestRegistryOrdering`` — first-match-wins on category overlap.
+
+Plus end-to-end injection sanity: a simulated Graph WAC response
+fed through ``ModernProtocolFeatures.process_structured_output`` →
+translator → result envelope produced an agent payload containing
+both the structured ``_runtime_hint`` field and the inline
+``[Runtime hint]`` suffix on ``content`` with the expected
+``folder`` and ``.xlsx`` markers.
+
+ruff/black clean, ``validate_events`` clean (no new event types),
+13/13 translator tests pass, full unit suite 1019 passed (the one
+pre-existing RCE auth failure unchanged on develop).
+
 ### Scheduler: restore job stat persistence + collapse doubled session_id + preserve delivery framing + disambiguate scheduled execution at agent boundary
 
 Three independent scheduler bugs surfaced by user testing on a recurring
