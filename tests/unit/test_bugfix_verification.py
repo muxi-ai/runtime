@@ -391,8 +391,18 @@ class TestScheduledExecutionMarker:
         ``current_user_message`` before returning the bundle the agent
         consumes."""
         source = self._get_orchestrator_source()
+        # Bound the slice to the next outer method so the assertion is
+        # scoped to ``_build_clean_chat_context`` only — without this,
+        # any later method that happens to call the helper would
+        # satisfy the substring check and the policy guard could
+        # silently rotate away under a refactor. Named-boundary
+        # (matching ``test_enhance_message_uses_helper``) is preferred
+        # over the generic ``async def `` lookup, which would land on
+        # an inner closure (``_fetch_user_synopsis``) rather than the
+        # next outer method and exclude the actual call site.
         method_start = source.index("async def _build_clean_chat_context")
-        method_body = source[method_start:]
+        method_end = source.index("async def _extract_user_information_async")
+        method_body = source[method_start:method_end]
         assert (
             "_apply_scheduled_marker" in method_body
         ), "_build_clean_chat_context must call _apply_scheduled_marker."
@@ -402,8 +412,10 @@ class TestScheduledExecutionMarker:
         original user text, so they must NOT be re-marked. Lock the
         comment that documents this so the policy is visible."""
         source = self._get_orchestrator_source()
+        # Same boundary discipline as ``test_clean_chat_context_uses_helper``.
         method_start = source.index("async def _build_clean_chat_context")
-        method_body = source[method_start:]
+        method_end = source.index("async def _extract_user_information_async")
+        method_body = source[method_start:method_end]
 
         # Normalize comment-marker noise + whitespace so phrases that
         # straddle line breaks become continuous substrings. Required
