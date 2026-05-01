@@ -1,6 +1,6 @@
 # All-in-One E2E Testing Image for MUXI Runtime
 # Includes all services and the MUXI runtime itself
-FROM python:3.10-slim
+FROM python:3.14-slim
 
 # Add PostgreSQL APT repository for version 17
 RUN apt-get update && apt-get install -y gnupg wget lsb-release \

@@ -29,6 +29,7 @@ classifiers = [
     "Programming Language :: Python :: 3.11",
     "Programming Language :: Python :: 3.12",
     "Programming Language :: Python :: 3.13",
+    "Programming Language :: Python :: 3.14",
     "License :: Other/Proprietary License",
     "Operating System :: OS Independent",
     "Operating System :: POSIX :: Linux",
@@ -64,7 +65,16 @@ dependencies = [
     "python-magic>=0.4.27",
 
     # Document processing dependencies
-    "markitdown[all]>=0.1.0",  # Convert various file formats to Markdown
+    # Targeted extras only: docx/pdf/pptx/xls/xlsx covers every file format
+    # MUXI's knowledge ingest actually dispatches to MarkItDown for. The
+    # [all] superset additionally pulls audio-transcription, az-doc-intel,
+    # outlook, and youtube-transcription extras - none of which MUXI uses
+    # (audio goes through OneLLM in services/multimodal/fusion_engine.py;
+    # there is no .msg / Azure-DI / YouTube ingest path). The youtube extra
+    # in particular pins youtube-transcript-api~=1.0.0, whose 1.0.x line
+    # declares requires_python='<3.14' and blocks Python 3.14 installs even
+    # though MUXI never imports it.
+    "markitdown[docx,pdf,pptx,xls,xlsx]>=0.1.0",  # Convert various file formats to Markdown
     "pypdf>=6.10.0",  # PDF document processing (successor to PyPDF2); CVE-2026-33123 fixed in 6.9.1
     "python-docx>=1.1.0",  # Word document processing
     "markdownify>=0.11.6",  # HTML to Markdown conversion
