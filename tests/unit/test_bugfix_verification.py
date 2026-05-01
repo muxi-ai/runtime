@@ -6,6 +6,7 @@ Verification tests for bugfixes:
 """
 
 import inspect
+import re
 from pathlib import Path
 from unittest.mock import MagicMock
 
@@ -403,14 +404,24 @@ class TestScheduledExecutionMarker:
         source = self._get_orchestrator_source()
         method_start = source.index("async def _build_clean_chat_context")
         method_body = source[method_start:]
-        # The documented invariant lives in the ``return`` block comment.
-        assert "buffer_turns" in method_body
-        assert (
-            "buffer_turns" in method_body
-            and "left untouched" in method_body
-            or "without the marker" in method_body
-        ), (
-            "The buffer-turns-not-marked invariant must be documented in "
-            "the rendering function so a future edit can't quietly start "
-            "double-marking history."
-        )
+
+        # Normalize comment-marker noise + whitespace so phrases that
+        # straddle line breaks become continuous substrings. Required
+        # because Python's source layout splits e.g. ``is left\n
+        # # untouched`` across two lines, and a literal substring
+        # check on the raw body would never see ``"left untouched"`` —
+        # which is exactly the precedence/empty-substring bug this
+        # rewrite replaces.
+        flat = re.sub(r"\s*#\s*", " ", method_body)
+        flat = re.sub(r"\s+", " ", flat)
+
+        # Each clause is asserted independently — no boolean glue, so
+        # operator precedence cannot make any single check vacuous.
+        # All three phrases must appear in the documenting comment for
+        # the invariant to be considered locked in.
+        for phrase in ("buffer_turns", "left untouched", "without the marker"):
+            assert phrase in flat, (
+                "The buffer-turns-not-marked invariant must be documented "
+                "in the rendering function so a future edit can't quietly "
+                f"start double-marking history. Missing phrase: {phrase!r}."
+            )

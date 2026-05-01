@@ -1491,11 +1491,19 @@ class ChatOrchestrator:
 
             {
               "buffer_turns": [{"role": "user"|"assistant", "content": "..."}],
-              "current_user_message": "<raw text, no markers>",
+              "current_user_message": "<user text, optionally prefixed
+                                       with '[SCHEDULED] ' when
+                                       session_id belongs to the
+                                       scheduler namespace>",
               "user_profile_text": "...",
               "long_term_memories": "...",
               "file_results": "...",
             }
+
+        ``current_user_message`` is the only field the marker is applied
+        to — ``buffer_turns`` mirrors buffer memory's stored shape (the
+        original user text, no marker) and the remaining fields carry
+        no user input. See ``_apply_scheduled_marker`` for the rule.
 
         in contrast to ``_enhance_message_with_context`` which produces a
         single flat string with ``=== CURRENT REQUEST ===`` /
