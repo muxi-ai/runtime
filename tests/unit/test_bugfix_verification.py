@@ -367,6 +367,31 @@ class TestScheduledExecutionMarker:
                 == "remind me to drink water"
             ), f"Marker leaked into non-scheduler session: {session_id!r}"
 
+    def test_marker_application_is_idempotent(self):
+        """If a message already carries the marker (e.g. a user
+        copy-pasted a prior scheduled-firing transcript into a new
+        scheduled job, or both render paths chain through the same
+        string), the helper must not double-stamp it."""
+        from muxi.runtime.formation.overlord.chat_orchestrator import (
+            SCHEDULED_EXECUTION_MARKER,
+            _apply_scheduled_marker,
+        )
+
+        already_marked = f"{SCHEDULED_EXECUTION_MARKER}remind me to drink water"
+
+        # Single application on a marked message: unchanged.
+        assert _apply_scheduled_marker(already_marked, "job_abc123") == already_marked
+
+        # Two applications in series: still single-marked (chained-call
+        # safety).
+        once = _apply_scheduled_marker("remind me to drink water", "job_abc123")
+        twice = _apply_scheduled_marker(once, "job_abc123")
+        assert once == twice == already_marked
+
+        # Idempotence does not unmark non-scheduler sessions: a marked
+        # message in a normal session is left alone (no implicit strip).
+        assert _apply_scheduled_marker(already_marked, "normal-session") == already_marked
+
     def test_enhance_message_uses_helper(self):
         """``_enhance_message_with_context`` must apply the marker via
         the centralized helper at the ``=== CURRENT REQUEST ===``

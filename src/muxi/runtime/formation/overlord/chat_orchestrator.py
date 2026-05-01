@@ -57,9 +57,17 @@ def _apply_scheduled_marker(message: str, session_id: Optional[str]) -> str:
     (``_enhance_message_with_context`` and ``_build_clean_chat_context``)
     apply the same rule, and so a single source-shape assertion can lock
     the policy.
+
+    Idempotent: if ``message`` already starts with the marker (e.g. a
+    user copy-pasted a prior scheduled-firing transcript into a new
+    scheduled job, or two render paths chain the helper through the
+    same string), the marker is not doubled. Double-prefixing is
+    harmless for well-behaved models but still a silent edge case
+    worth guarding against.
     """
     if session_id and session_id.startswith("job_"):
-        return f"{SCHEDULED_EXECUTION_MARKER}{message}"
+        if not message.startswith(SCHEDULED_EXECUTION_MARKER):
+            return f"{SCHEDULED_EXECUTION_MARKER}{message}"
     return message
 
 
