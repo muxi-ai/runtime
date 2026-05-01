@@ -1164,6 +1164,67 @@ class LLM:
         except (AttributeError, KeyError, TypeError):
             return {}
 
+    def _record_model_completion(
+        self,
+        response: Any,
+        *,
+        model: str,
+        operation: str,
+    ) -> None:
+        """Centralize post-LLM-call bookkeeping for every chat / tools /
+        embedding / transcription path:
+
+        1. Extract the per-call ``usage_data`` from the provider response.
+        2. Add it to the cumulative ``request.tokens`` tally on the
+           active request context (so every subsequent observability
+           event sees the running total + per-model breakdown).
+        3. Emit a ``MODEL_REQUEST_COMPLETED`` event with the per-call
+           ``tokens``, ``model``, ``provider``, and ``operation`` so
+           downstream consumers can attribute spend to the specific
+           call that produced it.
+
+        Before this helper existed, step (2) was duplicated inline at 5
+        call sites and step (3) was missing entirely on the success
+        path — only the fallback-success branch emitted a completion
+        event, so users saw 5+ ``model.request.started`` events with
+        no matching ``model.request.completed`` and no per-call token
+        attribution. Cumulative tokens still updated correctly, but
+        the per-call accountability was gone.
+        """
+        usage_data = self._extract_tokens_from_response(response)
+
+        # Step 2: cumulative tally — only update when we actually got
+        # numbers back from the provider. Embeddings/transcription
+        # often return usage_data with zeros for unsupported metrics
+        # (e.g., completion_tokens), and we still want to track the
+        # call so we use ``usage_data`` truthiness rather than
+        # ``total_tokens > 0`` as the gate.
+        if usage_data:
+            from ...services.observability.context import get_current_request_context
+
+            ctx = get_current_request_context()
+            if ctx:
+                ctx.tokens.add_tokens(model, usage_data)
+
+        # Step 3: per-call completion event. Wrapped in try/except
+        # because observability failures must never break the LLM
+        # call path — same defensive posture as the
+        # MODEL_REQUEST_STARTED emission above.
+        try:
+            observability.observe(
+                event_type=observability.ConversationEvents.MODEL_REQUEST_COMPLETED,
+                level=observability.EventLevel.INFO,
+                data={
+                    "model": model,
+                    "provider": self._provider,
+                    "operation": operation,
+                    "tokens": usage_data or {},
+                },
+                description=f"Model request completed: {model} ({operation})",
+            )
+        except Exception:
+            pass  # Observability failure - continue gracefully
+
     async def _execute_with_resilience(self, func, *args, **kwargs):
         """Execute a function with full resilience patterns including fallback model support."""
 
@@ -1559,14 +1620,8 @@ Provide a helpful, conversational response that directly addresses what the user
             if telemetry:
                 telemetry.record_llm_request(self._provider, self._model, cache_hit=False)
 
-            # Track token usage
-            usage_data = self._extract_tokens_from_response(response)
-            if usage_data and usage_data.get("total_tokens", 0) > 0:
-                from ...services.observability.context import get_current_request_context
-
-                context = get_current_request_context()
-                if context:
-                    context.tokens.add_tokens(self.model_name, usage_data)
+            # Record per-call tokens + emit MODEL_REQUEST_COMPLETED
+            self._record_model_completion(response, model=self.model_name, operation="chat")
 
             # Extract content from response using helper
             content = self._extract_content_from_response(response)
@@ -1641,14 +1696,10 @@ Provide a helpful, conversational response that directly addresses what the user
             if telemetry:
                 telemetry.record_llm_request(self._provider, self._model, cache_hit=False)
 
-            # Track token usage
-            usage_data = self._extract_tokens_from_response(response)
-            if usage_data and usage_data.get("total_tokens", 0) > 0:
-                from ...services.observability.context import get_current_request_context
-
-                context = get_current_request_context()
-                if context:
-                    context.tokens.add_tokens(self.model_name, usage_data)
+            # Record per-call tokens + emit MODEL_REQUEST_COMPLETED
+            self._record_model_completion(
+                response, model=self.model_name, operation="chat_with_tools"
+            )
 
             # Check if response contains tool calls - if so, return the full response
             if self._has_tool_calls(response):
@@ -1710,14 +1761,8 @@ Provide a helpful, conversational response that directly addresses what the user
             # Call OneLLM Embedding using async method
             response = await Embedding.acreate(**params)
 
-            # Track token usage
-            usage_data = self._extract_tokens_from_response(response)
-            if usage_data:
-                from ...services.observability.context import get_current_request_context
-
-                context = get_current_request_context()
-                if context:
-                    context.tokens.add_tokens(embedding_model, usage_data)
+            # Record per-call tokens + emit MODEL_REQUEST_COMPLETED
+            self._record_model_completion(response, model=embedding_model, operation="embedding")
 
             # Extract embedding from response
             if isinstance(response, dict) and "data" in response:
@@ -1783,14 +1828,10 @@ Provide a helpful, conversational response that directly addresses what the user
             # Call OneLLM AudioTranscription using async method
             response = await AudioTranscription.create(**params)
 
-            # Track token usage
-            usage_data = self._extract_tokens_from_response(response)
-            if usage_data:
-                from ...services.observability.context import get_current_request_context
-
-                context = get_current_request_context()
-                if context:
-                    context.tokens.add_tokens(transcription_model, usage_data)
+            # Record per-call tokens + emit MODEL_REQUEST_COMPLETED
+            self._record_model_completion(
+                response, model=transcription_model, operation="transcription"
+            )
 
             # Extract text from response
             if isinstance(response, dict) and "text" in response:
@@ -1852,14 +1893,10 @@ Provide a helpful, conversational response that directly addresses what the user
             # Call OneLLM Embedding using async method
             response = await Embedding.acreate(**params)
 
-            # Track token usage
-            usage_data = self._extract_tokens_from_response(response)
-            if usage_data:
-                from ...services.observability.context import get_current_request_context
-
-                context = get_current_request_context()
-                if context:
-                    context.tokens.add_tokens(embedding_model, usage_data)
+            # Record per-call tokens + emit MODEL_REQUEST_COMPLETED
+            self._record_model_completion(
+                response, model=embedding_model, operation="embedding_batch"
+            )
 
             # Extract embeddings from response
             if isinstance(response, dict) and "data" in response:
