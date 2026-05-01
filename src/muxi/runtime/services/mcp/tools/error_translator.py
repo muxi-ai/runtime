@@ -112,8 +112,11 @@ def translate_tool_error(
 
     Args:
         tool_name: Name of the upstream MCP tool. Currently unused
-            for matching but reserved for future per-tool patterns
-            and emitted via observability when a translation fires.
+            for matching but reserved for future per-tool patterns.
+            The calling site in ``service.py`` also emits ``tool_name``
+            as part of the ``MCP_TOOL_CALL_COMPLETED`` event — that
+            emission is independent of whether a translation fires
+            and is not driven by this function.
         arguments: Arguments dict the agent passed to the tool. Used
             to gate patterns by required arg keys.
         error_text: Flattened content text from the upstream error
@@ -125,7 +128,7 @@ def translate_tool_error(
     Returns:
         First matching translation, or ``None``.
     """
-    if not error_text:
+    if not error_text or not error_text.strip():
         return None
 
     arg_keys = set(arguments.keys()) if isinstance(arguments, dict) else set()

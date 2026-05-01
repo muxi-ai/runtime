@@ -144,14 +144,53 @@ class TestNegativeGates:
         assert result is None
 
     def test_no_match_for_empty_error_text(self):
-        for empty in (None, "", "   "):
-            # Spaces alone don't match any pattern — verify each.
+        """The guard must short-circuit on every form of effectively
+        empty input — including whitespace-only strings, which are
+        truthy in Python and would otherwise fall through to the
+        pattern loop."""
+        for empty in (None, "", "   ", "\n\n", "\t  \r\n"):
             result = et.translate_tool_error(
                 tool_name="list-excel-worksheets",
                 arguments={"driveItemId": "01..."},
                 error_text=empty,
             )
             assert result is None, f"empty input {empty!r} should return None"
+
+    def test_whitespace_only_short_circuits_before_pattern_loop(self, monkeypatch):
+        """Regression for the early-exit guard: an injected pattern
+        whose regex is permissive enough to match whitespace must NOT
+        fire when ``error_text`` is whitespace-only. Without the
+        ``.strip()`` check this test would pass through to the loop
+        and the permissive pattern would match — exactly the silent
+        future-proofing failure the reviewer flagged."""
+        permissive = et._ErrorPattern(
+            category="probe_permissive_match",
+            content_regex=re.compile(r".*", re.IGNORECASE | re.DOTALL),
+            required_arg_keys=("probe_arg",),
+            hint="should not appear",
+        )
+        monkeypatch.setattr(et, "_PATTERNS", (permissive,))
+
+        for whitespace in ("   ", "\n", "\t\t", " \n  "):
+            result = et.translate_tool_error(
+                tool_name="any",
+                arguments={"probe_arg": "x"},
+                error_text=whitespace,
+            )
+            assert result is None, (
+                f"whitespace-only input {whitespace!r} reached the pattern loop "
+                "and matched a permissive regex — the early-exit guard regressed."
+            )
+
+        # Sanity: the same permissive pattern DOES fire on real text,
+        # so the test above is meaningful (not vacuously passing
+        # because the pattern itself is broken).
+        sanity = et.translate_tool_error(
+            tool_name="any",
+            arguments={"probe_arg": "x"},
+            error_text="real content here",
+        )
+        assert sanity is not None and sanity.category == "probe_permissive_match"
 
     def test_no_match_for_empty_arguments(self):
         for empty_args in (None, {}):
