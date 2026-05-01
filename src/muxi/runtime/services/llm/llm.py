@@ -1123,43 +1123,41 @@ class LLM:
         return False
 
     def _extract_tokens_from_response(self, response: Any) -> Dict[str, int]:
-        """Extract comprehensive token usage including cache information from LLM response."""
-        try:
-            usage_data = {}
+        """Extract token usage from a provider response and translate to the
+        runtime's short-name vocabulary.
 
-            # Handle object with usage attribute
+        Provider responses (OpenAI / Anthropic / OneLLM-normalized) use
+        ``prompt_tokens`` / ``completion_tokens`` / ``*_tokens_cached``.
+        Internally we standardize on ``total / in / out / in_cached /
+        out_cached`` everywhere — both the cumulative ``request.tokens``
+        legend and the per-call ``MODEL_REQUEST_COMPLETED`` event. This
+        function is the single boundary translation point: every
+        downstream consumer sees one vocabulary instead of two parallel
+        ones (``input`` vs ``prompt``, ``output`` vs ``completion``).
+        """
+        try:
+            # Pull raw usage (dict, attribute object, or nested under "usage"
+            # in a response dict). Three response shapes; one extraction.
             if hasattr(response, "usage"):
                 usage = response.usage
-                if isinstance(usage, dict):
-                    usage_data = {
-                        "total_tokens": usage.get("total_tokens", 0),
-                        "prompt_tokens": usage.get("prompt_tokens", 0),
-                        "completion_tokens": usage.get("completion_tokens", 0),
-                        "prompt_tokens_cached": usage.get("prompt_tokens_cached", 0),
-                        "completion_tokens_cached": usage.get("completion_tokens_cached", 0),
-                    }
-                else:
-                    # Handle object-style usage
-                    usage_data = {
-                        "total_tokens": getattr(usage, "total_tokens", 0),
-                        "prompt_tokens": getattr(usage, "prompt_tokens", 0),
-                        "completion_tokens": getattr(usage, "completion_tokens", 0),
-                        "prompt_tokens_cached": getattr(usage, "prompt_tokens_cached", 0),
-                        "completion_tokens_cached": getattr(usage, "completion_tokens_cached", 0),
-                    }
-
-            # Handle dictionary format
             elif isinstance(response, dict) and "usage" in response:
                 usage = response["usage"]
-                usage_data = {
-                    "total_tokens": usage.get("total_tokens", 0),
-                    "prompt_tokens": usage.get("prompt_tokens", 0),
-                    "completion_tokens": usage.get("completion_tokens", 0),
-                    "prompt_tokens_cached": usage.get("prompt_tokens_cached", 0),
-                    "completion_tokens_cached": usage.get("completion_tokens_cached", 0),
-                }
+            else:
+                return {}
 
-            return usage_data
+            # Reader that handles both dict and attribute-object usage.
+            def _read(key: str) -> int:
+                if isinstance(usage, dict):
+                    return usage.get(key, 0) or 0
+                return getattr(usage, key, 0) or 0
+
+            return {
+                "total": _read("total_tokens"),
+                "in": _read("prompt_tokens"),
+                "out": _read("completion_tokens"),
+                "in_cached": _read("prompt_tokens_cached"),
+                "out_cached": _read("completion_tokens_cached"),
+            }
 
         except (AttributeError, KeyError, TypeError):
             return {}
@@ -1196,9 +1194,9 @@ class LLM:
         # Step 2: cumulative tally — only update when we actually got
         # numbers back from the provider. Embeddings/transcription
         # often return usage_data with zeros for unsupported metrics
-        # (e.g., completion_tokens), and we still want to track the
-        # call so we use ``usage_data`` truthiness rather than
-        # ``total_tokens > 0`` as the gate.
+        # (e.g., ``out``), and we still want to track the call so we
+        # use ``usage_data`` truthiness rather than ``total > 0`` as
+        # the gate.
         if usage_data:
             from ...services.observability.context import get_current_request_context
 
