@@ -87,10 +87,13 @@ dependencies = [
     "pdf2image>=1.16.0",  # Convert PDF pages to images (requires Poppler)
 
     # LLM Package
-    # 0.20260422.3 adds the `local-cuda` extra (onnxruntime-gpu + faiss-gpu-cu12)
-    # used by Dockerfile.cuda, and completes the revision= plumbing for the
-    # local/<repo>:<revision> slug we consume in embedding.py.
-    "onellm[cache]>=0.20260422.3",
+    # 0.20260502.1 persists CoreML compiled .mlmodelc artifacts under
+    # $HF_HOME/onellm-coreml so the macOS knowledge ingestion path no
+    # longer triggers jetsam (the prior compile-on-every-load behavior
+    # spiked RSS to ~8.7 GB on Apple Silicon). 0.20260422.3 added the
+    # `local-cuda` extra used by Dockerfile.cuda and completed
+    # revision= plumbing for the local/<repo>:<revision> slug.
+    "onellm[cache]>=0.20260502.1",
     "boto3>=1.26.0",  # AWS SDK for OneLLM Bedrock provider
     "google-cloud-aiplatform>=1.25.0",  # Google Cloud for OneLLM Vertex AI provider
 
@@ -200,7 +203,7 @@ kafka = [
 # CPU torch wheel specifically (vs. the default PyPI CUDA wheel on Linux
 # x86_64) should pass ``--index-url https://download.pytorch.org/whl/cpu``.
 pytorch = [
-    "onellm[cache,local-pytorch]>=0.20260422.3",
+    "onellm[cache,local-pytorch]>=0.20260502.1",
     "torch>=2.0.0",
     "torchvision>=0.15.0",
 ]
@@ -218,7 +221,7 @@ pytorch = [
 # without CUDA drivers, ``faiss-gpu-cu12`` has no installable wheel and pip
 # will fail with a clear ``No matching distribution`` error.
 cuda = [
-    "onellm[local-cuda,local-pytorch]>=0.20260422.3",
+    "onellm[local-cuda,local-pytorch]>=0.20260502.1",
     "faissx-gpu>=0.20260422.2",
     "torch>=2.0.0",
     "torchvision>=0.15.0",

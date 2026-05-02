@@ -41,11 +41,11 @@ try:
 except Exception:
     print(f"FATAL: cannot parse onellm version {onellm.__version__!r}")
     sys.exit(1)
-if major != 0 or date < 20260421:
-    print(f"FATAL: onellm {onellm.__version__} is older than required 0.20260421.0")
+if major != 0 or date < 20260502:
+    print(f"FATAL: onellm {onellm.__version__} is older than required 0.20260502.0")
     sys.exit(1)
 PY
-echo "[ok] onellm version is >= 0.20260421.0"
+echo "[ok] onellm version is >= 0.20260502.0"
 
 # 4. Confirm LocalProvider registered
 python -c "from onellm.providers.local import LocalProvider" 2>/dev/null

@@ -119,9 +119,7 @@ class CommandLineTransport(BaseTransport):
         (with ``error`` populated) so ``connect()`` raises a clean
         ``MCPConnectionError`` instead of deadlocking the caller.
         """
-        server_params = StdioServerParameters(
-            command=self.command, args=self.args, env=self.env
-        )
+        server_params = StdioServerParameters(command=self.command, args=self.args, env=self.env)
 
         try:
             with warnings.catch_warnings():
