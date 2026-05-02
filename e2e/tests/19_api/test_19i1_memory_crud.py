@@ -73,7 +73,12 @@ class TestMemoryCRUD(BaseE2ETest):
                     self.headers["X-Muxi-Client-Key"] = self.client_key
             print("✅ Formation ready with API server")
 
-            user_id = "test_memory_user_19i1"
+            # Use a unique user_id per run so the test starts from a clean
+            # memory partition - the previous fixed value accumulated state
+            # across runs and hit the default GET limit of 10, breaking the
+            # ``count == initial+1`` assertion.
+            import uuid
+            user_id = f"test_memory_user_19i1_{uuid.uuid4().hex[:8]}"
             # Add user ID to headers as per spec
             headers_with_user = {**self.headers, "X-Muxi-User-ID": user_id}
 

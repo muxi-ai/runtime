@@ -108,6 +108,123 @@ class TestProbeBuilder:
         assert len(probes) == 1
         assert probes[0]["kind"] == "chat"
 
+    def test_audio_capability_uses_audio_probe_kind(self):
+        # Regression: pre-fix this collapsed to "chat", which sent
+        # ChatCompletion at openai/whisper-1 and 404'd as
+        # "not a chat model" -> false-positive fatal abort across every
+        # formation declaring an audio capability.
+        probes = init_mod._build_unique_probes({"audio": {"model": "openai/whisper-1"}})
+        assert len(probes) == 1
+        assert probes[0]["kind"] == "audio"
+        assert probes[0]["model"] == "openai/whisper-1"
+
+    def test_audio_and_text_do_not_dedup_even_if_same_slug(self):
+        # Hypothetical edge case: same slug declared as both audio and
+        # text. Different transports => two probes, like the
+        # chat+embedding case below.
+        probes = init_mod._build_unique_probes(
+            {
+                "text": {"model": "openai/gpt-4o-audio-preview"},
+                "audio": {"model": "openai/gpt-4o-audio-preview"},
+            }
+        )
+        assert len(probes) == 2
+        kinds = {p["kind"] for p in probes}
+        assert kinds == {"chat", "audio"}
+
+    def test_vision_and_video_default_to_chat_probe_kind(self):
+        # Multimodal vision/video models (gpt-4o, gemini-2.0-flash) are
+        # chat-compatible: a text-only "ping" round-trips fine. Lock
+        # the default-to-chat fallback so future capability additions
+        # don't silently break.
+        probes = init_mod._build_unique_probes(
+            {
+                "vision": {"model": "openai/gpt-4o"},
+                "video": {"model": "google/gemini-2.0-flash"},
+            }
+        )
+        assert {p["kind"] for p in probes} == {"chat"}
+        assert len(probes) == 2  # different slugs, distinct probes
+
+    def test_text_fallback_audio_capability_is_skipped(self):
+        # Regression: when a formation does NOT declare an audio model,
+        # _initialize_llm_configuration fills in audio with the text
+        # slug + ``_fallback_from_text=True``. The audio probe would
+        # then send a Whisper request to a chat-only slug like
+        # ``openai/gpt-4o-mini`` and 404 with "Invalid URL
+        # /v1/audio/transcriptions" - bricking every formation that
+        # falls back. The fallback skip eliminates the redundant probe
+        # (text already validates the slug).
+        probes = init_mod._build_unique_probes(
+            {
+                "text": {"model": "openai/gpt-4o-mini"},
+                "audio": {
+                    "model": "openai/gpt-4o-mini",
+                    "_fallback_from_text": True,
+                },
+                "vision": {
+                    "model": "openai/gpt-4o-mini",
+                    "_fallback_from_text": True,
+                },
+            }
+        )
+        # Only the text probe survives; fallback entries are skipped.
+        assert len(probes) == 1
+        assert probes[0]["model"] == "openai/gpt-4o-mini"
+        assert probes[0]["kind"] == "chat"
+        assert probes[0]["capabilities"] == ["text"]
+
+    def test_explicit_audio_capability_is_probed_even_if_same_slug_as_text(self):
+        # A formation that legitimately declares an audio model
+        # (e.g. openai/whisper-1) MUST still get the audio probe -
+        # explicitness signals "this slug is meant for audio".
+        # Absent _fallback_from_text => probe normally.
+        probes = init_mod._build_unique_probes(
+            {
+                "text": {"model": "openai/gpt-4o-mini"},
+                "audio": {"model": "openai/whisper-1"},  # explicit
+            }
+        )
+        assert len(probes) == 2
+        kinds = {(p["model"], p["kind"]) for p in probes}
+        assert kinds == {
+            ("openai/gpt-4o-mini", "chat"),
+            ("openai/whisper-1", "audio"),
+        }
+
+    def test_audio_probe_payload_is_valid_wav(self):
+        # The probe sends real bytes to OneLLM's AudioTranscription
+        # endpoint; if the WAV is malformed the probe falsely reports
+        # the slug as broken. Lock the format so a future refactor
+        # can't silently produce truncated or non-WAV bytes.
+        import io
+        import wave
+
+        payload = init_mod._PROBE_AUDIO_WAV
+        assert payload[:4] == b"RIFF"
+        assert payload[8:12] == b"WAVE"
+
+        with wave.open(io.BytesIO(payload), "rb") as w:
+            assert w.getnchannels() == 1
+            assert w.getsampwidth() == 2  # 16-bit
+            assert w.getframerate() == 8000
+            # Whisper minimum is 0.1s; we send 0.2s for clock-skew margin.
+            assert w.getnframes() / w.getframerate() >= 0.15
+
+    def test_capability_probe_kind_helper_is_pure(self):
+        # Direct contract on the dispatch helper - keeps future additions
+        # honest without spinning up _build_unique_probes.
+        assert init_mod._capability_probe_kind("embedding") == "embedding"
+        assert init_mod._capability_probe_kind("audio") == "audio"
+        assert init_mod._capability_probe_kind("text") == "chat"
+        assert init_mod._capability_probe_kind("streaming") == "chat"
+        assert init_mod._capability_probe_kind("vision") == "chat"
+        assert init_mod._capability_probe_kind("video") == "chat"
+        assert init_mod._capability_probe_kind("documents") == "chat"
+        # Unknown capabilities default to chat - the runtime invokes
+        # them via ChatCompletion until proven otherwise.
+        assert init_mod._capability_probe_kind("future-capability") == "chat"
+
     def test_two_capabilities_same_chat_slug_dedup_to_one_probe(self):
         # vision falling back to text is the canonical case.
         probes = init_mod._build_unique_probes(

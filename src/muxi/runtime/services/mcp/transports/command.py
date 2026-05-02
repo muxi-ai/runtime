@@ -66,10 +66,27 @@ class CommandLineTransport(BaseTransport):
             self.env.update(auth_env_vars)
 
         self.message_handler = MCPMessageHandler()
-        self.client_context = None  # Store the stdio_client context manager
         self.session = None
         self.read_stream = None
         self.write_stream = None
+
+        # Connection-lifecycle plumbing. ``stdio_client`` is an anyio
+        # async context manager that internally creates a task group +
+        # cancel scope. anyio enforces that the scope must be entered
+        # AND exited in the same asyncio task; if ``__aenter__`` runs in
+        # task A and ``__aexit__`` runs in task B (which happened when
+        # ``connect()`` and ``disconnect()`` were awaited from different
+        # request handlers / cleanup paths), anyio raises
+        # ``RuntimeError: Attempted to exit cancel scope in a different
+        # task than it was entered in``. The fix is to hold both the
+        # ``stdio_client`` and the ``ClientSession`` context managers
+        # open inside a single dedicated background task, and signal
+        # shutdown via an asyncio.Event so the task tears them down
+        # from within its own scope.
+        self._connection_task: Optional[asyncio.Task] = None
+        self._connected_event: Optional[asyncio.Event] = None
+        self._shutdown_event: Optional[asyncio.Event] = None
+        self._connect_error: Optional[BaseException] = None
 
         # Initialize connection stats
         self.connection_stats = {
@@ -78,50 +95,108 @@ class CommandLineTransport(BaseTransport):
             "errors_encountered": 0,
         }
 
+    async def _connection_lifecycle(self) -> None:
+        """Hold the stdio_client + ClientSession contexts open in ONE task.
+
+        Entered from :meth:`connect`. Spawns inside a dedicated asyncio
+        task so the ``async with`` cancel scopes the MCP SDK opens are
+        both entered and exited from the same task - the only contract
+        anyio's task-group implementation honors.
+
+        Lifecycle:
+
+        1. Open ``stdio_client(server_params)`` -> ``(read, write)``.
+        2. Open ``ClientSession(read, write)`` and ``initialize()``.
+        3. Publish ``read``, ``write``, ``session`` on ``self`` and signal
+           ``_connected_event`` so the caller of ``connect()`` can return.
+        4. ``await self._shutdown_event.wait()`` - block until something
+           calls ``disconnect()``.
+        5. Fall out of both ``async with`` blocks - clean teardown
+           inside the connection-owning task.
+
+        Exceptions during steps 1-3 are captured on
+        ``self._connect_error`` and the connected event is still set
+        (with ``error`` populated) so ``connect()`` raises a clean
+        ``MCPConnectionError`` instead of deadlocking the caller.
+        """
+        server_params = StdioServerParameters(
+            command=self.command, args=self.args, env=self.env
+        )
+
+        try:
+            with warnings.catch_warnings():
+                # Suppress annoying MCP server warnings about
+                # notification-validation noise.
+                warnings.simplefilter("ignore")
+                root_logger = logging.getLogger()
+                original_level = root_logger.level
+                root_logger.setLevel(logging.ERROR)
+                try:
+                    async with stdio_client(server_params) as (
+                        read_stream,
+                        write_stream,
+                    ):
+                        async with ClientSession(read_stream, write_stream) as session:
+                            await session.initialize()
+
+                            self.read_stream = read_stream
+                            self.write_stream = write_stream
+                            self.session = session
+                            self.connected = True
+                            self.connect_time = datetime.now()
+                            self.last_activity = datetime.now()
+                            self._connected_event.set()
+
+                            # Hold the contexts open. ``disconnect()``
+                            # sets this event, the task wakes, falls
+                            # out of both ``async with`` blocks, and
+                            # the cancel scopes tear down inside this
+                            # same task (the only place anyio allows).
+                            await self._shutdown_event.wait()
+                finally:
+                    root_logger.setLevel(original_level)
+        except BaseException as exc:  # noqa: BLE001 - surface any failure
+            # Capture the failure for ``connect()`` to re-raise. Do not
+            # swallow ``BaseException`` (e.g. ``CancelledError``) - the
+            # caller needs to see the real reason the lifecycle aborted.
+            if not self._connected_event.is_set():
+                self._connect_error = exc
+                self._connected_event.set()
+            # If we were already connected, the exception is from the
+            # post-connect path (provider died, network issue, etc.) -
+            # let it surface in the task result so callers awaiting it
+            # observe the failure.
+            if isinstance(exc, asyncio.CancelledError):
+                raise
+        finally:
+            self.connected = False
+            self.session = None
+            self.read_stream = None
+            self.write_stream = None
+
     async def connect(self) -> bool:
         """Connect using MCP SDK pattern with proper context management."""
         if self.connected:
             return True
 
+        # Reset per-attempt state so a retry after a previous failure
+        # does not see stale events.
+        self._connected_event = asyncio.Event()
+        self._shutdown_event = asyncio.Event()
+        self._connect_error = None
+
+        # Spawn the lifecycle task that owns both async-context managers.
+        self._connection_task = asyncio.create_task(self._connection_lifecycle())
+
         try:
-            # Create server parameters object
-            server_params = StdioServerParameters(
-                command=self.command, args=self.args, env=self.env
-            )
-
-            # Suppress annoying MCP server warnings about notification validation
-            with warnings.catch_warnings():
-                warnings.simplefilter("ignore")
-                # Also suppress root logger warnings from MCP servers
-                root_logger = logging.getLogger()
-                original_level = root_logger.level
-                root_logger.setLevel(logging.ERROR)
-
-                try:
-                    # Store the context manager itself
-                    self.client_context = stdio_client(server_params)
-
-                    # Enter context and get streams
-                    self.read_stream, self.write_stream = await self.client_context.__aenter__()
-
-                    # Create session for high-level operations
-                    self.session = ClientSession(self.read_stream, self.write_stream)
-                    await self.session.__aenter__()
-
-                    # Initialize the connection
-                    await self.session.initialize()
-                finally:
-                    # Restore original logging level
-                    root_logger.setLevel(original_level)
-
-            self.connected = True
-            self.connect_time = datetime.now()
-            self.last_activity = datetime.now()
-            return True
-
+            await self._connected_event.wait()
         except Exception as e:
-            # Cleanup on error
-            await self._cleanup()
+            # Caller cancelled the connect; tear down the lifecycle.
+            self._shutdown_event.set()
+            try:
+                await asyncio.wait_for(self._connection_task, timeout=5)
+            except Exception:
+                pass
             error_details = {
                 "command": self.command,
                 "args": self.args,
@@ -129,6 +204,19 @@ class CommandLineTransport(BaseTransport):
                 "timestamp": datetime.now().isoformat(),
             }
             raise MCPConnectionError("Failed to connect to MCP server", error_details) from e
+
+        if self._connect_error is not None:
+            error_details = {
+                "command": self.command,
+                "args": self.args,
+                "error": str(self._connect_error),
+                "timestamp": datetime.now().isoformat(),
+            }
+            raise MCPConnectionError(
+                "Failed to connect to MCP server", error_details
+            ) from self._connect_error
+
+        return True
 
     def _update_success_stats(self) -> None:
         """Update statistics for successful request/response."""
@@ -221,28 +309,43 @@ class CommandLineTransport(BaseTransport):
             raise MCPRequestError("Request failed", error_details) from e
 
     async def _cleanup(self) -> None:
-        """Proper cleanup in same async context."""
-        try:
-            if self.session:
-                await self.session.__aexit__(None, None, None)
-                self.session = None
-        except Exception:
-            pass
+        """Signal the connection-lifecycle task to tear down its contexts.
 
-        try:
-            if self.client_context:
-                await self.client_context.__aexit__(None, None, None)
-                self.client_context = None
-        except Exception:
-            pass
-        finally:
-            self.connected = False
-            self.read_stream = None
-            self.write_stream = None
+        The actual ``__aexit__`` for both ``stdio_client`` and
+        ``ClientSession`` runs inside ``_connection_lifecycle`` (the
+        same task that called ``__aenter__``), so this method only has
+        to flip the shutdown event and wait for the task to finish.
+        """
+        if self._shutdown_event is not None and not self._shutdown_event.is_set():
+            self._shutdown_event.set()
+
+        task = self._connection_task
+        if task is not None and not task.done():
+            try:
+                await asyncio.wait_for(task, timeout=10)
+            except asyncio.TimeoutError:
+                # The lifecycle task didn't react in time - cancel and
+                # await it so the cancellation propagates inside the
+                # task's own scope (still anyio-safe).
+                task.cancel()
+                try:
+                    await task
+                except (asyncio.CancelledError, Exception):
+                    pass
+            except Exception:
+                # Surface in observability via the caller; the
+                # connection state is already torn down here.
+                pass
+
+        self._connection_task = None
+        self.connected = False
+        self.session = None
+        self.read_stream = None
+        self.write_stream = None
 
     async def disconnect(self) -> bool:
         """Disconnect from MCP server."""
-        if not self.connected:
+        if not self.connected and self._connection_task is None:
             return True
 
         await self._cleanup()

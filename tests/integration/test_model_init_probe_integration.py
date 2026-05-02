@@ -200,6 +200,50 @@ async def test_valid_cloud_slug_succeeds_real_openai():
 
 
 @pytest.mark.asyncio
+@_NEEDS_OPENAI
+async def test_valid_audio_slug_succeeds_real_openai():
+    """A valid audio slug must round-trip through ``AudioTranscription``
+    without raising.
+
+    Regression coverage for the bug that aborted every formation
+    declaring ``audio: openai/whisper-1`` because the probe sent a
+    ``ChatCompletion`` round-trip and got 404
+    ``"This is not a chat model"``. After the fix, audio slugs are
+    probed via the same OneLLM transport the runtime uses
+    (``AudioTranscription.create``) with a tiny silent WAV - same
+    code path Whisper sees at request time.
+
+    Cost: Whisper is billed per minute (rounded up), so a ~0.2s probe
+    is a fraction of one minute's charge. Negligible.
+    """
+    formation = _make_formation({"audio": {"model": "openai/whisper-1"}})
+    # Must not raise.
+    await init_mod.probe_declared_models(formation)
+
+
+@pytest.mark.asyncio
+@_NEEDS_OPENAI
+async def test_audio_slug_typo_aborts_with_404_real_openai():
+    """A typo'd audio slug hitting real OpenAI surfaces a 404 from
+    the transcription endpoint and produces the same fatal-abort
+    semantics as a typo'd chat slug.
+
+    Witnesses that the new audio probe path preserves the probe's
+    core promise - "deterministic slug failures abort init" -
+    without false-positive aborting on healthy whisper slugs.
+    """
+    # whispr-1 (no 'e') is the same shape of typo as gpt-4o-min above.
+    formation = _make_formation({"audio": {"model": "openai/whispr-1"}})
+
+    with pytest.raises(ConfigurationValidationError) as excinfo:
+        await init_mod.probe_declared_models(formation)
+
+    msg = str(excinfo.value)
+    assert "openai/whispr-1" in msg
+    assert "Common causes for cloud slugs" in msg
+
+
+@pytest.mark.asyncio
 async def test_authentication_error_warns_and_continues_real_openai():
     """A bad API key surfaces ``AuthenticationError`` from real
     OpenAI - which is classified ``"warn"`` and must NOT abort

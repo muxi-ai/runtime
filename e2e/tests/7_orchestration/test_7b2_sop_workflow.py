@@ -65,7 +65,12 @@ async def test_sop_workflow():
                 session_id="sop_test",
                 stream=False,
             ),
-            timeout=60,  # Should complete quickly
+            # SOP workflow runs 4 sequential tasks (LLM planning +
+            # MCP system-info tool calls). Real OpenAI / MCP latency
+            # routinely puts the wall-clock around 60s, so the prior
+            # 60s ceiling was a coin-flip. Bump to 180s with margin
+            # for slow planning round-trips.
+            timeout=180,
         )
 
         # Handle response

@@ -278,8 +278,37 @@ class Agent:
             from .knowledge.handler import KnowledgeHandler
 
             working_memory = getattr(self.overlord, "buffer_memory", None)
+            # Resolution order for the knowledge-ingestion embedding model:
+            #
+            #   1. The formation-level ``llm.models.embedding`` capability,
+            #      pulled from ``overlord._capability_models["embedding"]``.
+            #      This is the model the formation author explicitly chose
+            #      for high-quality knowledge / document embeddings (e.g.
+            #      ``openai/text-embedding-3-small``).
+            #   2. ``working_memory.embedding_model_name`` — the slug used
+            #      by buffer / working memory. Per
+            #      ``_initialize_buffer_memory`` this defaults to a *local*
+            #      sentence-transformer (``local/nomic-ai/nomic-embed-text-v1.5``).
+            #      Falling through to it for knowledge ingestion was the
+            #      cause of the 8 GB+ jetsam kills on macOS during the
+            #      6_knowledge tests: the formation declared
+            #      ``openai/text-embedding-3-small`` but knowledge files
+            #      were silently embedded with the local Nomic model,
+            #      whose ONNX + CoreML compile alone allocates several
+            #      gigabytes per ingest.
+            #   3. ``DEFAULT_EMBEDDING_MODEL`` as a final offline fallback.
+            #
+            # Pulling from ``_capability_models`` first honors the
+            # formation contract: when the operator declares an embedding
+            # slug, knowledge ingestion uses it.
             embedding_slug: Optional[str] = None
-            if working_memory is not None:
+            capability_models = getattr(self.overlord, "_capability_models", None) or {}
+            embedding_cfg = capability_models.get("embedding") or {}
+            if isinstance(embedding_cfg, dict):
+                cap_model = embedding_cfg.get("model")
+                if isinstance(cap_model, str) and cap_model:
+                    embedding_slug = cap_model
+            if not embedding_slug and working_memory is not None:
                 slug_candidate = getattr(working_memory, "embedding_model_name", None)
                 if isinstance(slug_candidate, str) and slug_candidate:
                     embedding_slug = slug_candidate

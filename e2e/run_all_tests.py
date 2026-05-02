@@ -21,6 +21,16 @@ AREA_TIMEOUT_OVERRIDES = {
     "20_mcp_server": 360,  # MCP tests spin up server + MCP client calls + LLM chat
     "3_multimodal": 480,  # Vision/video LLM calls can be very slow (14MB video, Gemini API)
     "2_memory": 180,  # Memory tests with extraction waits, multi-user, PG queries
+    # SOP workflow tests sequentially execute LLM planning + MCP tool
+    # calls per task; a 4-task workflow regularly takes ~100s wall-clock
+    # against real OpenAI / MCP, so the 120s default kills mid-flight.
+    "7_orchestration": 240,
+    # Knowledge tests deliberately clear the embedding cache to
+    # exercise the cold-start path: sentence-transformers download +
+    # CoreML compile + chunked embedding of ~50KB markdown sources
+    # routinely runs 3-4 minutes before the first chat turn even
+    # starts.
+    "6_knowledge": 600,
 }
 E2E_DIR = Path(__file__).parent
 TESTS_DIR = E2E_DIR / "tests"
@@ -70,7 +80,19 @@ CRASH_SIGNALS = {-6, -9, -11}  # SIGABRT, SIGKILL, SIGSEGV
 def _run_once(test_file: Path, env: dict, timeout: int) -> dict:
     """Run a single test subprocess and return result dict."""
 
-    pass_markers = ["SUCCESS", "PASSED", "All checks passed", "CORE TESTS PASSED"]
+    pass_markers = [
+        "SUCCESS",
+        "PASSED",
+        "All checks passed",
+        "CORE TESTS PASSED",
+        # Many existing e2e tests close with "Test XX completed
+        # successfully!" (or "All Test XX tests completed successfully!")
+        # using a celebratory emoji line instead of the SUCCESS marker
+        # AGENTS.md prescribes. Matching the trailing bang keeps this
+        # narrow to end-of-run summary lines and not arbitrary "task X
+        # completed successfully" log noise mid-run.
+        "completed successfully!",
+    ]
     t0 = time.time()
     try:
         proc = subprocess.Popen(

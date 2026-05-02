@@ -10,6 +10,8 @@ The initialization order is critical:
 2. Then other services can be initialized
 """
 
+import io
+import wave
 from pathlib import Path
 from typing import Any, Dict, List, Optional
 
@@ -237,13 +239,21 @@ def initialize_llm_config(formation) -> None:
     common_capabilities = ["vision", "audio", "documents", "streaming"]
     capabilities_using_text_fallback = []
 
-    # Apply text model as default for unconfigured common capabilities
+    # Apply text model as default for unconfigured common capabilities.
+    # The ``_fallback_from_text`` flag is read by the model-init probe
+    # (:func:`_build_unique_probes`) so it can skip probing a fallback
+    # capability through its own transport. Without this flag, an audio
+    # capability falling back to a text/chat slug like ``openai/gpt-4o-mini``
+    # would be probed via ``AudioTranscription``, which 404s because the
+    # chat model has no audio endpoint - bricking every formation that
+    # doesn't explicitly declare an audio model.
     for capability in common_capabilities:
         if capability not in formation._capability_models:
             formation._capability_models[capability] = {
                 "model": text_model_config["model"],
                 "api_key": text_model_config.get("api_key"),
                 "settings": text_model_config.get("settings", {}),
+                "_fallback_from_text": True,
             }
             capabilities_using_text_fallback.append(capability)
 
@@ -421,6 +431,70 @@ def _format_probe_fatal_message(model_slug: str, exc: Exception) -> str:
     )
 
 
+# Capability -> probe-kind mapping. Each kind selects a different OneLLM
+# transport in ``_execute_single_probe``. Keep this aligned with how the
+# runtime actually uses each capability at request time:
+#
+# - ``embedding``  -> ``onellm.Embedding`` (services/memory/embedding.py)
+# - ``audio``      -> ``onellm.AudioTranscription`` (services/llm/llm.py)
+# - everything     -> ``onellm.ChatCompletion`` (the default text/chat
+#   else              transport that text/streaming/vision/video/
+#                    documents all flow through)
+#
+# Probing audio via ``ChatCompletion`` (the previous behavior) sends a
+# chat round-trip to a non-chat slug like ``openai/whisper-1`` and gets
+# back a 404 ``"This is not a chat model"``, which then misclassifies as
+# a fatal slug error and aborts every formation that declares an audio
+# capability. The kind table below routes each capability to the
+# transport it would actually use at runtime.
+_CAPABILITY_PROBE_KIND: Dict[str, str] = {
+    "embedding": "embedding",
+    "audio": "audio",
+}
+
+
+def _capability_probe_kind(capability: str) -> str:
+    """Return the probe ``kind`` for a given capability name.
+
+    Defaults to ``"chat"`` so any capability not explicitly mapped
+    (text, streaming, vision, video, documents, future additions) gets
+    the ``ChatCompletion`` transport - matching how those capabilities
+    are invoked at runtime.
+    """
+    return _CAPABILITY_PROBE_KIND.get(capability, "chat")
+
+
+def _build_audio_probe_payload() -> bytes:
+    """Build a minimal valid WAV payload for the audio probe.
+
+    OpenAI's Whisper endpoint rejects audio shorter than 0.1s with an
+    ``InvalidRequestError`` (which the probe classifies as fatal), so we
+    generate ~0.2s of mono 16-bit PCM silence at 8 kHz - the smallest
+    payload that round-trips reliably. Format details:
+
+    - ``8000 Hz`` sample rate (lowest standard rate)
+    - ``1`` channel (mono)
+    - ``16-bit`` signed PCM samples (required by WAV PCM)
+    - ``0.2 s`` duration (2x the documented minimum, well within the
+      provider's tolerance for clock-skew at the lower bound)
+
+    Total size: ``44`` byte WAV header + ``8000 * 0.2 * 2`` =
+    ``3244`` bytes. Computed once at import time.
+    """
+    buf = io.BytesIO()
+    with wave.open(buf, "wb") as w:
+        w.setnchannels(1)
+        w.setsampwidth(2)
+        w.setframerate(8000)
+        w.writeframes(b"\x00\x00" * int(8000 * 0.2))
+    return buf.getvalue()
+
+
+# Computed once at import time so every probe reuses the same bytes -
+# trivially cheap (~3 KB constant) and avoids per-probe encoding cost.
+_PROBE_AUDIO_WAV: bytes = _build_audio_probe_payload()
+
+
 def _build_unique_probes(
     capability_models: Dict[str, Dict[str, Any]],
 ) -> List[Dict[str, Any]]:
@@ -431,11 +505,13 @@ def _build_unique_probes(
     on the resulting probe lists every capability that mapped to it so
     observability events stay informative.
 
-    ``probe_kind`` is ``"embedding"`` for the ``embedding`` capability
-    and ``"chat"`` for everything else - this matches OneLLM's own
-    transport split and lets the same slug be probed twice if it is
-    legitimately used as both an embedding model and a chat model
-    (rare, but possible).
+    ``probe_kind`` is selected by :func:`_capability_probe_kind`, which
+    routes each capability to the OneLLM transport it actually uses at
+    runtime (``embedding`` -> ``Embedding``, ``audio`` ->
+    ``AudioTranscription``, everything else -> ``ChatCompletion``). The
+    same slug declared as both an embedding model and a chat model
+    (rare, but possible) is therefore probed twice with the correct
+    transport for each role.
 
     Returns the probes in a stable order keyed on the first capability
     that introduced each unique probe, so error messages and tests are
@@ -448,7 +524,14 @@ def _build_unique_probes(
         model = cfg.get("model")
         if not isinstance(model, str) or not model:
             continue
-        kind = "embedding" if capability == "embedding" else "chat"
+        # Skip capabilities filled in by the text-fallback cascade. The
+        # ``text`` probe already validates the underlying slug, and
+        # probing a chat slug through a non-chat transport (audio's
+        # ``AudioTranscription``, etc.) would 404 even though the
+        # formation is healthy at runtime via the fallback chain.
+        if cfg.get("_fallback_from_text"):
+            continue
+        kind = _capability_probe_kind(capability)
         key = (model, kind)
         if key not in seen:
             seen[key] = {
@@ -467,10 +550,10 @@ async def _execute_single_probe(model: str, kind: str) -> None:
     """Issue the actual OneLLM call for a single probe.
 
     Encapsulates the per-``kind`` transport split (Embedding vs
-    ChatCompletion) so :func:`probe_declared_models` stays focused on
-    the per-probe lifecycle (event emission, error classification,
-    serial fail-fast) and adding a new probe kind in the future is a
-    one-function change confined to this helper.
+    AudioTranscription vs ChatCompletion) so :func:`probe_declared_models`
+    stays focused on the per-probe lifecycle (event emission, error
+    classification, serial fail-fast) and adding a new probe kind in
+    the future is a one-function change confined to this helper.
 
     Behavior contract:
 
@@ -484,7 +567,29 @@ async def _execute_single_probe(model: str, kind: str) -> None:
     if kind == "embedding":
         from onellm import Embedding
 
-        await Embedding.acreate(input="probe", model=model)
+        # Honor ``local/<repo>:<revision>`` slug notation by splitting
+        # the revision off and forwarding it as a separate ``revision=``
+        # kwarg, matching the runtime's actual embedding entry point
+        # (services/memory/embedding.py::embed). Without this, a slug
+        # like ``local/nomic-ai/nomic-embed-text-v1.5:main`` is sent to
+        # OneLLM verbatim and rejected as an invalid HF repo id.
+        from ..services.memory.embedding import _parse_model_slug
+
+        parsed_model, revision = _parse_model_slug(model)
+        kwargs: Dict[str, Any] = {"input": "probe", "model": parsed_model}
+        if revision is not None:
+            kwargs["revision"] = revision
+        await Embedding.acreate(**kwargs)
+    elif kind == "audio":
+        # Audio capability slugs (e.g. ``openai/whisper-1``) are
+        # transcription models, not chat models. Probe them through the
+        # same OneLLM transport the runtime uses at request time
+        # (services/llm/llm.py -> AudioTranscription.create) so we
+        # surface real slug-resolution failures and don't false-positive
+        # on "this is not a chat model" 404s.
+        from onellm.audio import AudioTranscription
+
+        await AudioTranscription.create(file=_PROBE_AUDIO_WAV, model=model)
     else:
         from onellm import ChatCompletion
 
