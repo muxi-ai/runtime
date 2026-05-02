@@ -14,9 +14,9 @@ Four independent fixes shipped together after a full e2e regression sweep (176/2
 
 **4. onellm pin bump to `>=0.20260502.1`** (`pyproject.toml`, `Dockerfile.pytorch`, `Dockerfile.cuda`). Picks up the CoreML compiled-artifact cache fix in onellm 0.20260502.1: `CoreMLExecutionProvider` now receives a `ModelCacheDirectory` option pointing at `$HF_HOME/onellm-coreml/<repo>/<revision>/`, so the compiled `.mlmodelc` package persists across process restarts instead of being recompiled on every `InferenceSession` construction. Combined with fix 3 above, the knowledge e2e suite on Apple Silicon went from 280 s + SIGKILL to 38 s warm.
 
-### Docker: bump lean variants to ``python:3.14-slim`` (and narrow markitdown extras)
+### Docker: bump lean variants to ``python:3.13-slim`` (and narrow markitdown extras)
 
-The lean Dockerfiles (``Dockerfile``, ``Dockerfile.production``, ``e2e/docker/Dockerfile``) move from ``python:3.10-slim`` to ``python:3.14-slim``. The library's own ``requires-python`` floor in ``pyproject.toml`` stays at ``>=3.10`` - the upper end of the supported interpreter range expands; the lower end is unchanged.
+The lean Dockerfiles (``Dockerfile``, ``Dockerfile.production``, ``e2e/docker/Dockerfile``) move from ``python:3.10-slim`` to ``python:3.13-slim``. The library's own ``requires-python`` floor in ``pyproject.toml`` stays at ``>=3.10`` - the upper end of the supported interpreter range expands; the lower end is unchanged.
 
 Why the bump: third-party benchmarks measure CPython 3.14 at ~2.0-2.4x faster than 3.10 on pure-Python loops (with the largest single jump at the 3.10 -> 3.11 cliff). MUXI's hot path is overwhelmingly I/O-bound (LLM round trips, MCP subprocess JSON-RPC, DB round trips, network embeddings), so the realistic end-user delta is in the single-digit percent range - but the change is mechanical and the orchestration glue (planning loops, JSON manipulation in the agent tool-call loop, prompt builders, SOP / workflow planning) does benefit on every request.
 
@@ -32,9 +32,9 @@ Behavioural impact for downstream library users: ``MarkItDown`` still converts e
 
 What changed:
 
-- ``Dockerfile`` (lean / default, both builder and runtime stages): ``python:3.10-slim`` -> ``python:3.14-slim``.
-- ``Dockerfile.production`` (lean + bundled PostgreSQL 17 + FAISSx via supervisor): ``python:3.10-slim`` -> ``python:3.14-slim``.
-- ``e2e/docker/Dockerfile`` (E2E test harness with all services and the test runtime): ``python:3.10-slim`` -> ``python:3.14-slim``.
+- ``Dockerfile`` (lean / default, both builder and runtime stages): ``python:3.10-slim`` -> ``python:3.13-slim``.
+- ``Dockerfile.production`` (lean + bundled PostgreSQL 17 + FAISSx via supervisor): ``python:3.10-slim`` -> ``python:3.13-slim``.
+- ``e2e/docker/Dockerfile`` (E2E test harness with all services and the test runtime): ``python:3.10-slim`` -> ``python:3.13-slim``.
 - ``pyproject.toml``: ``markitdown[all]>=0.1.0`` -> ``markitdown[docx,pdf,pptx,xls,xlsx]>=0.1.0``.
 
 What did NOT change:
