@@ -69,12 +69,12 @@ RUN ARCH="$(uname -m)" && \
     if [ "$ARCH" = "x86_64" ]; then \
         pip uninstall -y faiss-cpu faissx onnxruntime && \
         pip install --no-cache-dir torch torchvision && \
-        pip install --no-cache-dir "onellm[local-cuda,local-pytorch]>=0.20260502.1" && \
+        pip install --no-cache-dir "onellm[local-cuda]>=0.20260502.2" && \
         pip install --no-cache-dir "faissx-gpu>=0.20260422.2"; \
     else \
         pip install --no-cache-dir torch torchvision \
             --index-url https://download.pytorch.org/whl/cpu && \
-        pip install --no-cache-dir "onellm[local-pytorch]>=0.20260502.1"; \
+        pip install --no-cache-dir "onellm[local-pytorch]>=0.20260502.2"; \
     fi && \
     find /usr/local -name "*.pyc" -delete && \
     find /usr/local -name "__pycache__" -type d -exec rm -rf {} + 2>/dev/null || true && \

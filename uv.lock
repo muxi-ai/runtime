@@ -3604,7 +3604,7 @@ dependencies = [
 [package.optional-dependencies]
 cuda = [
     { name = "faissx-gpu" },
-    { name = "onellm", extra = ["local-cuda", "local-pytorch"] },
+    { name = "onellm", extra = ["local-cuda"] },
     { name = "torch" },
     { name = "torchvision" },
 ]
@@ -3670,9 +3670,9 @@ requires-dist = [
     { name = "nanoid", specifier = ">=2.0.0" },
     { name = "nltk", specifier = ">=3.8.0" },
     { name = "numpy", specifier = ">=1.24.0" },
-    { name = "onellm", extras = ["cache"], specifier = ">=0.20260502.1" },
-    { name = "onellm", extras = ["cache", "local-pytorch"], marker = "extra == 'pytorch'", specifier = ">=0.20260502.1" },
-    { name = "onellm", extras = ["local-cuda", "local-pytorch"], marker = "extra == 'cuda'", specifier = ">=0.20260502.1" },
+    { name = "onellm", extras = ["cache"], specifier = ">=0.20260502.2" },
+    { name = "onellm", extras = ["cache", "local-pytorch"], marker = "extra == 'pytorch'", specifier = ">=0.20260502.2" },
+    { name = "onellm", extras = ["local-cuda"], marker = "extra == 'cuda'", specifier = ">=0.20260502.2" },
     { name = "openai", specifier = ">=1.3.0" },
     { name = "openpyxl", specifier = ">=3.1.0" },
     { name = "orjson", specifier = ">=3.9.0" },
@@ -4159,7 +4159,7 @@ wheels = [
 
 [[package]]
 name = "onellm"
-version = "0.20260502.1"
+version = "0.20260502.2"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
     { name = "filelock" },
@@ -4173,9 +4173,9 @@ dependencies = [
     { name = "tiktoken" },
     { name = "urllib3" },
 ]
-sdist = { url = "https://files.pythonhosted.org/packages/4a/23/c4b18a8e9185ed5efd26d2a9c9ae37d60ed7a34722d2e95affe009e70129/onellm-0.20260502.1.tar.gz", hash = "sha256:4b6cdda40d5a8178a2cd072412bc196a3b999610d377c34e3b972ca84dfcf7c5", size = 188203, upload-time = "2026-05-02T16:34:20.765Z" }
+sdist = { url = "https://files.pythonhosted.org/packages/8d/10/91cb6bc19faf69796f9404ed61206eece1f344dd9675986f68e84c149254/onellm-0.20260502.2.tar.gz", hash = "sha256:1136e34a94d3f6819ac35aeb5f30e26faf43be0c8c91cbab8981ec4bf21653fb", size = 188336, upload-time = "2026-05-02T19:46:28.189Z" }
 wheels = [
-    { url = "https://files.pythonhosted.org/packages/06/a9/d4a25d3bac79af60b17daf29e88c21e2d195efed83768b2494fe02142ec1/onellm-0.20260502.1-py3-none-any.whl", hash = "sha256:713c9782b96684cd21abb66e6421a32cc3f5c9dacfb921e5f54ad40625f656d4", size = 223431, upload-time = "2026-05-02T16:34:19.01Z" },
+    { url = "https://files.pythonhosted.org/packages/5f/26/fbd2147cb7c665d449dfd014323000946b8fb72beb84ac2a6a097be49902/onellm-0.20260502.2-py3-none-any.whl", hash = "sha256:283ef48be201ce7c6aaf0540f637b9ad425387439595b7cf3bc61f342a9e2898", size = 223431, upload-time = "2026-05-02T19:46:26.422Z" },
 ]
 
 [package.optional-dependencies]
@@ -4192,6 +4192,7 @@ local-cuda = [
     { name = "numpy", version = "2.4.1", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version >= '3.11'" },
     { name = "onnxruntime-gpu", version = "1.24.3", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version < '3.11'" },
     { name = "onnxruntime-gpu", version = "1.25.0", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version >= '3.11'" },
+    { name = "sentence-transformers" },
     { name = "transformers" },
 ]
 local-pytorch = [
