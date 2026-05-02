@@ -4,7 +4,7 @@
 # ============================================================================
 # Stage 1: Builder - Install dependencies and compile
 # ============================================================================
-FROM python:3.14-slim AS builder
+FROM python:3.13-slim AS builder
 
 # Install build dependencies
 RUN apt-get update && apt-get install -y \
@@ -65,7 +65,7 @@ RUN ARCH=$(uname -m) && \
 # ============================================================================
 # Stage 2: Runtime - Minimal runtime environment
 # ============================================================================
-FROM python:3.14-slim
+FROM python:3.13-slim
 
 LABEL maintainer="Ran Aroussi <ran@aroussi.com>"
 LABEL description="MUXI Runtime - Optimized container for AI agent formations"

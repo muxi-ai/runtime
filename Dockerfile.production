@@ -1,6 +1,6 @@
 # MUXI Runtime - Production Image with Services
 # Includes PostgreSQL, FAISSx, and full service stack
-FROM python:3.14-slim
+FROM python:3.13-slim
 
 LABEL maintainer="Ran Aroussi <ran@aroussi.com>"
 LABEL description="MUXI Runtime - Production container with PostgreSQL and FAISSx"
