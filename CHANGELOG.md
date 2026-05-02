@@ -1,6 +1,6 @@
 # Changelog
 
-## [unreleased]
+## v0.20260502.1
 
 ### Fix: audio probe regression, MCP cancel-scope race, knowledge OOM (onellm pin bump to 0.20260502.1)
 
