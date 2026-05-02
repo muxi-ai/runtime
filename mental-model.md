@@ -1,7 +1,7 @@
 # MUXI Runtime Architecture Analysis
 
 **Generated:** 2026-03-10
-**Last Updated:** 2026-05-01 (lean Docker variants on python:3.14-slim; markitdown extras narrowed to docx/pdf/pptx/xls/xlsx; SIF artifacts ~10-14% smaller; Apptainer-on-Mac /etc/localtime workaround documented)
+**Last Updated:** 2026-05-02 (knowledge-ingest embedding slug now resolved from formation-level capability_models first; onellm CoreML EP gets persistent ModelCacheDirectory so .mlmodelc compile is one-shot per repo+revision; 6_knowledge tests no longer trigger macOS jetsam)
 **Codebase:** `/Users/ran/Projects/muxi/code/runtime`  
 **Scope:** 290 Python files, ~119K lines
 
@@ -3342,6 +3342,34 @@ The codebase is well-structured with clear separation of concerns, comprehensive
 ---
 
 ## Appendix: Lessons Learned (Updated During E2E Testing)
+
+### 2026-05-02: Knowledge ingestion silently routed through local Nomic + CoreML compile-on-every-load thrashed macOS jetsam
+
+**Symptom.** Four `e2e/tests/6_knowledge/` tests SIGKILLed (exit -9) at ~166-302 s, every time, after printing "Knowledge sources: 1 loaded" but before the chat phase. Direct PID memory tracing showed the child python process spiking to 8.7 GB RSS at t=40 s, then macOS jetsam aggressively pages it out (5 GB → 500 MB → 350 MB → kill), with VSZ growing continuously to ~490 GB. Standalone runs survived only when the system was otherwise idle; the official `run_all_tests` runner reproduced jetsam every time.
+
+**Root cause #1 (runtime side). Wrong embedding slug for knowledge ingest.** `formation/agents/agent.py::_initialize_knowledge` resolved its `embedding_slug` from `working_memory.embedding_model_name`. By design, `_initialize_buffer_memory` always passes `embedding_model=None` to `WorkingMemory`, which falls through to `DEFAULT_EMBEDDING_MODEL = "local/nomic-ai/nomic-embed-text-v1.5"`. So even when a formation declared `embedding: openai/text-embedding-3-small`, knowledge files were embedded with the *local* Nomic model, loading a multi-hundred-MB ONNX graph into the test process for what should have been a cloud round-trip.
+
+Fix: pull the embedding slug from `overlord._capability_models["embedding"]` *first*, fall through to `working_memory.embedding_model_name` only when no formation-level embedding capability was declared, and fall through to `DEFAULT_EMBEDDING_MODEL` only when working memory itself is unavailable. The local Nomic remains the SIF-shipped offline fallback; it stops silently overriding declared cloud embeddings.
+
+**Root cause #2 (onellm side). CoreML EP recompiles on every `InferenceSession()`.** Even with the runtime fix, the local working-memory model + classifier prewarm still touch ONNX. On Apple Silicon, `ort.get_available_providers()` returns `["CoreMLExecutionProvider", "AzureExecutionProvider", "CPUExecutionProvider"]`. The CoreML EP compiles every ONNX graph into an `.mlmodelc` package on each session construction. Without `ModelCacheDirectory` set, ORT writes the artifact to a per-session temp dir that disappears on session disposal — the source of the 490 GB VSZ growth (mmap'd shape-specialization scratch) and the RSS spike that triggered jetsam.
+
+Fix lives in `onellm/providers/local.py::_build_provider_list`: every `CoreMLExecutionProvider` entry is rewritten to a `(name, options)` tuple with `ModelCacheDirectory` pointing at a stable per-(repo, revision) path under `$HF_HOME/onellm-coreml/<sanitized_repo>/<revision>/` (or `~/.cache/huggingface/onellm-coreml` when `HF_HOME` is unset). `MLComputeUnits=ALL` keeps ANE/GPU/CPU dispatch on; `SpecializationStrategy=FastPrediction` (ORT >= 1.20, silently ignored on older runtimes) reduces per-input-shape recompilation. CUDA / ROCm / OpenVINO / plain CPU pass through untouched.
+
+**Operator knobs (onellm).**
+- `ONELLM_COREML_DISABLED=true` drops the CoreML EP entirely. Recovery path if a future ORT release breaks the on-disk cache contract.
+- `ONELLM_COREML_CACHE_DIR=/path/to/cache` overrides the default cache root.
+
+**Real-world impact (runtime 6_knowledge tests on macOS arm64).**
+- Peak RSS: 8.7 GB → 3.8 GB cold / 4.7 GB warm.
+- Wall time: 280 s + jetsam SIGKILL → 72-90 s clean PASS.
+- Cache footprint: ~14 MB for three embedding models (`nomic-embed-text-v1.5`, `multilingual-e5-small`, `paraphrase-multilingual-MiniLM-L12-v2`).
+
+**Why VSZ stays large even after the fix (and that's fine).** Loading the compiled `.mlmodelc` mmaps the file into the process's address space, which still shows up in VSZ. mmap'd regions don't cost physical memory until paged in. The metric that matters for jetsam is RSS, which dropped by more than half. Don't get distracted by the VSZ number — it has always been a poor proxy for actual memory pressure on macOS.
+
+**Mental notes for future debugging.**
+- Exit code -9 + no `PYTHONFAULTHANDLER` traceback + a process growing to GB-scale RSS = jetsam, not a hang. Confirm with `log show --predicate 'subsystem == "com.apple.runningboard"' --last 30m` and direct `ps -p <pid> -o rss=,vsz=` polling. The runner-side timeout / `EARLY_KILL_AFTER_SUCCESS` is rarely the culprit when the time-to-kill is non-deterministic across runs.
+- Two layers of "the system silently used the wrong slug" lurked behind one symptom: (a) buffer memory hardcoded to local Nomic by design, (b) the agent's knowledge handler trusted that slug as if it were the formation-declared one. When investigating "why is local model X loading when I declared cloud model Y?", trace the slug-resolution path top-down through `_capability_models` → `working_memory` → `DEFAULT_EMBEDDING_MODEL`. Buffer memory's `embedding_model=None` is intentional ("buffer always uses local") but it's not the right source of truth for knowledge ingest.
+- ORT 1.16+ accepts per-EP options as `providers=[("EPName", {"opt": "val"}), ...]`. Tests that mock `ort.InferenceSession(onnx_path, providers=...)` keep working because `providers` is just a list with a different element type.
 
 ### 2026-05-01: Lean Docker variants jump python:3.10-slim -> python:3.14-slim; markitdown extras narrowed; Apptainer-on-Mac /etc/localtime workaround
 
