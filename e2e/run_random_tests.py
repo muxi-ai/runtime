@@ -23,7 +23,25 @@ from run_all_tests import (
 
 
 def main():
-    n = int(sys.argv[1]) if len(sys.argv) > 1 else 10
+    import argparse
+
+    parser = argparse.ArgumentParser(description="Run N random e2e tests")
+    parser.add_argument("n", nargs="?", type=int, default=10, help="Number of tests to run")
+    parser.add_argument(
+        "--exclude-file",
+        metavar="PATH",
+        help="File with test paths (one per line) to exclude from the pool",
+    )
+    args = parser.parse_args()
+    n = args.n
+
+    excluded = set()
+    if args.exclude_file:
+        with open(args.exclude_file) as f:
+            for line in f:
+                line = line.strip()
+                if line:
+                    excluded.add(line)
 
     RESULTS_DIR.mkdir(parents=True, exist_ok=True)
 
@@ -32,6 +50,11 @@ def main():
         tests = sorted(area.glob("test_*.py"))
         tests = [t for t in tests if not should_skip(t.name)]
         all_tests.extend(tests)
+
+    if excluded:
+        before = len(all_tests)
+        all_tests = [t for t in all_tests if str(t.relative_to(t.parent.parent.parent)) not in excluded]
+        print(f"Excluded {before - len(all_tests)} already-passing tests from pool")
 
     if n > len(all_tests):
         n = len(all_tests)
