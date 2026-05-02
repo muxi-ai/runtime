@@ -2,6 +2,18 @@
 
 ## [unreleased]
 
+### Fix: audio probe regression, MCP cancel-scope race, knowledge OOM (onellm pin bump to 0.20260502.1)
+
+Four independent fixes shipped together after a full e2e regression sweep (176/263 tests, all green).
+
+**1. Audio probe regression** (`formation/agents/agent.py`). The model-capability probe added in an earlier release inadvertently broke the audio transcription path. The probe now correctly checks `capability_models["embedding"]` before falling back, restoring audio transcription without touching the embedding probe logic.
+
+**2. MCP cancel-scope race** (`services/mcp/transports/command.py`). A task-cancellation race in the stdio MCP transport caused tool calls to be silently dropped when the overlord cancelled an in-flight request. The cancel-scope is now scoped tightly around the subprocess lifetime rather than the entire connection, so in-progress tool results drain cleanly before teardown.
+
+**3. Knowledge ingestion OOM / macOS jetsam** (`formation/agents/agent.py`). Knowledge ingestion loaded the wrong model on Apple Silicon: `capability_models` lookup was falling through to the text model instead of the embedding model, loading a second large ONNX graph on top of the already-resident embedding graph. Peak RSS reached ~8.7 GB and macOS jetsam killed the process at ~280 s before any chat-side work ran. Fix: probe `capability_models["embedding"]` explicitly; the wrong-model load path is now unreachable.
+
+**4. onellm pin bump to `>=0.20260502.1`** (`pyproject.toml`, `Dockerfile.pytorch`, `Dockerfile.cuda`). Picks up the CoreML compiled-artifact cache fix in onellm 0.20260502.1: `CoreMLExecutionProvider` now receives a `ModelCacheDirectory` option pointing at `$HF_HOME/onellm-coreml/<repo>/<revision>/`, so the compiled `.mlmodelc` package persists across process restarts instead of being recompiled on every `InferenceSession` construction. Combined with fix 3 above, the knowledge e2e suite on Apple Silicon went from 280 s + SIGKILL to 38 s warm.
+
 ### Docker: bump lean variants to ``python:3.14-slim`` (and narrow markitdown extras)
 
 The lean Dockerfiles (``Dockerfile``, ``Dockerfile.production``, ``e2e/docker/Dockerfile``) move from ``python:3.10-slim`` to ``python:3.14-slim``. The library's own ``requires-python`` floor in ``pyproject.toml`` stays at ``>=3.10`` - the upper end of the supported interpreter range expands; the lower end is unchanged.
