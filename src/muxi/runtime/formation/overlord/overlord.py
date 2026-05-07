@@ -5414,6 +5414,7 @@ Agent response: {raw_response}"""
         stream: Optional[bool] = None,  # None=use config, True=force stream, False=no stream
         files: Optional[List[Dict[str, Any]]] = None,  # Optional file attachments
         bypass_workflow_approval: bool = False,  # Skip workflow approval (useful for triggers/automation)
+        is_scheduled_execution: bool = False,  # True when invoked by scheduler firing a job
     ) -> Union[str, Dict[str, Any], AsyncGenerator[str, None]]:
         """
         Enhanced chat with async support for long-running agentic tasks and file attachments.
@@ -7497,7 +7498,18 @@ Agent response: {raw_response}"""
                 # FIRST: Check for scheduler intent - highest priority after security
                 # This must run BEFORE SOP matching to prevent SOPs with generic
                 # tags (e.g., "tasks") from intercepting scheduler requests.
-                if getattr(analysis, "is_scheduling_request", False) and self.scheduler_service:
+                #
+                # Skip when invoked by the scheduler firing an existing job: the
+                # message is the stored execution_prompt being delivered, not a
+                # new user request. Without this guard the intent classifier
+                # treats phrases like "remind me to drink coffee" as a fresh
+                # scheduling request and creates an orphan child job on every
+                # firing instead of letting the agent deliver the reminder.
+                if (
+                    not is_scheduled_execution
+                    and getattr(analysis, "is_scheduling_request", False)
+                    and self.scheduler_service
+                ):
                     try:
                         job_id = await self.scheduler_service.create_job(
                             user_id=str(user_id),
@@ -7539,9 +7551,12 @@ Agent response: {raw_response}"""
                         )
                         # Fall through to SOP / agent handling
 
-                # Check for scheduler query (list/view scheduled jobs)
+                # Check for scheduler query (list/view scheduled jobs).
+                # Same guard as above: a scheduled-execution invocation must
+                # not be intercepted by the query handler either.
                 if (
-                    getattr(analysis, "is_scheduler_query_request", False)
+                    not is_scheduled_execution
+                    and getattr(analysis, "is_scheduler_query_request", False)
                     and self.scheduler_service
                 ):
                     try:

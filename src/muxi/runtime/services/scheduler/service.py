@@ -790,6 +790,7 @@ class SchedulerService:
                     use_async=has_webhook,
                     webhook_url=webhook_url,
                     stream=False,  # No streaming needed for scheduled jobs
+                    is_scheduled_execution=True,  # Bypass scheduler-intent classifier
                 )
 
                 if has_webhook:

@@ -194,12 +194,24 @@ class PromptRewriter:
             response = await llm.generate_text(prompt)
             rewritten = response.strip()
 
-            # Ensure we got a reasonable response
-            if len(rewritten) > 0 and rewritten != original_prompt:
+            # Strip surrounding quotes the LLM sometimes adds despite the
+            # "no quotes" instruction in the rewriter prompt.
+            if len(rewritten) >= 2 and rewritten[0] == rewritten[-1] and rewritten[0] in ('"', "'"):
+                rewritten = rewritten[1:-1].strip()
+
+            # An empty response is a real failure — fall back. But equality
+            # with the input is a SIGNAL that no rewriting was needed (the
+            # rewriter prompt explicitly tells the LLM to return the input
+            # unchanged when there are no timing words to strip), not a
+            # failure. Treating it as failure caused the original prompt
+            # to be wrapped with "Execute scheduled task: " on every
+            # already-clean input — including stored execution_prompts
+            # being re-rewritten when an agent recursively scheduled them.
+            if rewritten:
                 return rewritten
-            else:
-                # Fallback to simple pattern rewriting
-                return f"Execute scheduled task: {original_prompt}"
+
+            # Real fallback: LLM returned nothing usable.
+            return f"Execute scheduled task: {original_prompt}"
 
         except Exception as e:
             observability.observe(
