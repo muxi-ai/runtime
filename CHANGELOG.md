@@ -2,6 +2,22 @@
 
 ## [unreleased]
 
+### Fix: scheduler firing recursion — overlord re-classified delivery as new schedule request
+
+Recurring scheduled jobs (e.g. ``remind me to drink coffee every 3 minutes``) were spawning a fresh one-time job on every firing instead of delivering the reminder. Three layers of the scheduler pipeline were involved; the actual fault was at the overlord layer, not the prompt rewriter.
+
+When a recurring job fires, ``SchedulerService`` invokes ``overlord.chat()`` with the stored ``execution_prompt`` (e.g. ``"remind me to drink coffee"``) as the user message. The overlord runs every incoming message through ``request_analyzer`` for intent classification — and a phrase like ``"remind me to drink coffee"``, in the absence of any context that this is a delivery, correctly classifies as ``is_scheduling_request=True``. The scheduler-intent handler at the top of the chat pipeline then short-circuits the request and creates a NEW one-time job ID, returning a synthesized ``"I've created a scheduled job for you..."`` message. The agent never runs, no reminder is delivered, and ``scheduled_jobs`` accumulates orphan rows on every firing.
+
+Three surgical changes:
+
+- ``overlord.chat()`` (``formation/overlord/overlord.py``) now takes ``is_scheduled_execution: bool = False``. When ``True``, both the scheduler-intent handler and the scheduler-query handler are bypassed so the message reaches the agent as a normal delivery.
+- ``SchedulerService._execute_job`` (``services/scheduler/service.py``) passes ``is_scheduled_execution=True`` from the firing path so any chat invocation tied to a job session is treated as delivery, not new scheduling.
+- ``PromptRewriter._llm_rewrite_prompt`` (``services/scheduler/rewriter.py``) no longer treats ``rewritten == original_prompt`` as failure. The rewriter prompt explicitly tells the LLM to return the input unchanged when there are no timing words to strip; wrapping that with ``"Execute scheduled task: "`` was a misread of intent that compounded the recursion (orphan jobs stored ``execution_prompt`` values like ``"Execute scheduled task: remind me to drink coffee"``). Empty LLM responses still fall back to the prefix wrapping. Surrounding quotes the LLM occasionally adds despite explicit instructions are now stripped.
+
+The downstream symptom from the bug report — empty ``job_results`` rows at the receiving webhook — resolves automatically once the agent actually runs and produces a real reply for the webhook payload, instead of the synthesized "I've created a scheduled job" string.
+
+Adds ``tests/unit/test_scheduler_rewriter.py`` covering unchanged-output, empty-output, normal-rewrite, quoted-output, and llm-unavailable paths.
+
 ## v0.20260503.0
 
 ### Fix: audio probe regression, MCP cancel-scope race, knowledge OOM (onellm pin bump to 0.20260502.1)
