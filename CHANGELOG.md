@@ -2,6 +2,8 @@
 
 ## [unreleased]
 
+## v0.20260508.0
+
 ### Fix: scheduler firing recursion — overlord re-classified delivery as new schedule request
 
 Recurring scheduled jobs (e.g. ``remind me to drink coffee every 3 minutes``) were spawning a fresh one-time job on every firing instead of delivering the reminder. Three layers of the scheduler pipeline were involved; the actual fault was at the overlord layer, not the prompt rewriter.
