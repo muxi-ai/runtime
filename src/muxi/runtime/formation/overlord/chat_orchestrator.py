@@ -103,6 +103,7 @@ class ChatOrchestrator:
         muxi_user_id: Optional[str] = None,
         bypass_workflow_approval: bool = False,
         clean_chat_context: Optional[Dict[str, Any]] = None,
+        is_scheduled_execution: bool = False,
     ) -> AsyncGenerator[str, None]:
         """
         Create a streaming generator that fires off processing and yields events.
@@ -167,6 +168,7 @@ class ChatOrchestrator:
                     webhook_url=webhook_url,
                     bypass_workflow_approval=bypass_workflow_approval,
                     clean_chat_context=clean_chat_context,
+                    is_scheduled_execution=is_scheduled_execution,
                 )
             except Exception as exc:
                 observability.observe(
@@ -246,6 +248,7 @@ class ChatOrchestrator:
         stream: Optional[bool] = None,
         files: Optional[List[Dict[str, Any]]] = None,
         bypass_workflow_approval: bool = False,
+        is_scheduled_execution: bool = False,
     ) -> Union[str, Dict[str, Any], AsyncGenerator[str, None], MuxiResponse]:
         """
         Enhanced chat with async support for long-running agentic tasks and file attachments.
@@ -691,6 +694,7 @@ class ChatOrchestrator:
                     webhook_url=webhook_url,
                     timestamp=timestamp,
                     original_message=original_message,
+                    is_scheduled_execution=is_scheduled_execution,
                 )
 
                 # Record framework mode telemetry (async requests are always "successful" at queue time)
@@ -737,6 +741,7 @@ class ChatOrchestrator:
                     muxi_user_id=muxi_user_id,
                     bypass_workflow_approval=bypass_workflow_approval,
                     clean_chat_context=clean_chat_context,
+                    is_scheduled_execution=is_scheduled_execution,
                 )
 
             # Sync processing
@@ -753,6 +758,7 @@ class ChatOrchestrator:
                     webhook_url=webhook_url,
                     bypass_workflow_approval=bypass_workflow_approval,
                     clean_chat_context=clean_chat_context,
+                    is_scheduled_execution=is_scheduled_execution,
                 )
                 success = True
             except Exception:
@@ -807,6 +813,7 @@ class ChatOrchestrator:
         webhook_url: Optional[str],
         timestamp: float,
         original_message: Optional[str] = None,
+        is_scheduled_execution: bool = False,
     ) -> Dict[str, Any]:
         """
         Execute a request asynchronously.
@@ -872,6 +879,7 @@ class ChatOrchestrator:
                 user_id=user_id,
                 session_id=session_id,
                 original_message=original_message,
+                is_scheduled_execution=is_scheduled_execution,
             )
 
         self.overlord._create_tracked_task(
@@ -907,6 +915,7 @@ class ChatOrchestrator:
         webhook_url: Optional[str] = None,
         bypass_workflow_approval: bool = False,
         clean_chat_context: Optional[Dict[str, Any]] = None,
+        is_scheduled_execution: bool = False,
     ) -> Union[str, Dict[str, Any], MuxiResponse]:
         """
         Process a chat request synchronously.
@@ -943,6 +952,7 @@ class ChatOrchestrator:
                 webhook_url=webhook_url,
                 bypass_workflow_approval=bypass_workflow_approval,
                 clean_chat_context=clean_chat_context,
+                is_scheduled_execution=is_scheduled_execution,
             )
         except RequestCancelledException as e:
             # Request was cancelled by user - log and return empty response

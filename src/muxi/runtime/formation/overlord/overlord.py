@@ -5558,6 +5558,7 @@ Agent response: {raw_response}"""
             stream=stream,
             files=files,
             bypass_workflow_approval=bypass_workflow_approval,
+            is_scheduled_execution=is_scheduled_execution,
         )
 
     async def audiochat(
@@ -5681,6 +5682,7 @@ Agent response: {raw_response}"""
         user_id: Any,
         session_id: Optional[str] = None,
         original_message: Optional[str] = None,
+        is_scheduled_execution: bool = False,
     ) -> None:
         """
         Execute async request in background.
@@ -5787,6 +5789,7 @@ Agent response: {raw_response}"""
                 use_async=True,
                 webhook_url=webhook_url,
                 original_message=original_message,
+                is_scheduled_execution=is_scheduled_execution,
             )
             processing_time = time.time() - start_time
 
@@ -6249,6 +6252,7 @@ Agent response: {raw_response}"""
         bypass_workflow_approval: bool = False,
         clean_chat_context: Optional[Dict[str, Any]] = None,
         original_message: Optional[str] = None,
+        is_scheduled_execution: bool = False,
     ) -> MuxiResponse:
         """
         Process chat synchronously using existing infrastructure.
