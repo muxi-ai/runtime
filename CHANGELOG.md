@@ -1,6 +1,6 @@
 # Changelog
 
-## [unreleased]
+## v0.20260508.0
 
 ### Fix: scheduler firing recursion — overlord re-classified delivery as new schedule request
 
