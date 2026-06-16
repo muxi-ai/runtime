@@ -1,8 +1,9 @@
 """Unit tests for [skill:...] directive parsing in SOPs."""
 
 import pytest
-from muxi.runtime.formation.workflow.decomposer import TaskDecomposer
+
 from muxi.runtime.datatypes.workflow import SkillRef
+from muxi.runtime.formation.workflow.decomposer import TaskDecomposer
 
 
 class TestSOPSkillDirectiveParsing:
@@ -113,14 +114,15 @@ class TestSkillManagerGrants:
     """Test request-scoped skill grants."""
 
     def test_grant_and_revoke(self):
-        from muxi.runtime.formation.skills.skill_manager import SkillManager
-        from collections import OrderedDict
         import tempfile
+
+        from muxi.runtime.formation.skills.skill_manager import SkillManager
 
         mgr = SkillManager()
         # Seed a fake skill so grant filters unknown names
-        from muxi.runtime.formation.skills.parser import SkillMetadata
         from pathlib import Path
+
+        from muxi.runtime.formation.skills.parser import SkillMetadata
         base = tempfile.mkdtemp()
         mgr.skills["pdf-generation"] = SkillMetadata(
             name="pdf-generation",
@@ -142,10 +144,10 @@ class TestSkillManagerGrants:
         assert "pdf-generation" not in mgr.get_available_skills("agent-b", request_id="req-1")
 
     def test_grant_does_not_mutate_declared_skills(self):
-        from muxi.runtime.formation.skills.skill_manager import SkillManager
-        from collections import OrderedDict
         import tempfile
         from pathlib import Path
+
+        from muxi.runtime.formation.skills.skill_manager import SkillManager
 
         mgr = SkillManager()
         from muxi.runtime.formation.skills.parser import SkillMetadata
@@ -168,8 +170,9 @@ class TestResolveSkillCommand:
     """Test script-to-command resolution in executor."""
 
     def test_resolve_python_script(self):
-        from muxi.runtime.formation.workflow.executor import _resolve_skill_command
         from unittest.mock import MagicMock
+
+        from muxi.runtime.formation.workflow.executor import _resolve_skill_command
 
         mgr = MagicMock()
         mgr._get_resources.return_value = ["scripts/render.py", "references/spec.md"]
@@ -177,8 +180,9 @@ class TestResolveSkillCommand:
         assert cmd == "python3 scripts/render.py"
 
     def test_resolve_by_stem(self):
-        from muxi.runtime.formation.workflow.executor import _resolve_skill_command
         from unittest.mock import MagicMock
+
+        from muxi.runtime.formation.workflow.executor import _resolve_skill_command
 
         mgr = MagicMock()
         mgr._get_resources.return_value = ["scripts/run.sh"]
@@ -186,8 +190,9 @@ class TestResolveSkillCommand:
         assert cmd == "bash scripts/run.sh"
 
     def test_resolve_missing_script(self):
-        from muxi.runtime.formation.workflow.executor import _resolve_skill_command
         from unittest.mock import MagicMock
+
+        from muxi.runtime.formation.workflow.executor import _resolve_skill_command
 
         mgr = MagicMock()
         mgr._get_resources.return_value = []
