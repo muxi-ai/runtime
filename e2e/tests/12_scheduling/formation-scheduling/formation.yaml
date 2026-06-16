@@ -9,8 +9,8 @@ llm:
     google: "${{ secrets.GEMINI_API_KEY }}"
   models:
     - text: "openai/gpt-4o-mini"
-    - vision: "google/gemini-2.0-flash"
-    - video: "google/gemini-2.0-flash"
+    - vision: "google/gemini-2.5-flash"
+    - video: "google/gemini-2.5-flash"
     - audio: "openai/whisper-1"
     - documents: "openai/gpt-4o"
       settings:
