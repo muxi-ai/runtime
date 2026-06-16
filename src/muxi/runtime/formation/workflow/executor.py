@@ -22,7 +22,7 @@ from ...datatypes.workflow_models import (
 from ...services import observability, streaming
 from ...utils.fastjson import json
 from ..agents.agent import Agent
-from ..agents.skill_dispatch import run_skill_command
+from ..agents.skill_dispatch import _rce_artifact_to_muxi, run_skill_command
 from .config import (
     AgentRoutingRule,
     TaskRoutingStrategy,
@@ -1456,11 +1456,31 @@ class WorkflowExecutor:
                 if ref.script and rce_client:
                     cmd = _resolve_skill_command(skill_manager, ref.name, ref.script)
                     if cmd:
-                        run_result = await run_skill_command(
-                            skill_manager, rce_client, ref.name, cmd
-                        )
-                        skill_run_summaries.append(run_result)
-                        artifacts_from_skills.extend(run_result.get("_artifacts_full", []))
+                        try:
+                            run_result = await run_skill_command(
+                                skill_manager, rce_client, ref.name, cmd
+                            )
+                            skill_run_summaries.append(run_result)
+                            artifacts_from_skills.extend(run_result.get("_artifacts_full", []))
+                        except Exception as e:
+                            observability.observe(
+                                event_type=observability.ErrorEvents.SERVICE_UNAVAILABLE,
+                                level=observability.EventLevel.WARNING,
+                                data={
+                                    "task_id": task.id,
+                                    "skill_name": ref.name,
+                                    "script": ref.script,
+                                    "agent_id": agent.agent_id,
+                                    "error": str(e),
+                                },
+                                description=(
+                                    f"Skill '{ref.name}' script execution failed: {e}; "
+                                    "proceeding with activation only."
+                                ),
+                            )
+                            skill_run_summaries.append(
+                                {"status": "error", "error": str(e), "stdout": "", "stderr": ""}
+                            )
                     else:
                         observability.observe(
                             event_type=observability.ErrorEvents.CONFIGURATION_ERROR,
@@ -1505,32 +1525,8 @@ class WorkflowExecutor:
             # Add skill-run artifacts to the agent's artifacts
             if artifacts_from_skills:
                 for a in artifacts_from_skills:
-                    # Convert RCE artifact dict to MuxiArtifact via existing helper
-                    from ...datatypes.artifacts import ArtifactMetadata, MuxiArtifact
-
-                    ext = a.get("name", "").rsplit(".", 1)[-1] if "." in a.get("name", "") else ""
-                    mime = a.get("mime", "application/octet-stream")
-                    artifact_type = "text"
-                    if mime.startswith("image/"):
-                        artifact_type = "image"
-                    elif mime.startswith("text/"):
-                        artifact_type = "text"
-                    elif ext in ("json", "csv", "xml", "xlsx", "xls"):
-                        artifact_type = "data"
-                    else:
-                        artifact_type = "document"
                     try:
-                        muxi_artifact = MuxiArtifact(
-                            type=artifact_type,
-                            format=ext,
-                            filename=a["name"],
-                            data_url=f"data:{mime};base64,{a['content']}",
-                            metadata=ArtifactMetadata(
-                                size_bytes=a.get("size", 0),
-                                created_at=datetime.now(),
-                            ),
-                        )
-                        artifacts.append(muxi_artifact)
+                        artifacts.append(_rce_artifact_to_muxi(a))
                     except Exception:
                         pass
 

@@ -137,17 +137,17 @@ async def handle_run_skill(
     manager = overlord.skill_manager
     rce = overlord.rce_client
 
-    streaming.stream(
-        "progress",
-        f"Running skill '{skill_name}'...",
-        stage="skill_executing",
-        skill_name=skill_name,
-        command=command,
-        agent_name=agent_id,
-        skip_rephrase=True,
-    )
-
     try:
+        streaming.stream(
+            "progress",
+            f"Running skill '{skill_name}'...",
+            stage="skill_executing",
+            skill_name=skill_name,
+            command=command,
+            agent_name=agent_id,
+            skip_rephrase=True,
+        )
+
         response = await run_skill_command(manager, rce, skill_name, command)
 
         observability.observe(
