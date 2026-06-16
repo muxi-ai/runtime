@@ -1236,8 +1236,7 @@ Would you like me to proceed with this plan?
                 status=TaskStatus.PENDING,
                 assigned_agent_id=step["assigned_agent"],
                 required_skills=[
-                    SkillRef(name=s["name"], script=s["script"])
-                    for s in step.get("skills", [])
+                    SkillRef(name=s["name"], script=s["script"]) for s in step.get("skills", [])
                 ],
             )
             task_id_list.append(task_id)

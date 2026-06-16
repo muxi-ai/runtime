@@ -44,9 +44,7 @@ class TestSOPSkillDirectiveActivation(BaseE2ETest):
         try:
             # 1. Load formation with skill + SOP
             print("\n1. Loading formation with skill and SOP...")
-            formation_path = (
-                Path(__file__).parent / "formations" / "formation-sop-skills"
-            )
+            formation_path = Path(__file__).parent / "formations" / "formation-sop-skills"
             await self.setup_formation(formation_path=formation_path)
             overlord = self.overlord
             skill_manager = self.formation._skill_manager
@@ -57,17 +55,17 @@ class TestSOPSkillDirectiveActivation(BaseE2ETest):
             sop_system = getattr(overlord, "sop_system", None)
             assert sop_system is not None, "SOP system not available"
             sop_ids = list(sop_system.sops.keys())
-            assert "skill-activation-test" in sop_ids, (
-                f"Expected 'skill-activation-test' in {sop_ids}"
-            )
+            assert (
+                "skill-activation-test" in sop_ids
+            ), f"Expected 'skill-activation-test' in {sop_ids}"
             print(f"   SOPs loaded: {sop_ids}")
             checks.append("SOP 'skill-activation-test' loaded")
 
             # 3. Verify skill loaded
             print("\n3. Verifying skill loaded...")
-            assert "test-skill" in skill_manager.skills, (
-                f"Expected 'test-skill' in skills. Got: {list(skill_manager.skills.keys())}"
-            )
+            assert (
+                "test-skill" in skill_manager.skills
+            ), f"Expected 'test-skill' in skills. Got: {list(skill_manager.skills.keys())}"
             print(f"   Skills: {list(skill_manager.skills.keys())}")
             checks.append("Skill 'test-skill' loaded")
 
@@ -92,9 +90,7 @@ class TestSOPSkillDirectiveActivation(BaseE2ETest):
                 ),
                 timeout=timeout,
             )
-            response_text = (
-                response.content if hasattr(response, "content") else str(response)
-            )
+            response_text = response.content if hasattr(response, "content") else str(response)
             print(f"   Response: {response_text[:300]}...")
             transcript.append(("Execute SOP", response_text[:300]))
             checks.append("Got response from overlord.chat()")
@@ -115,9 +111,7 @@ class TestSOPSkillDirectiveActivation(BaseE2ETest):
                 "[skill:test-skill] should have caused deterministic activation "
                 "by the workflow executor before the agent processed the task."
             )
-            checks.append(
-                f"test-skill activated deterministically (session: {activation_session})"
-            )
+            checks.append(f"test-skill activated deterministically (session: {activation_session})")
 
             # 7. Verify skill content was injected into agent context
             print("\n7. Verifying skill content injection...")
@@ -128,7 +122,10 @@ class TestSOPSkillDirectiveActivation(BaseE2ETest):
                 # not the system message. Search all messages.
                 for msg in agent._messages:
                     msg_content = msg.get("content", "")
-                    if "test-skill" in msg_content and "SKILL_ACTIVATED_CONFIRMED_42" in msg_content:
+                    if (
+                        "test-skill" in msg_content
+                        and "SKILL_ACTIVATED_CONFIRMED_42" in msg_content
+                    ):
                         print("   Skill content found in test-agent's messages")
                         injected = True
                         break
@@ -155,9 +152,7 @@ class TestSOPSkillDirectiveActivation(BaseE2ETest):
             if relevant:
                 checks.append("Response references skill/context")
             else:
-                checks.append(
-                    "WARNING: Response relevance unclear (LLM variance expected)"
-                )
+                checks.append("WARNING: Response relevance unclear (LLM variance expected)")
 
             # 9. Cleanup
             print("\n9. Cleaning up...")

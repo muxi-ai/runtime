@@ -123,6 +123,7 @@ class TestSkillManagerGrants:
         from pathlib import Path
 
         from muxi.runtime.formation.skills.parser import SkillMetadata
+
         base = tempfile.mkdtemp()
         mgr.skills["pdf-generation"] = SkillMetadata(
             name="pdf-generation",
@@ -151,6 +152,7 @@ class TestSkillManagerGrants:
 
         mgr = SkillManager()
         from muxi.runtime.formation.skills.parser import SkillMetadata
+
         base = tempfile.mkdtemp()
         mgr.skills["pdf-generation"] = SkillMetadata(
             name="pdf-generation",

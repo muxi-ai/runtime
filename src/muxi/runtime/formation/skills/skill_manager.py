@@ -123,9 +123,7 @@ class SkillManager:
         self.skills[name] = metadata
         return metadata
 
-    def grant_request_skills(
-        self, request_id: str, agent_id: str, names: list
-    ) -> None:
+    def grant_request_skills(self, request_id: str, agent_id: str, names: list) -> None:
         """Transiently grant skills to an agent for a single request lifecycle.
 
         The grant is NOT persisted to public_skills or agent_skills; it only
@@ -146,9 +144,7 @@ class SkillManager:
         """Remove all transient grants for a request_id."""
         self._request_grants.pop(request_id, None)
 
-    def get_available_skills(
-        self, agent_id: str, request_id: Optional[str] = None
-    ) -> List[str]:
+    def get_available_skills(self, agent_id: str, request_id: Optional[str] = None) -> List[str]:
         """Get skill names available to an agent (public + private + request grants, deduplicated)."""
         available = list(self.public_skills)
         for name in self.agent_skills.get(agent_id, []):
