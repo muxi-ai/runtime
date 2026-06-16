@@ -4,6 +4,8 @@
 
 ## v0.20260616.0
 
+## v0.20260616.0
+
 ### SOP Skill Directives -- deterministic activation from SOP steps
 
 SOP steps can now declare skills that should be activated deterministically
