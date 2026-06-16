@@ -41,27 +41,27 @@ classifiers = [
 ]
 dependencies = [
     # Build dependencies for setup.py
-    "tomli>=1.2.0;python_version<'3.11'",  # For reading pyproject.toml in setup.py
+    "tomli>=2.4.1;python_version<'3.11'",  # For reading pyproject.toml in setup.py
 
     # Core dependencies
-    "orjson>=3.9.0",
-    "pyyaml>=6.0",
-    "pydantic>=2.0.0",
-    "httpx>=0.24.0",
-    "anyio>=3.7.0",
-    "python-dotenv>=1.0.0",
-    "websockets>=11.0.3",
-    "httpx-sse>=0.4.0",
-    "rich>=13.6.0",
+    "orjson>=3.11.9",
+    "pyyaml>=6.0.3",
+    "pydantic>=2.13.4",
+    "httpx>=0.28.1",
+    "anyio>=4.14.0",
+    "python-dotenv>=1.2.2",
+    "websockets>=16.0",
+    "httpx-sse>=0.4.3",
+    "rich>=15.0.0",
     "colorama>=0.4.6",
-    "psutil>=5.9.0",  # System and process utilities
+    "psutil>=7.2.2",  # System and process utilities
 
     # MCP Package
-    "mcp>=1.23.0",  # Required for Streamable HTTP transport support (security fix)
-    "fastmcp>=3.2.0",  # MCP server generation from FastAPI app
+    "mcp>=1.27.2",  # Required for Streamable HTTP transport support (security fix)
+    "fastmcp>=3.4.2",  # MCP server generation from FastAPI app
 
     # File processing and utilities
-    "aiofiles>=23.2.0",
+    "aiofiles>=25.1.0",
     "python-magic>=0.4.27",
 
     # Document processing dependencies
@@ -74,17 +74,17 @@ dependencies = [
     # in particular pins youtube-transcript-api~=1.0.0, whose 1.0.x line
     # declares requires_python='<3.14' and blocks Python 3.14 installs even
     # though MUXI never imports it.
-    "markitdown[docx,pdf,pptx,xls,xlsx]>=0.1.0",  # Convert various file formats to Markdown
-    "pypdf>=6.13.0",  # PDF document processing (successor to PyPDF2); CVE-2026-33123 fixed in 6.9.1
-    "python-docx>=1.1.0",  # Word document processing
-    "markdownify>=0.11.6",  # HTML to Markdown conversion
-    "beautifulsoup4>=4.12.0",  # HTML parsing and validation
-    "nltk>=3.8.0",  # Natural language processing for chunking
-    "spacy>=3.8.0",  # Advanced NLP for semantic chunking (compatible with NumPy 2.x)
+    "markitdown[docx,pdf,pptx,xls,xlsx]>=0.1.6",  # Convert various file formats to Markdown
+    "pypdf>=6.13.2",  # PDF document processing (successor to PyPDF2); CVE-2026-33123 fixed in 6.9.1
+    "python-docx>=1.2.0",  # Word document processing
+    "markdownify>=1.2.2",  # HTML to Markdown conversion
+    "beautifulsoup4>=4.15.0",  # HTML parsing and validation
+    "nltk>=3.9.4",  # Natural language processing for chunking
+    "spacy>=3.8.14",  # Advanced NLP for semantic chunking (compatible with NumPy 2.x)
 
     # Image processing dependencies
     "Pillow>=12.2.0",  # PIL/Pillow for image processing
-    "pdf2image>=1.16.0",  # Convert PDF pages to images (requires Poppler)
+    "pdf2image>=1.17.0",  # Convert PDF pages to images (requires Poppler)
 
     # LLM Package
     # 0.20260502.2 persists CoreML compiled .mlmodelc artifacts under
@@ -94,85 +94,85 @@ dependencies = [
     # `local-cuda` extra used by Dockerfile.cuda and completed
     # revision= plumbing for the local/<repo>:<revision> slug.
     "onellm[cache]>=0.20260514.0",
-    "boto3>=1.26.0",  # AWS SDK for OneLLM Bedrock provider
-    "google-cloud-aiplatform>=1.25.0",  # Google Cloud for OneLLM Vertex AI provider
+    "boto3>=1.43.30",  # AWS SDK for OneLLM Bedrock provider
+    "google-cloud-aiplatform>=1.157.0",  # Google Cloud for OneLLM Vertex AI provider
 
     # A2A (Agent-to-Agent) Communication
     # Native 1.0 migration landed 2026-04-21; services/a2a/_sdk_helpers.py
     # centralises protobuf glue (Part/Struct/Value wrapping, MessageToDict).
-    "a2a-sdk>=1.0,<2.0",  # Google's Agent-to-Agent SDK for inter-agent communication
-    "protobuf>=5.29.5,<8",  # a2a-sdk 1.0 uses protobuf; MessageToDict fallbacks handle any json_format API differences
+    "a2a-sdk>=1.1.0,<2.0",  # Google's Agent-to-Agent SDK for inter-agent communication
+    "protobuf>=6.33.6,<8",  # a2a-sdk 1.0 uses protobuf; MessageToDict fallbacks handle any json_format API differences
 
 
     # Server components
-    "fastapi>=0.108.0",
-    "uvicorn>=0.24.0",
+    "fastapi>=0.137.1",
+    "uvicorn>=0.49.0",
     "starlette>=1.3.1",  # Security fix for Range header DoS
 
     # Vector search
-    "faiss-cpu>=1.13.0",  # 1.13+ fixes numpy deprecation warning
-    "faissx>=0.20260403.0",  # Distributed FAISS for remote vector operations
-    "pgvector>=0.3.6",
-    "numpy>=1.24.0",
-    "sqlite-vec>=0.1.6",  # SQLite vector extension for similarity search
+    "faiss-cpu>=1.14.3",  # 1.13+ fixes numpy deprecation warning
+    "faissx>=0.20260422.2",  # Distributed FAISS for remote vector operations
+    "pgvector>=0.4.2",
+    "numpy>=2.2.6",
+    "sqlite-vec>=0.1.9",  # SQLite vector extension for similarity search
 
     # Database
-    "psycopg2-binary>=2.9.9",
-    "asyncpg>=0.29.0",  # Async PostgreSQL driver for SQLAlchemy (required for persistent memory)
-    "SQLAlchemy[asyncio]>=2.0.17",
-    "aiosqlite>=0.19.0",  # Async SQLite driver for SQLAlchemy (required for default persistent memory)
+    "psycopg2-binary>=2.9.12",
+    "asyncpg>=0.31.0",  # Async PostgreSQL driver for SQLAlchemy (required for persistent memory)
+    "SQLAlchemy[asyncio]>=2.0.51",
+    "aiosqlite>=0.22.1",  # Async SQLite driver for SQLAlchemy (required for default persistent memory)
 
     # Legacy dependencies (keeping for compatibility)
     "aiohttp>=3.14.1",  # Security fixes for DoS vulnerabilities
-    "click>=8.1.0",
-    "openai>=1.3.0",
+    "click>=8.4.1",
+    "openai>=2.41.1",
 
     # File generation dependencies (now core requirements)
     # Data processing and analysis
-    "pandas>=2.0.0",
-    "scipy>=1.10.0",
-    "statsmodels>=0.14.0",
+    "pandas>=2.3.3",
+    "scipy>=1.15.3",
+    "statsmodels>=0.14.6",
 
     # Visualization
-    "matplotlib>=3.7.0",
-    "seaborn>=0.12.0",
-    "plotly>=5.15.0",
-    "bokeh>=3.8.2",  # Security fix for WebSocket origin validation
-    "altair>=5.0.0",
+    "matplotlib>=3.10.9",
+    "seaborn>=0.13.2",
+    "plotly>=6.8.0",
+    "bokeh>=3.9.1",  # Security fix for WebSocket origin validation
+    "altair>=6.2.1",
 
     # Document generation
-    "reportlab>=4.0.0",
-    "fpdf2>=2.7.0",
+    "reportlab>=4.5.1",
+    "fpdf2>=2.8.7",
 
     # Spreadsheet handling
-    "openpyxl>=3.1.0",
-    "xlsxwriter>=3.1.0",
-    "xlrd>=2.0.0",
+    "openpyxl>=3.1.5",
+    "xlsxwriter>=3.2.9",
+    "xlrd>=2.0.2",
     "xlwt>=1.3.0",
 
     # Image processing (Pillow already included above)
-    "qrcode>=7.4.0",
-    "python-barcode>=0.15.0",
+    "qrcode>=8.2",
+    "python-barcode>=0.16.1",
 
     # Presentation
-    "python-pptx>=0.6.21",
+    "python-pptx>=1.0.2",
 
     # File formats
-    "lxml>=4.9.0",
+    "lxml>=6.1.1",
 
     # Additional dependencies found in codebase
-    "cachetools>=5.3.0",  # Caching for credential resolution (TTL, LRU)
-    "croniter>=1.3.0",  # Cron expression parsing for scheduler
-    "cryptography>=48.0.1",  # Encryption for secrets manager
-    "PyJWT>=2.12.0",  # CVE-2026-32597: accepts unknown crit headers; fixed in 2.12.0
+    "cachetools>=7.1.4",  # Caching for credential resolution (TTL, LRU)
+    "croniter>=6.2.2",  # Cron expression parsing for scheduler
+    "cryptography>=49.0.0",  # Encryption for secrets manager
+    "PyJWT>=2.13.0",  # CVE-2026-32597: accepts unknown crit headers; fixed in 2.12.0
     "pyasn1>=0.6.3",  # CVE-2026-30922: unbounded recursion DoS; fixed in 0.6.3
-    "msgpack>=1.0.0",  # Message pack format for observability
+    "msgpack>=1.2.0",  # Message pack format for observability
     "multitasking>=0.0.13",  # Multi-threading utilities; >=0.0.13 required for set_daemon() opt-in (prevents interpreter-exit hang on long-lived @task workers)
     "nanoid>=2.0.0",  # Nano ID generation
-    "pytz>=2023.3",  # Timezone support for scheduler
-    "requests>=2.33.0",  # HTTP client (used in observability)
-    "typing-extensions>=4.8.0",  # Backport of typing features
-    "pyzmq>=25.0.0",  # ZeroMQ for observability streaming
+    "pytz>=2026.2",  # Timezone support for scheduler
+    "requests>=2.34.2",  # HTTP client (used in observability)
+    "typing-extensions>=4.15.0",  # Backport of typing features
+    "pyzmq>=27.1.0",  # ZeroMQ for observability streaming
 ]
 
 [project.optional-dependencies]
