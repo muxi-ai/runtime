@@ -32,6 +32,8 @@ class SkillManager:
         self._active_execution_context_max = 10_000
         self._builtin_skills: List[str] = []
         self._secrets_manager = secrets_manager
+        self._request_grants: OrderedDict[str, Dict[str, Set[str]]] = OrderedDict()
+        self._request_grants_max = 10_000
 
     def load_builtin_skills(self, disabled: Optional[List[str]] = None) -> List[str]:
         """Load built-in skills shipped with the runtime.
@@ -121,12 +123,37 @@ class SkillManager:
         self.skills[name] = metadata
         return metadata
 
-    def get_available_skills(self, agent_id: str) -> List[str]:
-        """Get skill names available to an agent (public + private, deduplicated)."""
+    def grant_request_skills(self, request_id: str, agent_id: str, names: list) -> None:
+        """Transiently grant skills to an agent for a single request lifecycle.
+
+        The grant is NOT persisted to public_skills or agent_skills; it only
+        widens get_available_skills/build_*_tool when the same request_id is
+        passed back in.  revoke_request_skills must be called in a finally block.
+        """
+        if not request_id:
+            return
+        bucket = self._request_grants.setdefault(request_id, {})
+        agent_set = bucket.setdefault(agent_id, set())
+        for n in names:
+            if n in self.skills:
+                agent_set.add(n)
+        if len(self._request_grants) > self._request_grants_max:
+            self._request_grants.popitem(last=False)
+
+    def revoke_request_skills(self, request_id: str) -> None:
+        """Remove all transient grants for a request_id."""
+        self._request_grants.pop(request_id, None)
+
+    def get_available_skills(self, agent_id: str, request_id: Optional[str] = None) -> List[str]:
+        """Get skill names available to an agent (public + private + request grants, deduplicated)."""
         available = list(self.public_skills)
         for name in self.agent_skills.get(agent_id, []):
             if name not in available:
                 available.append(name)
+        if request_id:
+            for name in self._request_grants.get(request_id, {}).get(agent_id, set()):
+                if name not in available:
+                    available.append(name)
         return available
 
     def get_skill_descriptions(self, agent_id: str) -> List[str]:
@@ -161,12 +188,14 @@ class SkillManager:
             "its full instructions into your context.\n\n" + "\n".join(entries)
         )
 
-    def build_activate_skill_tool(self, agent_id: str) -> Optional[Dict[str, Any]]:
+    def build_activate_skill_tool(
+        self, agent_id: str, request_id: Optional[str] = None
+    ) -> Optional[Dict[str, Any]]:
         """Build the activate_skill tool definition for an agent.
 
         Returns None if agent has no skills.
         """
-        available = self.get_available_skills(agent_id)
+        available = self.get_available_skills(agent_id, request_id=request_id)
         if not available:
             return None
 
@@ -192,7 +221,9 @@ class SkillManager:
             },
         }
 
-    def build_run_skill_tool(self, agent_id: str) -> Optional[Dict[str, Any]]:
+    def build_run_skill_tool(
+        self, agent_id: str, request_id: Optional[str] = None
+    ) -> Optional[Dict[str, Any]]:
         """Build the run_skill tool definition for an agent.
 
         Only available when:
@@ -201,7 +232,7 @@ class SkillManager:
 
         Returns None if no executable skills are available.
         """
-        available = self.get_available_skills(agent_id)
+        available = self.get_available_skills(agent_id, request_id=request_id)
         # Exclude file-generation from run_skill (uses generate_file tool instead)
         executable = [n for n in available if self.has_scripts(n) and n != "file-generation"]
         if not executable:

@@ -2,6 +2,7 @@ import asyncio
 import re
 from collections import defaultdict
 from datetime import datetime, timedelta
+from pathlib import Path
 from typing import Any, Callable, Dict, List, Optional
 
 from ...datatypes.exceptions import WorkflowTimeoutError
@@ -21,6 +22,7 @@ from ...datatypes.workflow_models import (
 from ...services import observability, streaming
 from ...utils.fastjson import json
 from ..agents.agent import Agent
+from ..agents.skill_dispatch import _rce_artifact_to_muxi, run_skill_command
 from .config import (
     AgentRoutingRule,
     TaskRoutingStrategy,
@@ -279,6 +281,20 @@ class WorkflowExecutor:
         if self.config.timeout_config.workflow_timeout:
             timeout_task = asyncio.create_task(self._workflow_timeout_monitor(workflow.id))
 
+        # Register transient skill grants for this workflow so agents can
+        # legitimately call activate_skill / run_skill for SOP-declared skills
+        # even when those skills were never declared for the agent in YAML.
+        skill_manager = getattr(self.overlord, "skill_manager", None) if self.overlord else None
+        request_id = (context or {}).get("request_id")
+        if skill_manager and request_id:
+            for task in workflow.tasks.values():
+                if task.required_skills and task.assigned_agent_id:
+                    skill_manager.grant_request_skills(
+                        request_id,
+                        task.assigned_agent_id,
+                        [ref.name for ref in task.required_skills],
+                    )
+
         try:
             # Build execution phases
             phases = build_execution_phases(workflow)
@@ -379,6 +395,10 @@ class WorkflowExecutor:
             if workflow.id in self.workflow_start_times:
                 del self.workflow_start_times[workflow.id]
 
+            # Revoke transient skill grants
+            if skill_manager and request_id:
+                skill_manager.revoke_request_skills(request_id)
+
         return workflow
 
     async def execute_workflow_streaming(
@@ -404,6 +424,18 @@ class WorkflowExecutor:
         """
         # Validate and initialize workflow
         self._validate_and_initialize_workflow(workflow, context)
+
+        # Register transient skill grants for streaming workflows
+        skill_manager = getattr(self.overlord, "skill_manager", None) if self.overlord else None
+        request_id = (context or {}).get("request_id")
+        if skill_manager and request_id:
+            for task in workflow.tasks.values():
+                if task.required_skills and task.assigned_agent_id:
+                    skill_manager.grant_request_skills(
+                        request_id,
+                        task.assigned_agent_id,
+                        [ref.name for ref in task.required_skills],
+                    )
 
         try:
             # Build execution phases
@@ -492,6 +524,10 @@ class WorkflowExecutor:
             # Clean up
             if workflow.id in self.active_workflows:
                 del self.active_workflows[workflow.id]
+
+            # Revoke transient skill grants
+            if skill_manager and request_id:
+                skill_manager.revoke_request_skills(request_id)
 
         return workflow
 
@@ -1385,16 +1421,97 @@ class WorkflowExecutor:
         """
         # # DEBUG: Log all task executions to find the Linear task
 
+        skill_manager = getattr(self.overlord, "skill_manager", None) if self.overlord else None
+        rce_client = getattr(self.overlord, "rce_client", None) if self.overlord else None
+        session_id = context.get("session_id", "default")
+        request_id = context.get("request_id")
+
+        skill_preludes = []
+        skill_run_summaries = []
+        artifacts_from_skills = []
+
+        if task.required_skills:
+            for ref in task.required_skills:
+                if not skill_manager or ref.name not in skill_manager.skills:
+                    observability.observe(
+                        event_type=observability.ErrorEvents.CONFIGURATION_ERROR,
+                        level=observability.EventLevel.WARNING,
+                        data={
+                            "task_id": task.id,
+                            "skill_name": ref.name,
+                            "agent_id": agent.agent_id,
+                        },
+                        description=f"SOP references unknown skill '{ref.name}' in task '{task.id}'",
+                    )
+                    continue
+
+                # Activation
+                content = await skill_manager.activate_async(
+                    ref.name, session_id, agent_id=agent.agent_id
+                )
+                if "already active" not in content.lower():
+                    skill_preludes.append(content)
+
+                # Run form
+                if ref.script and rce_client:
+                    cmd = _resolve_skill_command(skill_manager, ref.name, ref.script)
+                    if cmd:
+                        try:
+                            run_result = await run_skill_command(
+                                skill_manager, rce_client, ref.name, cmd
+                            )
+                            skill_run_summaries.append(run_result)
+                            artifacts_from_skills.extend(run_result.get("_artifacts_full", []))
+                        except Exception as e:
+                            observability.observe(
+                                event_type=observability.ErrorEvents.SERVICE_UNAVAILABLE,
+                                level=observability.EventLevel.WARNING,
+                                data={
+                                    "task_id": task.id,
+                                    "skill_name": ref.name,
+                                    "script": ref.script,
+                                    "agent_id": agent.agent_id,
+                                    "error": str(e),
+                                },
+                                description=(
+                                    f"Skill '{ref.name}' script execution failed: {e}; "
+                                    "proceeding with activation only."
+                                ),
+                            )
+                            skill_run_summaries.append(
+                                {"status": "error", "error": str(e), "stdout": "", "stderr": ""}
+                            )
+                    else:
+                        observability.observe(
+                            event_type=observability.ErrorEvents.CONFIGURATION_ERROR,
+                            level=observability.EventLevel.WARNING,
+                            data={
+                                "task_id": task.id,
+                                "skill_name": ref.name,
+                                "script": ref.script,
+                                "agent_id": agent.agent_id,
+                            },
+                            description=(
+                                f"Skill '{ref.name}' script '{ref.script}' not found; "
+                                "skipping run, activation still applied."
+                            ),
+                        )
+
         # Create task prompt
-        task_prompt = self._create_task_prompt(task, context)
+        task_prompt = self._create_task_prompt(
+            task,
+            context,
+            skill_preludes=skill_preludes,
+            skill_run_summaries=skill_run_summaries,
+        )
 
         try:
             # Execute with agent
             response = await agent.process_message(
                 task_prompt,
                 user_id=context.get("user_id", 0),
-                session_id=context.get("session_id"),
-                request_id=context.get("request_id"),
+                session_id=session_id,
+                request_id=request_id,
             )
 
             # Extract content from muxi.runtimeResponse
@@ -1404,6 +1521,14 @@ class WorkflowExecutor:
             artifacts = []
             if hasattr(response, "artifacts") and response.artifacts:
                 artifacts = response.artifacts
+
+            # Add skill-run artifacts to the agent's artifacts
+            if artifacts_from_skills:
+                for a in artifacts_from_skills:
+                    try:
+                        artifacts.append(_rce_artifact_to_muxi(a))
+                    except Exception:
+                        pass
 
             # Parse response into structured outputs
             outputs = self._parse_task_response(response_content, task)
@@ -1445,13 +1570,21 @@ class WorkflowExecutor:
                 error_message=str(e),
             )
 
-    def _create_task_prompt(self, task: SubTask, context: Dict[str, Any]) -> str:
+    def _create_task_prompt(
+        self,
+        task: SubTask,
+        context: Dict[str, Any],
+        skill_preludes: Optional[List[str]] = None,
+        skill_run_summaries: Optional[List[Dict[str, Any]]] = None,
+    ) -> str:
         """
         Create prompt for task execution.
 
         Args:
             task: Task to create prompt for
             context: Execution context
+            skill_preludes: Activated skill instruction blocks to inject
+            skill_run_summaries: Results from deterministic skill script runs
 
         Returns:
             Task execution prompt
@@ -1463,6 +1596,25 @@ class WorkflowExecutor:
             f"- Required Capabilities: {', '.join(task.required_capabilities)}",
             f"- Estimated Complexity: {task.estimated_complexity}/10",
         ]
+
+        if skill_preludes:
+            prompt_parts.append("")
+            prompt_parts.append("## Skills available for this step (already activated)")
+            for prelude in skill_preludes:
+                prompt_parts.append(prelude)
+
+        if skill_run_summaries:
+            prompt_parts.append("")
+            prompt_parts.append("## Skill execution results (already produced)")
+            for summary in skill_run_summaries:
+                status = summary.get("status", "unknown")
+                stdout = summary.get("stdout", "")
+                stderr = summary.get("stderr", "")
+                prompt_parts.append(f"- Status: {status}")
+                if stdout:
+                    prompt_parts.append(f"  Output: {stdout[:500]}")
+                if stderr:
+                    prompt_parts.append(f"  Stderr: {stderr[:200]}")
 
         # Add dependency outputs — extract the actual content from each prior step's result
         if context.get("inputs"):
@@ -2184,3 +2336,23 @@ class ProgressTracker:
         """
         if context is not None and not isinstance(context, dict):
             raise ValueError("Context must be a dictionary if provided")
+
+
+def _resolve_skill_command(skill_manager, name: str, script: str) -> Optional[str]:
+    """Map a skill name + script selector to an executable command."""
+    resources = skill_manager._get_resources(name)
+    scripts = [r for r in resources if r.startswith("scripts/")]
+    match = next(
+        (
+            r
+            for r in scripts
+            if r == f"scripts/{script}" or Path(r).name == script or Path(r).stem == script
+        ),
+        None,
+    )
+    if not match:
+        return None
+    interp = {".py": "python3", ".sh": "bash", ".js": "node"}.get(Path(match).suffix)
+    if interp is None:
+        return None
+    return f"{interp} {match}"

@@ -2,6 +2,50 @@
 
 ## [unreleased]
 
+## v0.20260616.0
+
+### SOP Skill Directives -- deterministic activation from SOP steps
+
+SOP steps can now declare skills that should be activated deterministically
+before the assigned agent processes the task, using a new bracket directive
+syntax similar to ``[agent:...]`` and ``[mcp:...]``.
+
+- **Bracket syntax**: ``[skill:skill-name]`` for activation-only, ``[skill:skill-name/script-name]`` to also run a script from the skill's ``scripts/`` directory. Placed on the same line as the step heading after ``[agent:...]``.
+- **Deterministic activation**: the workflow executor calls ``skill_manager.activate_async`` directly before ``agent.process_message``, without waiting for the LLM to choose the ``activate_skill`` tool. Skill content is injected into the task prompt as a skill prelude.
+- **Deterministic script execution**: when the run form is used and an RCE client is available, the executor calls ``run_skill_command`` directly before the agent runs, and the script output is appended to the task prompt under "Skill execution results".
+- **Request-scoped transient grants**: SOP-declared skills work even when not pre-declared for the assigned agent in its YAML formation. The executor registers transient grants via ``skill_manager.grant_request_skills`` before workflow execution and revokes them in ``finally``.
+- **Script resolution**: ``_resolve_skill_command`` maps ``script.py`` -> ``python3 scripts/script.py``, ``script.sh`` -> ``bash scripts/script.sh``, ``script.js`` -> ``node scripts/script.js``; if no extension is given, the stem is matched against existing ``scripts/*`` entries.
+
+Files touched:
+- ``datatypes/workflow.py`` -- ``SkillRef`` model added to ``SubTask.required_skills``
+- ``skills/skill_manager.py`` -- request grant registry with ``grant_request_skills`` / ``revoke_request_skills``
+- ``agents/skill_dispatch.py`` -- ``run_skill_command`` extracted as shared helper
+- ``workflow/decomposer.py`` -- ``_SOP_SKILL_RE`` regex, skill extraction in both step parsers
+- ``workflow/executor.py`` -- activation / run injection in ``_execute_task_with_agent``, grant lifecycle in ``_execute_workflow_internal``
+- ``agents/agent.py`` -- ``_current_request_id`` tracked, passed to skill tool builders
+- ``overlord/overlord.py`` -- ``skill_manager`` passed to ``TaskDecomposer``, ``overlord`` wired into executor
+- ``prompts/sop_template_mode.md`` / ``sop_guide_mode.md`` -- directive documentation updated
+- ``tests/unit/test_sop_skill_directive.py`` -- 13 unit tests for parsing, dedup, grants, script resolution
+
+### E2E: new skill-directive activation test
+
+- ``e2e/tests/21_skills/test_21b4_sop_skill_directive_activation.py`` -- standalone E2E test that loads a formation with a ``test-skill`` and a ``skill-activation-test`` SOP, invokes it via ``overlord.chat()``, and asserts deterministic activation, skill content injection, and clean shutdown.
+
+### E2E: update deprecated Gemini model
+
+All E2E formation YAMLs referencing ``google/gemini-2.0-flash`` (shut down by Google)
+now use the stable successor ``google/gemini-2.5-flash``. This fixes formation-loading
+404 errors in tests that depend on vision/video model declarations.
+
+### Dependency minimums updated to latest compatible releases
+
+65 direct dependency minimums in ``pyproject.toml`` raised to the newest
+resolvable versions after ``uv lock --upgrade``. Notable bumps:
+- ``mcp>=1.27.2`` (was 1.26.x)
+- ``fastmcp>=3.4.2`` (was 3.2.x)
+- ``numpy>=2.2.6`` (was 1.24.x)
+- ``pandas>=2.3.3`` (was 2.0.x)
+
 ## v0.20260508.0
 
 ### Fix: scheduler firing recursion — overlord re-classified delivery as new schedule request

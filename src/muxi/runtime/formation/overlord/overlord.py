@@ -645,6 +645,7 @@ class Overlord:
         self.workflow_executor = ResilientWorkflowExecutor(
             agent_registry=self.agents, config=self.workflow_config
         )
+        self.workflow_executor.overlord = self
         self.progress_tracker = ProgressTracker()
 
         # Initialize workflow manager for centralized workflow tracking
@@ -786,7 +787,10 @@ class Overlord:
 
         # Initialize TaskDecomposer now that MCP service is available
         self.task_decomposer = TaskDecomposer(
-            llm=None, agent_registry=self.agents, mcp_service=self.mcp_service  # Will be set later
+            llm=None,
+            agent_registry=self.agents,
+            mcp_service=self.mcp_service,
+            skill_manager=getattr(self, "skill_manager", None),
         )
 
         # Initialize agent tracking for delayed external registration

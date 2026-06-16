@@ -83,6 +83,49 @@ async def handle_activate_skill(
     }
 
 
+async def run_skill_command(
+    skill_manager: Any,
+    rce: Any,
+    skill_name: str,
+    command: str,
+) -> Dict[str, Any]:
+    """Execute a skill command via RCE without streaming/observability coupling.
+
+    Returns a dict shaped for both handle_run_skill and the workflow executor.
+    """
+    if skill_name not in skill_manager.skills:
+        return {"status": "error", "error": f"Skill '{skill_name}' not found."}
+
+    metadata = skill_manager.skills[skill_name]
+    content_hash = skill_manager.get_skill_hash(skill_name)
+
+    await rce.ensure_cached(skill_name, metadata.base_dir, content_hash)
+
+    skill_env = await skill_manager.resolve_skill_env(skill_name)
+    result = await rce.run_skill(skill_name, command, timeout=60, env=skill_env or None)
+
+    response: Dict[str, Any] = {
+        "status": result.status,
+        "exit_code": result.exit_code,
+        "stdout": result.stdout,
+        "output": result.stdout,
+        "duration_ms": result.duration_ms,
+    }
+    structured_stdout = (
+        _parse_structured_stdout(result.stdout) if result.status == "success" else None
+    )
+    if structured_stdout not in (None, "", [], {}):
+        response["structuredContent"] = structured_stdout
+    if result.stderr:
+        response["stderr"] = result.stderr
+    if result.artifacts:
+        response["artifacts"] = [
+            {"name": a["name"], "mime": a["mime"], "size": a["size"]} for a in result.artifacts
+        ]
+        response["_artifacts_full"] = result.artifacts
+    return response
+
+
 async def handle_run_skill(
     agent_id: str,
     parameters: Dict[str, Any],
@@ -94,27 +137,18 @@ async def handle_run_skill(
     manager = overlord.skill_manager
     rce = overlord.rce_client
 
-    if skill_name not in manager.skills:
-        return {"status": "error", "error": f"Skill '{skill_name}' not found."}
-
-    metadata = manager.skills[skill_name]
-    content_hash = manager.get_skill_hash(skill_name)
-
-    streaming.stream(
-        "progress",
-        f"Running skill '{skill_name}'...",
-        stage="skill_executing",
-        skill_name=skill_name,
-        command=command,
-        agent_name=agent_id,
-        skip_rephrase=True,
-    )
-
     try:
-        await rce.ensure_cached(skill_name, metadata.base_dir, content_hash)
+        streaming.stream(
+            "progress",
+            f"Running skill '{skill_name}'...",
+            stage="skill_executing",
+            skill_name=skill_name,
+            command=command,
+            agent_name=agent_id,
+            skip_rephrase=True,
+        )
 
-        skill_env = await manager.resolve_skill_env(skill_name)
-        result = await rce.run_skill(skill_name, command, timeout=60, env=skill_env or None)
+        response = await run_skill_command(manager, rce, skill_name, command)
 
         observability.observe(
             event_type=observability.ConversationEvents.AGENT_MESSAGE_PROCESSING,
@@ -123,33 +157,14 @@ async def handle_run_skill(
                 "agent_id": agent_id,
                 "skill_name": skill_name,
                 "command": command,
-                "status": result.status,
-                "exit_code": result.exit_code,
-                "duration_ms": result.duration_ms,
-                "artifact_count": len(result.artifacts),
+                "status": response.get("status"),
+                "exit_code": response.get("exit_code"),
+                "duration_ms": response.get("duration_ms"),
+                "artifact_count": len(response.get("artifacts", [])),
             },
-            description=f"Skill '{skill_name}' executed: {result.status}",
+            description=f"Skill '{skill_name}' executed: {response.get('status')}",
         )
 
-        response: Dict[str, Any] = {
-            "status": result.status,
-            "exit_code": result.exit_code,
-            "stdout": result.stdout,
-            "output": result.stdout,
-            "duration_ms": result.duration_ms,
-        }
-        structured_stdout = (
-            _parse_structured_stdout(result.stdout) if result.status == "success" else None
-        )
-        if structured_stdout not in (None, "", [], {}):
-            response["structuredContent"] = structured_stdout
-        if result.stderr:
-            response["stderr"] = result.stderr
-        if result.artifacts:
-            response["artifacts"] = [
-                {"name": a["name"], "mime": a["mime"], "size": a["size"]} for a in result.artifacts
-            ]
-            response["_artifacts_full"] = result.artifacts
         return response
 
     except Exception as e:
