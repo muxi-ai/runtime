@@ -10,6 +10,8 @@ REQUIREMENTS:
 - Every step in the SOP must become a task in your workflow
 - Maintain the exact order of operations specified in the SOP
 - [agent:name] directives are MANDATORY - route to the specified agent
+- [skill:name] directives activate a skill for the step's agent (deterministic, no LLM judgment needed)
+- [skill:name/script] directives activate AND run a named script from the skill's scripts/ directory
 - [critical] steps CANNOT be optimized away
 
 Your task descriptions must be COMPLETE and SELF-CONTAINED so agents can execute them without additional context.

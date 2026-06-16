@@ -75,6 +75,17 @@ class TaskOutput(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
 
+class SkillRef(BaseModel):
+    """Reference to a skill that should be activated (and optionally run) for a task."""
+
+    name: str = Field(..., min_length=1, description="Skill name to activate")
+    script: Optional[str] = Field(
+        default=None, description="Optional scripts/ file to run after activation"
+    )
+
+    model_config = ConfigDict(extra="forbid")
+
+
 class SubTask(BaseModel):
     """Individual task within a workflow"""
 
@@ -98,6 +109,10 @@ class SubTask(BaseModel):
         default=None, ge=0.0, le=100.0, description="Task progress percentage"
     )
     error_message: Optional[str] = Field(default=None, description="Error message if task failed")
+    required_skills: List[SkillRef] = Field(
+        default_factory=list,
+        description="Skills to activate (and optionally run) for this task",
+    )
 
     @field_validator("id")
     @classmethod

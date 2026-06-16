@@ -4,6 +4,7 @@ from typing import Any, Dict, List, Optional, Tuple
 from ...datatypes.workflow import (
     ApprovalStatus,
     RequestAnalysis,
+    SkillRef,
     SubTask,
     TaskStatus,
     Workflow,
@@ -26,7 +27,11 @@ class TaskDecomposer:
     """
 
     def __init__(
-        self, llm: Optional[LLM] = None, agent_registry: Optional[Dict] = None, mcp_service=None
+        self,
+        llm: Optional[LLM] = None,
+        agent_registry: Optional[Dict] = None,
+        mcp_service=None,
+        skill_manager=None,
     ):
         """
         Initialize the task decomposer.
@@ -35,10 +40,12 @@ class TaskDecomposer:
             llm: Optional LLM for intelligent decomposition. Falls back to heuristics if None.
             agent_registry: Registry of available agents with their capabilities
             mcp_service: MCP service for discovering available tools
+            skill_manager: SkillManager for discovering available skills
         """
         self.llm = llm
         self.agent_registry = agent_registry or {}
         self.mcp_service = mcp_service
+        self.skill_manager = skill_manager
 
     async def decompose_request(
         self,
@@ -514,6 +521,13 @@ Analysis Results:
             except Exception:
                 # If MCP introspection fails, continue without it
                 pass
+
+        # Get skill capabilities
+        if self.skill_manager and self.skill_manager.skills:
+            info_parts.append("**Available Skills:**")
+            for name, skill in self.skill_manager.skills.items():
+                info_parts.append(f"- **{skill.name}**: {skill.description}")
+            info_parts.append("")
 
         # Add dynamic guidance for task mapping based on available capabilities
         info_parts.append("**Task Mapping Guidelines:**")
@@ -1139,6 +1153,7 @@ Would you like me to proceed with this plan?
     # Compiled regexes for the deterministic SOP parser.
     _SOP_AGENT_RE = re.compile(r"\[agent:([^\]]+)\]", re.IGNORECASE)
     _SOP_MCP_RE = re.compile(r"\[mcp:([^\]]+)\]", re.IGNORECASE)
+    _SOP_SKILL_RE = re.compile(r"\[skill:([^\]]+)\]", re.IGNORECASE)
     _SOP_PARALLEL_RE = re.compile(r"\[parallel\]", re.IGNORECASE)
     _SOP_DIRECTIVE_RE = re.compile(r"\[[^\]]+\]")
     # Numbered list item: "N. rest of line"
@@ -1220,6 +1235,10 @@ Would you like me to proceed with this plan?
                 estimated_complexity=3.0,
                 status=TaskStatus.PENDING,
                 assigned_agent_id=step["assigned_agent"],
+                required_skills=[
+                    SkillRef(name=s["name"], script=s["script"])
+                    for s in step.get("skills", [])
+                ],
             )
             task_id_list.append(task_id)
 
@@ -1297,6 +1316,18 @@ Would you like me to proceed with this plan?
                 {m2.group(1).split("/")[0].strip() for m2 in self._SOP_MCP_RE.finditer(body)}
             )
 
+            # Skills: name before '/', optional script after '/'
+            skills = []
+            seen_skills = set()
+            for m2 in self._SOP_SKILL_RE.finditer(title_raw + "\n" + body):
+                raw = m2.group(1).strip()
+                name, _, script = raw.partition("/")
+                name, script = name.strip(), script.strip() or None
+                key = (name, script)
+                if name and key not in seen_skills:
+                    seen_skills.add(key)
+                    skills.append({"name": name, "script": script})
+
             is_parallel = bool(self._SOP_PARALLEL_RE.search(combined))
 
             # Clean title: strip ** bold markers and all [directive] tags
@@ -1315,6 +1346,7 @@ Would you like me to proceed with this plan?
                     "description": full_desc,
                     "assigned_agent": assigned_agent,
                     "mcp_tools": mcp_tools,
+                    "skills": skills,
                     "is_parallel": is_parallel,
                 }
             )
@@ -1358,6 +1390,16 @@ Would you like me to proceed with this plan?
             mcp_tools = list(
                 {m2.group(1).split("/")[0].strip() for m2 in self._SOP_MCP_RE.finditer(body)}
             )
+            skills = []
+            seen_skills = set()
+            for m2 in self._SOP_SKILL_RE.finditer(combined):
+                raw = m2.group(1).strip()
+                name, _, script = raw.partition("/")
+                name, script = name.strip(), script.strip() or None
+                key = (name, script)
+                if name and key not in seen_skills:
+                    seen_skills.add(key)
+                    skills.append({"name": name, "script": script})
             is_parallel = bool(self._SOP_PARALLEL_RE.search(combined))
 
             # Strip directives from title too — they are routing metadata, not task instructions
@@ -1376,6 +1418,7 @@ Would you like me to proceed with this plan?
                     "description": full_desc,
                     "assigned_agent": assigned_agent,
                     "mcp_tools": mcp_tools,
+                    "skills": skills,
                     "is_parallel": is_parallel,
                 }
             )

@@ -1310,6 +1310,7 @@ class Agent:
 
         # Store session_id for skill activation scoping
         self._current_session_id = session_id or "default"
+        self._current_request_id = request_id
 
         # Reset A2A attempt counter for each new request to prevent cascading failures
         self._a2a_attempt_count = 0
@@ -1542,15 +1543,18 @@ class Agent:
                     and hasattr(self.overlord, "skill_manager")
                     and self.overlord.skill_manager
                 ):
+                    request_id = getattr(self, "_current_request_id", None)
                     skill_tool = self.overlord.skill_manager.build_activate_skill_tool(
-                        self.agent_id
+                        self.agent_id, request_id=request_id
                     )
                     if skill_tool:
                         tools.append(skill_tool)
 
                     # Add run_skill tool if RCE client is available and skills have scripts
                     if hasattr(self.overlord, "rce_client") and self.overlord.rce_client:
-                        run_tool = self.overlord.skill_manager.build_run_skill_tool(self.agent_id)
+                        run_tool = self.overlord.skill_manager.build_run_skill_tool(
+                            self.agent_id, request_id=request_id
+                        )
                         if run_tool:
                             tools.append(run_tool)
 
