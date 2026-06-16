@@ -1,0 +1,7 @@
+id: test-agent
+name: Test Agent
+role: general
+description: "A test agent for SOP skill directive validation"
+system_message: "You are a test agent. Follow instructions precisely."
+specialties:
+  - "General execution"

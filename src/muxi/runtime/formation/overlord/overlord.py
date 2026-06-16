@@ -645,6 +645,7 @@ class Overlord:
         self.workflow_executor = ResilientWorkflowExecutor(
             agent_registry=self.agents, config=self.workflow_config
         )
+        self.workflow_executor.overlord = self
         self.progress_tracker = ProgressTracker()
 
         # Initialize workflow manager for centralized workflow tracking
