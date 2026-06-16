@@ -425,6 +425,18 @@ class WorkflowExecutor:
         # Validate and initialize workflow
         self._validate_and_initialize_workflow(workflow, context)
 
+        # Register transient skill grants for streaming workflows
+        skill_manager = getattr(self.overlord, "skill_manager", None) if self.overlord else None
+        request_id = (context or {}).get("request_id")
+        if skill_manager and request_id:
+            for task in workflow.tasks.values():
+                if task.required_skills and task.assigned_agent_id:
+                    skill_manager.grant_request_skills(
+                        request_id,
+                        task.assigned_agent_id,
+                        [ref.name for ref in task.required_skills],
+                    )
+
         try:
             # Build execution phases
             phases = build_execution_phases(workflow)
@@ -512,6 +524,10 @@ class WorkflowExecutor:
             # Clean up
             if workflow.id in self.active_workflows:
                 del self.active_workflows[workflow.id]
+
+            # Revoke transient skill grants
+            if skill_manager and request_id:
+                skill_manager.revoke_request_skills(request_id)
 
         return workflow
 
@@ -1529,25 +1545,6 @@ class WorkflowExecutor:
                     "metrics": {"artifact_count": len(artifacts)},
                 }
 
-            # Extract content from muxi.runtimeResponse
-            response_content = response.content if hasattr(response, "content") else str(response)
-
-            # Extract artifacts if present
-            artifacts = []
-            if hasattr(response, "artifacts") and response.artifacts:
-                artifacts = response.artifacts
-
-            # Parse response into structured outputs
-            outputs = self._parse_task_response(response_content, task)
-
-            # Add artifacts to outputs if present
-            if artifacts:
-                outputs["artifacts"] = {
-                    "result": artifacts,
-                    "status": "success",
-                    "metrics": {"artifact_count": len(artifacts)},
-                }
-
             return TaskResult(
                 task_id=task.id,
                 agent_id=agent.agent_id,
@@ -2359,5 +2356,7 @@ def _resolve_skill_command(skill_manager, name: str, script: str) -> Optional[st
     )
     if not match:
         return None
-    interp = {".py": "python3", ".sh": "bash", ".js": "node"}.get(Path(match).suffix, "")
-    return f"{interp} {match}".strip()
+    interp = {".py": "python3", ".sh": "bash", ".js": "node"}.get(Path(match).suffix)
+    if interp is None:
+        return None
+    return f"{interp} {match}"
