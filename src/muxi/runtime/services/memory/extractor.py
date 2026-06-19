@@ -35,6 +35,7 @@ import time
 from typing import Any, Set
 
 from ...utils.fastjson import json
+from ...utils.sensitive_terms import SENSITIVE_KEY_TERMS
 from .. import observability
 
 
@@ -93,18 +94,7 @@ class MemoryExtractor:
         self.similarity_threshold = similarity_threshold
 
         # Add default privacy settings
-        self._sensitive_key_patterns = {
-            "password",
-            "social_security",
-            "ssn",
-            "credit_card",
-            "bank_account",
-            "passport",
-            "license",
-            "secret",
-            "private",
-            "confidential",
-        }
+        self._sensitive_key_patterns = SENSITIVE_KEY_TERMS
 
     async def process_conversation_turn(
         self, user_message, agent_response, user_id, message_count=1

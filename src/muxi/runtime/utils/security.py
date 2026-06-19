@@ -8,6 +8,34 @@ before logging, streaming, or other output operations.
 import re
 from typing import Optional
 
+from .sensitive_terms import SENSITIVE_PREVIEW_TERMS
+
+
+def _luhn_valid(digits: str) -> bool:
+    """Return True if a digit string passes the Luhn checksum."""
+    total = 0
+    parity = len(digits) % 2
+    for i, ch in enumerate(digits):
+        d = int(ch)
+        if i % 2 == parity:
+            d *= 2
+            if d > 9:
+                d -= 9
+        total += d
+    return total % 10 == 0
+
+
+def _redact_credit_cards(text: str) -> str:
+    """Mask digit sequences that are valid credit-card numbers (Luhn + length)."""
+
+    def _mask(match: re.Match) -> str:
+        digits = re.sub(r"\D", "", match.group(0))
+        if 13 <= len(digits) <= 19 and _luhn_valid(digits):
+            return "****-****-****-****"
+        return match.group(0)
+
+    return re.sub(r"\b\d[\d -]{11,21}\d\b", _mask, text)
+
 
 def redact_sensitive_content(text: Optional[str]) -> str:
     """
@@ -68,9 +96,6 @@ def redact_sensitive_content(text: Optional[str]) -> str:
         (r'(secret|client_secret)\s*[:=]\s*["\']?([^\s"\']{8,})["\']?', r"\1=****"),
     ]
 
-    # Credit card patterns (basic - matches 13-19 digit numbers with optional formatting)
-    credit_card_pattern = r"\b(?:\d{4}[-\s]?){3}\d{1,7}\b"
-
     # SSN pattern (US format: XXX-XX-XXXX or XXXXXXXXX)
     ssn_pattern = r"\b\d{3}-?\d{2}-?\d{4}\b"
 
@@ -96,8 +121,8 @@ def redact_sensitive_content(text: Optional[str]) -> str:
     for pattern, replacement in db_patterns:
         redacted = re.sub(pattern, replacement, redacted, flags=re.IGNORECASE)
 
-    # Credit cards
-    redacted = re.sub(credit_card_pattern, "****-****-****-****", redacted)
+    # Credit cards (Luhn-validated to avoid masking arbitrary long digit strings)
+    redacted = _redact_credit_cards(redacted)
 
     # SSNs
     redacted = re.sub(ssn_pattern, "***-**-****", redacted)
@@ -149,12 +174,9 @@ def sanitize_message_preview(message: Optional[str], max_length: int = 200) -> s
     sanitized = redact_sensitive_content(message_str)
 
     # Additional aggressive sanitization for streaming context
-    # Remove any remaining potential sensitive keywords
-    sensitive_words = [
-        r"\b(private|confidential|internal|secret|credential|token|key|password|auth)\b",
-    ]
-    for pattern in sensitive_words:
-        sanitized = re.sub(pattern, "[REDACTED]", sanitized, flags=re.IGNORECASE)
+    # Remove any remaining potential sensitive keywords (shared vocabulary)
+    keyword_pattern = r"\b(" + "|".join(sorted(map(re.escape, SENSITIVE_PREVIEW_TERMS))) + r")\b"
+    sanitized = re.sub(keyword_pattern, "[REDACTED]", sanitized, flags=re.IGNORECASE)
 
     # Remove any URLs that might contain sensitive parameters
     sanitized = re.sub(r"https?://[^\s]+", "[URL]", sanitized)

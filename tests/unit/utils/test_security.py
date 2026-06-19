@@ -64,9 +64,10 @@ class TestSanitizeMessagePreview:
 
     def test_redacts_credit_cards(self):
         """Test redaction of credit card numbers."""
-        result = sanitize_message_preview("Card: 4532-1234-5678-9012")
+        # Luhn-valid Visa test number
+        result = sanitize_message_preview("Card: 4111-1111-1111-1111")
         assert "****-****-****-****" in result
-        assert "4532" not in result
+        assert "4111" not in result
 
     def test_redacts_ssn(self):
         """Test redaction of SSN."""
@@ -178,3 +179,14 @@ class TestRedactSensitiveContent:
         text = "User said: Hello, can you help?"
         result = redact_sensitive_content(text)
         assert result == text
+
+    def test_credit_card_requires_luhn(self):
+        """Only Luhn-valid card numbers are masked; arbitrary digit runs are kept."""
+        # Luhn-valid card is masked
+        valid = redact_sensitive_content("Card 4111-1111-1111-1111 on file")
+        assert "****-****-****-****" in valid
+        assert "4111" not in valid
+
+        # 16-digit number that fails Luhn (e.g. an order id) is preserved
+        invalid = redact_sensitive_content("Order 1234567812345678 shipped")
+        assert "1234567812345678" in invalid
