@@ -14,9 +14,10 @@ class TestRedactDataRecursive:
     """The recursive redactor backs redaction for all event payloads."""
 
     def test_redacts_string_secret(self):
-        result = _redact_data_recursive("key sk-abcdefghijklmnopqrstuvwxyz012345")
+        fake_key = "sk-" + "z" * 30  # synthetic value; matches the sk- pattern
+        result = _redact_data_recursive(f"key {fake_key}")
         assert "sk-****" in result
-        assert "abcdefghijklmnop" not in result
+        assert fake_key not in result
 
     def test_redacts_nested_dict_and_list(self):
         data = {
