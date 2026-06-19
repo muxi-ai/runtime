@@ -2817,9 +2817,9 @@ class Formation:
                 )
             )
 
-            # Register the optional entity-redaction detector based on the
+            # Register the entity-redaction detector based on the
             # logging.redaction.entities flag (default on; regex-only fallback
-            # when the presidio extra is not installed).
+            # if the presidio NLP stack is unexpectedly unavailable).
             from ..utils.redaction import build_entity_detector, set_entity_detector
 
             redaction_config = (

@@ -1,10 +1,11 @@
 """
-Optional Presidio-backed entity detector for names, addresses, orgs, DOB, and
-financial identifiers.
+Presidio-backed entity detector for names, addresses, orgs, DOB, and financial
+identifiers.
 
-Shipped via the ``muxi[pii]`` extra. When the dependency is absent the factory
-returns ``None`` and the redaction path stays regex-only, so a base install
-never crashes and pays no per-call cost.
+Presidio is a core dependency and entity redaction is on by default (toggle via
+``logging.redaction.entities``). The factory and detector still degrade
+gracefully to regex-only if the NLP stack is somehow unavailable at runtime,
+mirroring how document chunking treats the same spaCy model.
 """
 
 import importlib.util
@@ -16,12 +17,11 @@ from .base import EntityDetector, Span
 
 logger = logging.getLogger(__name__)
 
-# v1 model choice: small English model (~12MB). Accepts weaker PERSON/ORG recall
-# than en_core_web_lg in exchange for a small footprint. Internal constant so a
-# future upgrade is a one-line change.
+# Model choice: small English model (~12MB), already required by document
+# chunking. Accepts weaker PERSON/ORG recall than en_core_web_lg in exchange for
+# a small footprint. Internal constant so a future upgrade is a one-line change.
 _DEFAULT_MODEL = "en_core_web_sm"
 _DEFAULT_MAX_CHARS = 4000
-_DEFAULT_THRESHOLD = 0.5
 
 # Presidio entity types we request, mapped to our masking labels.
 _LABEL_MAP = {
@@ -109,10 +109,12 @@ class PresidioDetector(EntityDetector):
 
 def build_entity_detector(enabled: bool = True) -> Optional[EntityDetector]:
     """
-    Build the entity detector when enabled and its dependency is installed.
+    Build the entity detector when enabled.
 
-    Returns None (regex-only) when disabled, or when ``presidio-analyzer`` is not
-    installed — logging a one-time warning in the latter case.
+    Returns None (regex-only) when disabled via logging.redaction.entities, or
+    when the presidio NLP stack is unexpectedly unavailable (it is a core
+    dependency) — logging a one-time warning in the latter case so the
+    degradation is visible.
     """
     global _warned_missing
     if not enabled:
@@ -120,9 +122,9 @@ def build_entity_detector(enabled: bool = True) -> Optional[EntityDetector]:
     if importlib.util.find_spec("presidio_analyzer") is None:
         if not _warned_missing:
             logger.warning(
-                "logging.redaction.entities is enabled but 'presidio-analyzer' is not "
-                "installed; falling back to regex-only redaction. "
-                "Install entity detection with: pip install muxi[pii]"
+                "Entity redaction is enabled but 'presidio-analyzer' is unavailable; "
+                "falling back to regex-only redaction. This is unexpected since presidio "
+                "is a core dependency - check the installation."
             )
             _warned_missing = True
         return None

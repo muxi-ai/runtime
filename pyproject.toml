@@ -82,6 +82,13 @@ dependencies = [
     "nltk>=3.9.4",  # Natural language processing for chunking
     "spacy>=3.8.14",  # Advanced NLP for semantic chunking (compatible with NumPy 2.x)
 
+    # PII entity redaction (names/addresses/orgs/DOB/financial) for logs,
+    # telemetry, previews, and the memory extractor gate. Reuses the spaCy
+    # en_core_web_sm model already required by document chunking. Toggle via
+    # logging.redaction.entities (default on).
+    "presidio-analyzer>=2.2",
+    "presidio-anonymizer>=2.2",
+
     # Image processing dependencies
     "Pillow>=12.2.0",  # PIL/Pillow for image processing
     "pdf2image>=1.17.0",  # Convert PDF pages to images (requires Poppler)
@@ -178,20 +185,6 @@ dependencies = [
 [project.optional-dependencies]
 kafka = [
     "kafka-python>=2.0.0",  # Kafka streaming support for observability
-]
-
-# PII entity redaction — adds NER-based detection of names, addresses, orgs,
-# DOB, and financial identifiers for logs/telemetry/previews and the memory
-# extractor gate. Optional: when absent, redaction stays regex-only (secrets
-# are always scrubbed). Activates the logging.redaction.entities flag.
-#   pip install 'muxi-runtime[pii]'
-# The small spaCy model (~12MB) ships as a resolvable wheel URL; alternatively
-# run `python -m spacy download en_core_web_sm` after install.
-pii = [
-    "presidio-analyzer>=2.2",
-    "presidio-anonymizer>=2.2",
-    "spacy>=3.7",
-    "en_core_web_sm @ https://github.com/explosion/spacy-models/releases/download/en_core_web_sm-3.7.1/en_core_web_sm-3.7.1-py3-none-any.whl",
 ]
 
 # ---------------------------------------------------------------------------

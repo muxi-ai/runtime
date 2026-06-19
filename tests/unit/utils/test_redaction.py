@@ -118,6 +118,45 @@ class TestPresidioLabelMapping:
         assert self._map("URL") is None
 
 
+def _live_detector_or_skip():
+    """Build the real Presidio detector, skipping if the NLP model is unavailable."""
+    import pytest
+
+    detector = build_entity_detector(enabled=True)
+    if detector is None:
+        pytest.skip("presidio-analyzer not installed")
+    # Probe once; skip when the spaCy model is not downloaded in this env.
+    if not detector.detect("Jane Doe works at Microsoft"):
+        pytest.skip("en_core_web_sm model not available")
+    return detector
+
+
+class TestPresidioLiveDetection:
+    """End-to-end checks against the real Presidio + spaCy stack."""
+
+    def teardown_method(self):
+        set_entity_detector(None)
+
+    def test_detects_person_org_location(self):
+        detector = _live_detector_or_skip()
+        set_entity_detector(detector)
+        out = redact_sensitive_content("Jane Doe works at Microsoft in Seattle")
+        assert "Jane Doe" not in out
+        assert "[PERSON_1]" in out
+        assert "[ORG_1]" in out
+        assert "[ADDRESS_1]" in out
+
+    def test_dob_context_masks_but_generic_date_survives(self):
+        detector = _live_detector_or_skip()
+        set_entity_detector(detector)
+        dob = redact_sensitive_content("He was born on January 5, 1990")
+        assert "[DOB_1]" in dob
+        assert "1990" not in dob
+
+        generic = redact_sensitive_content("The release shipped on January 5, 2026")
+        assert "2026" in generic  # non-DOB dates are left untouched
+
+
 class TestSecurityComposition:
     def teardown_method(self):
         set_entity_detector(None)
