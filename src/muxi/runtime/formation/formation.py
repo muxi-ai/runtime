@@ -2827,9 +2827,7 @@ class Formation:
                 if isinstance(self._logging_config, dict)
                 else {}
             )
-            set_entity_detector(
-                build_entity_detector(redaction_config.get("entities", True))
-            )
+            set_entity_detector(build_entity_detector(redaction_config.get("entities", True)))
 
             # Enable observability now that init is complete
             # This starts the flow of JSON observability events for runtime monitoring
