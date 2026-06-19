@@ -8,6 +8,7 @@ before logging, streaming, or other output operations.
 import re
 from typing import Optional
 
+from .redaction import get_entity_detector, mask_spans
 from .sensitive_terms import SENSITIVE_PREVIEW_TERMS
 
 
@@ -140,6 +141,12 @@ def redact_sensitive_content(text: Optional[str]) -> str:
 
     # Generic long hex strings that might be tokens (40+ chars)
     redacted = re.sub(r"\b[a-fA-F0-9]{40,}\b", "****", redacted)
+
+    # Optional second layer: entity detection (names, addresses, orgs, DOB,
+    # financial). No-op unless an entity detector is registered at startup.
+    detector = get_entity_detector()
+    if detector is not None and redacted:
+        redacted = mask_spans(redacted, detector.detect(redacted))
 
     return redacted
 

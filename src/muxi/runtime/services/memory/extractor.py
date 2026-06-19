@@ -35,6 +35,7 @@ import time
 from typing import Any, Set
 
 from ...utils.fastjson import json
+from ...utils.redaction import get_entity_detector
 from ...utils.sensitive_terms import SENSITIVE_KEY_TERMS
 from .. import observability
 
@@ -614,6 +615,11 @@ class MemoryExtractor:
                 if key_lower not in {"phone", "contact", "mobile"}:
                     return True
 
+            # Entity detection (names, addresses, orgs, DOB, financial) when enabled
+            detector = get_entity_detector()
+            if detector is not None and detector.detect(value):
+                return True
+
         return False
 
     def _should_update_existing(self, key, new_value, existing_value, importance):
@@ -667,6 +673,11 @@ class MemoryExtractor:
         import re
 
         if re.search(r"\b\d{3}-\d{2}-\d{4}\b", sentence):
+            return True
+
+        # Entity detection (names, addresses, orgs, DOB, financial) when enabled
+        detector = get_entity_detector()
+        if detector is not None and detector.detect(sentence):
             return True
 
         return False
