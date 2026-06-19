@@ -169,6 +169,7 @@ def observe(
     level: EventLevel = EventLevel.INFO,
     data: Optional[Dict[str, Any]] = None,
     description: str = "",
+    skip_redaction: bool = False,
 ) -> None:
     """
     Emit an observability event (non-blocking).
@@ -183,6 +184,9 @@ def observe(
         level: Event level (defaults to INFO)
         data: Additional event data
         description: Human-readable description
+        skip_redaction: When True, emit raw data without redaction. Use only for
+            audited, non-sensitive events where raw values are required. Redaction
+            is applied to every event by default.
     """
     global _enabled
 
@@ -198,26 +202,16 @@ def observe(
         if not configured_logger:
             return
 
-        # Conditionally redact PII based on event type
-        # Only redact for user-facing events (conversation, errors, API, user-related)
-        should_redact = False
-        if isinstance(event_type, (ConversationEvents, ErrorEvents, APIEvents)):
-            should_redact = True
-        elif isinstance(event_type, str):
-            # Check for user-related keywords in string event types
-            event_type_lower = event_type.lower()
-            if any(
-                keyword in event_type_lower
-                for keyword in ["user", "conversation", "message", "error", "api"]
-            ):
-                should_redact = True
-
-        if should_redact:
-            redacted_data = _redact_data_recursive(data or {})
-            redacted_description = _redact_data_recursive(description) if description else ""
-        else:
+        # Redact PII/secrets by default for every event. The previous event-type
+        # allow-list left non-user events (SystemEvents, MCP_*, WORKFLOW_*, ...)
+        # unredacted, which could leak secrets carried in their payloads. Callers
+        # may opt out via skip_redaction for audited, non-sensitive events.
+        if skip_redaction:
             redacted_data = data or {}
             redacted_description = description or ""
+        else:
+            redacted_data = _redact_data_recursive(data or {})
+            redacted_description = _redact_data_recursive(description) if description else ""
 
         # Get request context
         from .context import get_current_request_context

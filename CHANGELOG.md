@@ -2,6 +2,64 @@
 
 ## [unreleased]
 
+## v0.20260619.0
+
+### PII/secret redaction hardening + entity-based redaction
+
+Observability and memory now redact secrets and personal data far more
+thoroughly, and entity-based PII redaction (names, addresses, organizations,
+dates of birth, financial identifiers) is a built-in capability that is on by
+default.
+
+- **Redact by default in observability**: ``observe()`` now redacts every event
+  before emission instead of only a user-facing allow-list. Non-user events
+  (``SystemEvents``, ``MCP_*``, ``WORKFLOW_*``, ...) previously emitted raw
+  payloads that could carry secrets. A ``skip_redaction=True`` opt-out exists for
+  audited, non-sensitive events.
+- **Luhn-validated credit-card redaction**: 16-digit sequences are now masked
+  only when they pass the Luhn checksum, eliminating false positives on order
+  IDs, timestamps, and other long digit runs while still catching real cards.
+- **Unified sensitive vocabulary**: a shared ``utils/sensitive_terms.py`` holds
+  two term sets -- ``SENSITIVE_KEY_TERMS`` (substring-matched for dict keys) and
+  ``SENSITIVE_PREVIEW_TERMS`` (word-boundary-matched for free text) -- so the
+  observability redactor and the memory extractor stop drifting apart and avoid
+  ``"monkey"``-contains-``"key"`` style false positives.
+- **Entity-based PII redaction**: a pluggable detector layer
+  (``utils/redaction/``) sits after the regex layer. The default implementation
+  wraps Microsoft Presidio (spaCy ``en_core_web_sm``) and masks PERSON, ADDRESS,
+  ORG, date-of-birth (date entities only in birth context), and financial
+  identifiers using consistent indexed tokens (``[PERSON_1]``, ``[ORG_1]``, ...).
+  Generic dates and non-Luhn numbers are deliberately preserved.
+- **Core dependency, default on**: ``presidio-analyzer`` / ``presidio-anonymizer``
+  are now core dependencies (spaCy + ``en_core_web_sm`` were already core, used by
+  document chunking), so this is not an optional extra. A single
+  ``logging.redaction.entities`` flag (default ``true``) toggles the entity layer;
+  it is registered during formation load before observability is enabled. If the
+  model is unavailable the layer degrades gracefully to regex-only.
+- **Memory extractor gate**: the extractor reuses the shared vocabulary and the
+  entity detector so PII-bearing content is kept out of long-term memory.
+- **Lean image**: the lean ``Dockerfile`` now bakes ``en_core_web_sm`` into the
+  install prefix so default-on entity redaction works in the default image,
+  matching ``Dockerfile.production`` and the e2e image.
+
+Files touched:
+- ``utils/sensitive_terms.py`` -- NEW shared term sets
+- ``utils/security.py`` -- Luhn helpers, shared vocabulary, entity-layer composition
+- ``utils/redaction/{base,entity,__init__}.py`` -- NEW detector layer + Presidio impl
+- ``services/observability/__init__.py`` -- redact-by-default + ``skip_redaction``
+- ``services/memory/extractor.py`` -- shared vocabulary + entity-detector gate
+- ``formation/formation.py`` -- register detector from ``logging.redaction.entities``
+- ``formation/config/validation.py`` -- validate ``logging.redaction``
+- ``pyproject.toml`` -- presidio promoted to core dependencies
+- ``Dockerfile`` -- bake ``en_core_web_sm`` into the lean image
+- ``tests/unit/test_observability_redaction.py`` -- NEW redact-by-default tests
+- ``tests/unit/utils/test_redaction.py`` -- NEW detector/Presidio tests (incl. live)
+- ``tests/unit/utils/test_security.py`` -- Luhn coverage
+- ``e2e/tests/18_observability/test_18c_pii_redaction_observability.py`` -- NEW e2e:
+  pipeline redaction with the flag on and off
+- ``e2e/tests/18_observability/test_18d_pii_redaction_chat.py`` -- NEW e2e: real chat
+  turn never leaks secrets/PII into emitted events
+
 ## v0.20260616.0
 
 ## v0.20260616.0

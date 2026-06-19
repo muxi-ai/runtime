@@ -59,8 +59,11 @@ RUN ARCH=$(uname -m) && \
         echo "sqlite-vec: skipping recompilation for $ARCH"; \
     fi
 
-# Note: Skipping spaCy model download to save ~45MB
-# Can be downloaded at runtime if needed: python -m spacy download en_core_web_sm
+# Download the spaCy en_core_web_sm model (~45MB) into the install prefix so it
+# is copied into the runtime stage. Required by entity PII redaction (on by
+# default via logging.redaction.entities) and reused by semantic chunking.
+RUN uv pip install --prefix=/install --no-cache \
+    "en_core_web_sm @ https://github.com/explosion/spacy-models/releases/download/en_core_web_sm-3.8.0/en_core_web_sm-3.8.0-py3-none-any.whl"
 
 # ============================================================================
 # Stage 2: Runtime - Minimal runtime environment

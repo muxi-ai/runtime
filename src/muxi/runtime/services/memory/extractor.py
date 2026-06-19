@@ -35,6 +35,8 @@ import time
 from typing import Any, Set
 
 from ...utils.fastjson import json
+from ...utils.redaction import DEFAULT_ENTITY_THRESHOLD, get_entity_detector
+from ...utils.sensitive_terms import SENSITIVE_KEY_TERMS
 from .. import observability
 
 
@@ -93,18 +95,7 @@ class MemoryExtractor:
         self.similarity_threshold = similarity_threshold
 
         # Add default privacy settings
-        self._sensitive_key_patterns = {
-            "password",
-            "social_security",
-            "ssn",
-            "credit_card",
-            "bank_account",
-            "passport",
-            "license",
-            "secret",
-            "private",
-            "confidential",
-        }
+        self._sensitive_key_patterns = SENSITIVE_KEY_TERMS
 
     async def process_conversation_turn(
         self, user_message, agent_response, user_id, message_count=1
@@ -624,6 +615,15 @@ class MemoryExtractor:
                 if key_lower not in {"phone", "contact", "mobile"}:
                     return True
 
+            # Entity detection (names, addresses, orgs, DOB, financial) when enabled.
+            # Apply the same confidence threshold mask_spans uses so the memory
+            # gate and the observability redactor agree on what counts as PII.
+            detector = get_entity_detector()
+            if detector is not None and any(
+                span.score >= DEFAULT_ENTITY_THRESHOLD for span in detector.detect(value)
+            ):
+                return True
+
         return False
 
     def _should_update_existing(self, key, new_value, existing_value, importance):
@@ -677,6 +677,15 @@ class MemoryExtractor:
         import re
 
         if re.search(r"\b\d{3}-\d{2}-\d{4}\b", sentence):
+            return True
+
+        # Entity detection (names, addresses, orgs, DOB, financial) when enabled.
+        # Apply the same confidence threshold mask_spans uses so the memory gate
+        # and the observability redactor agree on what counts as PII.
+        detector = get_entity_detector()
+        if detector is not None and any(
+            span.score >= DEFAULT_ENTITY_THRESHOLD for span in detector.detect(sentence)
+        ):
             return True
 
         return False

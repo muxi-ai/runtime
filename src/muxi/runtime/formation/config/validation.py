@@ -1821,6 +1821,20 @@ class FormationValidator:
         if "conversation" in logging_config:
             self._validate_logging_conversation_config(logging_config["conversation"])
 
+        # Validate redaction config (optional)
+        if "redaction" in logging_config:
+            self._validate_logging_redaction_config(logging_config["redaction"])
+
+    def _validate_logging_redaction_config(self, redaction_config: Dict[str, Any]) -> None:
+        """Validate logging.redaction configuration."""
+        if not isinstance(redaction_config, dict):
+            self.result.add_error("Logging 'redaction' must be a dictionary")
+            return
+
+        # Validate entities toggle (optional, defaults to True)
+        if "entities" in redaction_config and not isinstance(redaction_config["entities"], bool):
+            self.result.add_error("Logging redaction 'entities' must be a boolean")
+
     def _validate_logging_system_config(self, system_config: Dict[str, Any]) -> None:
         """Validate logging.system configuration."""
         if not isinstance(system_config, dict):

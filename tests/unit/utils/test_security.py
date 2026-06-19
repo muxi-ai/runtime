@@ -64,9 +64,10 @@ class TestSanitizeMessagePreview:
 
     def test_redacts_credit_cards(self):
         """Test redaction of credit card numbers."""
-        result = sanitize_message_preview("Card: 4532-1234-5678-9012")
+        # Luhn-valid Visa test number
+        result = sanitize_message_preview("Card: 4111-1111-1111-1111")
         assert "****-****-****-****" in result
-        assert "4532" not in result
+        assert "4111" not in result
 
     def test_redacts_ssn(self):
         """Test redaction of SSN."""
@@ -178,3 +179,27 @@ class TestRedactSensitiveContent:
         text = "User said: Hello, can you help?"
         result = redact_sensitive_content(text)
         assert result == text
+
+    def test_credit_card_requires_luhn(self):
+        """Only Luhn-valid card numbers are masked; arbitrary digit runs are kept."""
+        # Luhn-valid card is masked
+        valid = redact_sensitive_content("Card 4111-1111-1111-1111 on file")
+        assert "****-****-****-****" in valid
+        assert "4111" not in valid
+
+        # 16-digit number that fails Luhn (e.g. an order id) is preserved
+        invalid = redact_sensitive_content("Order 1234567812345678 shipped")
+        assert "1234567812345678" in invalid
+
+    def test_credit_card_placeholder_is_length_accurate(self):
+        """Placeholder uses one '****' group per 4 digits, not a fixed 16-digit block."""
+        from muxi.runtime.utils.security import _luhn_valid
+
+        base = "402400000000000000"  # 18 digits; complete to a Luhn-valid 19-digit card
+        card19 = next(base + c for c in "0123456789" if _luhn_valid(base + c))
+        assert len(card19) == 19
+
+        result = redact_sensitive_content(f"Card {card19} stored")
+        assert card19 not in result
+        # 19 digits -> ceil(19/4) == 5 masked groups
+        assert "****-****-****-****-****" in result

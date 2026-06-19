@@ -2817,6 +2817,18 @@ class Formation:
                 )
             )
 
+            # Register the entity-redaction detector based on the
+            # logging.redaction.entities flag (default on; regex-only fallback
+            # if the presidio NLP stack is unexpectedly unavailable).
+            from ..utils.redaction import build_entity_detector, set_entity_detector
+
+            redaction_config = (
+                self._logging_config.get("redaction", {})
+                if isinstance(self._logging_config, dict)
+                else {}
+            )
+            set_entity_detector(build_entity_detector(redaction_config.get("entities", True)))
+
             # Enable observability now that init is complete
             # This starts the flow of JSON observability events for runtime monitoring
             observability.enable()
