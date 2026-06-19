@@ -86,6 +86,63 @@ class TestBuildEntityDetector:
         if importlib.util.find_spec("presidio_analyzer") is None:
             assert build_entity_detector(enabled=True) is None
 
+    def test_build_failure_is_cached_and_detect_degrades(self, monkeypatch):
+        """A failed engine build is memoized so detect() stops retrying."""
+        import importlib.util
+
+        import pytest
+
+        if importlib.util.find_spec("presidio_analyzer") is None:
+            pytest.skip("presidio-analyzer not installed")
+
+        import presidio_analyzer.nlp_engine as ne
+
+        from muxi.runtime.utils.redaction.entity import _BUILD_FAILED, PresidioDetector
+
+        build_calls = {"n": 0}
+
+        class _BoomProvider:
+            def __init__(self, *args, **kwargs):
+                pass
+
+            def create_engine(self):
+                build_calls["n"] += 1
+                raise RuntimeError("simulated engine build failure")
+
+        # Provider is imported inside _get_analyzer, so patching the module attr works.
+        monkeypatch.setattr(ne, "NlpEngineProvider", _BoomProvider)
+
+        detector = PresidioDetector(model="probe_fail_model")
+        key = (frozenset(detector._languages), detector._model)
+        PresidioDetector._analyzers.pop(key, None)
+
+        # First call attempts the build, fails, and caches the sentinel.
+        assert PresidioDetector._get_analyzer(detector._languages, detector._model) is None
+        assert PresidioDetector._analyzers[key] is _BUILD_FAILED
+        # detect() degrades to [] without raising and without rebuilding.
+        assert detector.detect("Jane Doe at Microsoft") == []
+        assert detector.detect("another message") == []
+        # The expensive build was attempted exactly once.
+        assert build_calls["n"] == 1
+        PresidioDetector._analyzers.pop(key, None)
+
+    def test_probe_returns_none_when_model_unloadable(self, monkeypatch):
+        """build_entity_detector returns None (regex-only) if the model won't load."""
+        import importlib.util
+
+        import pytest
+
+        if importlib.util.find_spec("presidio_analyzer") is None:
+            pytest.skip("presidio-analyzer not installed")
+
+        import muxi.runtime.utils.redaction.entity as ent
+
+        monkeypatch.setattr(
+            ent.PresidioDetector, "_get_analyzer", classmethod(lambda cls, langs, model: None)
+        )
+        monkeypatch.setattr(ent, "_warned_missing", False)
+        assert ent.build_entity_detector(enabled=True) is None
+
 
 class TestPresidioLabelMapping:
     """The label mapping / DOB filtering is pure logic, testable without presidio."""

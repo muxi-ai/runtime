@@ -38,6 +38,10 @@ _DOB_CONTEXT = ("born", "dob", "date of birth", "birthday", "birth date")
 
 _warned_missing = False
 
+# Cached in _analyzers when an engine build fails, so detect() stops retrying the
+# expensive NLP init on every event for the rest of the process lifetime.
+_BUILD_FAILED = object()
+
 
 class PresidioDetector(EntityDetector):
     """Detects entities via a lazily-loaded, process-wide Presidio analyzer."""
@@ -59,29 +63,42 @@ class PresidioDetector(EntityDetector):
 
     @classmethod
     def _get_analyzer(cls, languages: Sequence[str], model: str):
-        key = (frozenset(languages), model)
-        analyzer = cls._analyzers.get(key)
-        if analyzer is None:
-            with cls._analyzer_lock:
-                analyzer = cls._analyzers.get(key)
-                if analyzer is None:
-                    from presidio_analyzer import AnalyzerEngine
-                    from presidio_analyzer.nlp_engine import NlpEngineProvider
+        """Return a cached analyzer, or None if the engine could not be built.
 
-                    provider = NlpEngineProvider(
-                        nlp_configuration={
-                            "nlp_engine_name": "spacy",
-                            "models": [
-                                {"lang_code": lang, "model_name": model} for lang in languages
-                            ],
-                        }
-                    )
-                    analyzer = AnalyzerEngine(
-                        nlp_engine=provider.create_engine(),
-                        supported_languages=list(languages),
-                    )
-                    cls._analyzers[key] = analyzer
-        return analyzer
+        A failed build is memoized as a sentinel so a broken NLP environment does
+        not re-enter the lock and re-attempt the expensive init on every event.
+        """
+        key = (frozenset(languages), model)
+        cached = cls._analyzers.get(key)
+        if cached is None:
+            with cls._analyzer_lock:
+                cached = cls._analyzers.get(key)
+                if cached is None:
+                    try:
+                        from presidio_analyzer import AnalyzerEngine
+                        from presidio_analyzer.nlp_engine import NlpEngineProvider
+
+                        provider = NlpEngineProvider(
+                            nlp_configuration={
+                                "nlp_engine_name": "spacy",
+                                "models": [
+                                    {"lang_code": lang, "model_name": model} for lang in languages
+                                ],
+                            }
+                        )
+                        cached = AnalyzerEngine(
+                            nlp_engine=provider.create_engine(),
+                            supported_languages=list(languages),
+                        )
+                    except Exception:
+                        logger.debug(
+                            "Presidio analyzer build failed for model '%s'; caching failure",
+                            model,
+                            exc_info=True,
+                        )
+                        cached = _BUILD_FAILED
+                    cls._analyzers[key] = cached
+        return None if cached is _BUILD_FAILED else cached
 
     def detect(self, text: str, language: str = "en") -> List[Span]:
         if not text:
@@ -93,8 +110,10 @@ class PresidioDetector(EntityDetector):
                 self._max_chars,
             )
             return []
+        analyzer = self._get_analyzer(self._languages, self._model)
+        if analyzer is None:
+            return []
         try:
-            analyzer = self._get_analyzer(self._languages, self._model)
             results = analyzer.analyze(text=text, language=language, entities=_REQUESTED_ENTITIES)
         except Exception:
             # Never let detection failures break the logging path.
@@ -128,6 +147,10 @@ def build_entity_detector(enabled: bool = True) -> Optional[EntityDetector]:
     when the presidio NLP stack is unexpectedly unavailable (it is a core
     dependency) — logging a one-time warning in the latter case so the
     degradation is visible.
+
+    The NLP engine is built eagerly here (a single probe) so a missing or corrupt
+    spaCy model degrades to regex-only once at startup, instead of failing on
+    every observability event under the redact-by-default policy.
     """
     global _warned_missing
     if not enabled:
@@ -141,4 +164,19 @@ def build_entity_detector(enabled: bool = True) -> Optional[EntityDetector]:
             )
             _warned_missing = True
         return None
-    return PresidioDetector()
+
+    detector = PresidioDetector()
+    # Force the engine build now; on failure the sentinel is cached and we return
+    # None so the hot path never re-attempts the load.
+    if PresidioDetector._get_analyzer(detector._languages, detector._model) is None:
+        if not _warned_missing:
+            logger.warning(
+                "Entity redaction is enabled but the spaCy model '%s' could not be loaded; "
+                "falling back to regex-only redaction. Install it with "
+                "'python -m spacy download %s'.",
+                detector._model,
+                detector._model,
+            )
+            _warned_missing = True
+        return None
+    return detector
