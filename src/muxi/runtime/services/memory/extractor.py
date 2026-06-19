@@ -35,7 +35,7 @@ import time
 from typing import Any, Set
 
 from ...utils.fastjson import json
-from ...utils.redaction import get_entity_detector
+from ...utils.redaction import DEFAULT_ENTITY_THRESHOLD, get_entity_detector
 from ...utils.sensitive_terms import SENSITIVE_KEY_TERMS
 from .. import observability
 
@@ -615,9 +615,13 @@ class MemoryExtractor:
                 if key_lower not in {"phone", "contact", "mobile"}:
                     return True
 
-            # Entity detection (names, addresses, orgs, DOB, financial) when enabled
+            # Entity detection (names, addresses, orgs, DOB, financial) when enabled.
+            # Apply the same confidence threshold mask_spans uses so the memory
+            # gate and the observability redactor agree on what counts as PII.
             detector = get_entity_detector()
-            if detector is not None and detector.detect(value):
+            if detector is not None and any(
+                span.score >= DEFAULT_ENTITY_THRESHOLD for span in detector.detect(value)
+            ):
                 return True
 
         return False
@@ -675,9 +679,13 @@ class MemoryExtractor:
         if re.search(r"\b\d{3}-\d{2}-\d{4}\b", sentence):
             return True
 
-        # Entity detection (names, addresses, orgs, DOB, financial) when enabled
+        # Entity detection (names, addresses, orgs, DOB, financial) when enabled.
+        # Apply the same confidence threshold mask_spans uses so the memory gate
+        # and the observability redactor agree on what counts as PII.
         detector = get_entity_detector()
-        if detector is not None and detector.detect(sentence):
+        if detector is not None and any(
+            span.score >= DEFAULT_ENTITY_THRESHOLD for span in detector.detect(sentence)
+        ):
             return True
 
         return False

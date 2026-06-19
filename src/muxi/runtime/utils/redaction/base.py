@@ -11,6 +11,11 @@ import threading
 from dataclasses import dataclass
 from typing import List, Optional, Protocol, runtime_checkable
 
+# Minimum confidence for a detected span to be treated as PII. Shared by the
+# masking path and the memory sensitivity gate so both layers agree on what
+# "contains PII" means.
+DEFAULT_ENTITY_THRESHOLD = 0.5
+
 
 @dataclass(frozen=True)
 class Span:
@@ -43,7 +48,7 @@ def _merge_spans(spans: List[Span], threshold: float) -> List[Span]:
     return result
 
 
-def mask_spans(text: str, spans: List[Span], threshold: float = 0.5) -> str:
+def mask_spans(text: str, spans: List[Span], threshold: float = DEFAULT_ENTITY_THRESHOLD) -> str:
     """
     Replace detected spans with consistent, label-aware indexed tokens.
 
@@ -91,4 +96,5 @@ def set_entity_detector(detector: Optional[EntityDetector]) -> None:
 
 def get_entity_detector() -> Optional[EntityDetector]:
     """Return the registered entity detector, or None when redaction is regex-only."""
-    return _entity_detector
+    with _registry_lock:
+        return _entity_detector

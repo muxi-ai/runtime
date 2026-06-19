@@ -1,6 +1,7 @@
 """Entity-based redaction layer (optional, opt-out via logging.redaction.entities)."""
 
 from .base import (
+    DEFAULT_ENTITY_THRESHOLD,
     EntityDetector,
     Span,
     get_entity_detector,
@@ -10,6 +11,7 @@ from .base import (
 from .entity import PresidioDetector, build_entity_detector
 
 __all__ = [
+    "DEFAULT_ENTITY_THRESHOLD",
     "EntityDetector",
     "Span",
     "get_entity_detector",
