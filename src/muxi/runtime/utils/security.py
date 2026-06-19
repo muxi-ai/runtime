@@ -32,7 +32,9 @@ def _redact_credit_cards(text: str) -> str:
     def _mask(match: re.Match) -> str:
         digits = re.sub(r"\D", "", match.group(0))
         if 13 <= len(digits) <= 19 and _luhn_valid(digits):
-            return "****-****-****-****"
+            # Length-accurate placeholder: one "****" group per 4 digits so a
+            # 15-digit Amex or 19-digit card is not misrepresented as 16-digit.
+            return "-".join("****" for _ in range((len(digits) + 3) // 4))
         return match.group(0)
 
     return re.sub(r"\b\d[\d -]{11,21}\d\b", _mask, text)

@@ -42,7 +42,9 @@ _warned_missing = False
 class PresidioDetector(EntityDetector):
     """Detects entities via a lazily-loaded, process-wide Presidio analyzer."""
 
-    _analyzer = None
+    # Analyzers are cached per (languages, model) so distinct configurations get
+    # distinct engines instead of silently reusing whichever was built first.
+    _analyzers: dict = {}
     _analyzer_lock = threading.Lock()
 
     def __init__(
@@ -57,9 +59,12 @@ class PresidioDetector(EntityDetector):
 
     @classmethod
     def _get_analyzer(cls, languages: Sequence[str], model: str):
-        if cls._analyzer is None:
+        key = (frozenset(languages), model)
+        analyzer = cls._analyzers.get(key)
+        if analyzer is None:
             with cls._analyzer_lock:
-                if cls._analyzer is None:
+                analyzer = cls._analyzers.get(key)
+                if analyzer is None:
                     from presidio_analyzer import AnalyzerEngine
                     from presidio_analyzer.nlp_engine import NlpEngineProvider
 
@@ -71,14 +76,22 @@ class PresidioDetector(EntityDetector):
                             ],
                         }
                     )
-                    cls._analyzer = AnalyzerEngine(
+                    analyzer = AnalyzerEngine(
                         nlp_engine=provider.create_engine(),
                         supported_languages=list(languages),
                     )
-        return cls._analyzer
+                    cls._analyzers[key] = analyzer
+        return analyzer
 
     def detect(self, text: str, language: str = "en") -> List[Span]:
-        if not text or len(text) > self._max_chars:
+        if not text:
+            return []
+        if len(text) > self._max_chars:
+            logger.debug(
+                "Entity detection skipped: text length %d exceeds max_chars=%d",
+                len(text),
+                self._max_chars,
+            )
             return []
         try:
             analyzer = self._get_analyzer(self._languages, self._model)

@@ -190,3 +190,16 @@ class TestRedactSensitiveContent:
         # 16-digit number that fails Luhn (e.g. an order id) is preserved
         invalid = redact_sensitive_content("Order 1234567812345678 shipped")
         assert "1234567812345678" in invalid
+
+    def test_credit_card_placeholder_is_length_accurate(self):
+        """Placeholder uses one '****' group per 4 digits, not a fixed 16-digit block."""
+        from muxi.runtime.utils.security import _luhn_valid
+
+        base = "402400000000000000"  # 18 digits; complete to a Luhn-valid 19-digit card
+        card19 = next(base + c for c in "0123456789" if _luhn_valid(base + c))
+        assert len(card19) == 19
+
+        result = redact_sensitive_content(f"Card {card19} stored")
+        assert card19 not in result
+        # 19 digits -> ceil(19/4) == 5 masked groups
+        assert "****-****-****-****-****" in result
