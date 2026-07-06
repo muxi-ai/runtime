@@ -1373,9 +1373,11 @@ def fifo_cleanup_task(buffer_memory: "WorkingMemory") -> None:
                 time.sleep(60)  # Wait a minute before retrying
 
     # daemon=True so the never-ending loop cannot block interpreter
-    # exit (unit tests, CLI scripts, graceful-shutdown paths)
+    # exit (unit tests, CLI scripts, graceful-shutdown paths). The
+    # instance id in the name keeps thread dumps attributable when
+    # several WorkingMemory instances are alive in one process.
     threading.Thread(
         target=_cleanup_loop,
-        name="muxi-buffer-fifo-cleanup",
+        name=f"muxi-buffer-fifo-cleanup-{id(buffer_memory):x}",
         daemon=True,
     ).start()
