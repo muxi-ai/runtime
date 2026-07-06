@@ -228,6 +228,68 @@ class TestPeriodicSummarization:
         totals = await service.run_periodic_summarization(FakeModel())
         assert totals["entries"] == 1
 
+    async def test_failed_digest_requeues_turns_for_next_run(self, service):
+        service.queue_turn("first", "ok", user_id="u1")
+        service.queue_turn("second", "ok", user_id="u1")
+
+        totals = await service.run_periodic_summarization(FakeModel(RuntimeError("LLM down")))
+        assert totals == {"entries": 0, "sources": 0, "lessons": 0}
+        # Failure must not lose the snapshot: both turns are back, in order.
+        assert [text for _, text in service._pending_turns["u1"]] == [
+            "User: first\nAssistant: ok",
+            "User: second\nAssistant: ok",
+        ]
+
+        # The next run digests the restored turns and clears the queue.
+        totals = await service.run_periodic_summarization(FakeModel())
+        assert totals == {"entries": 1, "sources": 2, "lessons": 1}
+        assert service._pending_turns == {}
+
+    async def test_requeue_prepends_before_turns_arriving_mid_run(self, service):
+        class QueueThenFail:
+            """Model that simulates a turn arriving while the digest fails."""
+
+            def __init__(self, target):
+                self.target = target
+
+            async def generate_text(self, prompt, caching=True):
+                self.target.queue_turn("late", "ok", user_id="u1")
+                raise RuntimeError("LLM down")
+
+        service.queue_turn("early", "ok", user_id="u1")
+        await service.run_periodic_summarization(QueueThenFail(service))
+        assert [text for _, text in service._pending_turns["u1"]] == [
+            "User: early\nAssistant: ok",
+            "User: late\nAssistant: ok",
+        ]
+
+    async def test_requeue_capped_under_persistent_failure(self, service):
+        class QueueManyThenFail:
+            """Model that simulates 10 turns arriving while the digest fails."""
+
+            def __init__(self, target):
+                self.target = target
+
+            async def generate_text(self, prompt, caching=True):
+                for index in range(10):
+                    self.target.queue_turn(f"new{index}", "ok", user_id="u1")
+                raise RuntimeError("LLM down")
+
+        for index in range(MAX_PENDING_TURNS_PER_USER):
+            service.queue_turn(f"old{index}", "ok", user_id="u1")
+
+        await service.run_periodic_summarization(QueueManyThenFail(service))
+
+        texts = [text for _, text in service._pending_turns["u1"]]
+        # Cap respected: drop-oldest, newest turns kept, order preserved.
+        assert len(texts) == MAX_PENDING_TURNS_PER_USER
+        assert texts[0] == "User: old10\nAssistant: ok"
+        assert texts[-1] == "User: new9\nAssistant: ok"
+
+        # A second failing run stays at the cap (no unbounded growth).
+        await service.run_periodic_summarization(FakeModel(RuntimeError("still down")))
+        assert len(service._pending_turns["u1"]) == MAX_PENDING_TURNS_PER_USER
+
     async def test_graph_failure_keeps_entry(self, service_with_graph, monkeypatch):
         async def broken(*args, **kwargs):
             raise RuntimeError("graph down")
@@ -446,6 +508,47 @@ class TestQuerySurface:
         await service.run_periodic_summarization(FakeModel())
         history = await service.get_history("u1")
         assert "sources" not in history[0]
+
+    async def test_history_sources_fetched_in_single_batched_query(self, service, monkeypatch):
+        from datetime import date
+
+        for day in (4, 5, 6):
+            entry = await service.storage.upsert_entry(
+                "u1", date(2026, 7, day), summary=f"Day {day}"
+            )
+            await service.storage.add_sources(
+                "u1",
+                entry["id"],
+                [{"source_type": "buffer_item", "source_id": f"{day}.0"}],
+            )
+
+        calls = []
+        original = service.storage.get_sources_for_logs
+
+        async def counting(log_ids):
+            calls.append(list(log_ids))
+            return await original(log_ids)
+
+        monkeypatch.setattr(service.storage, "get_sources_for_logs", counting)
+
+        history = await service.get_history("u1", include_sources=True)
+        assert len(history) == 3
+        # One batched IN query for all entries, never one per entry.
+        assert len(calls) == 1
+        assert len(calls[0]) == 3
+        assert [entry["sources"][0]["source_id"] for entry in history] == ["6.0", "5.0", "4.0"]
+
+    async def test_history_without_sources_skips_source_query(self, service, monkeypatch):
+        from datetime import date
+
+        await service.storage.upsert_entry("u1", date(2026, 7, 6), summary="Day 6")
+
+        async def must_not_be_called(log_ids):
+            raise AssertionError("get_sources_for_logs called without include_sources")
+
+        monkeypatch.setattr(service.storage, "get_sources_for_logs", must_not_be_called)
+        history = await service.get_history("u1")
+        assert len(history) == 1
 
     async def test_topological_sort_over_log_dag(self, service_with_graph):
         storage = service_with_graph.storage

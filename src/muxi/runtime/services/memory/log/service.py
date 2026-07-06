@@ -226,6 +226,10 @@ class CaptainsLogService:
                 totals["sources"] += stored["sources"]
                 totals["lessons"] += stored["lessons"]
             except Exception as e:
+                # A failed digest must not lose the snapshot: restore it
+                # ahead of any turns that arrived while the run was in
+                # flight so the next run digests them in order.
+                self._requeue_turns(user_id, turns)
                 observability.observe(
                     event_type=observability.ConversationEvents.MEMORY_CAPTAINS_LOG_FAILED,
                     level=observability.EventLevel.WARNING,
@@ -234,10 +238,41 @@ class CaptainsLogService:
                         "error": str(e),
                         "error_type": type(e).__name__,
                         "pass": "summarization",
+                        "requeued_turns": len(self._pending_turns.get(user_id, ())),
                     },
                     description=f"Captain's log summarization failed: {e}",
                 )
         return totals
+
+    def _requeue_turns(self, user_id: str, turns: List[Tuple[str, str]]) -> None:
+        """Restore a failed digest's turn snapshot for the next run.
+
+        The snapshot is prepended so ordering is preserved when new turns
+        arrived during the failed run. The combined queue stays capped at
+        MAX_PENDING_TURNS_PER_USER (drop-oldest, the deque's own policy)
+        so persistent failure cannot grow memory unboundedly; a WARNING is
+        emitted whenever the cap trims.
+        """
+        queue = self._pending_turns.setdefault(user_id, deque(maxlen=MAX_PENDING_TURNS_PER_USER))
+        combined = list(turns) + list(queue)
+        trimmed = len(combined) - MAX_PENDING_TURNS_PER_USER
+        if trimmed > 0:
+            observability.observe(
+                event_type=observability.ConversationEvents.MEMORY_CAPTAINS_LOG_FAILED,
+                level=observability.EventLevel.WARNING,
+                data={
+                    "user_id": user_id,
+                    "pass": "requeue",
+                    "trimmed_turns": trimmed,
+                    "kept_turns": MAX_PENDING_TURNS_PER_USER,
+                },
+                description=(
+                    f"Captain's log re-queue dropped {trimmed} oldest buffered turns "
+                    "(per-user cap reached after repeated digest failures)"
+                ),
+            )
+        queue.clear()
+        queue.extend(combined)  # deque maxlen keeps the newest turns
 
     async def _digest_user(
         self, user_id: str, turns: List[Tuple[str, str]], model
@@ -641,6 +676,13 @@ class CaptainsLogService:
             date_from=_parse_iso_date(date_from),
             date_to=_parse_iso_date(date_to),
         )
+        sources_by_log: Dict[int, List[Dict[str, Any]]] = {}
+        if include_sources and entries:
+            # One batched IN query for all entries instead of a round-trip
+            # per entry (up to the API's limit=100).
+            sources_by_log = await self.storage.get_sources_for_logs(
+                [entry["id"] for entry in entries]
+            )
         history = []
         for entry in entries:
             item = {
@@ -656,7 +698,7 @@ class CaptainsLogService:
             if include_sources:
                 item["sources"] = [
                     {"source_type": source["source_type"], "source_id": source["source_id"]}
-                    for source in await self.storage.get_sources(entry["id"])
+                    for source in sources_by_log.get(entry["id"], [])
                 ]
             history.append(item)
         return history

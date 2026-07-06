@@ -279,10 +279,14 @@ class NetworkXAlgorithms:
     async def topological_sort(self, *, user_id: str, dag: str = DAG_ENTITY_GRAPH) -> List[int]:
         # The sort itself is the shared lexicographic Kahn implementation
         # (see lexicographic_topological_sort) so both backends order
-        # identically by construction; only the edge fetch is per-backend.
+        # identically by construction; only the node/edge fetch is
+        # per-backend. The entity node set comes from storage independently
+        # of the edge set so isolated entities are ordered too (parity:
+        # the pgRouting backend fetches the same node set via SQL).
         if dag == DAG_ENTITY_GRAPH:
             graph = await self._get_graph(user_id)
-            return lexicographic_topological_sort(graph.nodes(), graph.edges())
+            nodes = await self._storage.iter_entity_ids(str(user_id))
+            return lexicographic_topological_sort(nodes, graph.edges())
         edges = await self._resolve_dag_edges(dag, str(user_id))
         return lexicographic_topological_sort((), edges)
 
@@ -446,27 +450,34 @@ class PgRoutingAlgorithms:
     async def topological_sort(self, *, user_id: str, dag: str = DAG_ENTITY_GRAPH) -> List[int]:
         # Deliberately NOT pgr_topologicalSort: it is a "proposed" pgRouting
         # function with no ordering guarantee, so its output cannot be
-        # pinned to the NetworkX backend's. The edge set is fetched with
-        # plain SQL and ordered by the shared lexicographic Kahn sort --
-        # identical results on both backends by construction, and O(V+E)
-        # on per-user graph sizes.
+        # pinned to the NetworkX backend's. The node and edge sets are
+        # fetched with plain SQL and ordered by the shared lexicographic
+        # Kahn sort -- identical results on both backends by construction,
+        # and O(V+E) on per-user graph sizes. The node set is fetched
+        # independently of the edge set (mirroring the NetworkX backend's
+        # storage node source) so isolated entities are ordered too.
         if dag == DAG_ENTITY_GRAPH:
-            query = text(
+            scope = {
+                "user_id": str(user_id),
+                "formation_id": self.formation_id,
+                "status": STATUS_ACTIVE,
+            }
+            nodes_query = text(
+                "SELECT e.id FROM kg_entities e "
+                "WHERE e.user_id = :user_id AND e.formation_id = :formation_id "
+                "AND e.status = :status"
+            )
+            edges_query = text(
                 "SELECT r.from_entity_id, r.to_entity_id FROM kg_relationships r "
                 "WHERE r.user_id = :user_id AND r.formation_id = :formation_id "
                 "AND r.status = :status"
             )
             async with self.db_manager.get_async_session() as session:
-                result = await session.execute(
-                    query,
-                    {
-                        "user_id": str(user_id),
-                        "formation_id": self.formation_id,
-                        "status": STATUS_ACTIVE,
-                    },
-                )
-                edges = [(int(row[0]), int(row[1])) for row in result.fetchall()]
-            return lexicographic_topological_sort((), edges)
+                node_rows = await session.execute(nodes_query, scope)
+                nodes = [int(row[0]) for row in node_rows.fetchall()]
+                edge_rows = await session.execute(edges_query, scope)
+                edges = [(int(row[0]), int(row[1])) for row in edge_rows.fetchall()]
+            return lexicographic_topological_sort(nodes, edges)
         provider = self._dag_edge_providers.get(dag)
         if provider is None:
             raise ValueError(f"Unknown DAG '{dag}': no edge provider registered")

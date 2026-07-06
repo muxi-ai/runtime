@@ -73,6 +73,44 @@ class TestEntityGraphSort:
         order = await algorithms.topological_sort(user_id="u1")
         assert order == [user["id"], automaze["id"], muxi["id"]]
 
+    async def test_isolated_entities_included(self, storage, algorithms):
+        """Entities without relationships must still appear in the order.
+
+        The node set comes from storage independently of the edge set --
+        the same contract the pgRouting backend implements with its nodes
+        query -- so isolated entities cannot vanish on either backend.
+        """
+        user, automaze, muxi = await self._seed_chain(storage)
+        isolated = await storage.upsert_entity("u1", "topic", "Isolated", confidence=0.9)
+        algorithms.invalidate("u1")
+
+        order = await algorithms.topological_sort(user_id="u1")
+        assert isolated["id"] in order
+        assert set(order) == {user["id"], automaze["id"], muxi["id"], isolated["id"]}
+        # Edge constraints still hold around the isolated node.
+        assert order.index(user["id"]) < order.index(automaze["id"]) < order.index(muxi["id"])
+
+    async def test_node_source_is_active_entities_only(self, storage, algorithms):
+        """The fetched node set is active entities, matching the edge filter."""
+        from sqlalchemy import text
+
+        from muxi.runtime.services.memory.graph.models import STATUS_SUPERSEDED
+
+        user, automaze, muxi = await self._seed_chain(storage)
+        isolated = await storage.upsert_entity("u1", "topic", "Isolated", confidence=0.9)
+        with storage.db_manager.engine.connect() as conn:
+            conn.execute(
+                text("UPDATE kg_entities SET status = :status WHERE id = :id"),
+                {"status": STATUS_SUPERSEDED, "id": isolated["id"]},
+            )
+            conn.commit()
+        algorithms.invalidate("u1")
+
+        assert isolated["id"] not in await storage.iter_entity_ids("u1")
+        order = await algorithms.topological_sort(user_id="u1")
+        assert isolated["id"] not in order
+        assert order == [user["id"], automaze["id"], muxi["id"]]
+
     async def test_cyclic_entity_graph_returns_empty(self, storage, algorithms):
         user, automaze, _ = await self._seed_chain(storage)
         await storage.upsert_relationship(

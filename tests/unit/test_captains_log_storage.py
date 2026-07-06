@@ -125,6 +125,29 @@ class TestSourceLineage:
         assert counts == {"added": 0, "skipped": 1, "rejected": 0}
         assert len(await storage.get_sources(entry["id"])) == 1
 
+    async def test_get_sources_for_logs_batched_grouping(self, storage):
+        first = await storage.upsert_entry("u1", YESTERDAY, summary="Old")
+        second = await storage.upsert_entry("u1", TODAY, summary="New")
+        await storage.add_sources(
+            "u1",
+            first["id"],
+            [
+                {"source_type": SOURCE_TYPE_BUFFER_ITEM, "source_id": "1.0"},
+                {"source_type": SOURCE_TYPE_BUFFER_ITEM, "source_id": "1.1"},
+            ],
+        )
+        await storage.add_sources(
+            "u1", second["id"], [{"source_type": SOURCE_TYPE_BUFFER_ITEM, "source_id": "2.0"}]
+        )
+
+        grouped = await storage.get_sources_for_logs([first["id"], second["id"], 999999])
+        assert set(grouped) == {first["id"], second["id"]}  # unknown ids absent
+        assert [s["source_id"] for s in grouped[first["id"]]] == ["1.0", "1.1"]
+        assert [s["source_id"] for s in grouped[second["id"]]] == ["2.0"]
+
+    async def test_get_sources_for_logs_empty_input(self, storage):
+        assert await storage.get_sources_for_logs([]) == {}
+
     async def test_invalid_sources_rejected(self, storage):
         entry = await storage.upsert_entry("u1", TODAY, summary="S")
         counts = await storage.add_sources(

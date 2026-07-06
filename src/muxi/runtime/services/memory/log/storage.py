@@ -204,15 +204,31 @@ class CaptainsLogStorage:
         return counts
 
     async def get_sources(self, log_id: int) -> List[Dict[str, Any]]:
-        """Return the source lineage rows for an entry, oldest first."""
+        """Return the source lineage rows for one entry, oldest first."""
+        grouped = await self.get_sources_for_logs([log_id])
+        return grouped.get(log_id, [])
+
+    async def get_sources_for_logs(self, log_ids) -> Dict[int, List[Dict[str, Any]]]:
+        """Return source lineage rows for many entries in one query.
+
+        Batched lookup for the history path so callers never issue one
+        round-trip per entry. Rows are grouped by log_id, oldest first;
+        entries without sources are absent from the result.
+        """
+        ids = list(log_ids)
+        if not ids:
+            return {}
         async with self.db_manager.get_async_session() as session:
             stmt = (
                 select(CaptainsLogSource)
-                .filter_by(log_id=log_id)
+                .filter(CaptainsLogSource.log_id.in_(ids))
                 .order_by(CaptainsLogSource.id.asc())
             )
             rows = (await session.execute(stmt)).scalars().all()
-            return [row.to_dict() for row in rows]
+            grouped: Dict[int, List[Dict[str, Any]]] = {}
+            for row in rows:
+                grouped.setdefault(row.log_id, []).append(row.to_dict())
+            return grouped
 
     async def iter_log_edges(self, user_id: str) -> List[Tuple[int, int]]:
         """
