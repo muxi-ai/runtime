@@ -661,10 +661,11 @@ class TestToolOverrideCascade:
             },
         )
         perms = perms_for(groups, "granting", "denying")
-        # Agent-level deny wins first; the cascade result is moot but must
-        # not include the denying group's (nonexistent) surface.
+        # Agent-level deny wins everywhere: is_allowed and effective_tools
+        # must agree, so a globally denied agent has an EMPTY tool surface
+        # even though another group grants it (review follow-up on #204).
         assert not perms.is_allowed("agents", "db-assistant")
-        assert perms.effective_tools("db-assistant", "db", INHERITED) == set(INHERITED)
+        assert perms.effective_tools("db-assistant", "db", INHERITED) == set()
 
 
 @pytest.fixture
@@ -922,3 +923,29 @@ class TestSlackMotivatingExample:
             "code-assistant", "projects", ["lookup_other"], catalog=catalog
         )
         assert "lookup_atlas" not in effective
+
+
+class TestCrossGroupAgentDenialInEffectiveTools:
+    """A globally denied agent has an empty tool surface (review follow-up).
+
+    is_allowed() and effective_tools() must agree even when the granting
+    group carries a permissive agent-scoped tool override.
+    """
+
+    def test_denied_agent_with_permissive_override_is_empty(self, tmp_path):
+        groups = make_groups(
+            tmp_path,
+            {
+                "restrictors.yaml": "agents:\n  deny: [agent-x]\n",
+                "granters.yaml": (
+                    "agents:\n"
+                    "  - agent-x:\n"
+                    "      db:\n"
+                    "        tools:\n"
+                    '          allow: "*"\n'
+                ),
+            },
+        )
+        perms = perms_for(groups, "restrictors", "granters")
+        assert not perms.is_allowed("agents", "agent-x")
+        assert perms.effective_tools("agent-x", "db", INHERITED) == set()

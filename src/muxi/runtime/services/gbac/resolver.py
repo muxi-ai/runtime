@@ -135,6 +135,12 @@ class ResolvedPermissions:
             (or the user has no groups), and when overrides hide the server
             (``tools: {deny: "*"}``).
         """
+        # Deny-wins must hold here independently of callers: if ANY group
+        # denies the agent, the user cannot reach it, so its tool surface
+        # is empty regardless of what other groups would grant.
+        if not self.is_allowed("agents", agent_id):
+            return set()
+
         universe = tuple(catalog) if catalog is not None else tuple(inherited_tools)
         union: Set[str] = set()
         deny_patterns: List[str] = []
@@ -142,7 +148,7 @@ class ResolvedPermissions:
             # Only groups that grant the agent participate: the PRD scopes
             # group overrides to "every granted agent" on that server.
             rules = group.section("agents")
-            if _matches(agent_id, rules.deny) or not _matches(agent_id, rules.allow):
+            if not _matches(agent_id, rules.allow):
                 continue
             block = self._override_for(group, agent_id, mcp_id)
             if block is None:
@@ -157,6 +163,10 @@ class ResolvedPermissions:
                 deny_patterns.extend(block.deny)
             union.update(effective)
 
+        # Cross-group deny sweep: "any group's deny wins" applies to the
+        # merged union, so an explicit deny in one group also strips tools
+        # contributed by groups that had no override block at all. This
+        # asymmetry is intentional -- deny is global, allow is per-group.
         if deny_patterns:
             union = {t for t in union if not _matches(t, deny_patterns)}
         return union
