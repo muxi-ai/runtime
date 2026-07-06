@@ -130,6 +130,17 @@ class ExtractionCoordinator:
                     model=getattr(self.overlord, "default_model", None),
                 )
 
+            # Captain's log intake (Memory Revamp Phase 2): buffer the turn
+            # for the periodic summarization job. Pure queueing - no LLM
+            # work happens in the chat path.
+            captains_log = getattr(self.overlord, "captains_log", None)
+            if captains_log:
+                captains_log.queue_turn(
+                    user_message=user_message,
+                    agent_response=agent_response,
+                    user_id=user_id,
+                )
+
         except Exception as e:
             # Log the error but don't let it break the conversation flow
             observability.observe(

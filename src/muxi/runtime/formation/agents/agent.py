@@ -1377,6 +1377,24 @@ class Agent:
                 base = base[base.index(".\n") + 2 :]
             self._messages[0]["content"] = f"It is now {now_str}.\n{base}"
 
+        # Lessons learned injection (Memory Revamp Phase 2): a dynamic block
+        # appended AFTER the static persona/addendum so the cache-stable
+        # prefix stays intact. The block is loaded once per session and held
+        # stable (no mid-session refresh); the duplicate check keeps the
+        # accumulating non-clean-context path from re-appending it.
+        captains_log = getattr(self.overlord, "captains_log", None) if self.overlord else None
+        if (
+            captains_log
+            and user_id is not None
+            and self._messages
+            and self._messages[0].get("role") == "system"
+        ):
+            lessons_block = await captains_log.get_lessons_prompt_block(
+                user_id, self.agent_id, session_id
+            )
+            if lessons_block and lessons_block not in self._messages[0]["content"]:
+                self._messages[0]["content"] = f"{self._messages[0]['content']}\n\n{lessons_block}"
+
         # Add message to conversation context — but only if the
         # orchestrator didn't already do it for us via the clean bundle
         # rebuild above. Double-appending would put two copies of the
@@ -1509,6 +1527,47 @@ class Agent:
                             tools.append(tool_def)
                 else:
                     tools = []
+
+                # Built-in record_lesson tool (Memory Revamp Phase 2): lets the
+                # agent persist a reusable rule of thumb when it hits a gotcha
+                # worth remembering across sessions.
+                captains_log_service = (
+                    getattr(self.overlord, "captains_log", None) if self.overlord else None
+                )
+                if captains_log_service and captains_log_service.lessons_enabled:
+                    record_lesson_tool = {
+                        "type": "function",
+                        "function": {
+                            "name": "record_lesson",
+                            "description": (
+                                "Record a lesson learned: a reusable, prescriptive rule of "
+                                "thumb discovered through experience (e.g. a library or "
+                                "phrasing that works or fails). Use it when you hit a gotcha "
+                                "worth remembering across sessions. NOT for facts about the "
+                                "user or one-off events."
+                            ),
+                            "parameters": {
+                                "type": "object",
+                                "properties": {
+                                    "rule": {
+                                        "type": "string",
+                                        "description": (
+                                            "The prescriptive rule, phrased so it can be "
+                                            "applied directly in future sessions."
+                                        ),
+                                    },
+                                    "context": {
+                                        "type": "string",
+                                        "description": (
+                                            "Optional clarifier for when the rule applies."
+                                        ),
+                                    },
+                                },
+                                "required": ["rule"],
+                            },
+                        },
+                    }
+                    tools.append(record_lesson_tool)
 
                 # Always add the built-in generate_file tool if artifact service is available
                 if self.overlord and hasattr(self.overlord, "artifact_service"):
@@ -3995,6 +4054,33 @@ class Agent:
                 and self.overlord.skill_manager
             ):
                 return await handle_run_skill(self.agent_id, parameters, self.overlord)
+
+            if tool_name == "record_lesson" and self.overlord:
+                # Built-in lessons write path (Memory Revamp Phase 2).
+                captains_log = getattr(self.overlord, "captains_log", None)
+                if captains_log is None:
+                    return {"success": False, "error": "Captain's log service is not available"}
+                rule = (parameters.get("rule") or "").strip()
+                if not rule:
+                    return {"success": False, "error": "record_lesson requires a non-empty rule"}
+                context_note = (parameters.get("context") or "").strip() or None
+                try:
+                    lesson = await captains_log.record_lesson(
+                        user_id=user_id if user_id is not None else "0",
+                        agent_id=self.agent_id,
+                        rule=rule,
+                        context=context_note,
+                    )
+                except ValueError as e:
+                    # Lessons disabled (tool called anyway) or invalid input:
+                    # report to the model instead of failing the turn.
+                    return {"success": False, "error": str(e)}
+                return {
+                    "success": True,
+                    "lesson_id": lesson["public_id"],
+                    "hits": lesson["hits"],
+                    "message": "Lesson recorded; it will be applied in future sessions.",
+                }
 
             if tool_name == "generate_file" and self.overlord:
                 code = parameters.get("code", "")

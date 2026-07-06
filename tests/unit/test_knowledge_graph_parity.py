@@ -130,6 +130,25 @@ class TestParity:
         pg_steps = await pg_algorithms.path_explain(ids["User"], ids["MUXI"], user_id=USER)
         assert nx_steps == pg_steps
 
+    async def test_topological_sort_parity(self, parity_setup):
+        """Same order on both backends, including an isolated entity.
+
+        Isolated nodes are the regression this pins: both backends fetch
+        the node set independently of the edge set, so an entity with no
+        relationships must appear in the order on PostgreSQL exactly as
+        it does on NetworkX.
+        """
+        storage, nx_algorithms, pg_algorithms, ids = parity_setup
+        isolated = await storage.upsert_entity(USER, "topic", "Isolated", confidence=0.9)
+        nx_algorithms.invalidate(USER)
+        pg_algorithms.invalidate(USER)
+
+        nx_order = await nx_algorithms.topological_sort(user_id=USER)
+        pg_order = await pg_algorithms.topological_sort(user_id=USER)
+        assert nx_order == pg_order
+        assert isolated["id"] in nx_order
+        assert set(nx_order) == set(ids.values()) | {isolated["id"]}
+
     async def test_mutation_parity(self, parity_setup):
         """Delta test: same mutation, same re-query results on both backends."""
         storage, nx_algorithms, pg_algorithms, ids = parity_setup

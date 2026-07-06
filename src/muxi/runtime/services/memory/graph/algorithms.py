@@ -27,14 +27,64 @@
 # cumulative path cost ranks entities by aggregate relatedness.
 # =============================================================================
 
+import heapq
 from collections import OrderedDict
-from typing import Dict, List, Optional, Protocol, Set, Tuple
+from typing import Awaitable, Callable, Dict, Iterable, List, Optional, Protocol, Set, Tuple
 
 import networkx as nx
 from sqlalchemy import text
 
 from .models import STATUS_ACTIVE
 from .storage import KnowledgeGraphStorage, normalize_type
+
+# The DAG names topological_sort accepts. "entity_graph" is built in (the
+# active relationship edge set); other DAGs (Memory Revamp Phase 2:
+# "captains_log_sources") are registered by their owning service via
+# register_dag_edge_provider().
+DAG_ENTITY_GRAPH = "entity_graph"
+
+# Async callable returning the (source, target) edge list of a registered
+# DAG for one user. Backend-agnostic: providers run their own storage
+# queries, so both algorithm backends share one provider per DAG.
+DagEdgeProvider = Callable[[str], Awaitable[List[Tuple[int, int]]]]
+
+
+def lexicographic_topological_sort(
+    nodes: Iterable[int], edges: Iterable[Tuple[int, int]]
+) -> List[int]:
+    """Return the lexicographically-smallest topological order of a DAG.
+
+    Kahn's algorithm with a min-heap. Shared by both algorithm backends so
+    ordering is identical by construction (the parity requirement): graph
+    engines disagree on tie-breaking, a shared sort cannot. Returns []
+    when the edge set contains a cycle (not a valid DAG).
+    """
+    node_set: Set[int] = set(nodes)
+    indegree: Dict[int, int] = {node: 0 for node in node_set}
+    successors: Dict[int, List[int]] = {node: [] for node in node_set}
+    for source, target in edges:
+        for endpoint in (source, target):
+            if endpoint not in node_set:
+                node_set.add(endpoint)
+                indegree[endpoint] = 0
+                successors[endpoint] = []
+        successors[source].append(target)
+        indegree[target] += 1
+
+    ready = [node for node, degree in indegree.items() if degree == 0]
+    heapq.heapify(ready)
+    order: List[int] = []
+    while ready:
+        node = heapq.heappop(ready)
+        order.append(node)
+        for successor in successors[node]:
+            indegree[successor] -= 1
+            if indegree[successor] == 0:
+                heapq.heappush(ready, successor)
+
+    if len(order) != len(node_set):
+        return []  # cycle: no topological order exists
+    return order
 
 
 class GraphAlgorithms(Protocol):
@@ -90,6 +140,17 @@ class GraphAlgorithms(Protocol):
         """
         ...
 
+    async def topological_sort(self, *, user_id: str, dag: str = DAG_ENTITY_GRAPH) -> List[int]:
+        """Return the node ids of a DAG in dependency order (sources first).
+
+        Returns [] when the requested graph contains a cycle.
+        """
+        ...
+
+    def register_dag_edge_provider(self, dag: str, provider: DagEdgeProvider) -> None:
+        """Register the edge source for a named DAG (e.g. captains_log_sources)."""
+        ...
+
     def invalidate(self, user_id: str) -> None:
         """Drop any cached graph state for a user (no-op on pgRouting)."""
         ...
@@ -107,6 +168,7 @@ class NetworkXAlgorithms:
         self._storage = storage
         self._cache_size = max(1, cache_size)
         self._cache: "OrderedDict[str, nx.DiGraph]" = OrderedDict()
+        self._dag_edge_providers: Dict[str, DagEdgeProvider] = {}
 
     async def _get_graph(self, user_id: str) -> nx.DiGraph:
         user_id = str(user_id)
@@ -214,6 +276,29 @@ class NetworkXAlgorithms:
                 steps.append((node, None))
         return steps
 
+    async def topological_sort(self, *, user_id: str, dag: str = DAG_ENTITY_GRAPH) -> List[int]:
+        # The sort itself is the shared lexicographic Kahn implementation
+        # (see lexicographic_topological_sort) so both backends order
+        # identically by construction; only the node/edge fetch is
+        # per-backend. The entity node set comes from storage independently
+        # of the edge set so isolated entities are ordered too (parity:
+        # the pgRouting backend fetches the same node set via SQL).
+        if dag == DAG_ENTITY_GRAPH:
+            graph = await self._get_graph(user_id)
+            nodes = await self._storage.iter_entity_ids(str(user_id))
+            return lexicographic_topological_sort(nodes, graph.edges())
+        edges = await self._resolve_dag_edges(dag, str(user_id))
+        return lexicographic_topological_sort((), edges)
+
+    async def _resolve_dag_edges(self, dag: str, user_id: str) -> List[Tuple[int, int]]:
+        provider = self._dag_edge_providers.get(dag)
+        if provider is None:
+            raise ValueError(f"Unknown DAG '{dag}': no edge provider registered")
+        return await provider(user_id)
+
+    def register_dag_edge_provider(self, dag: str, provider: DagEdgeProvider) -> None:
+        self._dag_edge_providers[dag] = provider
+
     def invalidate(self, user_id: str) -> None:
         self._cache.pop(str(user_id), None)
 
@@ -230,6 +315,7 @@ class PgRoutingAlgorithms:
     def __init__(self, db_manager, formation_id: str):
         self.db_manager = db_manager
         self.formation_id = formation_id
+        self._dag_edge_providers: Dict[str, DagEdgeProvider] = {}
 
     def _edge_source_sql(
         self,
@@ -360,6 +446,46 @@ class PgRoutingAlgorithms:
             for node, edge in result.fetchall():
                 steps.append((int(node), None if edge == -1 else int(edge)))
             return steps
+
+    async def topological_sort(self, *, user_id: str, dag: str = DAG_ENTITY_GRAPH) -> List[int]:
+        # Deliberately NOT pgr_topologicalSort: it is a "proposed" pgRouting
+        # function with no ordering guarantee, so its output cannot be
+        # pinned to the NetworkX backend's. The node and edge sets are
+        # fetched with plain SQL and ordered by the shared lexicographic
+        # Kahn sort -- identical results on both backends by construction,
+        # and O(V+E) on per-user graph sizes. The node set is fetched
+        # independently of the edge set (mirroring the NetworkX backend's
+        # storage node source) so isolated entities are ordered too.
+        if dag == DAG_ENTITY_GRAPH:
+            scope = {
+                "user_id": str(user_id),
+                "formation_id": self.formation_id,
+                "status": STATUS_ACTIVE,
+            }
+            nodes_query = text(
+                "SELECT e.id FROM kg_entities e "
+                "WHERE e.user_id = :user_id AND e.formation_id = :formation_id "
+                "AND e.status = :status"
+            )
+            edges_query = text(
+                "SELECT r.from_entity_id, r.to_entity_id FROM kg_relationships r "
+                "WHERE r.user_id = :user_id AND r.formation_id = :formation_id "
+                "AND r.status = :status"
+            )
+            async with self.db_manager.get_async_session() as session:
+                node_rows = await session.execute(nodes_query, scope)
+                nodes = [int(row[0]) for row in node_rows.fetchall()]
+                edge_rows = await session.execute(edges_query, scope)
+                edges = [(int(row[0]), int(row[1])) for row in edge_rows.fetchall()]
+            return lexicographic_topological_sort(nodes, edges)
+        provider = self._dag_edge_providers.get(dag)
+        if provider is None:
+            raise ValueError(f"Unknown DAG '{dag}': no edge provider registered")
+        edges = await provider(str(user_id))
+        return lexicographic_topological_sort((), edges)
+
+    def register_dag_edge_provider(self, dag: str, provider: DagEdgeProvider) -> None:
+        self._dag_edge_providers[dag] = provider
 
     def invalidate(self, user_id: str) -> None:
         """No-op: pgRouting queries the live tables on every call."""

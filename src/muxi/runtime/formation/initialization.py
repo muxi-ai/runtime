@@ -762,6 +762,12 @@ def initialize_memory_systems(formation) -> None:
                 # so extraction can resolve the capability model at runtime.
                 _initialize_knowledge_graph(formation, memory_config.get("graph", {}))
 
+                # Initialize the captain's log service (Memory Revamp Phase 2).
+                # Placed after the knowledge graph so the digest job can feed
+                # extracted entities/relationships into it and register the
+                # captains_log_sources DAG on the shared algorithms layer.
+                _initialize_captains_log(formation, memory_config)
+
 
 def _initialize_knowledge_graph(formation, graph_config: Dict[str, Any]) -> None:
     """Initialize the knowledge graph service on top of persistent memory."""
@@ -789,6 +795,39 @@ def _initialize_knowledge_graph(formation, graph_config: Dict[str, Any]) -> None
             description=f"Failed to initialize knowledge graph service: {str(e)}",
         )
         # Don't raise - the knowledge graph is additive to persistent memory
+
+
+def _initialize_captains_log(formation, memory_config: Dict[str, Any]) -> None:
+    """Initialize the captain's log service on top of persistent memory."""
+    captains_log_config = memory_config.get("captains_log", {}) or {}
+    if captains_log_config.get("enabled", True) is False:
+        formation._captains_log = None
+        return
+
+    try:
+        from ..services.memory.log import CaptainsLogService
+
+        formation_id = getattr(formation, "formation_id", "default-formation")
+        embedding_model = (memory_config.get("embedding", {}) or {}).get("model")
+        formation._captains_log = CaptainsLogService(
+            db_manager=formation._db_manager,
+            formation_id=formation_id,
+            config=captains_log_config,
+            lessons_config=memory_config.get("lessons", {}) or {},
+            knowledge_graph=getattr(formation, "_knowledge_graph", None),
+            embedding_model=embedding_model,
+        )
+        lessons_status = "lessons on" if formation._captains_log.lessons_enabled else "lessons off"
+        print(InitEventFormatter.format_ok("Initializing captain's log", lessons_status))
+    except Exception as e:
+        formation._captains_log = None
+        observability.observe(
+            event_type=observability.ErrorEvents.MEMORY_INITIALIZATION_FAILED,
+            level=observability.EventLevel.WARNING,
+            data={"error": str(e), "service": "captains_log"},
+            description=f"Failed to initialize captain's log service: {str(e)}",
+        )
+        # Don't raise - the captain's log is additive to persistent memory
 
 
 def _initialize_working_memory(formation, working_config: Dict[str, Any]) -> None:
@@ -1077,6 +1116,11 @@ def _create_all_database_tables(db_manager, embedding_dimension: int = 1536) -> 
         # Get Base from db module
         from ..services.db import Base
         from ..services.memory.graph.models import KGEntity, KGRelationship  # noqa: F401
+        from ..services.memory.log.models import (  # noqa: F401
+            CaptainsLogEntry,
+            CaptainsLogSource,
+            Lesson,
+        )
         from ..services.memory.long_term import (  # noqa: F401
             Group,
             User,
@@ -1121,6 +1165,9 @@ def _create_all_database_tables(db_manager, embedding_dimension: int = 1536) -> 
             memories_table,  # Memory system tables (dimension-specific)
             "kg_entities",
             "kg_relationships",  # Knowledge graph tables
+            "captains_log",
+            "captains_log_sources",
+            "lessons",  # Captain's log tables
             "credentials",  # Credential storage
             "scheduled_jobs",
             "scheduled_job_audit",  # Scheduler tables

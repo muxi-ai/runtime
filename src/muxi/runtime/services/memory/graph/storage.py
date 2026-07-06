@@ -162,6 +162,22 @@ class KnowledgeGraphStorage:
             rows = (await session.execute(stmt)).scalars().all()
             return [row.to_dict() for row in rows]
 
+    async def iter_entity_ids(self, user_id: str) -> List[int]:
+        """Return every active entity id in the user's subgraph.
+
+        This is the canonical node source for graph algorithms that must
+        see isolated entities (topological_sort): both backends order the
+        same node set, fetched independently of the edge set, so entities
+        without relationships cannot silently vanish on one backend.
+        """
+        async with self.db_manager.get_async_session() as session:
+            stmt = select(KGEntity.id).filter_by(
+                user_id=str(user_id),
+                formation_id=self.formation_id,
+                status=STATUS_ACTIVE,
+            )
+            return [int(row[0]) for row in (await session.execute(stmt)).all()]
+
     # ------------------------------------------------------------------
     # Relationships
     # ------------------------------------------------------------------

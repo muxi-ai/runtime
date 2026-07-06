@@ -338,6 +338,63 @@ async def delete_user_memory(
         return JSONResponse(content=response.model_dump(), status_code=500)
 
 
+@router.get("/history", response_model=APIResponse, operation_id="get_history")
+async def get_history(
+    request: Request,
+    x_user_id: Optional[str] = Header(None, alias="X-Muxi-User-ID"),
+    limit: int = Query(10, ge=1, le=100, description="Maximum number of log entries to return"),
+    date_from: Optional[str] = Query(None, description="Earliest entry date (ISO date)"),
+    date_to: Optional[str] = Query(None, description="Latest entry date (ISO date)"),
+    include_sources: bool = Query(False, description="Include source lineage per entry"),
+) -> JSONResponse:
+    """
+    Get the user's captain's log history (Memory Revamp Phase 2).
+
+    Returns the narrative log entries for a user, newest first, optionally
+    with the source lineage each entry was derived from.
+    """
+    formation = request.app.state.formation
+    request_id = getattr(request.state, "request_id", None)
+
+    # Validate user_id from header
+    user_id, error_response = _get_user_id(x_user_id, request_id)
+    if error_response:
+        return error_response
+
+    overlord = getattr(formation, "_overlord", None)
+    captains_log = getattr(overlord, "captains_log", None) if overlord else None
+    if captains_log is None:
+        response = create_success_response(
+            APIObjectType.MEMORY,
+            APIEventType.MEMORY_RETRIEVED,
+            {"entries": [], "count": 0},
+            request_id,
+        )
+        return JSONResponse(content=response.model_dump(), status_code=200)
+
+    try:
+        entries = await captains_log.get_history(
+            user_id,
+            limit=limit,
+            date_from=date_from,
+            date_to=date_to,
+            include_sources=include_sources,
+        )
+        response = create_success_response(
+            APIObjectType.MEMORY,
+            APIEventType.MEMORY_RETRIEVED,
+            {"entries": entries, "count": len(entries)},
+            request_id,
+        )
+        return JSONResponse(content=response.model_dump(), status_code=200)
+
+    except Exception as e:
+        response = create_error_response(
+            "INTERNAL_ERROR", f"Failed to retrieve history: {str(e)}", None, request_id
+        )
+        return JSONResponse(content=response.model_dump(), status_code=500)
+
+
 # Buffer Memory Operations
 @router.get("/memory/buffer", response_model=APIResponse, operation_id="get_buffer_memory")
 def get_buffer_status(
