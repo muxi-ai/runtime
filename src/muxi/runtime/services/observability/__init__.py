@@ -202,6 +202,13 @@ def observe(
         if not configured_logger:
             return
 
+        # Drop filtered events before doing any expensive work:
+        # redaction walks the entire payload and emission spawns a
+        # background thread, neither of which is needed for an event
+        # the logger would discard anyway.
+        if not configured_logger.should_emit(event_type, level):
+            return
+
         # Redact PII/secrets by default for every event. The previous event-type
         # allow-list left non-user events (SystemEvents, MCP_*, WORKFLOW_*, ...)
         # unredacted, which could leak secrets carried in their payloads. Callers

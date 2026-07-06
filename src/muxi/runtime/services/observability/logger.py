@@ -120,6 +120,27 @@ class EventLogger:
 
         return True
 
+    def should_emit(
+        self,
+        event_type: Union[
+            ConversationEvents, SystemEvents, ErrorEvents, ServerEvents, APIEvents, str
+        ],
+        level: EventLevel,
+    ) -> bool:
+        """Cheap pre-check: would ``emit_event`` emit this event?
+
+        Exposed so hot-path callers (``observe``) can drop filtered
+        events before paying for payload redaction and the background
+        emission thread.
+        """
+        if isinstance(
+            event_type, (ConversationEvents, SystemEvents, ErrorEvents, ServerEvents, APIEvents)
+        ):
+            event_type_str = event_type.value
+        else:
+            event_type_str = event_type
+        return self._should_emit_event(event_type, event_type_str, level)
+
     def emit_event(
         self,
         event_type: Union[
