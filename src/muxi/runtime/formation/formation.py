@@ -216,6 +216,11 @@ class Formation:
         # Registry of MCP servers that use user credentials
         self._mcp_servers_with_user_credentials: Dict[str, Dict[str, Any]] = {}
 
+        # Group-based access control (populated by _setup_groups when a
+        # groups/ directory is present in the formation)
+        self._group_permissions: Dict[str, Any] = {}
+        self._permission_resolver = None
+
     def set_secrets_manager(self, secrets_manager: SecretsManager) -> None:
         """
         Inject a pre-configured SecretsManager instance.
@@ -1092,6 +1097,9 @@ class Formation:
         # Generate API keys
         self._setup_auth()
 
+        # Load group permission files (GBAC) if a groups/ directory exists
+        self._setup_groups()
+
         # Prepare and validate service configurations
         self._setup_llm_config()
         self._setup_memory_config()
@@ -1235,6 +1243,7 @@ class Formation:
                 "scheduler_config": self._scheduler_config,
                 "runtime_config": self._runtime_config,
                 "agents_config": self._agents_config,
+                "permission_resolver": self._permission_resolver,
             }
         )
 
@@ -1399,6 +1408,102 @@ class Formation:
             "auth": auth_mode,
             "api_keys": self._api_keys,
         }
+
+    def _setup_groups(self) -> None:
+        """
+        Auto-discover and load group permission files (GBAC Phase 2).
+
+        A ``groups/`` directory next to the formation file activates
+        permission loading -- groups are intentionally auto-discovered
+        (policy data, not architecture; no manifest declaration). Without
+        the directory the feature is inert and nothing changes.
+
+        Malformed group files, unknown inheritance parents, and circular
+        inheritance fail the formation load with a precise error.
+
+        This method is idempotent -- _prepare_services() may run more than
+        once (load() and start_overlord()); the resolver is built once so
+        its membership/resolution caches survive.
+        """
+        if self._permission_resolver is not None:
+            return
+
+        formation_dir = self._formation_path
+        if formation_dir and os.path.isfile(formation_dir):
+            formation_dir = os.path.dirname(formation_dir)
+        if not formation_dir:
+            return
+
+        groups_dir = os.path.join(formation_dir, "groups")
+        if not os.path.isdir(groups_dir):
+            # No groups/ directory: no restrictions, feature inert.
+            return
+
+        from ..services.gbac import GroupPermissionError, PermissionResolver, load_groups
+
+        try:
+            groups = load_groups(groups_dir)
+        except GroupPermissionError as e:
+            raise ConfigurationValidationError(
+                [f"Invalid group permission configuration: {e}"],
+                {
+                    "groups_dir": groups_dir,
+                    "suggestion": (
+                        "Fix the group file named in the error; see the group "
+                        "definition format in the group-based-access-control PRD"
+                    ),
+                },
+            ) from e
+
+        if not groups:
+            # An empty groups/ directory can express no policy; treat it as
+            # inert (same as absent) rather than locking every user out.
+            observability.observe(
+                event_type=observability.ErrorEvents.CONFIGURATION_ERROR,
+                level=observability.EventLevel.WARNING,
+                data={
+                    "service": "formation",
+                    "groups_dir": groups_dir,
+                    "formation_id": self.formation_id,
+                },
+                description=(
+                    f"groups/ directory at {groups_dir} contains no group files; "
+                    "group permission filtering stays inactive"
+                ),
+            )
+            return
+
+        runtime_config = self.config.get("runtime", {}) if self.config else {}
+        membership_ttl = 60.0
+        if isinstance(runtime_config, dict):
+            membership_ttl = float(runtime_config.get("group_membership_ttl", 60.0))
+
+        self._group_permissions = groups
+        self._permission_resolver = PermissionResolver(
+            groups=groups,
+            formation_id=self.formation_id,
+            db_manager_getter=lambda: getattr(self, "_db_manager", None),
+            membership_ttl=membership_ttl,
+        )
+
+        observability.observe(
+            event_type=observability.SystemEvents.GROUPS_LOADED,
+            level=observability.EventLevel.INFO,
+            data={
+                "service": "formation",
+                "formation_id": self.formation_id,
+                "groups_dir": groups_dir,
+                "group_count": len(groups),
+                "group_ids": sorted(groups),
+                "membership_ttl_seconds": membership_ttl,
+            },
+            description=f"Loaded {len(groups)} permission group(s) from {groups_dir}",
+        )
+
+    @property
+    def permission_resolver(self):
+        """The formation's GBAC PermissionResolver, or None when inactive."""
+        return self._permission_resolver
 
     def _setup_llm_config(self) -> None:
         """Setup and validate LLM configuration."""

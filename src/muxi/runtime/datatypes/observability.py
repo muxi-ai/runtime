@@ -85,6 +85,13 @@ class SystemEvents(Enum):
     # When identifiers are associated with user
 
     # ===================================================================
+    # GROUP-BASED ACCESS CONTROL EVENTS
+    # ===================================================================
+    GROUPS_LOADED = "gbac.groups.loaded"
+    # When group permission files are loaded from the formation's groups/
+    # directory at startup (GBAC Phase 2)
+
+    # ===================================================================
     # DOCUMENT CROSS-REFERENCE EVENTS
     # ===================================================================
     CROSS_REFERENCE_MANAGER_INITIALIZED = "cross_reference.manager.initialized"
