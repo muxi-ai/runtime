@@ -279,7 +279,7 @@ class EventLogger:
                     atexit.register(self.flush)
         self._write_queue.put((kind, event_line))
 
-    def _writer_loop(self, write_queue: "queue.Queue") -> None:
+    def _writer_loop(self, write_queue: queue.Queue) -> None:
         """Drain the write queue in batches, grouped by destination.
 
         A single writer thread owns all file appends and HTTP posts, so
@@ -287,27 +287,32 @@ class EventLogger:
         and the HTTP session reuses connections across events.
         """
         session = requests.Session()
-        while True:
-            items = [write_queue.get()]
-            while len(items) < self._WRITER_BATCH_MAX:
-                try:
-                    items.append(write_queue.get_nowait())
-                except queue.Empty:
-                    break
+        try:
+            while True:
+                items = [write_queue.get()]
+                while len(items) < self._WRITER_BATCH_MAX:
+                    try:
+                        items.append(write_queue.get_nowait())
+                    except queue.Empty:
+                        break
 
-            grouped: Dict[str, List[str]] = {}
-            for kind, event_line in items:
-                grouped.setdefault(kind, []).append(event_line)
+                grouped: Dict[str, List[str]] = {}
+                for kind, event_line in items:
+                    grouped.setdefault(kind, []).append(event_line)
 
-            for kind, event_lines in grouped.items():
-                try:
-                    self._write_batch(kind, event_lines, session)
-                except Exception:
-                    # Transport failures must never disrupt the runtime
-                    pass
+                for kind, event_lines in grouped.items():
+                    try:
+                        self._write_batch(kind, event_lines, session)
+                    except Exception:
+                        # Transport failures must never disrupt the runtime
+                        pass
 
-            for _ in items:
-                write_queue.task_done()
+                for _ in items:
+                    write_queue.task_done()
+        finally:
+            # Return pooled connections/TLS sockets cleanly if the loop
+            # ever exits (e.g. a non-Exception raise)
+            session.close()
 
     def _write_batch(self, kind: str, event_lines: List[str], session: requests.Session) -> None:
         """Write one batch of JSON-L lines to a single destination."""
@@ -353,6 +358,9 @@ class EventLogger:
         write_queue = self._write_queue
         if write_queue is None:
             return
-        deadline = time.time() + timeout
-        while write_queue.unfinished_tasks and time.time() < deadline:
-            time.sleep(0.01)
+        # Timed join: Queue.join() has no timeout parameter, so run it in
+        # a short-lived helper thread and bound the wait by joining that
+        # thread. Wakes as soon as the last task_done() fires.
+        joiner = threading.Thread(target=write_queue.join, daemon=True)
+        joiner.start()
+        joiner.join(timeout=timeout)
