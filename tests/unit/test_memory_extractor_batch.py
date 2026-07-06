@@ -24,7 +24,7 @@ def make_item(memory, collection="context", confidence=0.9, importance=0.5):
     }
 
 
-def make_extractor(search_results=None, search_side_effect=None):
+def make_extractor(search_results=None, search_side_effect=None, is_multi_user=False):
     long_term_memory = SimpleNamespace(
         search=AsyncMock(return_value=search_results or []),
         add=AsyncMock(return_value="mem-id"),
@@ -34,7 +34,7 @@ def make_extractor(search_results=None, search_side_effect=None):
 
     overlord = SimpleNamespace(
         long_term_memory=long_term_memory,
-        is_multi_user=False,
+        is_multi_user=is_multi_user,
         current_agent=None,
         user_context_manager=SimpleNamespace(
             invalidate_identity_synopsis_cache=AsyncMock(return_value=None)
@@ -202,5 +202,33 @@ async def test_below_confidence_threshold_skipped():
     results = {"extracted_info": [make_item("Works at TechCorp", confidence=0.1)]}
 
     await extractor._process_extraction_results(results, user_id="user-1")
+
+    assert extractor.overlord.long_term_memory.add.await_count == 0
+
+
+@pytest.mark.asyncio
+async def test_multi_user_dedup_search_uses_external_user_id_and_collection():
+    extractor = make_extractor(search_results=[], is_multi_user=True)
+    results = {"extracted_info": [make_item("Works at TechCorp", collection="work_projects")]}
+
+    await extractor._process_extraction_results(results, user_id="user-42")
+
+    ltm = extractor.overlord.long_term_memory
+    assert ltm.search.await_count == 1
+    search_kwargs = ltm.search.await_args.kwargs
+    assert search_kwargs["external_user_id"] == "user-42"
+    assert search_kwargs["collection"] == "work_projects"
+    assert "user_id" not in search_kwargs
+    assert ltm.add.await_count == 1
+
+
+@pytest.mark.asyncio
+async def test_multi_user_skips_duplicate():
+    extractor = make_extractor(
+        search_results=[{"text": "Works at TechCorp", "score": 0.95}], is_multi_user=True
+    )
+    results = {"extracted_info": [make_item("Works at TechCorp")]}
+
+    await extractor._process_extraction_results(results, user_id="user-42")
 
     assert extractor.overlord.long_term_memory.add.await_count == 0

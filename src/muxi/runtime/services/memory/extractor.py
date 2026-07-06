@@ -492,7 +492,9 @@ class MemoryExtractor:
         for memory_data, result in zip(memories_to_store, duplicate_checks):
             if isinstance(result, BaseException):
                 # Log memory storage failure for debugging while continuing execution
-                self._log_memory_storage_failure(result, memory_data, user_id)
+                self._log_memory_storage_failure(
+                    result, memory_data, user_id, operation="long_term_memory_search"
+                )
             elif not result:
                 to_store.append(memory_data)
 
@@ -632,7 +634,9 @@ class MemoryExtractor:
 
         await self.overlord.long_term_memory.add(**add_params)
 
-    def _log_memory_storage_failure(self, error, memory_data, user_id) -> None:
+    def _log_memory_storage_failure(
+        self, error, memory_data, user_id, operation: str = "long_term_memory_add"
+    ) -> None:
         """
         Log a failure to de-duplicate or store an extracted memory.
 
@@ -640,6 +644,7 @@ class MemoryExtractor:
             error: The exception raised during search or add
             memory_data: The memory dict produced by extraction
             user_id: The user's ID
+            operation: Which memory operation failed (search vs add), for triage
         """
         memory_content = memory_data["memory"]
         observability.observe(
@@ -655,7 +660,7 @@ class MemoryExtractor:
                 "collection": memory_data["collection"],
                 "user_id": str(user_id),
                 "component": "memory_extractor",
-                "operation": "long_term_memory_add",
+                "operation": operation,
             },
         )
 
