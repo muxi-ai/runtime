@@ -239,6 +239,7 @@ class WorkingMemory:
         # have been added yet.
         self.index = faiss.IndexFlatL2(self.dimension)
         self.index_mapping = {}  # Maps buffer indices to FAISS indices
+        self.reverse_index_mapping = {}  # Maps FAISS indices back to buffer indices
         self.index_count = 0  # Counter for FAISS indices
         self.needs_rebuild = False  # Flag to track if index needs rebuilding
 
@@ -282,6 +283,7 @@ class WorkingMemory:
                 # first ``_ensure_dim`` call.
                 self.index = faiss.IndexFlatL2(self.dimension)
                 self.index_mapping = {}
+                self.reverse_index_mapping = {}
                 self.index_count = 0
                 self.needs_rebuild = False
             self._dimension = probed
@@ -355,6 +357,7 @@ class WorkingMemory:
                 # Record the mapping from buffer index to FAISS index
                 buffer_idx = len(self.buffer)
                 self.index_mapping[buffer_idx] = self.index_count
+                self.reverse_index_mapping[self.index_count] = buffer_idx
 
                 # Normalize embedding for better cosine similarity in FAISS
                 embedding_array = np.array([embedding_vector], dtype=np.float32)
@@ -396,6 +399,7 @@ class WorkingMemory:
         # Create a new index with the same dimension
         new_index = faiss.IndexFlatL2(self.dimension)
         new_mapping = {}
+        new_reverse_mapping = {}
         new_count = 0
 
         # Add embeddings from the current buffer to the new index
@@ -404,6 +408,7 @@ class WorkingMemory:
             if "embedding" in item and item["embedding"] is not None:
                 embeddings.append(item["embedding"])
                 new_mapping[i] = new_count
+                new_reverse_mapping[new_count] = i
                 new_count += 1
 
         # Add collected embeddings to the index if any exist
@@ -414,6 +419,7 @@ class WorkingMemory:
         # Replace the old index and mapping
         self.index = new_index
         self.index_mapping = new_mapping
+        self.reverse_index_mapping = new_reverse_mapping
         self.index_count = new_count
         self.needs_rebuild = False
 
@@ -807,14 +813,14 @@ class WorkingMemory:
             k = min(limit * 2, self.index_count)  # Get more results to allow for filtering
             distances, indices = self.index.search(query_np, k)
 
-            # Map FAISS indices back to buffer indices
+            # Map FAISS indices back to buffer indices via the reverse
+            # mapping (O(1) per result). FAISS pads with -1 when fewer
+            # than k vectors exist; those have no mapping and are skipped.
             buffer_indices = []
             for faiss_idx in indices[0]:
-                # Find the buffer index for this FAISS index
-                for buffer_idx, mapped_faiss_idx in self.index_mapping.items():
-                    if mapped_faiss_idx == faiss_idx:
-                        buffer_indices.append(buffer_idx)
-                        break
+                buffer_idx = self.reverse_index_mapping.get(int(faiss_idx))
+                if buffer_idx is not None:
+                    buffer_indices.append(buffer_idx)
 
             # Combine semantic score with recency score
             results = []
@@ -1140,6 +1146,7 @@ class WorkingMemory:
                 # Update mapping
                 buffer_idx = len(self.buffer) - 1
                 self.index_mapping[buffer_idx] = self.index_count
+                self.reverse_index_mapping[self.index_count] = buffer_idx
                 self.index_count += 1
 
             except Exception as e:
@@ -1169,6 +1176,7 @@ class WorkingMemory:
         # Reset FAISS index if enabled
         self.index = faiss.IndexFlatL2(self.dimension)
         self.index_mapping = {}
+        self.reverse_index_mapping = {}
         self.index_count = 0
         self.needs_rebuild = False
 
