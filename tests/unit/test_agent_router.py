@@ -148,3 +148,38 @@ class TestAgentRouter:
         )
 
         assert selected == "ms365-assistant"
+
+    @pytest.mark.asyncio
+    async def test_routing_cache_evicts_oldest_entries_beyond_max_size(self):
+        routing_model = FakeRoutingModel(["assistant"] * 4)
+        overlord = FakeOverlord(routing_model)
+        router = AgentRouter(overlord)
+        router.MAX_ROUTING_CACHE_SIZE = 3
+
+        for message in ("hello one", "hello two", "hello three", "hello four"):
+            await router.select_agent_for_message(message, session_id="session-a")
+
+        assert len(router._routing_cache) == 3
+        assert "session:session-a:hello one" not in router._routing_cache
+        assert "session:session-a:hello four" in router._routing_cache
+
+    @pytest.mark.asyncio
+    async def test_routing_cache_hit_refreshes_recency(self):
+        routing_model = FakeRoutingModel(["assistant"] * 3)
+        overlord = FakeOverlord(routing_model)
+        router = AgentRouter(overlord)
+        router.MAX_ROUTING_CACHE_SIZE = 2
+
+        await router.select_agent_for_message("hello one", session_id="session-a")
+        await router.select_agent_for_message("hello two", session_id="session-a")
+
+        # Cache hit on "hello one" refreshes its recency (no model call)
+        await router.select_agent_for_message("hello one", session_id="session-a")
+        assert len(routing_model.calls) == 2
+
+        # Inserting a third entry evicts "hello two", the least recently used
+        await router.select_agent_for_message("hello three", session_id="session-a")
+
+        assert "session:session-a:hello one" in router._routing_cache
+        assert "session:session-a:hello two" not in router._routing_cache
+        assert "session:session-a:hello three" in router._routing_cache
