@@ -7,6 +7,7 @@ content, agent capabilities, and availability.
 
 import re
 import time
+from collections import OrderedDict
 from typing import Any, Dict, Optional
 
 from ...datatypes.exceptions import NoAvailableAgentsError, SecurityViolation
@@ -29,6 +30,7 @@ class AgentRouter:
     MUXI_GENERALIST_AGENT_ID = "muxi-generalist"
     STRONG_NON_MUXI_MATCH_THRESHOLD = 7
     STRONG_NON_MUXI_MATCH_MARGIN = 3
+    MAX_ROUTING_CACHE_SIZE = 5000
 
     def __init__(self, overlord):
         """
@@ -38,7 +40,7 @@ class AgentRouter:
             overlord: Reference to the overlord instance
         """
         self.overlord = overlord
-        self._routing_cache: Dict[str, Any] = {}
+        self._routing_cache: "OrderedDict[str, Any]" = OrderedDict()
         self._session_last_agent: Dict[str, str] = {}
 
     def record_session_agent(self, session_id: str, agent_id: str) -> None:
@@ -326,6 +328,8 @@ class AgentRouter:
                 if time.time() - cached_time < cache_ttl:
                     # Verify the cached agent is still available
                     if cached_agent in available_agents:
+                        # Refresh recency for LRU eviction
+                        self._routing_cache.move_to_end(cache_key)
                         return str(cached_agent)
                     else:
                         # Cached agent no longer available, remove from cache
@@ -449,10 +453,15 @@ class AgentRouter:
 
             # Cache the result for future identical messages (if caching is enabled)
             if caching_enabled:
+                # Fresh insert (every non-hit read path deletes the key), so the
+                # entry lands at the MRU end; a single insert needs at most one
+                # eviction to stay within the bound
                 self._routing_cache[cache_key] = {
                     "agent_id": selected_agent_id,
                     "timestamp": time.time(),
                 }
+                if len(self._routing_cache) > self.MAX_ROUTING_CACHE_SIZE:
+                    self._routing_cache.popitem(last=False)
 
             return selected_agent_id
 
