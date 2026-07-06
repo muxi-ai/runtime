@@ -453,13 +453,14 @@ class AgentRouter:
 
             # Cache the result for future identical messages (if caching is enabled)
             if caching_enabled:
+                # Fresh insert (every non-hit read path deletes the key), so the
+                # entry lands at the MRU end; a single insert needs at most one
+                # eviction to stay within the bound
                 self._routing_cache[cache_key] = {
                     "agent_id": selected_agent_id,
                     "timestamp": time.time(),
                 }
-                self._routing_cache.move_to_end(cache_key)
-                # Bound the cache with LRU eviction to prevent unbounded growth
-                while len(self._routing_cache) > self.MAX_ROUTING_CACHE_SIZE:
+                if len(self._routing_cache) > self.MAX_ROUTING_CACHE_SIZE:
                     self._routing_cache.popitem(last=False)
 
             return selected_agent_id
