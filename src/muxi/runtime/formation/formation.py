@@ -1330,6 +1330,7 @@ class Formation:
                 "observability_manager": getattr(self, "_observability_manager", None),
                 "buffer_memory": getattr(self, "_buffer_memory", None),
                 "long_term_memory": getattr(self, "_long_term_memory", None),
+                "knowledge_graph": getattr(self, "_knowledge_graph", None),
                 "working_memory_config": getattr(self, "_working_memory_config", None),
                 "document_chunk_manager": getattr(self, "_document_chunk_manager", None),
                 "request_tracker": getattr(self, "_request_tracker", None),

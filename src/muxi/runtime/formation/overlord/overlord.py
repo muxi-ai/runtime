@@ -541,6 +541,11 @@ class Overlord:
         self.long_term_memory = (
             configured_services.get("long_term_memory") if configured_services else long_term_memory
         )
+        # Knowledge graph service (Memory Revamp Phase 1) - initialized by the
+        # Formation alongside persistent memory; None when disabled/unavailable.
+        self.knowledge_graph = (
+            configured_services.get("knowledge_graph") if configured_services else None
+        )
 
         # Configure extraction settings (intelligence concerns)
         self.auto_extract_user_info = auto_extract_user_info
@@ -1468,6 +1473,14 @@ class Overlord:
 
             self.scheduler_service = await SchedulerService.get_instance(self)
             await self.scheduler_service.start()
+
+        # Start the knowledge graph periodic extraction loop now that the
+        # extraction/default model is resolved. The getter is evaluated per
+        # run so the loop always uses the current capability model.
+        if getattr(self, "knowledge_graph", None):
+            self.knowledge_graph.start_periodic_extraction(
+                lambda: getattr(self, "default_model", None)
+            )
 
         # Populate formation capabilities after all services are loaded
         self._populate_formation_capabilities()
@@ -4065,6 +4078,18 @@ Agent response: {raw_response}"""
                     level=observability.EventLevel.WARNING,
                     data={"error": str(e), "service": "scheduler"},
                     description=f"Error stopping scheduler service: {e}",
+                )
+
+        # Stop the knowledge graph periodic extraction loop if running
+        if getattr(self, "knowledge_graph", None):
+            try:
+                await self.knowledge_graph.stop()
+            except Exception as e:
+                observability.observe(
+                    event_type=observability.ErrorEvents.INTERNAL_ERROR,
+                    level=observability.EventLevel.WARNING,
+                    data={"error": str(e), "service": "knowledge_graph"},
+                    description=f"Error stopping knowledge graph service: {e}",
                 )
 
         observability.observe(

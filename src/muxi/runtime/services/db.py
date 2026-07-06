@@ -467,15 +467,17 @@ class DatabaseManager:
             finally:
                 await session.close()
 
-    def create_tables(self, metadata: MetaData) -> None:
+    def create_tables(self, metadata: MetaData, tables: Optional[list] = None) -> None:
         """
         Create all tables defined in the provided SQLAlchemy metadata using the synchronous engine.
 
         Parameters:
             metadata (MetaData): SQLAlchemy metadata object containing table definitions.
+            tables (list, optional): Subset of ``Table`` objects to create.
+                When omitted, every table in the metadata is created.
         """
         try:
-            metadata.create_all(self.engine)
+            metadata.create_all(self.engine, tables=tables)
             pass  # REMOVED: init-phase observe() call
         except Exception as e:
             observability.observe(

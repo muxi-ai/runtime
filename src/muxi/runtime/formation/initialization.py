@@ -756,6 +756,40 @@ def initialize_memory_systems(formation) -> None:
                 embedding_dim = getattr(ltm, "dimension", 1536) if ltm else 1536
                 _create_all_database_tables(formation._db_manager, embedding_dim)
 
+                # Initialize the knowledge graph service (Memory Revamp Phase 1).
+                # Placed after table creation (kg_entities/kg_relationships must
+                # exist) and after LLM configuration in the formation load order
+                # so extraction can resolve the capability model at runtime.
+                _initialize_knowledge_graph(formation, memory_config.get("graph", {}))
+
+
+def _initialize_knowledge_graph(formation, graph_config: Dict[str, Any]) -> None:
+    """Initialize the knowledge graph service on top of persistent memory."""
+    if graph_config.get("enabled", True) is False:
+        formation._knowledge_graph = None
+        return
+
+    try:
+        from ..services.memory.graph import KnowledgeGraphService
+
+        formation_id = getattr(formation, "formation_id", "default-formation")
+        formation._knowledge_graph = KnowledgeGraphService(
+            db_manager=formation._db_manager,
+            formation_id=formation_id,
+            config=graph_config,
+        )
+        backend = "pgRouting" if formation._knowledge_graph.pgrouting_available else "NetworkX"
+        print(InitEventFormatter.format_ok("Initializing knowledge graph", f"{backend} backend"))
+    except Exception as e:
+        formation._knowledge_graph = None
+        observability.observe(
+            event_type=observability.ErrorEvents.MEMORY_INITIALIZATION_FAILED,
+            level=observability.EventLevel.WARNING,
+            data={"error": str(e), "service": "knowledge_graph"},
+            description=f"Failed to initialize knowledge graph service: {str(e)}",
+        )
+        # Don't raise - the knowledge graph is additive to persistent memory
+
 
 def _initialize_working_memory(formation, working_config: Dict[str, Any]) -> None:
     """Initialize working memory configuration with defaults."""
@@ -1042,6 +1076,7 @@ def _create_all_database_tables(db_manager, embedding_dimension: int = 1536) -> 
 
         # Get Base from db module
         from ..services.db import Base
+        from ..services.memory.graph.models import KGEntity, KGRelationship  # noqa: F401
         from ..services.memory.long_term import (  # noqa: F401
             Group,
             User,
@@ -1056,8 +1091,22 @@ def _create_all_database_tables(db_manager, embedding_dimension: int = 1536) -> 
         # Scheduler models (scheduled_jobs, scheduled_job_audit)
         from ..services.scheduler.models import ScheduledJob, ScheduledJobAudit  # noqa: F401
 
+        # On SQLite the dim-specific memories table is owned by SQLiteMemory,
+        # which creates it lazily with its own raw-SQL schema (``metadata``
+        # column, FTS mirror tables). Creating the SQLAlchemy variant here
+        # first would win the CREATE TABLE IF NOT EXISTS race with a column
+        # set (``meta_data``) that SQLiteMemory's queries don't use, breaking
+        # flat-fact storage on fresh databases.
+        tables = None
+        if db_manager.database_type == "sqlite":
+            tables = [
+                table
+                for name, table in Base.metadata.tables.items()
+                if not name.startswith("memories_")
+            ]
+
         # Create all tables using the database manager
-        db_manager.create_tables(Base.metadata)
+        db_manager.create_tables(Base.metadata, tables=tables)
 
         # Migrate: ensure meta_data column exists on memories tables created by older versions
         # (CREATE TABLE IF NOT EXISTS won't add columns to existing tables)
@@ -1070,6 +1119,8 @@ def _create_all_database_tables(db_manager, embedding_dimension: int = 1536) -> 
             "groups",
             "user_groups",  # Group-based access control tables
             memories_table,  # Memory system tables (dimension-specific)
+            "kg_entities",
+            "kg_relationships",  # Knowledge graph tables
             "credentials",  # Credential storage
             "scheduled_jobs",
             "scheduled_job_audit",  # Scheduler tables
