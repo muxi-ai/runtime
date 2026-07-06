@@ -78,15 +78,12 @@ class TestKnowledgeGraph(BaseMemoryTest):
 
             # Turn 1: unambiguous graph facts (entities + relationships)
             user_msg1 = (
-                "My name is Jordan. I founded a company called Automaze "
-                "and I live in London."
+                "My name is Jordan. I founded a company called Automaze " "and I live in London."
             )
             response1 = await self.overlord.chat(
                 user_msg1, user_id=user_id, use_async=False, stream=False
             )
-            response1_text = (
-                response1.content if hasattr(response1, "content") else str(response1)
-            )
+            response1_text = response1.content if hasattr(response1, "content") else str(response1)
             transcript.append((user_msg1, response1_text))
             print(f"User: {user_msg1}")
             print(f"Assistant: {response1_text[:200]}...")
@@ -96,9 +93,7 @@ class TestKnowledgeGraph(BaseMemoryTest):
             response2 = await self.overlord.chat(
                 user_msg2, user_id=user_id, use_async=False, stream=False
             )
-            response2_text = (
-                response2.content if hasattr(response2, "content") else str(response2)
-            )
+            response2_text = response2.content if hasattr(response2, "content") else str(response2)
             transcript.append((user_msg2, response2_text))
             print(f"User: {user_msg2}")
             print(f"Assistant: {response2_text[:200]}...")
@@ -159,9 +154,7 @@ class TestKnowledgeGraph(BaseMemoryTest):
 
             # Check 5: knowledge graph rows persist across restart
             if knowledge_graph is not None:
-                persisted_entities = await knowledge_graph.storage.list_entities(
-                    effective_user_id
-                )
+                persisted_entities = await knowledge_graph.storage.list_entities(effective_user_id)
                 if persisted_entities:
                     print("  ✓ Knowledge graph rows persisted across restart")
                     checks_passed.append("Graph rows persisted across restart")
