@@ -5,7 +5,10 @@ This module contains the EventLogger class for handling event emission
 with configurable outputs and routing.
 """
 
+import atexit
+import queue
 import socket
+import threading
 import time
 from typing import Any, Dict, List, Optional, Union
 
@@ -32,7 +35,15 @@ class EventLogger:
     Two-tier logging architecture:
     - System events (SystemEvents, ErrorEvents, ServerEvents, APIEvents) -> system_destination
     - Conversation events (ConversationEvents) -> configured output (file, stdout, stream, trail)
+
+    File and network destinations are written by a single background
+    writer thread fed through a queue, so emitters never block on disk
+    or HTTP. stdout destinations stay synchronous to preserve console
+    ordering.
     """
+
+    # Max events drained per write batch by the background writer
+    _WRITER_BATCH_MAX = 100
 
     def __init__(
         self,
@@ -60,6 +71,11 @@ class EventLogger:
 
         self.muxi_version = get_version()
         self._server_id = self._get_server_id()
+
+        # Background writer state, created lazily on first non-stdout
+        # write so stdout-only loggers never spawn a thread
+        self._write_queue: Optional[queue.Queue] = None
+        self._writer_start_lock = threading.Lock()
 
     def set_server_ready(self, ready: bool = True) -> None:
         """Mark server as ready to enable JSONL output to stdout."""
@@ -217,12 +233,8 @@ class EventLogger:
             # Route ConversationEvents to configured output
             if self.output == "stdout":
                 print(event_line, flush=True)
-            elif self.output == "file":
-                self._emit_to_file(event_line)
-            elif self.output == "stream":
-                self._emit_to_stream(event_line)
-            elif self.output == "trail":
-                self._emit_to_trail(event_line)
+            elif self.output in ("file", "stream", "trail"):
+                self._enqueue_write(self.output, event_line)
 
         except Exception:
             # Silent failures to avoid disrupting main application flow
@@ -244,61 +256,103 @@ class EventLogger:
                 print(event_line, flush=True)
             return
 
-        # File path - write to system log file
-        try:
-            with open(self.system_destination, "a") as f:
-                f.write(event_line + "\n")
-                f.flush()
-        except Exception:
-            # Fallback to stdout if file write fails (only when server ready)
-            if self._server_ready:
-                print(event_line, flush=True)
+        # File path - write via the background writer
+        self._enqueue_write("system_file", event_line)
 
-    def _emit_to_file(self, event_line: str) -> None:
-        """Emit event to file output."""
-        file_path = self.output_config.get("path", f"{get_observability_dir()}/muxi.jsonl")
-        with open(file_path, "a") as f:
-            f.write(event_line + "\n")
-            f.flush()  # Ensure immediate write
+    def _enqueue_write(self, kind: str, event_line: str) -> None:
+        """Queue an event line for the background writer thread."""
+        if self._write_queue is None:
+            with self._writer_start_lock:
+                if self._write_queue is None:
+                    write_queue: queue.Queue = queue.Queue()
+                    writer = threading.Thread(
+                        target=self._writer_loop,
+                        args=(write_queue,),
+                        name="muxi-event-writer",
+                        daemon=True,
+                    )
+                    # Publish the queue only after the thread exists so
+                    # concurrent emitters never enqueue into a queue
+                    # nothing will ever drain
+                    self._write_queue = write_queue
+                    writer.start()
+                    atexit.register(self.flush)
+        self._write_queue.put((kind, event_line))
 
-    def _emit_to_stream(self, event_line: str) -> None:
-        """Emit event to stream output."""
-        stream_url = self.output_config.get("url")
-        if not stream_url:
+    def _writer_loop(self, write_queue: "queue.Queue") -> None:
+        """Drain the write queue in batches, grouped by destination.
+
+        A single writer thread owns all file appends and HTTP posts, so
+        emitters never block on I/O, per-destination ordering is FIFO,
+        and the HTTP session reuses connections across events.
+        """
+        session = requests.Session()
+        while True:
+            items = [write_queue.get()]
+            while len(items) < self._WRITER_BATCH_MAX:
+                try:
+                    items.append(write_queue.get_nowait())
+                except queue.Empty:
+                    break
+
+            grouped: Dict[str, List[str]] = {}
+            for kind, event_line in items:
+                grouped.setdefault(kind, []).append(event_line)
+
+            for kind, event_lines in grouped.items():
+                try:
+                    self._write_batch(kind, event_lines, session)
+                except Exception:
+                    # Transport failures must never disrupt the runtime
+                    pass
+
+            for _ in items:
+                write_queue.task_done()
+
+    def _write_batch(self, kind: str, event_lines: List[str], session: requests.Session) -> None:
+        """Write one batch of JSON-L lines to a single destination."""
+        payload = "\n".join(event_lines) + "\n"
+
+        if kind == "file":
+            file_path = self.output_config.get("path", f"{get_observability_dir()}/muxi.jsonl")
+            with open(file_path, "a") as f:
+                f.write(payload)
+        elif kind == "system_file":
+            try:
+                with open(self.system_destination, "a") as f:
+                    f.write(payload)
+            except Exception:
+                # Fallback to stdout if file write fails (only when server ready)
+                if self._server_ready:
+                    print(payload, end="", flush=True)
+        elif kind == "stream":
+            stream_url = self.output_config.get("url")
+            if stream_url:
+                session.post(
+                    stream_url,
+                    data=payload,
+                    headers={"Content-Type": "application/x-ndjson"},
+                    timeout=5,
+                )
+        elif kind == "trail":
+            trail_config = self.output_config.get("trail", {})
+            trail_url = trail_config.get("url")
+            if trail_url:
+                headers = {"Content-Type": "application/x-ndjson"}
+                # Add authentication if configured
+                if api_key := trail_config.get("api_key"):
+                    headers["Authorization"] = f"Bearer {api_key}"
+                session.post(trail_url, data=payload, headers=headers, timeout=10)
+
+    def flush(self, timeout: float = 2.0) -> None:
+        """Best-effort wait for queued events to reach their destination.
+
+        Registered via atexit so tail events are not lost on shutdown;
+        also useful in tests to assert on written output.
+        """
+        write_queue = self._write_queue
+        if write_queue is None:
             return
-
-        try:
-            requests.post(
-                stream_url,
-                data=event_line + "\n",
-                headers={"Content-Type": "application/x-ndjson"},
-                timeout=5,
-            )
-        except Exception:
-            # Silent failure for external stream connectivity issues
-            pass
-
-    def _emit_to_trail(self, event_line: str) -> None:
-        """Emit event to MUXI trail output."""
-        trail_config = self.output_config.get("trail", {})
-        trail_url = trail_config.get("url")
-
-        if not trail_url:
-            return
-
-        try:
-            headers = {"Content-Type": "application/x-ndjson"}
-
-            # Add authentication if configured
-            if api_key := trail_config.get("api_key"):
-                headers["Authorization"] = f"Bearer {api_key}"
-
-            requests.post(
-                trail_url,
-                data=event_line + "\n",
-                headers=headers,
-                timeout=10,
-            )
-        except Exception:
-            # Silent failure for external trail connectivity issues
-            pass
+        deadline = time.time() + timeout
+        while write_queue.unfinished_tasks and time.time() < deadline:
+            time.sleep(0.01)
