@@ -8,6 +8,7 @@ events are dropped before redaction, while emitted events still go
 through redaction as before.
 """
 
+import time
 from unittest.mock import patch
 
 from muxi.runtime.datatypes.observability import (
@@ -96,9 +97,11 @@ class TestObserveEarlyFiltering:
                     data={"payload": "value"},
                     description="emitted event",
                 )
-                # Redaction runs synchronously in observe() before the
-                # background emission thread is spawned: once for data,
-                # once for the description.
+                # Redaction runs on the background emission thread: once
+                # for data, once for the description.
+                deadline = time.time() + 2.0
+                while mock_redact.call_count < 2 and time.time() < deadline:
+                    time.sleep(0.01)
                 assert mock_redact.call_count == 2
         finally:
             self._restore(previous, was_enabled)

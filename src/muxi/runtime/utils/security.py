@@ -11,6 +11,84 @@ from typing import Optional
 from .redaction import get_entity_detector, mask_spans
 from .sensitive_terms import SENSITIVE_PREVIEW_TERMS
 
+# All redaction patterns are compiled once at import time; the redactor
+# runs on every observability event, so per-call compilation and list
+# construction are pure hot-path overhead. Pattern strings and flags are
+# identical to the originals.
+
+# Patterns for common API key formats
+# Matches strings like: sk-..., api_key=..., apikey:..., etc.
+_API_KEY_PATTERNS = [
+    # OpenAI style keys
+    (re.compile(r"\bsk-[A-Za-z0-9-]{20,}\b", re.IGNORECASE), "sk-****"),
+    # Generic API keys with common prefixes
+    (
+        re.compile(
+            r"\b(api[-_]?key|apikey|api[-_]?token|access[-_]?token|"
+            r'auth[-_]?token|bearer)\s*[:=]\s*["\']?([A-Za-z0-9+/=_-]{20,})["\']?',
+            re.IGNORECASE,
+        ),
+        r"\1=****",
+    ),
+    # AWS Access Keys
+    (re.compile(r"\bAKIA[A-Z0-9]{16}\b", re.IGNORECASE), "AKIA****"),
+    # AWS Secret Keys
+    (re.compile(r"\b[A-Za-z0-9+/]{40}\b(?=.*aws|.*secret)", re.IGNORECASE), "****"),
+    # GitHub tokens
+    (re.compile(r"\bghp_[A-Za-z0-9]{36}\b", re.IGNORECASE), "ghp_****"),
+    (re.compile(r"\bgho_[A-Za-z0-9]{36}\b", re.IGNORECASE), "gho_****"),
+    (re.compile(r"\bghu_[A-Za-z0-9]{36}\b", re.IGNORECASE), "ghu_****"),
+    # Google API keys
+    (re.compile(r"\bAIza[A-Za-z0-9_-]{35}\b", re.IGNORECASE), "AIza****"),
+    # Slack tokens
+    (re.compile(r"\bxox[baprs]-[A-Za-z0-9-]{10,}\b", re.IGNORECASE), "xox*-****"),
+]
+
+# Password patterns
+_PASSWORD_PATTERNS = [
+    # With explicit delimiter
+    (
+        re.compile(
+            r'(password|passwd|pwd|pass)\s*[:=]\s*["\']?([^\s"\']{8,})["\']?', re.IGNORECASE
+        ),
+        r"\1=****",
+    ),
+    # With "is" or space
+    (re.compile(r'(password|passwd|pwd|pass)\s+(is\s+)?([^\s"\']{8,})', re.IGNORECASE), r"\1 ****"),
+    (
+        re.compile(r'(secret|client_secret)\s*[:=]\s*["\']?([^\s"\']{8,})["\']?', re.IGNORECASE),
+        r"\1=****",
+    ),
+]
+
+# Database connection strings
+_DB_PATTERNS = [
+    (
+        re.compile(r"(mongodb|postgres|postgresql|mysql|redis|sqlite)://[^\s]+", re.IGNORECASE),
+        r"\1://****",
+    ),
+    (re.compile(r'(host|server)\s*[:=]\s*["\']?([^\s"\']+)["\']?', re.IGNORECASE), r"\1=****"),
+]
+
+# SSN pattern (US format: XXX-XX-XXXX or XXXXXXXXX)
+_SSN_PATTERN = re.compile(r"\b\d{3}-?\d{2}-?\d{4}\b")
+
+# Email pattern (partial redaction)
+_EMAIL_PATTERN = re.compile(r"\b([a-zA-Z0-9._%+-]+)@([a-zA-Z0-9.-]+\.[a-zA-Z]{2,})\b")
+
+# Phone number pattern (US format)
+_PHONE_PATTERN = re.compile(r"\b(?:\+?1[-.\s]?)?\(?\d{3}\)?[-.\s]?\d{3}[-.\s]?\d{4}\b")
+
+# JWT tokens (they start with ey and are base64)
+_JWT_PATTERN = re.compile(r"\bey[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+\b")
+
+# Generic long hex strings that might be tokens (40+ chars)
+_HEX_TOKEN_PATTERN = re.compile(r"\b[a-fA-F0-9]{40,}\b")
+
+# Credit card candidates (validated with Luhn before masking)
+_CARD_CANDIDATE_PATTERN = re.compile(r"\b\d[\d -]{11,21}\d\b")
+_NON_DIGIT_PATTERN = re.compile(r"\D")
+
 
 def _luhn_valid(digits: str) -> bool:
     """Return True if a digit string passes the Luhn checksum."""
@@ -30,14 +108,14 @@ def _redact_credit_cards(text: str) -> str:
     """Mask digit sequences that are valid credit-card numbers (Luhn + length)."""
 
     def _mask(match: re.Match) -> str:
-        digits = re.sub(r"\D", "", match.group(0))
+        digits = _NON_DIGIT_PATTERN.sub("", match.group(0))
         if 13 <= len(digits) <= 19 and _luhn_valid(digits):
             # Length-accurate placeholder: one "****" group per 4 digits so a
             # 15-digit Amex or 19-digit card is not misrepresented as 16-digit.
             return "-".join("****" for _ in range((len(digits) + 3) // 4))
         return match.group(0)
 
-    return re.sub(r"\b\d[\d -]{11,21}\d\b", _mask, text)
+    return _CARD_CANDIDATE_PATTERN.sub(_mask, text)
 
 
 def redact_sensitive_content(text: Optional[str]) -> str:
@@ -65,84 +143,33 @@ def redact_sensitive_content(text: Optional[str]) -> str:
 
     redacted = str(text)
 
-    # Patterns for common API key formats
-    # Matches strings like: sk-..., api_key=..., apikey:..., etc.
-    api_key_patterns = [
-        # OpenAI style keys
-        (r"\bsk-[A-Za-z0-9-]{20,}\b", "sk-****"),
-        # Generic API keys with common prefixes
-        (
-            r"\b(api[-_]?key|apikey|api[-_]?token|access[-_]?token|"
-            r'auth[-_]?token|bearer)\s*[:=]\s*["\']?([A-Za-z0-9+/=_-]{20,})["\']?',
-            r"\1=****",
-        ),
-        # AWS Access Keys
-        (r"\bAKIA[A-Z0-9]{16}\b", "AKIA****"),
-        # AWS Secret Keys
-        (r"\b[A-Za-z0-9+/]{40}\b(?=.*aws|.*secret)", "****"),
-        # GitHub tokens
-        (r"\bghp_[A-Za-z0-9]{36}\b", "ghp_****"),
-        (r"\bgho_[A-Za-z0-9]{36}\b", "gho_****"),
-        (r"\bghu_[A-Za-z0-9]{36}\b", "ghu_****"),
-        # Google API keys
-        (r"\bAIza[A-Za-z0-9_-]{35}\b", "AIza****"),
-        # Slack tokens
-        (r"\bxox[baprs]-[A-Za-z0-9-]{10,}\b", "xox*-****"),
-    ]
-
-    # Password patterns
-    password_patterns = [
-        # With explicit delimiter
-        (r'(password|passwd|pwd|pass)\s*[:=]\s*["\']?([^\s"\']{8,})["\']?', r"\1=****"),
-        # With "is" or space
-        (r'(password|passwd|pwd|pass)\s+(is\s+)?([^\s"\']{8,})', r"\1 ****"),
-        (r'(secret|client_secret)\s*[:=]\s*["\']?([^\s"\']{8,})["\']?', r"\1=****"),
-    ]
-
-    # SSN pattern (US format: XXX-XX-XXXX or XXXXXXXXX)
-    ssn_pattern = r"\b\d{3}-?\d{2}-?\d{4}\b"
-
-    # Email pattern (partial redaction)
-    email_pattern = r"\b([a-zA-Z0-9._%+-]+)@([a-zA-Z0-9.-]+\.[a-zA-Z]{2,})\b"
-
-    # Phone number pattern (US format)
-    phone_pattern = r"\b(?:\+?1[-.\s]?)?\(?\d{3}\)?[-.\s]?\d{3}[-.\s]?\d{4}\b"
-
-    # Database connection strings
-    db_patterns = [
-        (r"(mongodb|postgres|postgresql|mysql|redis|sqlite)://[^\s]+", r"\1://****"),
-        (r'(host|server)\s*[:=]\s*["\']?([^\s"\']+)["\']?', r"\1=****"),
-    ]
-
     # Apply all redactions
-    for pattern, replacement in api_key_patterns:
-        redacted = re.sub(pattern, replacement, redacted, flags=re.IGNORECASE)
+    for pattern, replacement in _API_KEY_PATTERNS:
+        redacted = pattern.sub(replacement, redacted)
 
-    for pattern, replacement in password_patterns:
-        redacted = re.sub(pattern, replacement, redacted, flags=re.IGNORECASE)
+    for pattern, replacement in _PASSWORD_PATTERNS:
+        redacted = pattern.sub(replacement, redacted)
 
-    for pattern, replacement in db_patterns:
-        redacted = re.sub(pattern, replacement, redacted, flags=re.IGNORECASE)
+    for pattern, replacement in _DB_PATTERNS:
+        redacted = pattern.sub(replacement, redacted)
 
     # Credit cards (Luhn-validated to avoid masking arbitrary long digit strings)
     redacted = _redact_credit_cards(redacted)
 
     # SSNs
-    redacted = re.sub(ssn_pattern, "***-**-****", redacted)
+    redacted = _SSN_PATTERN.sub("***-**-****", redacted)
 
     # Emails (show first char and domain)
-    redacted = re.sub(email_pattern, lambda m: m.group(1)[0] + "****@" + m.group(2), redacted)
+    redacted = _EMAIL_PATTERN.sub(lambda m: m.group(1)[0] + "****@" + m.group(2), redacted)
 
     # Phone numbers
-    redacted = re.sub(phone_pattern, "***-***-****", redacted)
+    redacted = _PHONE_PATTERN.sub("***-***-****", redacted)
 
     # JWT tokens (they start with ey and are base64)
-    redacted = re.sub(
-        r"\bey[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+\b", "ey****.****.****.", redacted
-    )
+    redacted = _JWT_PATTERN.sub("ey****.****.****.", redacted)
 
     # Generic long hex strings that might be tokens (40+ chars)
-    redacted = re.sub(r"\b[a-fA-F0-9]{40,}\b", "****", redacted)
+    redacted = _HEX_TOKEN_PATTERN.sub("****", redacted)
 
     # Optional second layer: entity detection (names, addresses, orgs, DOB,
     # financial). No-op unless an entity detector is registered at startup.
