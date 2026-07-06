@@ -115,6 +115,52 @@ class UserIdentifier(Base, AsyncModelMixin):
     )
 
 
+class Group(Base, AsyncModelMixin):
+    """
+    Group table for group-based access control.
+
+    Groups are policy data: membership rows in user_groups reference them,
+    and group_id matches the group YAML filename stem (permission resolution
+    is loaded from the formation's groups/ directory at runtime).
+    """
+
+    __tablename__ = "groups"
+
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    group_id = Column(String(255), nullable=False)
+    name = Column(String(255))
+    description = Column(Text)
+    formation_id = Column(String(255), nullable=False, index=True)
+    created_at = Column(DateTime, nullable=False, default=utc_now_naive)
+    updated_at = Column(DateTime, default=utc_now_naive, onupdate=utc_now_naive)
+
+    # Composite unique constraint to ensure group_id uniqueness per formation
+    __table_args__ = (UniqueConstraint("group_id", "formation_id", name="uq_group_formation"),)
+
+
+class UserGroup(Base, AsyncModelMixin):
+    """
+    User-to-group membership table.
+
+    user_id stores the external user identifier (email, Slack ID, etc.) as
+    populated by operators; it is resolved through the user_identifiers table
+    at request time, mirroring how identities enter the runtime.
+    """
+
+    __tablename__ = "user_groups"
+
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    user_id = Column(String(255), nullable=False, index=True)
+    group_id = Column(String(255), nullable=False, index=True)
+    formation_id = Column(String(255), nullable=False, index=True)
+    created_at = Column(DateTime, default=utc_now_naive)
+
+    # Composite unique constraint to prevent duplicate memberships per formation
+    __table_args__ = (
+        UniqueConstraint("user_id", "group_id", "formation_id", name="uq_user_group_formation"),
+    )
+
+
 # Dynamic Memory model factory — one ORM class per embedding dimension.
 # Table name: memories_{dimension} (e.g. memories_384, memories_768, memories_1536).
 _memory_models: Dict[int, Any] = {}

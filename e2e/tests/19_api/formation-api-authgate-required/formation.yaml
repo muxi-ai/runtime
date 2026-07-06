@@ -1,0 +1,37 @@
+schema: "1.0.0"
+id: api-test-authgate-required
+description: "Formation with server.auth required for auth gate testing"
+
+llm:
+  api_keys:
+    openai: "${{ secrets.OPENAI_API_KEY }}"
+  models:
+    - text: "openai/gpt-4o-mini"
+    - embedding: "openai/text-embedding-3-small"
+
+runtime:
+  built_in_mcps: false
+
+memory:
+  buffer:
+    size: 100
+    vector_search: false
+
+agents:
+  - id: assistant
+    name: "Auth Gate Test Assistant"
+    description: "A helpful assistant for testing the auth gate"
+    system_message: "You are a helpful assistant. Be concise and direct."
+
+server:
+  enabled: true
+  port: 8271
+  auth: required
+  api_keys:
+    admin_key: test-admin-key-123
+    client_key: test-client-key-456
+
+logging:
+  system:
+    level: "error"
+    destination: "stdout"

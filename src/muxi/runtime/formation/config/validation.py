@@ -2603,6 +2603,12 @@ class FormationValidator:
             if not isinstance(port, int) or port < 1 or port > 65535:
                 self.result.add_error("Server port must be an integer between 1 and 65535")
 
+        # Validate auth mode
+        if "auth" in server_config:
+            auth = server_config["auth"]
+            if auth not in ("open", "required"):
+                self.result.add_error(f"Server auth must be 'open' or 'required', got: {auth!r}")
+
         # Validate api_keys
         if "api_keys" in server_config:
             api_keys = server_config["api_keys"]
