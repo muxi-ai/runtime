@@ -12,6 +12,7 @@ from typing import Any, Dict, Optional
 
 from ...datatypes.exceptions import NoAvailableAgentsError, SecurityViolation
 from ...services import observability
+from ...services.gbac import enforcement as gbac
 
 
 class AgentRouter:
@@ -299,6 +300,11 @@ class AgentRouter:
         available_agents = await self.overlord.active_agent_tracker.get_available_agents(
             list(self.overlord.agents.keys()), request_id=request_id
         )
+
+        # GBAC Phase 3: the routing LLM only ever sees agents the requesting
+        # user's groups permit -- a denied agent is simply not a capability
+        # the model has (no-op without a groups/ directory).
+        available_agents = gbac.filter_ids("agents", available_agents)
 
         if not available_agents:
             raise NoAvailableAgentsError("No agents available for new requests")
@@ -602,6 +608,9 @@ Your response: [agent-id] or SECURITY_BLOCK"""
         available_agents = await self.overlord.active_agent_tracker.get_available_agents(
             list(self.overlord.agents.keys()), request_id=request_id
         )
+
+        # GBAC Phase 3: constrain the fallback heuristic to permitted agents
+        available_agents = gbac.filter_ids("agents", available_agents)
 
         if not available_agents:
             raise NoAvailableAgentsError("No agents available for new requests")

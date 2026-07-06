@@ -1,0 +1,4 @@
+name: "Engineering"
+description: "Engineering staff -- codebase access"
+agents:
+  - code-assistant

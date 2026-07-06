@@ -91,6 +91,10 @@ class SystemEvents(Enum):
     # When group permission files are loaded from the formation's groups/
     # directory at startup (GBAC Phase 2)
 
+    PERMISSION_FILTERED = "gbac.permissions.filtered"
+    # When request-time permission filtering removes resources (agents,
+    # SOPs, MCP tools) from a user's view (GBAC Phase 3)
+
     # ===================================================================
     # DOCUMENT CROSS-REFERENCE EVENTS
     # ===================================================================

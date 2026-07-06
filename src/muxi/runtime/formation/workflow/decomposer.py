@@ -460,11 +460,17 @@ Analysis Results:
         """
         info_parts = ["Available agent capabilities and tools:\n"]
 
+        # GBAC Phase 3: the decomposition LLM only sees agents the
+        # requesting user's groups permit (no-op without a groups/ dir).
+        from ...services.gbac import enforcement as gbac
+
+        agent_registry = gbac.filter_agent_registry(self.agent_registry)
+
         # Get agent capabilities
-        if self.agent_registry:
+        if agent_registry:
 
             info_parts.append("**Available Agents and Their Capabilities:**")
-            for agent_id, agent in self.agent_registry.items():
+            for agent_id, agent in agent_registry.items():
                 # Get all agent attributes
                 agent_name = getattr(agent, "name", agent_id)
                 agent_description = getattr(agent, "description", "")
@@ -536,8 +542,8 @@ Analysis Results:
         all_capabilities = set()
         capability_examples = {}
 
-        if self.agent_registry:
-            for agent_id, agent in self.agent_registry.items():
+        if agent_registry:
+            for agent_id, agent in agent_registry.items():
                 specialties = (
                     getattr(agent, "specialization", None)
                     or getattr(agent, "specialties", None)

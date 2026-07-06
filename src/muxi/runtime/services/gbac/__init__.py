@@ -16,11 +16,23 @@ Public surface:
 - ``GroupPermissionError`` -- raised for any malformed group definition;
   the formation loader converts it into a load failure.
 
-Resource *filtering* (applying these permissions to agents, triggers,
-SOPs, and MCP tools at request time) is Phase 3 and intentionally not
-implemented here.
+Resource *filtering* (Phase 3) lives in ``enforcement``: the overlord
+resolves the requesting user's permissions once per request and stores
+them in a ContextVar; the enforcement helpers filter agents, SOPs,
+triggers, and MCP tool surfaces at each site, and are strict no-ops when
+no permissions are set (formations without a ``groups/`` directory).
 """
 
+from .enforcement import (
+    effective_tool_registry,
+    filter_agent_registry,
+    filter_ids,
+    get_current_permissions,
+    is_allowed,
+    observe_denied,
+    reset_current_permissions,
+    set_current_permissions,
+)
 from .loader import (
     GroupPermissionError,
     ResolvedGroup,
@@ -37,5 +49,13 @@ __all__ = [
     "ResolvedPermissions",
     "SectionRules",
     "ToolRules",
+    "effective_tool_registry",
+    "filter_agent_registry",
+    "filter_ids",
+    "get_current_permissions",
+    "is_allowed",
     "load_groups",
+    "observe_denied",
+    "reset_current_permissions",
+    "set_current_permissions",
 ]

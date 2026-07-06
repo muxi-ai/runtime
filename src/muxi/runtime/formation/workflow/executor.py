@@ -20,6 +20,7 @@ from ...datatypes.workflow_models import (
     create_execution_result,
 )
 from ...services import observability, streaming
+from ...services.gbac import enforcement as gbac_enforcement
 from ...utils.fastjson import json
 from ..agents.agent import Agent
 from ..agents.skill_dispatch import _rce_artifact_to_muxi, run_skill_command
@@ -1062,7 +1063,34 @@ class WorkflowExecutor:
 
         return inputs
 
+    def _with_permitted_registry(self, select_fn):
+        """Run an agent-selection function against the GBAC-permitted registry.
+
+        GBAC Phase 3: workflow task assignment must not reach agents the
+        requesting user's groups deny -- even when a (hallucinated or
+        stale) plan names one explicitly. Selection functions read
+        ``self.agent_registry`` throughout, so we temporarily swap in the
+        filtered view (the same pattern ``_select_agent_for_task_excluding``
+        already uses; safe because selection is fully synchronous). No-op
+        when no permissions are set (no groups/ directory).
+        """
+        permitted = gbac_enforcement.filter_agent_registry(self.agent_registry)
+        if permitted is self.agent_registry:
+            return select_fn()
+        original_registry = self.agent_registry
+        self.agent_registry = permitted
+        try:
+            return select_fn()
+        finally:
+            self.agent_registry = original_registry
+
     def _select_agent_for_spec(
+        self, spec: TaskSpecification, state: TaskExecutionState
+    ) -> Optional[Agent]:
+        """Select best agent for a spec, constrained to permitted agents."""
+        return self._with_permitted_registry(lambda: self._select_agent_for_spec_impl(spec, state))
+
+    def _select_agent_for_spec_impl(
         self, spec: TaskSpecification, state: TaskExecutionState
     ) -> Optional[Agent]:
         """
@@ -1204,6 +1232,10 @@ class WorkflowExecutor:
         return best_agent
 
     def _select_agent_for_task(self, task: SubTask) -> Optional[Agent]:
+        """Select best agent for a task, constrained to permitted agents."""
+        return self._with_permitted_registry(lambda: self._select_agent_for_task_impl(task))
+
+    def _select_agent_for_task_impl(self, task: SubTask) -> Optional[Agent]:
         """
         Select best agent for task based on configured routing strategy.
 
