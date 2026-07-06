@@ -1486,19 +1486,17 @@ class Formation:
             membership_ttl=membership_ttl,
         )
 
-        observability.observe(
-            event_type=observability.SystemEvents.GROUPS_LOADED,
-            level=observability.EventLevel.INFO,
-            data={
-                "service": "formation",
-                "formation_id": self.formation_id,
-                "groups_dir": groups_dir,
-                "group_count": len(groups),
-                "group_ids": sorted(groups),
-                "membership_ttl_seconds": membership_ttl,
-            },
-            description=f"Loaded {len(groups)} permission group(s) from {groups_dir}",
-        )
+        # Observability is disabled during load(), so emitting here would be
+        # a silent no-op. Stash the event payload and emit it after
+        # observability.enable() in start_overlord().
+        self._groups_loaded_event = {
+            "service": "formation",
+            "formation_id": self.formation_id,
+            "groups_dir": groups_dir,
+            "group_count": len(groups),
+            "group_ids": sorted(groups),
+            "membership_ttl_seconds": membership_ttl,
+        }
 
     @property
     def permission_resolver(self):
@@ -2951,6 +2949,21 @@ class Formation:
             # Enable observability now that init is complete
             # This starts the flow of JSON observability events for runtime monitoring
             observability.enable()
+
+            # Deferred from _setup_groups(): the event is built during load()
+            # while observability is disabled, so it is emitted here instead
+            groups_event = getattr(self, "_groups_loaded_event", None)
+            if groups_event is not None:
+                observability.observe(
+                    event_type=observability.SystemEvents.GROUPS_LOADED,
+                    level=observability.EventLevel.INFO,
+                    data=groups_event,
+                    description=(
+                        f"Loaded {groups_event['group_count']} permission group(s) "
+                        f"from {groups_event['groups_dir']}"
+                    ),
+                )
+                self._groups_loaded_event = None
 
             return self._overlord
 

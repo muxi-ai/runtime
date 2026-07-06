@@ -949,3 +949,27 @@ class TestCrossGroupAgentDenialInEffectiveTools:
         perms = perms_for(groups, "restrictors", "granters")
         assert not perms.is_allowed("agents", "agent-x")
         assert perms.effective_tools("agent-x", "db", INHERITED) == set()
+
+
+class TestGroupsLoadedEventDeferral:
+    """GROUPS_LOADED must not be swallowed by the load-time observability gate.
+
+    _setup_groups() runs during load() while observability is disabled, so
+    it stashes the event payload; start_overlord() emits it after enable().
+    """
+
+    def test_setup_groups_stashes_event_instead_of_emitting(self, tmp_path):
+        (tmp_path / "groups").mkdir()
+        (tmp_path / "groups" / "analyst.yaml").write_text("agents: [researcher]\n")
+        stub = SimpleNamespace(
+            _formation_path=str(tmp_path),
+            _permission_resolver=None,
+            _group_permissions={},
+            formation_id=FORMATION_ID,
+            config={"runtime": {}},
+        )
+        Formation._setup_groups(stub)
+        event = stub._groups_loaded_event
+        assert event is not None
+        assert event["group_count"] == 1
+        assert event["group_ids"] == ["analyst"]
