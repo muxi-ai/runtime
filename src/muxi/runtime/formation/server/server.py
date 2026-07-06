@@ -661,7 +661,7 @@ class FormationServer:
         """Register client interaction endpoints."""
         from fastapi import Depends
 
-        from .auth import ClientKeyAuth, DualKeyAuth
+        from .auth import ClientKeyAuth, DualKeyAuth, UserAuthGate
 
         # Import scheduler from admin routes (has dual-auth endpoint GET /scheduler/jobs)
         from .routes.admin import scheduler
@@ -683,11 +683,18 @@ class FormationServer:
         # Create auth dependencies
         client_auth = ClientKeyAuth(self.client_key)
         dual_auth = DualKeyAuth(self.admin_key, self.client_key)
+        user_auth_gate = UserAuthGate()
+
+        # Routers that accept only ClientKey and carry a formation user
+        # identity, so they additionally pass the user auth gate
+        # (server.auth: required rejects unknown users with 401)
+        user_gated_routers = [
+            chat.router,
+            triggers.router,
+        ]
 
         # Routers that accept only ClientKey
         client_only_routers = [
-            chat.router,
-            triggers.router,
             users.router,
             sessions.router,
             skills.router,
@@ -702,6 +709,13 @@ class FormationServer:
             memory.router,
             scheduler.router,  # GET /scheduler/jobs needs both keys
         ]
+
+        for router in user_gated_routers:
+            app.include_router(
+                router,
+                prefix="/v1",
+                dependencies=[Depends(client_auth), Depends(user_auth_gate)],
+            )
 
         for router in client_only_routers:
             app.include_router(router, prefix="/v1", dependencies=[Depends(client_auth)])

@@ -1378,11 +1378,25 @@ class Formation:
         # Store generated keys for later display
         self._generated_api_keys = generated_keys
 
+        # Auth mode: "open" (default) accepts any user identity;
+        # "required" rejects users not present in the user_identifiers table
+        auth_mode = server_config.get("auth", "open")
+        if auth_mode not in ("open", "required"):
+            raise ConfigurationValidationError(
+                [f"Server auth must be 'open' or 'required', got: {auth_mode!r}"],
+                {
+                    "current_value": auth_mode,
+                    "suggestion": "Set 'server.auth' to 'open' or 'required' in your formation.afs",
+                    "example": {"server": {"auth": "required"}},
+                },
+            )
+
         # Store server configuration for later use
         self._server_config = {
             "host": server_config.get("host", "127.0.0.1"),
             "port": server_config.get("port", 8271),
             "access_log": server_config.get("access_log", False),
+            "auth": auth_mode,
             "api_keys": self._api_keys,
         }
 

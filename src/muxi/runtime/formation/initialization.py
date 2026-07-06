@@ -1043,7 +1043,9 @@ def _create_all_database_tables(db_manager, embedding_dimension: int = 1536) -> 
         # Get Base from db module
         from ..services.db import Base
         from ..services.memory.long_term import (  # noqa: F401
+            Group,
             User,
+            UserGroup,
             ensure_memory_table_indexes,
             get_memory_model,
         )
@@ -1065,6 +1067,8 @@ def _create_all_database_tables(db_manager, embedding_dimension: int = 1536) -> 
         table_names = [
             "users",
             "user_identifiers",
+            "groups",
+            "user_groups",  # Group-based access control tables
             memories_table,  # Memory system tables (dimension-specific)
             "credentials",  # Credential storage
             "scheduled_jobs",
