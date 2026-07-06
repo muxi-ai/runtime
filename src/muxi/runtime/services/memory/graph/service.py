@@ -176,6 +176,18 @@ class KnowledgeGraphService:
                 description=f"Knowledge graph real-time extraction failed: {e}",
             )
 
+    async def store_extraction(
+        self, user_id: Any, result: Dict[str, List[Dict[str, Any]]]
+    ) -> Dict[str, int]:
+        """Persist an externally-produced extraction result.
+
+        Public entry point for the Captain's Log digest integration
+        (Memory Revamp Phase 2): the digest response's entity/relationship
+        fields are validated with this service's extractor contract and
+        stored through the same upsert path as the built-in passes.
+        """
+        return await self._store_extraction(user_id, result)
+
     async def _store_extraction(
         self, user_id: Any, result: Dict[str, List[Dict[str, Any]]]
     ) -> Dict[str, int]:

@@ -547,6 +547,10 @@ class Overlord:
             configured_services.get("knowledge_graph") if configured_services else None
         )
 
+        # Captain's log service (Memory Revamp Phase 2) - initialized by the
+        # Formation alongside persistent memory; None when disabled/unavailable.
+        self.captains_log = configured_services.get("captains_log") if configured_services else None
+
         # Configure extraction settings (intelligence concerns)
         self.auto_extract_user_info = auto_extract_user_info
 
@@ -1480,6 +1484,15 @@ class Overlord:
         if getattr(self, "knowledge_graph", None):
             self.knowledge_graph.start_periodic_extraction(
                 lambda: getattr(self, "default_model", None)
+            )
+
+        # Start the captain's log summarization loop (Memory Revamp Phase 2).
+        # The digest resolves its model the way flat-fact extraction does:
+        # the extraction capability model with the default model as fallback.
+        if getattr(self, "captains_log", None):
+            self.captains_log.start(
+                lambda: getattr(self, "extraction_model", None)
+                or getattr(self, "default_model", None)
             )
 
         # Populate formation capabilities after all services are loaded
@@ -4090,6 +4103,18 @@ Agent response: {raw_response}"""
                     level=observability.EventLevel.WARNING,
                     data={"error": str(e), "service": "knowledge_graph"},
                     description=f"Error stopping knowledge graph service: {e}",
+                )
+
+        # Stop the captain's log summarization loop if running
+        if getattr(self, "captains_log", None):
+            try:
+                await self.captains_log.stop()
+            except Exception as e:
+                observability.observe(
+                    event_type=observability.ErrorEvents.INTERNAL_ERROR,
+                    level=observability.EventLevel.WARNING,
+                    data={"error": str(e), "service": "captains_log"},
+                    description=f"Error stopping captain's log service: {e}",
                 )
 
         observability.observe(

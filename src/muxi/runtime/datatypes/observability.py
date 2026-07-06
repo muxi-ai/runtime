@@ -750,6 +750,25 @@ class ConversationEvents(Enum):
     MEMORY_AUTO_EXTRACTION_FAILED = "memory.auto.extraction.failed"
     # When memory auto-extraction fails
 
+    # Captain's log operations (Memory Revamp Phase 2)
+    MEMORY_CAPTAINS_LOG_UPDATED = "memory.captains_log.updated"
+    # When a captain's log entry is created or updated by the digest job
+
+    MEMORY_CAPTAINS_LOG_FAILED = "memory.captains_log.failed"
+    # When a captain's log summarization or lesson-maintenance pass fails
+
+    MEMORY_LESSON_RECORDED = "memory.lesson.recorded"
+    # When a lesson is recorded (digest extraction or record_lesson tool)
+
+    MEMORY_LESSON_APPLIED = "memory.lesson.applied"
+    # When lessons are injected into a session's system prompt
+
+    MEMORY_LESSON_CONSOLIDATED = "memory.lesson.consolidated"
+    # When similar lessons are consolidated into one combined rule
+
+    MEMORY_LESSON_ARCHIVED = "memory.lesson.archived"
+    # When lessons are archived by confidence decay
+
     USER_INFO_EXTRACTION_STARTED = "user.info.extraction.started"
     # When background user information extraction task is initiated
 

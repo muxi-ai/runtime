@@ -1682,17 +1682,42 @@ class ChatOrchestrator:
                     pass
             return ""
 
-        user_profile_text, long_term_memories, buffer_turns, graph_context = await asyncio.gather(
+        async def _fetch_captains_log_context() -> str:
+            # Captain's log context injection (Memory Revamp Phase 2): the
+            # last N narrative entries for continuity. Failure-safe by
+            # contract (returns "" on any error or when the log is empty).
+            captains_log = getattr(self.overlord, "captains_log", None)
+            if captains_log and user_id is not None:
+                try:
+                    return await captains_log.get_context_block(user_id)
+                except Exception:
+                    pass
+            return ""
+
+        (
+            user_profile_text,
+            long_term_memories,
+            buffer_turns,
+            graph_context,
+            captains_log_context,
+        ) = await asyncio.gather(
             _fetch_user_synopsis(),
             _fetch_long_term_memories(),
             _fetch_buffer_role_turns(),
             _fetch_graph_context(),
+            _fetch_captains_log_context(),
         )
 
         if graph_context:
             graph_block = f"Known entity relationships:\n{graph_context}"
             user_profile_text = (
                 f"{user_profile_text}\n\n{graph_block}" if user_profile_text else graph_block
+            )
+
+        if captains_log_context:
+            log_block = f"Recent activity log:\n{captains_log_context}"
+            user_profile_text = (
+                f"{user_profile_text}\n\n{log_block}" if user_profile_text else log_block
             )
 
         # Apply the scheduled-execution marker only at the agent's
