@@ -31,6 +31,7 @@
 # explicit memory commands, creating a more natural and personalized experience.
 # =============================================================================
 
+import asyncio
 import time
 from typing import Any, Set
 
@@ -443,138 +444,220 @@ class MemoryExtractor:
             )
 
         # Store memories in long-term memory if any exist
-        if (
+        if not (
             memories_to_store
             and hasattr(self.overlord, "long_term_memory")
             and self.overlord.long_term_memory
         ):
-            # Handle multi-user mode
-            external_user_id = user_id if self.overlord.is_multi_user else None
+            return
 
+        # Handle multi-user mode
+        external_user_id = user_id if self.overlord.is_multi_user else None
+
+        # Use long_term_memory's search if available for de-duplication
+        supports_search = hasattr(self.overlord.long_term_memory, "search")
+
+        if supports_search:
+            # De-duplicate within the batch before storing. The previous
+            # serial implementation added each memory before checking the
+            # next one, so a later duplicate in the same batch could match a
+            # freshly-added memory. With concurrent duplicate checks the adds
+            # have not happened yet, so identical facts are collapsed here.
+            seen_keys = set()
+            deduped = []
             for memory_data in memories_to_store:
-                memory_content = memory_data["memory"]
-                collection = memory_data["collection"]
+                key = (
+                    memory_data["collection"],
+                    " ".join(memory_data["memory"].lower().split()),
+                )
+                if key in seen_keys:
+                    continue
+                seen_keys.add(key)
+                deduped.append(memory_data)
+            memories_to_store = deduped
 
-                # Create metadata
-                memory_metadata = {
-                    "confidence": memory_data["confidence"],
-                    "importance": memory_data["importance"],
-                    "extracted_at": memory_data["timestamp"],
-                    "source": "extraction",
-                    "user_id": str(user_id),
-                    "agent_id": getattr(self.overlord, "current_agent", None) or "overlord",
-                    "collection": collection,  # Keep in metadata for reference
-                }
+            # Check all memories for semantically similar existing memories
+            # concurrently instead of one await per memory
+            duplicate_checks = await asyncio.gather(
+                *(
+                    self._is_duplicate_memory(memory_data, user_id, external_user_id)
+                    for memory_data in memories_to_store
+                ),
+                return_exceptions=True,
+            )
+        else:
+            duplicate_checks = [False] * len(memories_to_store)
 
-                try:
-                    # Check for semantically similar memories before storing
-                    should_store = True
+        to_store = []
+        for memory_data, result in zip(memories_to_store, duplicate_checks):
+            if isinstance(result, BaseException):
+                # Log memory storage failure for debugging while continuing execution
+                self._log_memory_storage_failure(result, memory_data, user_id)
+            elif not result:
+                to_store.append(memory_data)
 
-                    # Use long_term_memory's search if available for de-duplication
-                    if hasattr(self.overlord.long_term_memory, "search"):
-                        # Search for similar existing memories
-                        # Build search params based on backend type
-                        search_params = {
-                            "query": memory_content,
-                            "limit": 1,
-                        }
-                        if self.overlord.is_multi_user:
-                            search_params["external_user_id"] = external_user_id
-                            search_params["collection"] = collection
-                        else:
-                            search_params["user_id"] = user_id
-                            # SQLiteMemory doesn't support collection parameter
+        if not to_store:
+            return
 
-                        existing = await self.overlord.long_term_memory.search(**search_params)
+        # Store all non-duplicate memories concurrently
+        add_results = await asyncio.gather(
+            *(self._store_memory(memory_data, user_id) for memory_data in to_store),
+            return_exceptions=True,
+        )
 
-                        if existing:
-                            # Check the first result for similarity
-                            # Score = 1/(1+distance), so higher score = more similar
-                            # Score=1.0 means identical, score>0.9 means very similar (distance<0.11)
-                            first_result = existing[0] if isinstance(existing, list) else existing
-                            score = (
-                                first_result.get("score", 0.0)
-                                if isinstance(first_result, dict)
-                                else 0.0
-                            )
+        stored_identity_memory = False
+        for memory_data, result in zip(to_store, add_results):
+            if isinstance(result, BaseException):
+                # Log memory storage failure for debugging while continuing execution
+                self._log_memory_storage_failure(result, memory_data, user_id)
+            elif memory_data["collection"] in ["user_identity", "relationships", "work_projects"]:
+                stored_identity_memory = True
 
-                            # Convert distance threshold to score threshold
-                            # If similarity_threshold=0.3, we skip when distance<0.3
-                            # Which means score > 1/(1+0.3) = 0.769
-                            score_threshold = 1.0 / (1.0 + self.similarity_threshold)
-
-                            if score > score_threshold:
-                                # Memory is very similar to existing one - skip to avoid duplicate
-                                observability.observe(
-                                    event_type=observability.SystemEvents.OPERATION_COMPLETED,
-                                    level=observability.EventLevel.DEBUG,
-                                    data={
-                                        "new_content": memory_content[:100],
-                                        "existing_content": first_result.get("text", "")[:100],
-                                        "similarity_score": score,
-                                        "threshold": score_threshold,
-                                    },
-                                    description=(
-                                        f"Skipping duplicate memory (similarity: {score:.3f} > {score_threshold:.3f})",
-                                    ),
-                                )
-                                should_store = False
-                            else:
-                                # Log when we allow a similar memory through
-                                observability.observe(
-                                    event_type=observability.SystemEvents.OPERATION_COMPLETED,
-                                    level=observability.EventLevel.DEBUG,
-                                    data={
-                                        "new_content": memory_content[:100],
-                                        "existing_content": first_result.get("text", "")[:100],
-                                        "similarity_score": score,
-                                        "threshold": score_threshold,
-                                    },
-                                    description=(
-                                        f"Storing similar memory (similarity: {score:.3f} <= {score_threshold:.3f})",
-                                    ),
-                                )
-
-                    if should_store:
-                        # Build add params - use user_id for both backends
-                        add_params = {
-                            "content": memory_content,
-                            "metadata": memory_metadata,
-                            "user_id": user_id,
-                            "collection": collection,
-                        }
-
-                        await self.overlord.long_term_memory.add(**add_params)
-
-                        # Invalidate identity synopsis cache if this affects identity collections
-                        if collection in ["user_identity", "relationships", "work_projects"]:
-                            try:
-                                if hasattr(self.overlord, "user_context_manager"):
-                                    await self.overlord.user_context_manager.invalidate_identity_synopsis_cache(
-                                        user_id
-                                    )
-                            except Exception:
-                                pass  # Cache invalidation failure is non-critical
-                except Exception as e:
-                    # Log memory storage failure for debugging while continuing execution
-                    observability.observe(
-                        event_type=observability.SystemEvents.EXTENSION_FAILED,
-                        level=observability.EventLevel.ERROR,
-                        description=f"Failed to store extracted memory in long-term memory: {str(e)}",
-                        data={
-                            "error": str(e),
-                            "error_type": type(e).__name__,
-                            "memory_content": (
-                                memory_content[:100] + "..."
-                                if len(memory_content) > 100
-                                else memory_content
-                            ),
-                            "collection": collection,
-                            "user_id": str(user_id),
-                            "component": "memory_extractor",
-                            "operation": "long_term_memory_add",
-                        },
+        # Invalidate identity synopsis cache once per batch if any stored
+        # memory affects identity collections. The cache is keyed by user_id
+        # only, so one invalidation is equivalent to one per stored memory.
+        if stored_identity_memory:
+            try:
+                if hasattr(self.overlord, "user_context_manager"):
+                    await self.overlord.user_context_manager.invalidate_identity_synopsis_cache(
+                        user_id
                     )
+            except Exception:
+                pass  # Cache invalidation failure is non-critical
+
+    async def _is_duplicate_memory(self, memory_data, user_id, external_user_id) -> bool:
+        """
+        Check whether a semantically similar memory already exists.
+
+        Args:
+            memory_data: The memory dict produced by extraction
+            user_id: The user's ID
+            external_user_id: External user ID in multi-user mode, else None
+
+        Returns:
+            True if a sufficiently similar memory exists (skip storing),
+            False otherwise
+        """
+        memory_content = memory_data["memory"]
+        collection = memory_data["collection"]
+
+        # Search for similar existing memories
+        # Build search params based on backend type
+        search_params = {
+            "query": memory_content,
+            "limit": 1,
+        }
+        if self.overlord.is_multi_user:
+            search_params["external_user_id"] = external_user_id
+            search_params["collection"] = collection
+        else:
+            search_params["user_id"] = user_id
+            # SQLiteMemory doesn't support collection parameter
+
+        existing = await self.overlord.long_term_memory.search(**search_params)
+
+        if not existing:
+            return False
+
+        # Check the first result for similarity
+        # Score = 1/(1+distance), so higher score = more similar
+        # Score=1.0 means identical, score>0.9 means very similar (distance<0.11)
+        first_result = existing[0] if isinstance(existing, list) else existing
+        score = first_result.get("score", 0.0) if isinstance(first_result, dict) else 0.0
+
+        # Convert distance threshold to score threshold
+        # If similarity_threshold=0.3, we skip when distance<0.3
+        # Which means score > 1/(1+0.3) = 0.769
+        score_threshold = 1.0 / (1.0 + self.similarity_threshold)
+
+        if score > score_threshold:
+            # Memory is very similar to existing one - skip to avoid duplicate
+            observability.observe(
+                event_type=observability.SystemEvents.OPERATION_COMPLETED,
+                level=observability.EventLevel.DEBUG,
+                data={
+                    "new_content": memory_content[:100],
+                    "existing_content": first_result.get("text", "")[:100],
+                    "similarity_score": score,
+                    "threshold": score_threshold,
+                },
+                description=(
+                    f"Skipping duplicate memory (similarity: {score:.3f} > {score_threshold:.3f})",
+                ),
+            )
+            return True
+
+        # Log when we allow a similar memory through
+        observability.observe(
+            event_type=observability.SystemEvents.OPERATION_COMPLETED,
+            level=observability.EventLevel.DEBUG,
+            data={
+                "new_content": memory_content[:100],
+                "existing_content": first_result.get("text", "")[:100],
+                "similarity_score": score,
+                "threshold": score_threshold,
+            },
+            description=(
+                f"Storing similar memory (similarity: {score:.3f} <= {score_threshold:.3f})",
+            ),
+        )
+        return False
+
+    async def _store_memory(self, memory_data, user_id) -> None:
+        """
+        Store a single extracted memory in long-term memory.
+
+        Args:
+            memory_data: The memory dict produced by extraction
+            user_id: The user's ID
+        """
+        # Create metadata
+        memory_metadata = {
+            "confidence": memory_data["confidence"],
+            "importance": memory_data["importance"],
+            "extracted_at": memory_data["timestamp"],
+            "source": "extraction",
+            "user_id": str(user_id),
+            "agent_id": getattr(self.overlord, "current_agent", None) or "overlord",
+            "collection": memory_data["collection"],  # Keep in metadata for reference
+        }
+
+        # Build add params - use user_id for both backends
+        add_params = {
+            "content": memory_data["memory"],
+            "metadata": memory_metadata,
+            "user_id": user_id,
+            "collection": memory_data["collection"],
+        }
+
+        await self.overlord.long_term_memory.add(**add_params)
+
+    def _log_memory_storage_failure(self, error, memory_data, user_id) -> None:
+        """
+        Log a failure to de-duplicate or store an extracted memory.
+
+        Args:
+            error: The exception raised during search or add
+            memory_data: The memory dict produced by extraction
+            user_id: The user's ID
+        """
+        memory_content = memory_data["memory"]
+        observability.observe(
+            event_type=observability.SystemEvents.EXTENSION_FAILED,
+            level=observability.EventLevel.ERROR,
+            description=f"Failed to store extracted memory in long-term memory: {str(error)}",
+            data={
+                "error": str(error),
+                "error_type": type(error).__name__,
+                "memory_content": (
+                    memory_content[:100] + "..." if len(memory_content) > 100 else memory_content
+                ),
+                "collection": memory_data["collection"],
+                "user_id": str(user_id),
+                "component": "memory_extractor",
+                "operation": "long_term_memory_add",
+            },
+        )
 
     def _is_sensitive_information(self, key: str, value: Any) -> bool:
         """
