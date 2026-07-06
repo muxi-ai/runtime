@@ -123,6 +123,11 @@ dependencies = [
     "numpy>=2.2.6",
     "sqlite-vec>=0.1.9",  # SQLite vector extension for similarity search
 
+    # Knowledge graph algorithms (SQLite backend / pgRouting fallback).
+    # Already in the install closure as a transitive dependency; promoted to
+    # a direct dependency by the memory revamp (PRD: memory-revamp.md).
+    "networkx>=3.4",
+
     # Database
     "psycopg2-binary>=2.9.12",
     "asyncpg>=0.31.0",  # Async PostgreSQL driver for SQLAlchemy (required for persistent memory)

@@ -1667,11 +1667,33 @@ class ChatOrchestrator:
                 turns.append({"role": role, "content": text})
             return turns
 
-        user_profile_text, long_term_memories, buffer_turns = await asyncio.gather(
+        async def _fetch_graph_context() -> str:
+            # Knowledge graph context injection (Memory Revamp Phase 1):
+            # strongest 1-hop facts plus multi-hop exploration when the
+            # message mentions a known entity. Failure-safe by contract
+            # (returns "" on any error or when the graph is empty).
+            knowledge_graph = getattr(self.overlord, "knowledge_graph", None)
+            if knowledge_graph and user_id is not None:
+                try:
+                    return await knowledge_graph.get_context_block(
+                        user_id, query_text=current_user_message
+                    )
+                except Exception:
+                    pass
+            return ""
+
+        user_profile_text, long_term_memories, buffer_turns, graph_context = await asyncio.gather(
             _fetch_user_synopsis(),
             _fetch_long_term_memories(),
             _fetch_buffer_role_turns(),
+            _fetch_graph_context(),
         )
+
+        if graph_context:
+            graph_block = f"Known entity relationships:\n{graph_context}"
+            user_profile_text = (
+                f"{user_profile_text}\n\n{graph_block}" if user_profile_text else graph_block
+            )
 
         # Apply the scheduled-execution marker only at the agent's
         # view of the current message. ``buffer_turns`` is left

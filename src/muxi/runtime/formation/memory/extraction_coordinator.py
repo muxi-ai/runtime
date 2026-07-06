@@ -117,6 +117,19 @@ class ExtractionCoordinator:
                 message_count=1,  # We don't track message count here
             )
 
+            # Knowledge graph pass (Memory Revamp Phase 1): runs alongside the
+            # flat-fact extraction above, never instead of it. The service is
+            # failure-isolated internally; a graph failure cannot affect the
+            # flat pipeline or the conversation.
+            knowledge_graph = getattr(self.overlord, "knowledge_graph", None)
+            if knowledge_graph:
+                await knowledge_graph.process_conversation_turn(
+                    user_message=user_message,
+                    agent_response=agent_response,
+                    user_id=user_id,
+                    model=getattr(self.overlord, "default_model", None),
+                )
+
         except Exception as e:
             # Log the error but don't let it break the conversation flow
             observability.observe(
