@@ -79,6 +79,7 @@
 
 import asyncio
 import base64
+import hashlib
 import os
 import re
 import signal
@@ -2909,13 +2910,6 @@ Agent response: {raw_response}"""
         Raises:
             ValueError: If no suitable model can be found
         """
-        # Create cache key
-        cache_key = f"{agent_id or 'default'}:{capability}"
-
-        # Return cached model if available
-        if cache_key in self._model_cache:
-            return self._model_cache[cache_key]
-
         model_config = None
 
         # Check for agent-specific model override
@@ -2945,6 +2939,18 @@ Agent response: {raw_response}"""
 
         # Apply global settings with model-specific overrides
         final_settings = {**self._global_llm_settings, **model_settings}
+
+        # Create cache key including a digest of the effective settings so callers
+        # requesting the same capability with a different model or different
+        # settings (temperature, timeout, etc.) do not share one cached instance
+        settings_digest = hashlib.sha256(
+            json.dumps(final_settings, sort_keys=True, default=str).encode("utf-8")
+        ).hexdigest()[:12]
+        cache_key = f"{agent_id or 'default'}:{capability}:{model_name}:{settings_digest}"
+
+        # Return cached model if available
+        if cache_key in self._model_cache:
+            return self._model_cache[cache_key]
 
         # Resolve API key - model-specific > global > environment
         final_api_key = api_key
