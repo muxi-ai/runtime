@@ -5450,13 +5450,19 @@ Agent response: {raw_response}"""
         from ...services.gbac import enforcement as gbac
 
         resolver = self._configured_services.get("permission_resolver")
-        if resolver is None or user_id is None:
-            # Feature inert (no groups/ directory), or no requesting user
-            # yet (the orchestrator rejects multi-user requests without a
-            # user id). Clear any permissions inherited from a previous
-            # request in this context.
+        if resolver is None:
+            # Feature inert (no groups/ directory). Nothing can have set
+            # permissions in this context, but clear defensively in case
+            # the formation was reloaded without groups mid-process.
             gbac.set_current_permissions(None)
             return None
+        if user_id is None:
+            # Internal/system re-entry (e.g. the recursive
+            # _process_sync_chat call with message=original_message).
+            # ContextVar mutations are visible within the same coroutine,
+            # so clearing here would un-filter the REMAINDER of the outer
+            # request. Inherit the outer requester's permissions instead.
+            return gbac.get_current_permissions()
 
         # Match the orchestrator's user-id normalization so membership
         # lookups behave identically across entry points.

@@ -255,9 +255,9 @@ async def execute_trigger(
             gbac_enforcement.observe_denied(
                 "triggers",
                 trigger_name,
+                permissions=permissions,
                 user_id=user_id,
                 formation_id=formation_id,
-                group_ids=list(permissions.group_ids),
                 channel="api",
             )
             raise HTTPException(

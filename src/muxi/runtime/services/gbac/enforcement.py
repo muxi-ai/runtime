@@ -160,7 +160,10 @@ def effective_tool_registry(
         # view -- source tool definitions from both, attachment view first.
         source = {**catalog_tools, **tools}
         kept = {name: info for name, info in source.items() if name in allowed}
-        dropped = [name for name in source if name not in allowed]
+        # Report only tools removed from the agent's inherited view --
+        # catalog-only tools were never on this agent's surface, so their
+        # absence is not a "drop" worth alerting on.
+        dropped = [name for name in tools if name not in allowed]
         if kept:
             filtered[server_id] = kept
         if dropped:
@@ -185,9 +188,17 @@ def effective_tool_registry(
     return filtered
 
 
-def observe_denied(kind: str, resource_id: str, **data: Any) -> None:
-    """Emit a permission-denial event (hard denial, e.g. 403 or direct address)."""
-    permissions = get_current_permissions()
+def observe_denied(
+    kind: str, resource_id: str, permissions: Optional[Any] = None, **data: Any
+) -> None:
+    """Emit a permission-denial event (hard denial, e.g. 403 or direct address).
+
+    Callers outside the chat pipeline (e.g. the trigger route) never set the
+    permissions ContextVar; they pass their locally resolved ``permissions``
+    explicitly so group_ids are recorded structurally rather than via a
+    caller-supplied kwarg override.
+    """
+    permissions = permissions if permissions is not None else get_current_permissions()
     observability.observe(
         event_type=observability.ErrorEvents.AUTHORIZATION_FAILED,
         level=observability.EventLevel.WARNING,

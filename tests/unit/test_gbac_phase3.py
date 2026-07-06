@@ -549,3 +549,29 @@ class TestWorkflowFiltering:
         )
         selected = executor._select_agent_for_task(task)
         assert selected.agent_id == "hr-assistant"
+
+
+class TestNestedReentryPreservesPermissions:
+    """Internal re-entries must not un-filter the outer request.
+
+    _process_sync_chat re-enters itself synchronously with user_id=None;
+    ContextVar mutations are visible within the same coroutine, so the
+    gate must inherit (not clear) the outer requester's permissions
+    (review follow-up on #207).
+    """
+
+    async def test_gate_with_none_user_inherits_outer_context(self, tmp_path):
+        perms = make_perms(tmp_path, {"g.yaml": "agents: [a]\n"}, "g")
+        resolver = FakeResolver(perms)
+        overlord = make_overlord_stub(resolver, {"a": object()})
+
+        await overlord._apply_permission_gate("alice", None)
+        assert enforcement.get_current_permissions() is perms
+
+        # Nested internal re-entry: outer permissions must survive
+        result = await overlord._apply_permission_gate(None, None)
+        assert result is perms
+        assert enforcement.get_current_permissions() is perms
+        assert resolver.calls == 1  # no second resolve
+
+        enforcement.set_current_permissions(None)
