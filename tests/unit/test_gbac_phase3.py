@@ -568,9 +568,11 @@ class TestNestedReentryPreservesPermissions:
         await overlord._apply_permission_gate("alice", None)
         assert enforcement.get_current_permissions() is perms
 
-        # Nested internal re-entry: outer permissions must survive
+        # Nested internal re-entry: gate returns None (the caller treats
+        # any non-None return as a MuxiResponse) while the outer
+        # permissions survive untouched in the context
         result = await overlord._apply_permission_gate(None, None)
-        assert result is perms
+        assert result is None
         assert enforcement.get_current_permissions() is perms
         assert resolver.calls == 1  # no second resolve
 

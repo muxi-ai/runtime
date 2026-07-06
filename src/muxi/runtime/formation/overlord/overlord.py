@@ -5461,8 +5461,10 @@ Agent response: {raw_response}"""
             # _process_sync_chat call with message=original_message).
             # ContextVar mutations are visible within the same coroutine,
             # so clearing here would un-filter the REMAINDER of the outer
-            # request. Inherit the outer requester's permissions instead.
-            return gbac.get_current_permissions()
+            # request. Leave the outer requester's permissions in place
+            # and return None -- any non-None return from this gate is
+            # treated as a MuxiResponse by the caller.
+            return None
 
         # Match the orchestrator's user-id normalization so membership
         # lookups behave identically across entry points.
