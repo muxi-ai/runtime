@@ -211,14 +211,16 @@ class UserAuthGate:
         if server_config.get("auth", "open") != "required":
             return
 
-        identity = await self._resolve_identity(request)
-
+        # Check the DB before resolving identity so a misconfigured
+        # formation fails fast without consuming the request body
         db_manager = getattr(formation, "_db_manager", None)
         if db_manager is None:
             raise HTTPException(
                 status_code=HTTP_500_INTERNAL_SERVER_ERROR,
                 detail="server.auth is 'required' but no persistent database is configured",
             )
+
+        identity = await self._resolve_identity(request)
 
         from ...utils.user_resolution import resolve_user_identifier
 
@@ -264,7 +266,12 @@ class UserAuthGate:
         if not identity and request.url.path in self._BODY_FALLBACK_PATHS:
             try:
                 body = await request.json()
-            except Exception:
+            except (ValueError, UnicodeDecodeError):
+                # Malformed body falls through to the default identity,
+                # matching the gated routes' own parsing behavior.
+                # Transport-level errors (client disconnect, upstream
+                # middleware failures) propagate instead of silently
+                # masquerading as user "0".
                 body = None
             if isinstance(body, dict):
                 body_user_id = body.get("user_id")
