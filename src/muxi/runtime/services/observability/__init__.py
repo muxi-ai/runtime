@@ -233,11 +233,10 @@ def observe(
         #
         # Redaction itself runs on the background emission thread so the
         # hot path only pays for a cheap container snapshot; every event
-        # is still fully redacted before it reaches any transport.
-        if skip_redaction:
-            snapshot_data = data or {}
-        else:
-            snapshot_data = _snapshot_structure(data or {})
+        # is still fully redacted before it reaches any transport. The
+        # snapshot is taken for skip_redaction events too, so caller
+        # mutations after observe() returns can never race emission.
+        snapshot_data = _snapshot_structure(data or {})
 
         # Get request context
         from .context import get_current_request_context
