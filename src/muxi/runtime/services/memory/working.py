@@ -66,37 +66,15 @@
 
 import asyncio
 import collections
-import signal
+import threading
 import time
 from typing import Any, Dict, List, Optional
 
-import multitasking
 import numpy as np
 from faissx import client as faiss
 
 from .. import observability
 from .embedding import DEFAULT_EMBEDDING_MODEL, embed, probe_dimension
-
-# Set multitasking to thread mode for shared memory access
-multitasking.set_engine("thread")
-
-# Spawn @multitasking.task workers as daemon threads. The FIFO cleanup
-# task below is a `while True: time.sleep(...)` worker that never
-# terminates on its own; without daemon=True, Python waits for it at
-# interpreter exit and processes that instantiate WorkingMemory (unit
-# tests, CLI scripts, graceful-shutdown paths) hang indefinitely.
-# The SIGINT handler below remains as a belt-and-suspenders for
-# interactive Ctrl+C even though daemon threads die with the process.
-multitasking.set_daemon(True)
-
-# Kill all tasks on ctrl-c for clean shutdown
-# Only register signal handlers in main thread to avoid errors in tests
-try:
-    signal.signal(signal.SIGINT, multitasking.killall)
-except ValueError:
-    # Signal handlers can only be registered in main thread
-    # This is expected in tests or when imported from threads
-    pass
 
 # Partition key for vectors that are not scoped to a single session:
 # non-"buffer" namespaces (sops, knowledge, docs) and "buffer" items
@@ -1440,39 +1418,48 @@ class WorkingMemory:
         return len(self.buffer)
 
 
-@multitasking.task
 def fifo_cleanup_task(buffer_memory: "WorkingMemory") -> None:
     """
-    Background task for periodic FIFO memory cleanup.
+    Start the periodic FIFO memory cleanup for a buffer instance.
 
-    This function runs continuously in a daemon thread to periodically
-    call the check_memory_usage_and_cleanup method on the buffer.
+    Runs on a dedicated daemon thread rather than the shared
+    multitasking pool: the pool is capped at cpu_count() concurrent
+    slots and this loop never terminates, so running it there
+    permanently consumed a slot per WorkingMemory instance and starved
+    the observability emitters that share the pool.
 
     Args:
         buffer_memory: The WorkingMemory instance to clean up
     """
-    import time
 
-    #     f"Starting FIFO cleanup task with {buffer_memory.fifo_interval_min} minute interval"
-    # )
+    def _cleanup_loop() -> None:
+        while True:
+            try:
+                # Perform cleanup first (free cleanup on startup!)
+                buffer_memory.check_memory_usage_and_cleanup()
 
-    while True:
-        try:
-            # Perform cleanup first (free cleanup on startup!)
-            buffer_memory.check_memory_usage_and_cleanup()
+                # Then wait for the configured interval (convert minutes to seconds)
+                time.sleep(buffer_memory.fifo_interval_min * 60)
 
-            # Then wait for the configured interval (convert minutes to seconds)
-            time.sleep(buffer_memory.fifo_interval_min * 60)
+            except Exception as e:
+                observability.observe(
+                    event_type=observability.ErrorEvents.INTERNAL_ERROR,
+                    level=observability.EventLevel.ERROR,
+                    data={
+                        "operation": "buffer_memory_cleanup",
+                        "error_type": type(e).__name__,
+                        "error": str(e),
+                    },
+                    description="Failed to run buffer memory cleanup task",
+                )
+                time.sleep(60)  # Wait a minute before retrying
 
-        except Exception as e:
-            observability.observe(
-                event_type=observability.ErrorEvents.INTERNAL_ERROR,
-                level=observability.EventLevel.ERROR,
-                data={
-                    "operation": "buffer_memory_cleanup",
-                    "error_type": type(e).__name__,
-                    "error": str(e),
-                },
-                description="Failed to run buffer memory cleanup task",
-            )
-            time.sleep(60)  # Wait a minute before retrying
+    # daemon=True so the never-ending loop cannot block interpreter
+    # exit (unit tests, CLI scripts, graceful-shutdown paths). The
+    # instance id in the name keeps thread dumps attributable when
+    # several WorkingMemory instances are alive in one process.
+    threading.Thread(
+        target=_cleanup_loop,
+        name=f"muxi-buffer-fifo-cleanup-{id(buffer_memory):x}",
+        daemon=True,
+    ).start()
