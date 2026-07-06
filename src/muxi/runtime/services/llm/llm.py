@@ -491,9 +491,14 @@ _retry_stats = {
 
 
 def _get_cache_key(operation: str, **kwargs) -> str:
-    """Generate a cache key from operation and parameters."""
-    # Create a hash of the operation and parameters
-    key_data = f"{operation}:{str(sorted(kwargs.items()))}"
+    """Generate a cache key from operation and parameters.
+
+    Uses json.dumps with sort_keys=True so the key is stable across
+    dict-key ordering but preserves the order of list-valued inputs
+    (e.g. batch embedding texts), keeping cached vectors aligned with
+    the order of the texts they were requested for.
+    """
+    key_data = f"{operation}:{json.dumps(kwargs, sort_keys=True, default=str)}"
     return hashlib.md5(key_data.encode()).hexdigest()
 
 
