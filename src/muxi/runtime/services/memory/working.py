@@ -98,6 +98,28 @@ except ValueError:
     # This is expected in tests or when imported from threads
     pass
 
+# Partition key for vectors that are not scoped to a single session:
+# non-"buffer" namespaces (sops, knowledge, docs) and "buffer" items
+# whose metadata carries no session_id.
+SHARED_PARTITION = "__shared__"
+
+
+class _IndexPartition:
+    """FAISS index state for a single working-memory partition.
+
+    Each partition owns its own ``IndexFlatL2`` plus the forward and
+    reverse mappings between global buffer indices and rows in that
+    index. Partitioning vectors per session keeps session-scoped
+    searches from scanning — and being crowded out of top-k by —
+    vectors that belong to other sessions.
+    """
+
+    def __init__(self, dimension: int):
+        self.index = faiss.IndexFlatL2(dimension)
+        self.index_mapping = {}  # Maps buffer indices to FAISS rows
+        self.reverse_index_mapping = {}  # Maps FAISS rows back to buffer indices
+        self.index_count = 0  # Number of vectors in this partition
+
 
 class WorkingMemory:
     """
@@ -233,14 +255,15 @@ class WorkingMemory:
         elif mode != "local" and mode != "remote":
             raise ValueError(f"Invalid mode: {mode}. Must be 'local' or 'remote'")
 
-        # Initialize vector storage with the provisional dim. The
-        # index will be rebuilt in-place the first time ``_ensure_dim``
-        # resolves a different real dim; this is safe because no vectors
-        # have been added yet.
-        self.index = faiss.IndexFlatL2(self.dimension)
-        self.index_mapping = {}  # Maps buffer indices to FAISS indices
-        self.reverse_index_mapping = {}  # Maps FAISS indices back to buffer indices
-        self.index_count = 0  # Counter for FAISS indices
+        # Initialize vector storage. Vectors are partitioned by session:
+        # each "buffer"-namespace item carrying a session_id goes to a
+        # per-session FAISS index; everything else (sops, knowledge,
+        # docs, buffer items without a session) shares the
+        # ``SHARED_PARTITION`` index. Partitions are created lazily on
+        # first write with the provisional dim and reset the first time
+        # ``_ensure_dim`` resolves a different real dim; this is safe
+        # because no vectors have been added yet.
+        self.partitions: Dict[str, _IndexPartition] = {}
         self.needs_rebuild = False  # Flag to track if index needs rebuilding
 
         # Key-value store for exact lookups with TTL
@@ -257,10 +280,11 @@ class WorkingMemory:
         :func:`services.memory.embedding.probe_dimension` for the
         configured model slug, stores the result on ``self._dimension``,
         and — if the probed dim differs from the provisional hint used
-        to build the initial FAISS index — rebuilds ``self.index`` at
-        the correct dimensionality. Rebuilding is safe here because
-        ``_ensure_dim`` is always invoked before the first embed
-        operation, so the index is guaranteed to be empty.
+        to build any early FAISS partitions — resets ``self.partitions``
+        so they are recreated at the correct dimensionality. Resetting
+        is safe here because ``_ensure_dim`` is always invoked before
+        the first embed operation, so the partitions are guaranteed to
+        be empty.
 
         Concurrent callers are serialized by ``self._dim_lock`` so only
         a single underlying ``probe_dimension`` call is issued even
@@ -279,15 +303,38 @@ class WorkingMemory:
             probed = await probe_dimension(self._embedding_model_name)
             if probed != self.dimension:
                 self.dimension = probed
-                # Safe rebuild: no embedded items exist yet before the
+                # Safe reset: no embedded items exist yet before the
                 # first ``_ensure_dim`` call.
-                self.index = faiss.IndexFlatL2(self.dimension)
-                self.index_mapping = {}
-                self.reverse_index_mapping = {}
-                self.index_count = 0
+                self.partitions = {}
                 self.needs_rebuild = False
             self._dimension = probed
             return probed
+
+    def _partition_key(self, namespace: str, metadata: Optional[Dict[str, Any]]) -> str:
+        """Derive the vector partition key for an item.
+
+        "buffer"-namespace items carrying a session_id are partitioned
+        per session; everything else (sops, knowledge, docs, and buffer
+        items with no session) shares one partition.
+        """
+        if namespace == "buffer":
+            session_id = (metadata or {}).get("session_id")
+            if session_id:
+                return str(session_id)
+        return SHARED_PARTITION
+
+    def _get_partition(self, key: str) -> _IndexPartition:
+        """Return the partition for ``key``, creating it lazily."""
+        partition = self.partitions.get(key)
+        if partition is None:
+            partition = _IndexPartition(self.dimension)
+            self.partitions[key] = partition
+        return partition
+
+    @property
+    def index_count(self) -> int:
+        """Total number of vectors across all partitions."""
+        return sum(partition.index_count for partition in self.partitions.values())
 
     @property
     def embedding_model_name(self) -> str:
@@ -354,10 +401,13 @@ class WorkingMemory:
 
                 item["embedding"] = embedding_vector
 
-                # Record the mapping from buffer index to FAISS index
+                # Route the vector to its partition (per-session for
+                # buffer items, shared otherwise) and record the
+                # buffer-index-to-FAISS-row mapping.
+                partition = self._get_partition(self._partition_key(namespace, metadata))
                 buffer_idx = len(self.buffer)
-                self.index_mapping[buffer_idx] = self.index_count
-                self.reverse_index_mapping[self.index_count] = buffer_idx
+                partition.index_mapping[buffer_idx] = partition.index_count
+                partition.reverse_index_mapping[partition.index_count] = buffer_idx
 
                 # Normalize embedding for better cosine similarity in FAISS
                 embedding_array = np.array([embedding_vector], dtype=np.float32)
@@ -365,11 +415,11 @@ class WorkingMemory:
                 if norm > 0:
                     embedding_array = embedding_array / norm
 
-                # Add the normalized embedding to the FAISS index
-                self.index.add(embedding_array)
+                # Add the normalized embedding to the partition's index
+                partition.index.add(embedding_array)
 
-                # Increment the FAISS index counter
-                self.index_count += 1
+                # Increment the partition's FAISS row counter
+                partition.index_count += 1
             except Exception as e:
                 # Handle embedding generation failures gracefully
                 _ = e  # remove this after implementing observability
@@ -387,40 +437,41 @@ class WorkingMemory:
 
     def _rebuild_index(self) -> None:
         """
-        Rebuild the FAISS index after buffer overflow.
+        Rebuild the FAISS partitions after buffer overflow.
 
-        This internal method rebuilds the FAISS index and mapping when the buffer
-        is full and new items have displaced old ones. It ensures the vector search
-        stays in sync with the actual buffer contents.
+        This internal method rebuilds every partition's FAISS index and mappings
+        when the buffer is full and new items have displaced old ones. It ensures
+        the vector search stays in sync with the actual buffer contents. Partitions
+        that end up with no vectors (e.g. every item of a dead session was evicted)
+        are dropped entirely.
         """
         if not self._embedding_model_name:
             return
 
-        # Create a new index with the same dimension
-        new_index = faiss.IndexFlatL2(self.dimension)
-        new_mapping = {}
-        new_reverse_mapping = {}
-        new_count = 0
+        # Regroup embeddings from the current buffer into new partitions
+        new_partitions: Dict[str, _IndexPartition] = {}
+        embeddings_by_key: Dict[str, list] = {}
 
-        # Add embeddings from the current buffer to the new index
-        embeddings = []
         for i, item in enumerate(self.buffer):
             if "embedding" in item and item["embedding"] is not None:
-                embeddings.append(item["embedding"])
-                new_mapping[i] = new_count
-                new_reverse_mapping[new_count] = i
-                new_count += 1
+                key = self._partition_key(item.get("namespace", "buffer"), item.get("metadata"))
+                partition = new_partitions.get(key)
+                if partition is None:
+                    partition = _IndexPartition(self.dimension)
+                    new_partitions[key] = partition
+                    embeddings_by_key[key] = []
+                embeddings_by_key[key].append(item["embedding"])
+                partition.index_mapping[i] = partition.index_count
+                partition.reverse_index_mapping[partition.index_count] = i
+                partition.index_count += 1
 
-        # Add collected embeddings to the index if any exist
-        if embeddings:
+        # Add collected embeddings to each partition's index
+        for key, embeddings in embeddings_by_key.items():
             embeddings_array = np.array(embeddings, dtype=np.float32)
-            new_index.add(embeddings_array)
+            new_partitions[key].index.add(embeddings_array)
 
-        # Replace the old index and mapping
-        self.index = new_index
-        self.index_mapping = new_mapping
-        self.reverse_index_mapping = new_reverse_mapping
-        self.index_count = new_count
+        # Replace the old partitions
+        self.partitions = new_partitions
         self.needs_rebuild = False
 
     def check_memory_usage_and_cleanup(self) -> None:
@@ -809,82 +860,105 @@ class WorkingMemory:
             if norm > 0:
                 query_np = query_np / norm
 
-            # Search the FAISS index for similar vectors
-            k = min(limit * 2, self.index_count)  # Get more results to allow for filtering
-            distances, indices = self.index.search(query_np, k)
+            # Select which partitions to search. A session-scoped search
+            # only needs that session's partition — the hard session_id
+            # filter below excluded every other item anyway (items in
+            # other partitions carry no matching session_id). Namespaced
+            # searches without a session (sops / knowledge) only need
+            # the shared partition, where all non-"buffer" vectors live.
+            # Unscoped searches merge results from all partitions.
+            if session_id:
+                partition_keys = [str(session_id)]
+            elif namespace and namespace != "buffer":
+                partition_keys = [SHARED_PARTITION]
+            else:
+                partition_keys = list(self.partitions.keys())
 
-            # Map FAISS indices back to buffer indices via the reverse
-            # mapping (O(1) per result). FAISS pads with -1 when fewer
-            # than k vectors exist; those have no mapping and are skipped.
-            buffer_indices = []
-            for faiss_idx in indices[0]:
-                buffer_idx = self.reverse_index_mapping.get(int(faiss_idx))
-                if buffer_idx is not None:
-                    buffer_indices.append(buffer_idx)
-
-            # Combine semantic score with recency score
             results = []
-            for i, buffer_idx in enumerate(buffer_indices):
-                # Make sure buffer_idx is in range
-                if buffer_idx >= len(self.buffer):
+            for partition_key in partition_keys:
+                partition = self.partitions.get(partition_key)
+                if partition is None or partition.index_count == 0:
                     continue
 
-                item = self.buffer[buffer_idx].copy()
+                # Search the partition's FAISS index for similar vectors
+                k = min(limit * 2, partition.index_count)  # Extra results allow for filtering
+                distances, indices = partition.index.search(query_np, k)
 
-                # Apply namespace filter if provided
-                if namespace and item.get("namespace") != namespace:
-                    continue
+                # Map FAISS rows back to buffer indices via the reverse
+                # mapping (O(1) per result). FAISS pads with -1 when fewer
+                # than k vectors exist; those have no mapping and are skipped.
+                candidates = []
+                for i, faiss_idx in enumerate(indices[0]):
+                    buffer_idx = partition.reverse_index_mapping.get(int(faiss_idx))
+                    if buffer_idx is not None:
+                        candidates.append((buffer_idx, float(distances[0][i])))
 
-                # Check formation_id match (always filter by formation)
-                if item.get("metadata", {}).get("formation_id") != self.formation_id:
-                    continue
+                # Combine semantic score with recency score
+                partition_results = []
+                for buffer_idx, distance in candidates:
+                    # Make sure buffer_idx is in range
+                    if buffer_idx >= len(self.buffer):
+                        continue
 
-                # Apply session_id filter as a hard filter if provided
-                if session_id and item.get("metadata", {}).get("session_id") != session_id:
-                    continue
+                    item = self.buffer[buffer_idx].copy()
 
-                # Apply metadata filters if provided
-                if filter_metadata and not all(
-                    key in item["metadata"] and item["metadata"][key] == value
-                    for key, value in filter_metadata.items()
-                ):
-                    continue
+                    # Apply namespace filter if provided
+                    if namespace and item.get("namespace") != namespace:
+                        continue
 
-                # Calculate combined score without session weighting
-                # (session_id is now a hard filter applied above)
-                if namespace == "sops":
-                    # SOPs are indexed once at startup; their position in the
-                    # buffer is meaningless and the ``1 / (1 + L2²)`` transform
-                    # used below compresses the high-similarity range that
-                    # SOP-routing decisions live in. Return *true* cosine
-                    # similarity instead so the threshold callers compare
-                    # against (typically 0.7) means what operators expect.
-                    #
-                    # Vectors are unit-normalised (see L803), so for the
-                    # FAISS ``IndexFlatL2`` distance ``d``:
-                    #   d == ||a - b||² == 2 - 2·cos(a, b)
-                    #   cos == 1 - d / 2
-                    cos_sim = 1.0 - float(distances[0][i]) / 2.0
-                    # Clamp into [0, 1] — numerical noise on ``d ≈ 0`` or
-                    # ``d ≈ 2`` can drift fractionally outside the range.
-                    combined_score = max(0.0, min(1.0, cos_sim))
-                else:
-                    semantic_score = 1.0 / (1.0 + float(distances[0][i]))
-                    recency_score = 1.0 - (buffer_idx / len(self.buffer))
+                    # Check formation_id match (always filter by formation)
+                    if item.get("metadata", {}).get("formation_id") != self.formation_id:
+                        continue
 
-                    # Use original recency bias formula
-                    # This preserves perfect scores for exact matches
-                    combined_score = (
-                        1 - recency_bias
-                    ) * semantic_score + recency_bias * recency_score
+                    # Apply session_id filter as a hard filter if provided
+                    if session_id and item.get("metadata", {}).get("session_id") != session_id:
+                        continue
 
-                # Add score to the item
-                item["score"] = combined_score
-                results.append(item)
+                    # Apply metadata filters if provided
+                    if filter_metadata and not all(
+                        key in item["metadata"] and item["metadata"][key] == value
+                        for key, value in filter_metadata.items()
+                    ):
+                        continue
 
-                # Stop if we have enough results
-                if len(results) >= limit:
-                    break
+                    # Calculate combined score without session weighting
+                    # (session_id is now a hard filter applied above)
+                    if namespace == "sops":
+                        # SOPs are indexed once at startup; their position in the
+                        # buffer is meaningless and the ``1 / (1 + L2²)`` transform
+                        # used below compresses the high-similarity range that
+                        # SOP-routing decisions live in. Return *true* cosine
+                        # similarity instead so the threshold callers compare
+                        # against (typically 0.7) means what operators expect.
+                        #
+                        # Vectors are unit-normalised (see the query
+                        # normalization above), so for the FAISS
+                        # ``IndexFlatL2`` distance ``d``:
+                        #   d == ||a - b||² == 2 - 2·cos(a, b)
+                        #   cos == 1 - d / 2
+                        cos_sim = 1.0 - distance / 2.0
+                        # Clamp into [0, 1] — numerical noise on ``d ≈ 0`` or
+                        # ``d ≈ 2`` can drift fractionally outside the range.
+                        combined_score = max(0.0, min(1.0, cos_sim))
+                    else:
+                        semantic_score = 1.0 / (1.0 + distance)
+                        recency_score = 1.0 - (buffer_idx / len(self.buffer))
+
+                        # Use original recency bias formula
+                        # This preserves perfect scores for exact matches
+                        combined_score = (
+                            1 - recency_bias
+                        ) * semantic_score + recency_bias * recency_score
+
+                    # Add score to the item
+                    item["score"] = combined_score
+                    partition_results.append(item)
+
+                    # Stop if we have enough results from this partition
+                    if len(partition_results) >= limit:
+                        break
+
+                results.extend(partition_results)
 
             # If we don't have enough results, try recency search
             if not results:
@@ -1118,14 +1192,14 @@ class WorkingMemory:
             # write. Without this, a WorkingMemory built with a
             # provisional hint (e.g. default 768) and a model whose
             # true dim differs (e.g. 1536 for text-embedding-3-small)
-            # raises a shape mismatch on self.index.add(), which the
-            # broad except below silently swallows — the item lands
-            # in self.buffer but never in FAISS. A later add() or
-            # search() triggers _ensure_dim and rebuilds the index
-            # at the correct dim, but these early items are not
-            # re-indexed and their vector recall is permanently
+            # raises a shape mismatch on the partition's index.add(),
+            # which the broad except below silently swallows — the
+            # item lands in self.buffer but never in FAISS. A later
+            # add() or search() triggers _ensure_dim and resets the
+            # partitions at the correct dim, but these early items are
+            # not re-indexed and their vector recall is permanently
             # degraded. Calling _ensure_dim first makes the
-            # "safe rebuild: no embedded items exist yet" invariant
+            # "safe reset: no embedded items exist yet" invariant
             # in _ensure_dim actually hold regardless of which
             # writer (add vs add_with_embedding) wins the race to
             # the first insert.
@@ -1141,13 +1215,15 @@ class WorkingMemory:
                 if norm > 0:
                     embedding_np = embedding_np / norm
 
-                self.index.add(embedding_np)
+                # Route the vector to its partition (per-session for
+                # buffer items, shared otherwise) and update the mapping
+                partition = self._get_partition(self._partition_key(namespace, metadata))
+                partition.index.add(embedding_np)
 
-                # Update mapping
                 buffer_idx = len(self.buffer) - 1
-                self.index_mapping[buffer_idx] = self.index_count
-                self.reverse_index_mapping[self.index_count] = buffer_idx
-                self.index_count += 1
+                partition.index_mapping[buffer_idx] = partition.index_count
+                partition.reverse_index_mapping[partition.index_count] = buffer_idx
+                partition.index_count += 1
 
             except Exception as e:
                 # If FAISS fails, keep the item in buffer but disable vector search for this item
@@ -1167,17 +1243,15 @@ class WorkingMemory:
         """
         Clear the buffer memory.
 
-        This method removes all items from the buffer and resets the FAISS index
-        if vector search is enabled. It effectively resets the memory to an empty state.
+        This method removes all items from the buffer and resets all FAISS
+        partitions if vector search is enabled. It effectively resets the memory
+        to an empty state.
         """
         # Clear the buffer
         self.buffer.clear()
 
-        # Reset FAISS index if enabled
-        self.index = faiss.IndexFlatL2(self.dimension)
-        self.index_mapping = {}
-        self.reverse_index_mapping = {}
-        self.index_count = 0
+        # Reset all FAISS partitions
+        self.partitions = {}
         self.needs_rebuild = False
 
         # Clear key-value store

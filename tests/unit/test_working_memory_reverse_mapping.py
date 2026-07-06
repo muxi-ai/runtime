@@ -3,9 +3,10 @@
 Semantic search previously mapped FAISS result indices back to buffer
 indices by scanning the entire ``index_mapping`` dict per result
 (O(k*n)). ``reverse_index_mapping`` replaces that with O(1) lookups.
-These tests pin the invariant that both mappings stay exact inverses of
-each other across every write path (add, rebuild, clear) and that
-search results resolve to the correct buffer items.
+Vectors now live in per-session partitions, so both mappings are kept
+per partition. These tests pin the invariant that both mappings stay
+exact inverses of each other across every write path (add, rebuild,
+clear) and that search results resolve to the correct buffer items.
 
 Patches ``probe_dimension`` / ``embed`` (as imported into ``working``)
 to avoid any OneLLM / network / HF calls.
@@ -15,7 +16,7 @@ from __future__ import annotations
 
 from unittest.mock import AsyncMock, patch
 
-from muxi.runtime.services.memory.working import WorkingMemory
+from muxi.runtime.services.memory.working import SHARED_PARTITION, WorkingMemory
 
 DIM = 8
 
@@ -37,11 +38,13 @@ def _make_memory() -> WorkingMemory:
 
 
 def _assert_inverse(mem: WorkingMemory) -> None:
-    """Both mappings must be exact inverses of each other."""
-    assert mem.reverse_index_mapping == {
-        faiss_idx: buffer_idx for buffer_idx, faiss_idx in mem.index_mapping.items()
-    }
-    assert len(mem.reverse_index_mapping) == len(mem.index_mapping)
+    """Both mappings must be exact inverses of each other in every partition."""
+    assert mem.partitions, "expected at least one partition"
+    for partition in mem.partitions.values():
+        assert partition.reverse_index_mapping == {
+            faiss_idx: buffer_idx for buffer_idx, faiss_idx in partition.index_mapping.items()
+        }
+        assert len(partition.reverse_index_mapping) == len(partition.index_mapping)
 
 
 async def test_mappings_stay_inverse_across_adds():
@@ -122,9 +125,10 @@ async def test_mappings_stay_inverse_after_rebuild():
 
         assert mem.index_count == 3
         _assert_inverse(mem)
-        # Buffer index 0 now holds what was item 1; FAISS row 0 must
-        # resolve back to buffer index 0.
-        assert mem.reverse_index_mapping[0] == 0
+        # Buffer index 0 now holds what was item 1; FAISS row 0 in the
+        # shared partition (no session_id on these items) must resolve
+        # back to buffer index 0.
+        assert mem.partitions[SHARED_PARTITION].reverse_index_mapping[0] == 0
 
 
 async def test_clear_resets_both_mappings():
@@ -147,6 +151,5 @@ async def test_clear_resets_both_mappings():
 
         mem.clear()
 
-        assert mem.index_mapping == {}
-        assert mem.reverse_index_mapping == {}
+        assert mem.partitions == {}
         assert mem.index_count == 0
