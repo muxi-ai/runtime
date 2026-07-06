@@ -1,0 +1,4 @@
+name: "Base User"
+description: "Baseline access every analyst inherits"
+agents:
+  - assistant

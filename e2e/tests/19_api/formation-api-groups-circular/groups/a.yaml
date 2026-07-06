@@ -1,0 +1,4 @@
+name: "Group A"
+inherits: b
+agents:
+  - assistant
