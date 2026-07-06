@@ -128,6 +128,23 @@ def _redact_data_recursive(obj: Any) -> Any:
         return obj
 
 
+def _snapshot_structure(obj: Any) -> Any:
+    """Copy container structure without touching leaf values.
+
+    Point-in-time snapshot taken on the emitting thread so caller
+    mutations after observe() returns cannot race the background
+    redaction/emission. Strings and other leaves are immutable and are
+    shared, not copied, which keeps the snapshot far cheaper than
+    running redaction inline.
+    """
+    if isinstance(obj, dict):
+        return {k: _snapshot_structure(v) for k, v in obj.items()}
+    if isinstance(obj, (list, tuple)):
+        copied = [_snapshot_structure(item) for item in obj]
+        return copied if isinstance(obj, list) else tuple(copied)
+    return obj
+
+
 # Kill all tasks on ctrl-c for clean shutdown
 # Only register signal handlers in main thread to avoid errors in tests
 try:
@@ -202,16 +219,24 @@ def observe(
         if not configured_logger:
             return
 
+        # Drop filtered events before doing any expensive work:
+        # redaction walks the entire payload and emission spawns a
+        # background thread, neither of which is needed for an event
+        # the logger would discard anyway.
+        if not configured_logger.should_emit(event_type, level):
+            return
+
         # Redact PII/secrets by default for every event. The previous event-type
         # allow-list left non-user events (SystemEvents, MCP_*, WORKFLOW_*, ...)
         # unredacted, which could leak secrets carried in their payloads. Callers
         # may opt out via skip_redaction for audited, non-sensitive events.
-        if skip_redaction:
-            redacted_data = data or {}
-            redacted_description = description or ""
-        else:
-            redacted_data = _redact_data_recursive(data or {})
-            redacted_description = _redact_data_recursive(description) if description else ""
+        #
+        # Redaction itself runs on the background emission thread so the
+        # hot path only pays for a cheap container snapshot; every event
+        # is still fully redacted before it reaches any transport. The
+        # snapshot is taken for skip_redaction events too, so caller
+        # mutations after observe() returns can never race emission.
+        snapshot_data = _snapshot_structure(data or {})
 
         # Get request context
         from .context import get_current_request_context
@@ -219,9 +244,12 @@ def observe(
         request_context = get_current_request_context()
 
         @multitasking.task
-        def _emit_in_background(logger, context, evt_type, evt_level, evt_data, evt_desc):
+        def _emit_in_background(logger, context, evt_type, evt_level, evt_data, evt_desc, redact):
             try:
                 # Use all parameters passed explicitly - no closure dependencies
+                if redact:
+                    evt_data = _redact_data_recursive(evt_data)
+                    evt_desc = _redact_data_recursive(evt_desc) if evt_desc else ""
                 logger.emit_event(
                     event_type=evt_type,
                     level=evt_level,
@@ -233,14 +261,15 @@ def observe(
                 # Silently fail if observability unavailable
                 pass
 
-        # Start the background task with all parameters explicit (using redacted data)
+        # Start the background task with all parameters explicit
         _emit_in_background(
             configured_logger,
             request_context,
             event_type,
             level,
-            redacted_data,
-            redacted_description,
+            snapshot_data,
+            description or "",
+            not skip_redaction,
         )
 
     except Exception:
