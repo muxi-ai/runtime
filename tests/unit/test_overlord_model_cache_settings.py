@@ -93,16 +93,31 @@ async def test_missing_settings_are_handled():
 
 
 @pytest.mark.asyncio
-async def test_cache_key_includes_settings_digest():
-    """Cache keys keep the agent/capability prefix and gain a hex digest."""
+async def test_cache_key_includes_model_and_settings_digest():
+    """Cache keys keep the agent/capability prefix and gain model + hex digest."""
     ov = make_overlord({"text": {"model": "openai/gpt-4o", "settings": {"temperature": 0.2}}})
 
     with patch.object(overlord_module, "LLM", FakeLLM):
         await ov.get_model_for_capability("text")
 
     (cache_key,) = ov._model_cache.keys()
-    prefix, capability, digest = cache_key.split(":")
+    prefix, capability, model_name, digest = cache_key.split(":")
     assert prefix == "default"
     assert capability == "text"
+    assert model_name == "openai/gpt-4o"
     assert len(digest) == 12
     int(digest, 16)  # digest must be hex
+
+
+@pytest.mark.asyncio
+async def test_model_change_creates_new_cache_entry():
+    """Mutating the capability's model at runtime must not serve the old instance."""
+    ov = make_overlord({"text": {"model": "openai/gpt-4o", "settings": {"temperature": 0.2}}})
+
+    with patch.object(overlord_module, "LLM", FakeLLM):
+        first = await ov.get_model_for_capability("text")
+        ov._capability_models["text"]["model"] = "anthropic/claude-sonnet-5"
+        second = await ov.get_model_for_capability("text")
+
+    assert first is not second
+    assert len(ov._model_cache) == 2
