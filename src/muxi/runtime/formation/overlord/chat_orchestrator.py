@@ -1272,10 +1272,11 @@ class ChatOrchestrator:
                 # The per-collection queries are independent — run them
                 # concurrently instead of sequentially awaiting each one.
                 # asyncio.gather preserves input ordering, so results are
-                # processed in the same collection order as before. Any
-                # failure propagates out of gather and is caught by the
-                # enclosing except, matching the previous all-or-nothing
-                # error behavior.
+                # processed in the same collection order as before.
+                # return_exceptions=True waits for every query so a failure
+                # never leaves orphaned in-flight tasks; the first error is
+                # then re-raised into the enclosing except, matching the
+                # previous all-or-nothing error behavior.
                 results = await asyncio.gather(
                     *(
                         self.overlord.long_term_memory.list_memories(
@@ -1284,8 +1285,12 @@ class ChatOrchestrator:
                             external_user_id=user_id,
                         )
                         for collection in profile_collections
-                    )
+                    ),
+                    return_exceptions=True,
                 )
+                for result in results:
+                    if isinstance(result, BaseException):
+                        raise result
                 seen_contents = set()
                 memory_parts = []
 
