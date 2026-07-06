@@ -1020,8 +1020,20 @@ class Overlord:
             if not self._ensure_sop_system():
                 return None
 
+            # GBAC Phase 3: exclude SOPs the requesting user's groups don't
+            # permit. Over-fetch a few candidates so a denied top match
+            # doesn't hide a permitted lower-ranked one; no-op when no
+            # permissions are set (no groups/ directory).
+            from ...services.gbac import enforcement as gbac
+
+            permissions = gbac.get_current_permissions()
+            top_k = 1 if permissions is None else 5
+
             # Search for relevant SOPs
-            relevant_sops = await self.sop_system.find_relevant_sops(message, top_k=1)
+            relevant_sops = await self.sop_system.find_relevant_sops(message, top_k=top_k)
+            if permissions is not None and relevant_sops:
+                allowed = set(gbac.filter_ids("sops", [sop["id"] for sop in relevant_sops]))
+                relevant_sops = [sop for sop in relevant_sops if sop["id"] in allowed]
             relevant_sop = relevant_sops[0] if relevant_sops else None
 
             # Filter out low-relevance SOPs
@@ -5411,6 +5423,78 @@ Agent response: {raw_response}"""
     # ASYNC REQUEST-RESPONSE ORCHESTRATION)
     # ===================================================================
 
+    async def _apply_permission_gate(
+        self, user_id: Any, agent_name: Optional[str]
+    ) -> Optional[MuxiResponse]:
+        """Resolve GBAC permissions once per request and gate agent access.
+
+        GBAC Phase 3 (resource filtering). When the formation has a
+        ``groups/`` directory, the requesting user's effective permissions
+        are resolved ONCE here (Phase 2's TTL/LRU caches make this cheap)
+        and stored in the request context. Downstream enforcement sites --
+        agent routing, workflow decomposition/execution, SOP matching, and
+        the per-turn MCP tool surface -- read that context instead of
+        re-resolving. Without a resolver this is a strict no-op.
+
+        Returns:
+            A graceful MuxiResponse when the user's groups grant no agents
+            at all ("registered but inactive" -- PRD resolution rule 6),
+            otherwise None to continue normal processing.
+
+        Raises:
+            ValueError: When a directly-addressed agent is denied. The
+                error type and message are identical to ``get_agent()``'s
+                unknown-agent error so a denied agent is indistinguishable
+                from a nonexistent one (no information leak).
+        """
+        from ...services.gbac import enforcement as gbac
+
+        resolver = self._configured_services.get("permission_resolver")
+        if resolver is None or user_id is None:
+            # Feature inert (no groups/ directory), or no requesting user
+            # yet (the orchestrator rejects multi-user requests without a
+            # user id). Clear any permissions inherited from a previous
+            # request in this context.
+            gbac.set_current_permissions(None)
+            return None
+
+        # Match the orchestrator's user-id normalization so membership
+        # lookups behave identically across entry points.
+        resolved_user = str(user_id).lower().strip()
+        permissions = await resolver.resolve(resolved_user)
+        gbac.set_current_permissions(permissions)
+
+        # A directly-addressed denied agent behaves exactly like an
+        # unknown agent -- same error type and message as get_agent().
+        if agent_name and not permissions.is_allowed("agents", agent_name):
+            gbac.observe_denied(
+                "agents",
+                agent_name,
+                user_id=resolved_user,
+                formation_id=self.formation_id,
+                channel="direct_address",
+            )
+            raise ValueError(f"No agent with ID '{agent_name}' exists")
+
+        # A user whose groups grant no agents at all gets a graceful
+        # reply instead of a routing failure (PRD: "registered but
+        # inactive" users are allowed in but can reach no resources).
+        if not permissions.filter("agents", list(self.agents.keys())):
+            gbac.observe_denied(
+                "agents",
+                "*",
+                user_id=resolved_user,
+                formation_id=self.formation_id,
+                reason="no_permitted_agents",
+            )
+            return MuxiResponse(
+                role="assistant",
+                content="I'm sorry, but I'm not able to help with that request.",
+                metadata={"handled_by": "overlord_direct", "reason": "no_capabilities"},
+            )
+
+        return None
+
     async def chat(
         self,
         message: str,
@@ -6310,6 +6394,28 @@ Agent response: {raw_response}"""
         if request_id and self.request_tracker.is_cancelled(request_id):
             await self.request_tracker.clear_cancelled(request_id)
             raise RequestCancelledException(request_id)
+
+        # ===================================================================
+        # GBAC PERMISSION GATE (Phase 3)
+        # ===================================================================
+        # Resolve the requesting user's permissions once per request and
+        # stash them in the request context for every downstream
+        # enforcement site (routing, workflow, SOP matching, MCP tool
+        # surface). This runs inside the sync/streaming/async execution
+        # task so streaming requests emit proper events. Strict no-op for
+        # formations without a groups/ directory. A directly-addressed
+        # denied agent raises the same ValueError as an unknown agent.
+        gate_response = await self._apply_permission_gate(user_id, agent_name)
+        if gate_response is not None:
+            # No permitted agents ("registered but inactive"): graceful
+            # reply, mirroring the fast-path completion behavior.
+            streaming.stream(
+                "completed",
+                gate_response.content,
+                status="success",
+                processing_time_ms=int((time.time() - start_time) * 1000),
+            )
+            return gate_response
 
         # ===================================================================
         # EARLY LLM HEALTH CHECK
@@ -7414,7 +7520,13 @@ Agent response: {raw_response}"""
                 # Build context with available SOPs for the analyzer
                 analysis_context = {"request_tracker": self.request_tracker}
                 if self._ensure_sop_system() and self.sop_system.enabled:
-                    analysis_context["available_sops"] = list(self.sop_system.sops.keys())
+                    # GBAC Phase 3: the analyzer LLM only sees SOPs the
+                    # requesting user's groups permit (no-op without groups/).
+                    from ...services.gbac import enforcement as gbac
+
+                    analysis_context["available_sops"] = gbac.filter_ids(
+                        "sops", list(self.sop_system.sops.keys())
+                    )
 
                 # Check for cancellation before request analysis
                 if request_id and self.request_tracker.is_cancelled(request_id):
@@ -7620,9 +7732,19 @@ Agent response: {raw_response}"""
 
                 # Check for explicit SOP request
                 if analysis.explicit_sop_request:
-                    # User explicitly requested a specific SOP
+                    # User explicitly requested a specific SOP.
+                    # GBAC Phase 3: a denied SOP takes the same "not found"
+                    # path as a nonexistent one (no information leak), and
+                    # the "available SOPs" list shown to the user is
+                    # filtered to what their groups permit.
+                    from ...services.gbac import enforcement as gbac
+
                     sop_id = analysis.explicit_sop_request
-                    if self._ensure_sop_system() and sop_id in self.sop_system.sops:
+                    if (
+                        self._ensure_sop_system()
+                        and sop_id in self.sop_system.sops
+                        and gbac.is_allowed("sops", sop_id)
+                    ):
                         observability.observe(
                             event_type=observability.ConversationEvents.SOP_MATCHED,
                             level=observability.EventLevel.INFO,
@@ -7651,8 +7773,22 @@ Agent response: {raw_response}"""
                         )
                     else:
                         # SOP explicitly requested but not found - return error to user
-                        available_sops = (
-                            list(self.sop_system.sops.keys()) if self.sop_system else []
+                        if (
+                            self.sop_system
+                            and sop_id in self.sop_system.sops
+                            and not gbac.is_allowed("sops", sop_id)
+                        ):
+                            # Exists but denied: log the permission decision
+                            # (the user-facing path stays "not found").
+                            gbac.observe_denied(
+                                "sops",
+                                sop_id,
+                                user_id=str(user_id) if user_id else None,
+                                request_id=request_id,
+                            )
+                        available_sops = gbac.filter_ids(
+                            "sops",
+                            list(self.sop_system.sops.keys()) if self.sop_system else [],
                         )
                         observability.observe(
                             event_type=observability.ConversationEvents.SOP_NOT_FOUND,

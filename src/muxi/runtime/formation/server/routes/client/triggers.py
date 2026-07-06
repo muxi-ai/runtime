@@ -241,6 +241,30 @@ async def execute_trigger(
     if not formation.is_overlord_running():
         raise HTTPException(status_code=503, detail="Overlord not available")
 
+    # GBAC Phase 3: a trigger fires only when the requesting user's groups
+    # permit it. Per the PRD's channel table, API/webhook callers get a 403
+    # with a generic message. No-op when the formation has no groups/
+    # directory. The membership lookup is TTL-cached by the resolver.
+    resolver = formation.permission_resolver
+    if resolver is not None:
+        from .....services.gbac import enforcement as gbac_enforcement
+
+        # Normalize the identifier the same way the overlord chat path does
+        permissions = await resolver.resolve(str(user_id).lower().strip())
+        if not permissions.is_allowed("triggers", trigger_name):
+            gbac_enforcement.observe_denied(
+                "triggers",
+                trigger_name,
+                user_id=user_id,
+                formation_id=formation_id,
+                group_ids=list(permissions.group_ids),
+                channel="api",
+            )
+            raise HTTPException(
+                status_code=403,
+                detail="Insufficient permissions to execute this trigger",
+            )
+
     # Get formation directory
     formation_path = formation.get_formation_path()
     if not formation_path:

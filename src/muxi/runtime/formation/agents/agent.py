@@ -1470,6 +1470,23 @@ class Agent:
                 # Use agent-specific tool registry to get only tools this agent has access to
                 available_tools = mcp_service.get_tool_registry(self.agent_id)
 
+                # GBAC Phase 3: narrow the per-turn tool surface to the
+                # requesting user's effective set (group tool-override
+                # cascade). ``available_tools`` is the inherited view
+                # (post-registry, post-attachment); ``mcp_service.
+                # tool_registry`` is the post-registry catalog that group
+                # allow-overrides expand against. No-op when the formation
+                # has no groups/ directory. The filtered dict feeds both
+                # the planning prompt and the LLM tool schema, so a denied
+                # tool is never visible nor callable in this turn.
+                from ...services.gbac import enforcement as gbac_enforcement
+
+                available_tools = gbac_enforcement.effective_tool_registry(
+                    self.agent_id,
+                    available_tools,
+                    catalogs=getattr(mcp_service, "tool_registry", None),
+                )
+
                 # Tool isolation now working with shared + agent-specific tools
 
                 # Format tools for LLM if any are available

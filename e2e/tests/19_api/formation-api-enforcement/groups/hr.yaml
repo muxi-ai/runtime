@@ -1,0 +1,6 @@
+name: "Human Resources"
+description: "HR staff -- employee data access"
+agents:
+  - hr-assistant
+triggers:
+  - hr-report
