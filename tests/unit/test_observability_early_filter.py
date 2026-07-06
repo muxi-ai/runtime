@@ -59,8 +59,9 @@ class TestObserveEarlyFiltering:
         return previous, was_enabled
 
     def _restore(self, previous, was_enabled):
-        if previous is not None:
-            observability.set_runtime_event_logger(previous)
+        # Restore unconditionally: previous may legitimately be None and
+        # must not leave this test's logger installed for later tests
+        observability.set_runtime_event_logger(previous)
         if not was_enabled:
             observability.disable()
 
