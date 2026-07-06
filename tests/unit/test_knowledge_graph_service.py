@@ -310,3 +310,37 @@ class TestQuerySurface:
     async def test_explain_path_unknown_entity(self, service):
         await self._seed(service)
         assert await service.explain_path("u1", "User", "Nowhere") == ""
+
+    async def test_entity_names_uses_single_batched_query(self, service):
+        user, acme, muxi = await self._seed(service)
+
+        calls = []
+        original_batched = service.storage.get_entities_by_ids
+
+        async def counting_batched(entity_ids):
+            calls.append(set(entity_ids))
+            return await original_batched(entity_ids)
+
+        async def forbidden_single(entity_id):
+            raise AssertionError("per-id lookup used on the batched path")
+
+        service.storage.get_entities_by_ids = counting_batched
+        service.storage.get_entity_by_id = forbidden_single
+
+        names = await service._entity_names({user["id"], acme["id"], muxi["id"]})
+        assert names == {user["id"]: "User", acme["id"]: "Acme", muxi["id"]: "MUXI"}
+        assert len(calls) == 1  # one storage round-trip for N ids
+
+    async def test_topic_match_requires_whole_word(self, service):
+        storage = service.storage
+        go = await storage.upsert_entity("u1", "topic", "Go", confidence=0.95)
+        user = await storage.upsert_entity("u1", "person", "User", confidence=0.95)
+        await storage.upsert_relationship(
+            "u1", user["id"], go["id"], "interested_in", confidence=0.95
+        )
+
+        # Substring inside a longer word must NOT match
+        assert await service._match_topic_entity("u1", "pick a category for me") is None
+        # Whole word (case-insensitive) must match
+        matched = await service._match_topic_entity("u1", "tell me about go concurrency")
+        assert matched is not None and matched["id"] == go["id"]

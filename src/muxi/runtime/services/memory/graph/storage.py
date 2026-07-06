@@ -130,6 +130,20 @@ class KnowledgeGraphStorage:
             entity = await session.get(KGEntity, entity_id)
             return entity.to_dict() if entity else None
 
+    async def get_entities_by_ids(self, entity_ids) -> List[Dict[str, Any]]:
+        """Return the entities matching the given integer ids in one query.
+
+        Batched lookup for hot paths (context blocks, path rendering) so
+        callers never issue one round-trip per id.
+        """
+        ids = list(entity_ids)
+        if not ids:
+            return []
+        async with self.db_manager.get_async_session() as session:
+            stmt = select(KGEntity).filter(KGEntity.id.in_(ids))
+            rows = (await session.execute(stmt)).scalars().all()
+            return [row.to_dict() for row in rows]
+
     async def list_entities(
         self,
         user_id: str,
@@ -220,12 +234,18 @@ class KnowledgeGraphStorage:
                 session.add(relationship)
                 await session.flush()
 
+                conflicted_ids = []
                 for old in conflicting:
                     if old.status == STATUS_SUPERSEDED:
                         old.superseded_by = relationship.id
                     else:
                         old.contradicted_by = relationship.id
-                        relationship.contradicted_by = old.id
+                        conflicted_ids.append(old.id)
+                if conflicted_ids:
+                    # Deterministic back-link: point at the most recent
+                    # conflicting fact rather than whichever row the loop
+                    # happened to visit last.
+                    relationship.contradicted_by = max(conflicted_ids)
                 await session.flush()
                 return relationship.to_dict()
 

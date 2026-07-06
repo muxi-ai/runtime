@@ -33,6 +33,7 @@ from typing import Dict, List, Optional, Protocol, Set, Tuple
 import networkx as nx
 from sqlalchemy import text
 
+from .models import STATUS_ACTIVE
 from .storage import KnowledgeGraphStorage, normalize_type
 
 
@@ -250,7 +251,7 @@ class PgRoutingAlgorithms:
             "FROM kg_relationships r "
             f"WHERE r.user_id = {_quote_literal(str(user_id))} "
             f"AND r.formation_id = {_quote_literal(self.formation_id)} "
-            "AND r.status = 'active'"
+            f"AND r.status = {_quote_literal(STATUS_ACTIVE)}"
         )
         if rel_types:
             normalized = sorted({normalize_type(t) for t in rel_types})
@@ -311,7 +312,7 @@ class PgRoutingAlgorithms:
             "SELECT array_agg(e.id) FROM kg_entities e "
             f"WHERE e.user_id = {_quote_literal(str(user_id))} "
             f"AND e.formation_id = {_quote_literal(self.formation_id)} "
-            "AND e.status = 'active'"
+            f"AND e.status = {_quote_literal(STATUS_ACTIVE)}"
         )
         query = text(
             "SELECT d.end_vid, MIN(d.agg_cost) AS cost "

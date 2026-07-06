@@ -83,6 +83,18 @@ class TestEntityRoundTrips:
         people = await storage.list_entities("u1", entity_type="person")
         assert [e["name"] for e in people] == ["Sarah"]
 
+    async def test_get_entities_by_ids_batched(self, storage):
+        sarah = await storage.upsert_entity("u1", "person", "Sarah")
+        acme = await storage.upsert_entity("u1", "company", "Acme")
+        await storage.upsert_entity("u1", "project", "MUXI")
+
+        rows = await storage.get_entities_by_ids({sarah["id"], acme["id"]})
+        assert {row["name"] for row in rows} == {"Sarah", "Acme"}
+
+    async def test_get_entities_by_ids_empty_and_unknown(self, storage):
+        assert await storage.get_entities_by_ids([]) == []
+        assert await storage.get_entities_by_ids([999999]) == []
+
 
 class TestRelationshipRoundTrips:
     async def _entities(self, storage):
@@ -178,6 +190,39 @@ class TestContradictionDetection:
         )
         all_rows = await storage.list_relationships("u1", status=None)
         assert len(all_rows) == 2  # history accumulates, never overwritten
+
+    async def test_multi_conflict_back_link_is_most_recent(self, storage):
+        """With several conflicting rows, the new fact's contradicted_by
+        deterministically points at the most recent one."""
+        user = await storage.upsert_entity("u1", "person", "User")
+        london = await storage.upsert_entity("u1", "location", "London")
+        berlin = await storage.upsert_entity("u1", "location", "Berlin")
+        paris = await storage.upsert_entity("u1", "location", "Paris")
+
+        # Two active lives_in rows: London superseded by Berlin, then revived.
+        first = await storage.upsert_relationship(
+            "u1", user["id"], london["id"], "lives_in", confidence=0.5
+        )
+        second = await storage.upsert_relationship(
+            "u1", user["id"], berlin["id"], "lives_in", confidence=0.95
+        )
+        await storage.upsert_relationship(
+            "u1", user["id"], london["id"], "lives_in", confidence=0.7
+        )
+
+        third = await storage.upsert_relationship(
+            "u1", user["id"], paris["id"], "lives_in", confidence=0.9
+        )
+
+        first_row = await storage.get_relationship_by_id(first["id"])
+        second_row = await storage.get_relationship_by_id(second["id"])
+        assert first_row["status"] == STATUS_CONFLICTED
+        assert first_row["contradicted_by"] == third["id"]
+        assert second_row["status"] == STATUS_CONFLICTED
+        assert second_row["contradicted_by"] == third["id"]
+        # Back-link points at the most recent conflicting row, not whichever
+        # the loop visited last.
+        assert third["contradicted_by"] == max(first["id"], second["id"])
 
     async def test_reasserted_fact_revives_superseded_edge(self, storage):
         user = await storage.upsert_entity("u1", "person", "User")

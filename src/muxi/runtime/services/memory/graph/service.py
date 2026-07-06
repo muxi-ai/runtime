@@ -23,6 +23,7 @@
 # =============================================================================
 
 import asyncio
+import re
 from collections import deque
 from typing import Any, Deque, Dict, List, Optional, Tuple
 
@@ -442,20 +443,22 @@ class KnowledgeGraphService:
         return " ".join(parts)
 
     async def _entity_names(self, entity_ids: set) -> Dict[int, str]:
-        """Map entity ids to display names."""
-        names: Dict[int, str] = {}
-        for entity_id in entity_ids:
-            entity = await self.storage.get_entity_by_id(entity_id)
-            if entity:
-                names[entity_id] = entity["name"]
-        return names
+        """Map entity ids to display names (single batched query)."""
+        entities = await self.storage.get_entities_by_ids(entity_ids)
+        return {entity["id"]: entity["name"] for entity in entities}
 
     async def _match_topic_entity(self, user_id: str, query_text: str) -> Optional[Dict[str, Any]]:
-        """Find the first known entity whose name appears in the query."""
+        """Find the first known entity whose name appears in the query.
+
+        Whole-word matching only: a substring check would let short entity
+        names match inside longer words (e.g. "go" inside "category").
+        """
         query_lower = query_text.lower()
         for entity in await self.storage.list_entities(user_id, limit=200):
             name = entity["name"].lower()
-            if name != _name_key(USER_ENTITY_NAME) and name in query_lower:
+            if name == _name_key(USER_ENTITY_NAME):
+                continue
+            if re.search(r"\b" + re.escape(name) + r"\b", query_lower):
                 return entity
         return None
 
