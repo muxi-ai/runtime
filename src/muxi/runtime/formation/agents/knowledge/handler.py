@@ -544,9 +544,14 @@ class KnowledgeHandler:
         query: str,
         top_k: int = 5,
         generate_embeddings_fn: Optional[Callable] = None,
-        session_id: Optional[str] = None,
     ) -> List[Dict[str, Any]]:
-        """Search across all knowledge sources with performance optimization."""
+        """Search across all knowledge sources with performance optimization.
+
+        Knowledge is agent-scoped, not session-scoped: chunks are stored
+        without a session_id, so the underlying vector search must not be
+        session-filtered. Passing a session_id here used to exclude every
+        knowledge chunk and silently return zero results.
+        """
         search_start_time = time.time()
 
         # Log search start
@@ -593,14 +598,15 @@ class KnowledgeHandler:
             # Use standard search parameters
             search_k = top_k
 
-            # Use WorkingMemory for document search with documents namespace
+            # Use WorkingMemory for document search with documents namespace.
+            # No session_id: knowledge chunks carry none, so a session filter
+            # would exclude all of them.
             memory_results = await self.working_memory.search(
                 query="",  # Empty since we provide vector
                 query_vector=query_vector.tolist(),
                 limit=search_k * 2,  # Get more results for filtering
                 recency_bias=0.05,  # Very low for documents - favor semantic similarity
                 namespace=DOCUMENT_NAMESPACE,
-                session_id=session_id,
             )
 
             # Convert to standard format
@@ -1497,12 +1503,13 @@ class KnowledgeHandler:
         results = {"knowledge": [], "memory": [], "unified": []}
 
         try:
-            # Search knowledge sources (use stored embedding function if not provided)
+            # Search knowledge sources (use stored embedding function if not
+            # provided). Knowledge is agent-scoped; session_id only applies to
+            # the conversational working-memory search below.
             knowledge_results = await self.search(
                 query=query,
                 top_k=knowledge_limit or top_k,
                 generate_embeddings_fn=generate_embeddings_fn or self._generate_embeddings_fn,
-                session_id=session_id,
             )
             results["knowledge"] = knowledge_results
 
