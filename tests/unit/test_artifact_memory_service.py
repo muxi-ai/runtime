@@ -479,3 +479,26 @@ class TestRetention:
         service = make_service(db_manager, store_dir)
         service.start()
         assert service._sweep_task is None
+
+
+class TestSavedEventFailureIsolation:
+    """artifact.saved recording failure must not fail the capture (review P1).
+
+    The blob and metadata row are committed before the audit event is
+    recorded; a memory_events failure is logged and swallowed so the
+    artifact is still returned as captured.
+    """
+
+    async def test_event_record_failure_keeps_artifact(self, db_manager, store_dir):
+        class ExplodingEvents:
+            async def record(self, **kwargs):
+                raise RuntimeError("substrate down")
+
+        service = make_service(db_manager, store_dir, memory_events=ExplodingEvents())
+        captured = await service.capture_response_artifacts(
+            [text_artifact("report.csv", "a,b\n1,2")], user_id="u1"
+        )
+        assert len(captured) == 1
+        # The artifact row exists and is queryable despite the event failure
+        rows = await service.list_artifacts(user_id="u1")
+        assert any(r["name"] == "report.csv" for r in rows)

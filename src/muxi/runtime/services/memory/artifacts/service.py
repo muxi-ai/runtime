@@ -423,9 +423,32 @@ class ArtifactMemoryService:
         return utc_now_naive() + timedelta(days=self.settings.retention_days)
 
     async def _record_saved_event(self, row: Dict[str, Any]) -> None:
-        """Record the artifact.saved audit event (failure-isolated)."""
+        """Record the artifact.saved audit event (failure-isolated).
+
+        The event is metadata-only audit trail; the blob and metadata row
+        are already committed by the time this runs, so a recording
+        failure must never make a successfully captured artifact report
+        as failed. Errors are logged and swallowed.
+        """
         if self.memory_events is None:
             return
+        try:
+            await self._record_saved_event_inner(row)
+        except Exception as exc:
+            observability.observe(
+                event_type=observability.ErrorEvents.MEMORY_OPERATION_FAILED,
+                level=observability.EventLevel.WARNING,
+                data={
+                    "service": "artifact_memory",
+                    "operation": "record_saved_event",
+                    "artifact_id": row["public_id"],
+                    "error": str(exc),
+                    "error_type": type(exc).__name__,
+                },
+                description="artifact.saved audit event recording failed; artifact retained",
+            )
+
+    async def _record_saved_event_inner(self, row: Dict[str, Any]) -> None:
         await self.memory_events.record(
             user_id=row["user_id"],
             event_type=EVENT_ARTIFACT_SAVED,
