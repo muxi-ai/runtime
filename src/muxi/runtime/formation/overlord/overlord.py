@@ -840,6 +840,15 @@ class Overlord:
 
         self.memory_ingestion = MemoryIngestionService(self)
 
+        # Memory distillery intake (Memory Distillery Phase 3b): the
+        # verify + accept service behind POST /v1/memories/distilled.
+        # Construction is cheap (config parse only) and the service stays
+        # inert (routes 503) unless memory.distillery.enabled is set, so
+        # formations without distillery config are untouched.
+        from ...services.memory.distillery import MemoryDistilleryService
+
+        self.memory_distillery = MemoryDistilleryService(self)
+
         # ===================================================================
         # INTELLIGENCE MODELS AND CACHE - Intelligence concerns
         # ===================================================================

@@ -813,6 +813,25 @@ class ConversationEvents(Enum):
     MEMORY_INGESTION_FILTERED = "memory.ingestion.filtered"
     # When the noise gate drops an ingested item (disposition event recorded)
 
+    # Memory distillery intake (Memory Distillery Phase 3b)
+    MEMORY_DISTILLED_ACCEPTED = "memory.distilled.accepted"
+    # When POST /v1/memories/distilled accepts a signed batch
+
+    MEMORY_DISTILLED_COMPLETED = "memory.distilled.completed"
+    # When a distilled batch's projection job finishes (per-event dispositions)
+
+    MEMORY_DISTILLED_FAILED = "memory.distilled.failed"
+    # When a distilled batch's projection job fails as a whole
+
+    MEMORY_DISTILLED_EMBEDDING_MISMATCH = "memory.distilled.embedding_mismatch"
+    # When shipped pre-computed vectors are discarded (model mismatch) and re-embedded
+
+    MEMORY_DISTILLERY_REGISTERED = "memory.distillery.registered"
+    # When an admin registers a distillery (public key + scope on file)
+
+    MEMORY_DISTILLERY_REVOKED = "memory.distillery.revoked"
+    # When an admin revokes a distillery registration (subsequent batches get 410)
+
     USER_INFO_EXTRACTION_STARTED = "user.info.extraction.started"
     # When background user information extraction task is initiated
 

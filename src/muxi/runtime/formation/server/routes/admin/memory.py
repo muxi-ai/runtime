@@ -5,13 +5,14 @@ These endpoints provide memory configuration and buffer management,
 requiring admin API key authentication.
 """
 
-from typing import Any, Optional
+from typing import Any, Dict, Optional
 
 from fastapi import APIRouter, Request
 from fastapi.responses import JSONResponse
 from pydantic import BaseModel
 
 from .....datatypes.api import APIEventType, APIObjectType
+from .....services import observability
 from ...responses import (
     APIResponse,
     create_error_response,
@@ -186,6 +187,174 @@ async def rebuild_memory_projections(
     data = {"user_id": rebuild.user_id, "dry_run": rebuild.dry_run, "projections": report}
     response = create_success_response(
         APIObjectType.MEMORY, APIEventType.MEMORY_RETRIEVED, data, request_id
+    )
+    return JSONResponse(content=response.model_dump(), status_code=200)
+
+
+# ---------------------------------------------------------------------------
+# Distillery registration (Memory Distillery Phase 3b)
+# ---------------------------------------------------------------------------
+
+
+class DistilleryRegistration(BaseModel):
+    """Model for registering an on-prem distillery.
+
+    ``public_key`` is the distillery's Ed25519 public key
+    (``ed25519:<base64 DER or raw 32 bytes>``). ``scope`` limits what the
+    distillery may write: ``user_ids`` ("all" | "pattern:<glob>" | [ids]),
+    ``event_types``, ``max_events_per_day``, ``max_batch_size`` -- omitted
+    keys fall back to the formation's memory.distillery defaults.
+    """
+
+    name: str
+    public_key: str
+    description: Optional[str] = None
+    scope: Optional[Dict[str, Any]] = None
+    trust_level: Optional[str] = None
+
+
+def _distillery_service_or_error(request: Request, request_id: Optional[str]):
+    """Resolve the overlord's distillery service, or a formed 503."""
+    formation = request.app.state.formation
+    overlord = getattr(formation, "_overlord", None)
+    service = getattr(overlord, "memory_distillery", None) if overlord else None
+    if service is None or not getattr(service, "enabled", False):
+        response = create_error_response(
+            "SERVICE_UNAVAILABLE",
+            "Memory distillery is not enabled for this formation " "(memory.distillery.enabled)",
+            None,
+            request_id,
+        )
+        return None, JSONResponse(content=response.model_dump(), status_code=503)
+    return service, None
+
+
+@router.post("/memory/distilleries", response_model=APIResponse, operation_id="register_distillery")
+async def register_distillery(
+    request: Request, registration: DistilleryRegistration
+) -> JSONResponse:
+    """
+    Register a distillery (Memory Distillery Phase 3b).
+
+    Stores the distillery's Ed25519 public key and write scope; the
+    returned ``distillery_id`` is the X-Distillery-ID every signed batch
+    must carry. New registrations default to the formation's configured
+    trust level (provisional unless overridden) -- provisional caps
+    source_confidence until the registration is trusted.
+    """
+    request_id = getattr(request.state, "request_id", None)
+
+    service, error_response = _distillery_service_or_error(request, request_id)
+    if error_response:
+        return error_response
+
+    try:
+        record = await service.registry.register(
+            name=registration.name,
+            public_key=registration.public_key,
+            scope=service.scope_defaults(registration.scope),
+            trust_level=registration.trust_level or service.default_trust_level,
+            description=registration.description,
+        )
+    except ValueError as e:
+        response = create_error_response("INVALID_PARAMS", str(e), None, request_id)
+        return JSONResponse(content=response.model_dump(), status_code=422)
+    except Exception as e:
+        response = create_error_response(
+            "INTERNAL_ERROR", f"Failed to register distillery: {str(e)}", None, request_id
+        )
+        return JSONResponse(content=response.model_dump(), status_code=500)
+
+    observability.observe(
+        event_type=observability.ConversationEvents.MEMORY_DISTILLERY_REGISTERED,
+        level=observability.EventLevel.INFO,
+        data={
+            "distillery_id": record["distillery_id"],
+            "name": record["name"],
+            "trust_level": record["trust_level"],
+            "scope": record["scope"],
+        },
+        description=f"Distillery registered: {record['name']} ({record['distillery_id']})",
+    )
+    response = create_success_response(
+        APIObjectType.MEMORY_DISTILLERY,
+        APIEventType.MEMORY_DISTILLERY_REGISTERED,
+        record,
+        request_id,
+    )
+    return JSONResponse(content=response.model_dump(), status_code=201)
+
+
+@router.get("/memory/distilleries", response_model=APIResponse, operation_id="list_distilleries")
+async def list_distilleries(request: Request) -> JSONResponse:
+    """List this formation's registered distilleries (newest first)."""
+    request_id = getattr(request.state, "request_id", None)
+
+    service, error_response = _distillery_service_or_error(request, request_id)
+    if error_response:
+        return error_response
+
+    try:
+        distilleries = await service.registry.list()
+    except Exception as e:
+        response = create_error_response(
+            "INTERNAL_ERROR", f"Failed to list distilleries: {str(e)}", None, request_id
+        )
+        return JSONResponse(content=response.model_dump(), status_code=500)
+
+    response = create_success_response(
+        APIObjectType.MEMORY_DISTILLERY_LIST,
+        APIEventType.MEMORY_DISTILLERY_LIST,
+        {"distilleries": distilleries, "count": len(distilleries)},
+        request_id,
+    )
+    return JSONResponse(content=response.model_dump(), status_code=200)
+
+
+@router.delete(
+    "/memory/distilleries/{distillery_id}",
+    response_model=APIResponse,
+    operation_id="revoke_distillery",
+)
+async def revoke_distillery(request: Request, distillery_id: str) -> JSONResponse:
+    """
+    Revoke a distillery registration.
+
+    Subsequent batches from it are rejected with 410 Gone. Previously
+    ingested events are NOT removed -- issue explicit user.deletion events
+    (the substrate's forgetting path) to purge them.
+    """
+    request_id = getattr(request.state, "request_id", None)
+
+    service, error_response = _distillery_service_or_error(request, request_id)
+    if error_response:
+        return error_response
+
+    try:
+        record = await service.registry.revoke(distillery_id)
+    except Exception as e:
+        response = create_error_response(
+            "INTERNAL_ERROR", f"Failed to revoke distillery: {str(e)}", None, request_id
+        )
+        return JSONResponse(content=response.model_dump(), status_code=500)
+
+    if record is None:
+        response = create_error_response(
+            "NOT_FOUND", f"Unknown distillery '{distillery_id}'", None, request_id
+        )
+        return JSONResponse(content=response.model_dump(), status_code=404)
+
+    observability.observe(
+        event_type=observability.ConversationEvents.MEMORY_DISTILLERY_REVOKED,
+        level=observability.EventLevel.INFO,
+        data={"distillery_id": record["distillery_id"], "name": record["name"]},
+        description=f"Distillery revoked: {record['name']} ({record['distillery_id']})",
+    )
+    response = create_success_response(
+        APIObjectType.MEMORY_DISTILLERY,
+        APIEventType.MEMORY_DISTILLERY_REVOKED,
+        record,
+        request_id,
     )
     return JSONResponse(content=response.model_dump(), status_code=200)
 

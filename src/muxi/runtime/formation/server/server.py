@@ -670,6 +670,7 @@ class FormationServer:
         from .routes.client import (
             chat,
             credentials,
+            distilled,
             events,
             memory,
             requests,
@@ -707,6 +708,10 @@ class FormationServer:
             events.router,
             requests.router,
             memory.router,
+            # Distilled batches additionally require an Ed25519 signature
+            # from a registered distillery (memory distillery Phase 3b);
+            # the API key here is the PRD's formation-key layer.
+            distilled.router,
             scheduler.router,  # GET /scheduler/jobs needs both keys
         ]
 
