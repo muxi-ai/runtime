@@ -113,7 +113,7 @@ class MemoryEventStorage:
                 scope_id = self.formation_id
 
         if source_id is not None:
-            existing = await self._find_by_source_id(user_id, source, source_id)
+            existing = await self.find_by_source_id(user_id, source, source_id)
             if existing is not None:
                 return existing, False
 
@@ -139,7 +139,7 @@ class MemoryEventStorage:
             # Lost an idempotency race: another appender inserted the same
             # (source, source_id) between our check and our insert.
             if source_id is not None:
-                existing = await self._find_by_source_id(user_id, source, source_id)
+                existing = await self.find_by_source_id(user_id, source, source_id)
                 if existing is not None:
                     return existing, False
             raise
@@ -162,10 +162,16 @@ class MemoryEventStorage:
             await session.flush()
             return event.to_dict(), True
 
-    async def _find_by_source_id(
+    async def find_by_source_id(
         self, user_id: str, source: str, source_id: str
     ) -> Optional[Dict[str, Any]]:
-        """Return the live event matching the idempotency key, or None."""
+        """Return the live event matching the idempotency key, or None.
+
+        Public so writers with pre-append accounting (e.g. the distillery
+        quota gate) can resolve duplicates read-only before deciding to
+        append; ``append`` itself uses the same lookup for its idempotent
+        return path.
+        """
         async with self.db_manager.get_async_session() as session:
             stmt = (
                 select(MemoryEvent)

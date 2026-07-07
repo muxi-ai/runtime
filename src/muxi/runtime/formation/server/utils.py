@@ -345,3 +345,30 @@ def render_trigger_template(template: str, data: Dict[str, Any]) -> str:
         raise
     except Exception as e:
         raise ValueError(f"Template rendering failed: {str(e)}")
+
+
+def distillery_service_or_error(request, request_id):
+    """Resolve the overlord's memory distillery service, or a formed 503.
+
+    Shared by the distilled intake routes (client) and the distillery
+    registration routes (admin). Returns ``(service, None)`` when the
+    service exists AND memory.distillery.enabled is set; otherwise
+    ``(None, JSONResponse 503)`` -- the inertness contract for formations
+    without distillery config.
+    """
+    from fastapi.responses import JSONResponse
+
+    from .responses import create_error_response
+
+    formation = request.app.state.formation
+    overlord = getattr(formation, "_overlord", None)
+    service = getattr(overlord, "memory_distillery", None) if overlord else None
+    if service is None or not getattr(service, "enabled", False):
+        response = create_error_response(
+            "SERVICE_UNAVAILABLE",
+            "Memory distillery is not enabled for this formation (memory.distillery.enabled)",
+            None,
+            request_id,
+        )
+        return None, JSONResponse(content=response.model_dump(), status_code=503)
+    return service, None

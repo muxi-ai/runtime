@@ -173,6 +173,7 @@ class TestImmutability:
         ]
         assert sorted(mutators) == [
             "append",
+            "find_by_source_id",  # read-only idempotency-key lookup
             "get_checkpoint",
             "get_event",
             "hard_purge",

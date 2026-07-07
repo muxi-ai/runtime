@@ -58,24 +58,34 @@ async def apply_fact_event(
     payload: Dict[str, Any],
     event_id: Optional[int] = None,
     scope: Optional[Tuple[str, str]] = None,
+    embedding=None,
 ) -> str:
     """
     Apply one fact.extracted payload to the flat-fact (vector) projection.
 
-    Shared by the live write paths (extractor, shared-scope API writes)
-    and the replay path so both produce byte-identical rows. ``scope`` is
-    the memory namespace stamp (None = user scope); replay passes the
-    scope recorded on the event. Returns the stored memory id.
+    Shared by the live write paths (extractor, shared-scope API writes,
+    distillery intake) and the replay path so both produce byte-identical
+    rows. ``scope`` is the memory namespace stamp (None = user scope);
+    replay passes the scope recorded on the event. ``embedding`` is an
+    optional pre-computed vector (memory distillery ``pre_computed`` mode,
+    validated against the formation's model by the caller); when None the
+    storage layer embeds on write, which is also what replay does.
+    Returns the stored memory id.
     """
     metadata = dict(payload.get("metadata") or {})
     if event_id is not None:
         metadata[FACT_EVENT_METADATA_KEY] = event_id
+    # Forward the pre-computed vector only when one was shipped: the
+    # keyword stays absent on every other path (extractor, shared-scope
+    # writes, replay), which all embed on write.
+    kwargs = {"embedding": embedding} if embedding is not None else {}
     return await long_term_memory.add(
         content=payload["memory"],
         metadata=metadata,
         user_id=user_id,
         collection=payload["collection"],
         scope=scope,
+        **kwargs,
     )
 
 

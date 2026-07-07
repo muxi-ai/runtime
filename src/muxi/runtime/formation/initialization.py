@@ -1260,6 +1260,7 @@ def _create_all_database_tables(db_manager, embedding_dimension: int = 1536) -> 
 
         # Get Base from db module
         from ..services.db import Base
+        from ..services.memory.distillery.models import RegisteredDistillery  # noqa: F401
         from ..services.memory.events.models import (  # noqa: F401
             MemoryEvent,
             ProjectionCheckpoint,
@@ -1321,6 +1322,7 @@ def _create_all_database_tables(db_manager, embedding_dimension: int = 1536) -> 
             memories_table,  # Memory system tables (dimension-specific)
             "memory_events",
             "projection_checkpoints",  # Memory event substrate tables
+            "memory_distilleries",  # Distillery trust registry (Phase 3b)
             "kg_entities",
             "kg_relationships",  # Knowledge graph tables
             "captains_log",
