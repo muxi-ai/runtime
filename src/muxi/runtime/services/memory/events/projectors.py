@@ -23,8 +23,9 @@
 # call -- no schema changes to the event log.
 # =============================================================================
 
-from typing import Any, Dict, Optional
+from typing import Any, Dict, Optional, Tuple
 
+from ..base import SCOPE_TYPE_USER
 from .models import (
     EVENT_FACT_EXTRACTED,
     EVENT_GRAPH_EXTRACTED,
@@ -38,17 +39,33 @@ from .models import (
 FACT_EVENT_METADATA_KEY = "derived_from_event_id"
 
 
+def event_scope(event: Dict[str, Any]) -> Optional[Tuple[str, str]]:
+    """Return the ``(scope_type, scope_id)`` a scoped event's projection
+    write must carry, or None for the implicit user scope.
+
+    Memory namespaces contract: events record the true scope of the write
+    they describe; replay stamps the projection row with that exact scope.
+    """
+    scope_type = event.get("scope_type")
+    if not scope_type or scope_type == SCOPE_TYPE_USER:
+        return None
+    return (scope_type, event.get("scope_id"))
+
+
 async def apply_fact_event(
     long_term_memory,
     user_id: str,
     payload: Dict[str, Any],
     event_id: Optional[int] = None,
+    scope: Optional[Tuple[str, str]] = None,
 ) -> str:
     """
     Apply one fact.extracted payload to the flat-fact (vector) projection.
 
-    Shared by the live extractor write path and the replay path so both
-    produce byte-identical rows. Returns the stored memory id.
+    Shared by the live write paths (extractor, shared-scope API writes)
+    and the replay path so both produce byte-identical rows. ``scope`` is
+    the memory namespace stamp (None = user scope); replay passes the
+    scope recorded on the event. Returns the stored memory id.
     """
     metadata = dict(payload.get("metadata") or {})
     if event_id is not None:
@@ -58,6 +75,7 @@ async def apply_fact_event(
         metadata=metadata,
         user_id=user_id,
         collection=payload["collection"],
+        scope=scope,
     )
 
 
@@ -123,18 +141,29 @@ class FlatFactProjector:
         self.long_term_memory = long_term_memory
 
     async def apply(self, event: Dict[str, Any]) -> None:
-        """Re-add one extracted fact through the shared write helper."""
+        """Re-add one extracted fact through the shared write helper.
+
+        The scope recorded on the event is reproduced on the projection
+        row, so shared-scope facts replay as shared rows (memory
+        namespaces Phases 2+3).
+        """
         await apply_fact_event(
-            self.long_term_memory, event["user_id"], event["payload"], event_id=event["id"]
+            self.long_term_memory,
+            event["user_id"],
+            event["payload"],
+            event_id=event["id"],
+            scope=event_scope(event),
         )
 
     async def reset(self, user_id: str) -> int:
         """
-        Delete the user's extraction-derived memories.
+        Delete the user's event-sourced memories.
 
-        Only rows written by the extractor (metadata source == 'extraction')
-        are touched: conversations, knowledge uploads, and manually created
-        memories are not event-sourced and must survive a rebuild.
+        Extractor rows (metadata source == 'extraction') and event-derived
+        rows (metadata ``derived_from_event_id`` -- e.g. shared-scope API
+        writes) are wiped, since replay recreates exactly those. Not
+        event-sourced (conversations, knowledge uploads, manually created
+        user memories) survives a rebuild.
         Returns the number of memories deleted.
         """
         return await self.long_term_memory.delete_extracted_memories(str(user_id))

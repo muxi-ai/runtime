@@ -557,11 +557,15 @@ class MemoryExtractor:
         memory_content = memory_data["memory"]
         collection = memory_data["collection"]
 
-        # Search for similar existing memories
-        # Build search params based on backend type
+        # Search for similar existing memories.
+        # Narrowed to user scope (memory namespaces): the extractor writes
+        # user scope only, always, so its dedup must not be suppressed by a
+        # similar shared-scope (group/formation) memory -- a user's own
+        # fact is not a duplicate of the team's fact.
         search_params = {
             "query": memory_content,
             "limit": 1,
+            "scopes": ["user"],
         }
         if self.overlord.is_multi_user:
             search_params["external_user_id"] = external_user_id
@@ -627,6 +631,13 @@ class MemoryExtractor:
         fact.extracted event first, then the flat-fact write goes through
         the same apply helper the event replay uses. An event append
         failure never blocks the memory write.
+
+        Scope policy (memory namespaces PRD, "Extractor / overlord write
+        policy"): conversation-derived extraction writes USER SCOPE ONLY,
+        always. Neither the event append nor the apply helper is ever
+        given a scope here -- one user's chat must never auto-promote a
+        claim into everyone's context. Shared scopes are written only
+        through explicit, grant-checked surfaces (the memories API).
 
         Args:
             memory_data: The memory dict produced by extraction

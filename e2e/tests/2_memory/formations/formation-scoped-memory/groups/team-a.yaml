@@ -1,0 +1,7 @@
+name: "Team A"
+description: "Members may share group-a memories and formation-wide announcements"
+agents: "*"
+memory:
+  write:
+    - group:team-a
+    - formation

@@ -68,29 +68,35 @@ import asyncio
 import collections
 import threading
 import time
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List, Optional, Sequence
 
 import numpy as np
 from faissx import client as faiss
 
 from .. import observability
 from .embedding import DEFAULT_EMBEDDING_MODEL, embed, probe_dimension
+from .scopes import resolve_read_group_ids
 
-# Structured partition-key scheme (memory namespaces Phase 1). Vector
-# partitions are keyed by scope:
+# Structured partition-key scheme (memory namespaces). Vector partitions
+# are keyed by scope:
 #
 #   "session:{id}"  transient per-session retrieval plumbing (from #200)
 #   "user:{id}"     cross-session items owned by one user
-#   "group:{id}"    reserved for Phase 3 (group-scope fan-out); no writer yet
+#   "group:{id}"    group-shared items ("buffer" items carrying a
+#                   group_id and no session_id)
 #   "formation"     formation-global items (sops, knowledge, docs, and
 #                   buffer items carrying neither session nor user)
 #
 # The item-kind tag (namespace: buffer / sops / knowledge / doc) stays
-# orthogonal, exactly as before. Search fan-out is unchanged in Phase 1:
-# a session-scoped search reads its session partition, namespaced
-# (sops/knowledge) searches read the formation partition, and unscoped
-# searches merge all partitions — group/user fan-out arrives with the
-# read-up-the-chain semantics in later phases.
+# orthogonal, exactly as before. Search fan-out (Phases 2+3,
+# read-up-the-chain): a session-scoped search reads its session partition
+# PLUS the requester's identity chain — the user's cross-session
+# partition, each group partition the requester belongs to (per-request
+# GBAC permissions), and the formation partition (restricted to "buffer"
+# items so sops/knowledge/docs stay out of chat recall — #200's dilution
+# fix holds). Namespaced (sops/knowledge) searches read the formation
+# partition; unscoped searches merge all partitions, with group
+# partitions gated by the requester's memberships.
 SESSION_PARTITION_PREFIX = "session:"
 USER_PARTITION_PREFIX = "user:"
 GROUP_PARTITION_PREFIX = "group:"
@@ -308,20 +314,50 @@ class WorkingMemory:
         """Derive the structured scope partition key for an item.
 
         "buffer"-namespace items carrying a session_id are partitioned
-        per session (``session:{id}``); buffer items carrying a user_id
-        but no session land in the user's cross-session partition
-        (``user:{id}``); everything else (sops, knowledge, docs, and
-        buffer items with neither) is formation-global (``formation``).
+        per session (``session:{id}``); sessionless buffer items carrying
+        a group_id are group-shared (``group:{id}`` -- explicitly
+        addressed to the group, so group outranks user when both are
+        present); buffer items carrying only a user_id land in the user's
+        cross-session partition (``user:{id}``); everything else (sops,
+        knowledge, docs, and buffer items with none of these) is
+        formation-global (``formation``).
         """
         if namespace == "buffer":
             md = metadata or {}
             session_id = md.get("session_id")
             if session_id:
                 return f"{SESSION_PARTITION_PREFIX}{session_id}"
+            group_id = md.get("group_id")
+            if group_id:
+                return f"{GROUP_PARTITION_PREFIX}{group_id}"
             user_id = md.get("user_id")
             if user_id:
                 return f"{USER_PARTITION_PREFIX}{user_id}"
         return FORMATION_PARTITION
+
+    def _fanout_partition_keys(
+        self,
+        requester_user_id: Optional[str] = None,
+        group_ids: Sequence[str] = (),
+    ) -> List[str]:
+        """The identity-chain partitions a user-context search reads.
+
+        Write-one-read-up (memory namespaces): the requester's own
+        cross-session partition, one partition per group the requester
+        belongs to, and the formation partition. ``group_ids`` is
+        resolved by the caller through the same shared helper the
+        long-term backends use (``scopes.resolve_read_group_ids``), so
+        working memory and long-term memory can never disagree about a
+        user's group set. Ordering is most-specific-first for
+        readability; the merge is score-based.
+        """
+        keys: List[str] = []
+        if requester_user_id:
+            keys.append(f"{USER_PARTITION_PREFIX}{requester_user_id}")
+        for group_id in group_ids:
+            keys.append(f"{GROUP_PARTITION_PREFIX}{group_id}")
+        keys.append(FORMATION_PARTITION)
+        return keys
 
     def _get_partition(self, key: str) -> _IndexPartition:
         """Return the partition for ``key``, creating it lazily."""
@@ -860,22 +896,42 @@ class WorkingMemory:
             if norm > 0:
                 query_np = query_np / norm
 
-            # Select which partitions to search. A session-scoped search
-            # only needs that session's partition — the hard session_id
-            # filter below excluded every other item anyway (items in
-            # other partitions carry no matching session_id). Namespaced
-            # searches without a session (sops / knowledge) only need
-            # the formation partition, where all non-"buffer" vectors
-            # live. Unscoped searches merge results from all partitions.
-            # This fan-out is unchanged by the structured partition keys
-            # (memory namespaces Phase 1) — user/group fan-out arrives
-            # in later phases.
+            # Select which partitions to search (memory namespaces
+            # Phases 2+3, read-up-the-chain):
+            #
+            # * A session-scoped search reads its session partition PLUS
+            #   the requester's identity chain -- user partition (from the
+            #   user_id filter), each group partition the requester
+            #   belongs to (per-request GBAC permissions), and the
+            #   formation partition. Fan-out items are merged by score;
+            #   the per-item filters below restrict fan-out partitions to
+            #   "buffer" items so sops/knowledge/docs stay out of chat
+            #   recall (#200's dilution fix holds).
+            # * Namespaced searches without a session (sops / knowledge)
+            #   only need the formation partition, where all non-"buffer"
+            #   vectors live (unchanged).
+            # * Unscoped searches merge all partitions, with group
+            #   partitions gated by the requester's memberships.
+            requester_user_id = (filter_metadata or {}).get("user_id")
+            fanout_keys: set = set()
             if session_id:
+                # Same three-level membership resolution as the long-term
+                # backends: per-request permissions ContextVar, then the
+                # formation's registered resolver by user id, then none.
+                group_ids = await resolve_read_group_ids(self.formation_id, requester_user_id)
                 partition_keys = [f"{SESSION_PARTITION_PREFIX}{session_id}"]
+                fanout_keys = set(self._fanout_partition_keys(requester_user_id, group_ids))
+                partition_keys.extend(key for key in fanout_keys if key in self.partitions)
             elif namespace and namespace != "buffer":
                 partition_keys = [FORMATION_PARTITION]
             else:
-                partition_keys = list(self.partitions.keys())
+                group_ids = await resolve_read_group_ids(self.formation_id, requester_user_id)
+                allowed_groups = {f"{GROUP_PARTITION_PREFIX}{group_id}" for group_id in group_ids}
+                partition_keys = [
+                    key
+                    for key in self.partitions
+                    if not key.startswith(GROUP_PARTITION_PREFIX) or key in allowed_groups
+                ]
 
             results = []
             for partition_key in partition_keys:
@@ -898,6 +954,7 @@ class WorkingMemory:
 
                 # Combine semantic score with recency score
                 partition_results = []
+                is_fanout_partition = partition_key in fanout_keys
                 for buffer_idx, distance in candidates:
                     # Make sure buffer_idx is in range
                     if buffer_idx >= len(self.buffer):
@@ -909,18 +966,49 @@ class WorkingMemory:
                     if namespace and item.get("namespace") != namespace:
                         continue
 
+                    # Fan-out partitions contribute "buffer" items only:
+                    # keeps the formation partition's sops/knowledge/docs
+                    # out of session-scoped chat recall (#200's dilution
+                    # fix must hold under the identity-chain fan-out).
+                    if is_fanout_partition and item.get("namespace", "buffer") != "buffer":
+                        continue
+
                     # Check formation_id match (always filter by formation)
                     if item.get("metadata", {}).get("formation_id") != self.formation_id:
                         continue
 
-                    # Apply session_id filter as a hard filter if provided
-                    if session_id and item.get("metadata", {}).get("session_id") != session_id:
+                    # Apply session_id filter as a hard filter if provided.
+                    # Identity-chain (fan-out) items carry no session_id by
+                    # construction; the session filter applies only to the
+                    # session partition itself.
+                    if (
+                        session_id
+                        and not is_fanout_partition
+                        and item.get("metadata", {}).get("session_id") != session_id
+                    ):
                         continue
 
-                    # Apply metadata filters if provided
-                    if filter_metadata and not all(
+                    # Apply metadata filters if provided. Fan-out items are
+                    # exempt from the identity keys they cannot carry:
+                    # session_id for the whole chain, and user_id for the
+                    # shared (group / formation) partitions -- visibility
+                    # for those is membership-based, enforced by the
+                    # partition selection above, not by per-item metadata.
+                    effective_filter = filter_metadata
+                    if is_fanout_partition and filter_metadata:
+                        exempt_keys = {"session_id"}
+                        if partition_key == FORMATION_PARTITION or partition_key.startswith(
+                            GROUP_PARTITION_PREFIX
+                        ):
+                            exempt_keys.add("user_id")
+                        effective_filter = {
+                            key: value
+                            for key, value in filter_metadata.items()
+                            if key not in exempt_keys
+                        }
+                    if effective_filter and not all(
                         key in item["metadata"] and item["metadata"][key] == value
-                        for key, value in filter_metadata.items()
+                        for key, value in effective_filter.items()
                     ):
                         continue
 

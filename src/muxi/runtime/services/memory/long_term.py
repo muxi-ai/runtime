@@ -72,6 +72,12 @@ from ..db import AsyncModelMixin, Base, DatabaseManager
 # Re-exported from base for existing importers; base.py is canonical
 from .base import SCOPE_TYPE_FORMATION, SCOPE_TYPE_GROUP, SCOPE_TYPE_USER  # noqa: F401
 from .embedding import DEFAULT_EMBEDDING_MODEL, embed, probe_dimension
+from .scopes import (
+    SCOPE_WEIGHTS,
+    normalize_read_scopes,
+    resolve_read_group_ids,
+    validate_scope,
+)
 
 # Memory collection definitions for organizing long-term storage
 MEMORY_COLLECTIONS = {
@@ -691,6 +697,7 @@ class LongTermMemory:
         user_id: Optional[str] = None,
         collection: Optional[str] = None,
         external_user_id: Optional[str] = None,  # Alias for user_id (for Memobase compatibility)
+        scope: Optional[Tuple[str, str]] = None,
     ) -> str:
         """
         Asynchronously adds new content to long-term memory, generating an embedding if not provided.
@@ -704,6 +711,15 @@ class LongTermMemory:
             external_user_id (str, optional): Alias for user_id (for Memobase compatibility).
             collection (str, optional): The collection to store the memory in.
             If not provided, uses the default collection.
+            scope (tuple, optional): ``(scope_type, scope_id)`` -- the memory
+                namespace this row is written to. ``None`` (the default)
+                keeps today's behavior: user scope, scope_id mirroring the
+                owning internal user id. Shared scopes
+                (``('formation', formation_id)`` / ``('group', group_id)``)
+                are AUTHORIZED BY THE CALLER via a ``memory.write`` grant
+                (services/memory/scopes.py) -- this storage layer only
+                stamps what it is told, so event replay can reproduce
+                shared rows without permission machinery.
 
         Returns:
             str: The unique ID of the newly created memory entry.
@@ -743,7 +759,7 @@ class LongTermMemory:
 
         # Insert into database using async method
         memory_id = await self._add_internal_async(
-            content, embedding, metadata, collection, user_id
+            content, embedding, metadata, collection, user_id, scope=scope
         )
 
         # Emit memory storage completed event
@@ -766,6 +782,7 @@ class LongTermMemory:
         metadata: Optional[Dict[str, Any]] = None,
         collection: Optional[str] = None,
         user_id: Optional[str] = None,
+        scope: Optional[Tuple[str, str]] = None,
     ) -> str:
         """
         Asynchronously adds a new memory entry to the database with the
@@ -777,6 +794,7 @@ class LongTermMemory:
             metadata (Dict[str, Any], optional): Additional metadata to associate with the memory.
             collection (str, optional): The collection name to store the memory in. Defaults to the default collection.
             user_id (str, optional): The user identifier (will be resolved to internal_user_id).
+            scope (tuple, optional): ``(scope_type, scope_id)``; None = user scope.
 
         Returns:
             str: The unique ID of the newly created memory entry.
@@ -793,14 +811,17 @@ class LongTermMemory:
         # Resolve user identifier to internal user ID (multi-identity support)
         internal_user_id = await self._resolve_user_id_async(user_id)
 
+        # Default (Phase 1 behavior): user scope, scope_id mirroring the
+        # owning internal user id. Shared scopes stamp the caller-provided
+        # (already authorized) target; user_id still records the writer.
+        scope_type, scope_id = self._resolve_write_scope(scope, internal_user_id)
+
         async with self.db_manager.get_async_session() as session:
             # Convert numpy array to list if necessary
             if isinstance(embedding, np.ndarray):
                 embedding = embedding.tolist()
 
             # Create memory using async model helper with internal user ID.
-            # Phase 1: every write is user scope; scope_id mirrors the
-            # owning internal user id (memory namespaces substrate).
             memory = await self.MemoryModel.create(
                 session,
                 user_id=internal_user_id,  # Use resolved internal ID
@@ -808,12 +829,32 @@ class LongTermMemory:
                 embedding=embedding,
                 meta_data=metadata,
                 collection=collection,
-                scope_type=SCOPE_TYPE_USER,
-                scope_id=str(internal_user_id),
+                scope_type=scope_type,
+                scope_id=scope_id,
             )
 
             # Return ID
             return memory.id
+
+    def _resolve_write_scope(
+        self, scope: Optional[Tuple[str, str]], internal_user_id: int
+    ) -> Tuple[str, str]:
+        """Resolve a write's ``(scope_type, scope_id)`` stamp.
+
+        ``None`` -> user scope with scope_id mirroring the owning internal
+        user id (byte-identical to Phase 1). A ``('formation', ...)`` scope
+        forces scope_id to this memory's formation id so a caller can never
+        cross-stamp another formation's namespace.
+        """
+        if scope is None:
+            return SCOPE_TYPE_USER, str(internal_user_id)
+        scope_type, scope_id = scope
+        validate_scope(scope_type, scope_id)
+        if scope_type == SCOPE_TYPE_USER:
+            return SCOPE_TYPE_USER, str(internal_user_id)
+        if scope_type == SCOPE_TYPE_FORMATION:
+            return SCOPE_TYPE_FORMATION, self.formation_id
+        return scope_type, scope_id
 
     def _add_internal(
         self,
@@ -822,6 +863,7 @@ class LongTermMemory:
         metadata: Optional[Dict[str, Any]] = None,
         collection: Optional[str] = None,
         external_user_id: Optional[str] = None,
+        scope: Optional[Tuple[str, str]] = None,
     ) -> str:
         """
         Synchronously adds a new memory entry to the database with associated text, embedding, metadata, and collection.
@@ -832,6 +874,7 @@ class LongTermMemory:
             metadata (Dict[str, Any], optional): Additional metadata to associate with the memory.
             collection (str, optional): The collection name to store the memory in.
             external_user_id (str, optional): The external user identifier for multi-user environments.
+            scope (tuple, optional): ``(scope_type, scope_id)``; None = user scope.
 
         Returns:
             str: The unique ID of the newly created memory entry.
@@ -848,21 +891,23 @@ class LongTermMemory:
         # Resolve user identifier to internal user ID (multi-identity support)
         internal_user_id = self._resolve_user_id_sync(external_user_id)
 
+        # None = user scope with scope_id mirroring the owning internal
+        # user id; shared scopes stamp the caller-authorized target.
+        scope_type, scope_id = self._resolve_write_scope(scope, internal_user_id)
+
         with self.Session() as session:
             # Convert numpy array to list if necessary
             if isinstance(embedding, np.ndarray):
                 embedding = embedding.tolist()
 
-            # Create memory (Phase 1: user scope, scope_id mirrors the
-            # owning internal user id — memory namespaces substrate)
             memory = self.MemoryModel(
                 user_id=internal_user_id,
                 text=text,
                 embedding=embedding,
                 meta_data=metadata,
                 collection=collection,
-                scope_type=SCOPE_TYPE_USER,
-                scope_id=str(internal_user_id),
+                scope_type=scope_type,
+                scope_id=scope_id,
             )
 
             # Add to database
@@ -883,6 +928,8 @@ class LongTermMemory:
         collections: Optional[List[str]] = None,
         filter_metadata: Optional[Dict[str, Any]] = None,
         external_user_id: Optional[str] = None,
+        scopes: Optional[List[str]] = None,
+        group_ids: Optional[List[str]] = None,
     ) -> List[Dict[str, Any]]:
         """
         Asynchronously performs a semantic similarity search for memories matching a text query.
@@ -890,6 +937,12 @@ class LongTermMemory:
         If a query embedding is not provided, it is generated using the embedding model.
         Supports filtering by collection and metadata, and returns a list of the most relevant
         memories with similarity scores.
+
+        Memory namespaces (Phases 2+3): by default the search fans out over
+        the requesting user's scope chain -- user rows, each group the user
+        belongs to, and the formation scope -- and merges by score with
+        specificity-wins weighting. Results carry ``scope_type`` /
+        ``scope_id`` so callers can attribute provenance.
 
         Parameters:
             query (str): The text query to search for.
@@ -899,6 +952,13 @@ class LongTermMemory:
             collections (Optional[List[str]]): Optional list of collections to search in one query.
             filter_metadata (Optional[Dict[str, Any]]): Optional metadata filters to apply.
             external_user_id (Optional[str]): The external user ID for multi-user environments.
+            scopes (Optional[List[str]]): Per-query narrowing for
+                privacy-sensitive callers -- e.g. ``["user"]`` restores the
+                exact Phase 1 user-only query. None = full cascade.
+            group_ids (Optional[List[str]]): Explicit group memberships for
+                the group-scope branch. Default: the per-request
+                ResolvedPermissions (GBAC ContextVar), falling back to the
+                formation's registered resolver by external user id.
 
         Returns:
             List[Dict[str, Any]]: A list of dictionaries containing memory IDs, text, metadata, and similarity scores,
@@ -952,6 +1012,8 @@ class LongTermMemory:
             normalized_collections,
             filter_metadata,
             external_user_id,
+            scopes=scopes,
+            group_ids=group_ids,
         )
 
         # Format results
@@ -964,6 +1026,8 @@ class LongTermMemory:
                     "metadata": memory["meta_data"],
                     "collection": memory.get("collection"),
                     "score": score,
+                    "scope_type": memory.get("scope_type", SCOPE_TYPE_USER),
+                    "scope_id": memory.get("scope_id"),
                 }
             )
 
@@ -1005,6 +1069,7 @@ class LongTermMemory:
         collection: Optional[str] = None,
         collections: Optional[List[str]] = None,
         query_embedding: Optional[Union[List[float], np.ndarray]] = None,
+        scopes: Optional[List[str]] = None,
     ) -> Dict[str, Any]:
         """
         Build search parameters for the LongTermMemory search method.
@@ -1017,6 +1082,7 @@ class LongTermMemory:
             collection: Optional collection name
             collections: Optional collection names
             query_embedding: Optional precomputed query embedding
+            scopes: Optional per-query scope narrowing (e.g. ["user"])
 
         Returns:
             Dictionary of parameters for the search method
@@ -1032,6 +1098,9 @@ class LongTermMemory:
 
         if user_id is not None:
             search_params["external_user_id"] = user_id
+
+        if scopes is not None:
+            search_params["scopes"] = scopes
 
         if collections:
             search_params["collections"] = collections
@@ -1054,6 +1123,11 @@ class LongTermMemory:
         This is a synchronous implementation that directly interacts with
         the database to perform vector similarity search with optional
         metadata filtering.
+
+        NOTE (memory namespaces): this legacy sync path stays user-scope
+        only -- the shared-scope read fan-out lives on the async path
+        (``_search_internal_async``), which every runtime retrieval
+        surface uses.
 
         Args:
             query_embedding: The vector embedding to search for.
@@ -1489,40 +1563,81 @@ class LongTermMemory:
         offset: int = 0,
         collection: Optional[str] = None,
         external_user_id: Optional[str] = None,
+        scopes: Optional[List[str]] = None,
+        group_ids: Optional[List[str]] = None,
     ) -> List[Dict[str, Any]]:
         """
         List memories for a specific user without vector search (no embeddings required).
 
-        This is USER-SPECIFIC - only returns memories belonging to the specified user.
-        For single-user mode (SQLite), uses default user "0".
-        For multi-user mode (PostgreSQL), requires external_user_id.
+        The user branch is USER-SPECIFIC exactly as before (owned rows in
+        the requested collection). By default the listing also fans out to
+        the shared scopes the user can read -- group rows for the user's
+        memberships and formation rows -- in one query so pagination stays
+        correct. ``scopes=["user"]`` restores the Phase 1 user-only listing.
 
         Parameters:
             limit: Maximum number of memories to return.
             offset: Number of memories to skip (for pagination).
-            collection: Optional collection name to filter by.
+            collection: Optional collection name to filter by (user branch
+                only -- shared rows are addressed by scope, not collection).
             external_user_id: The external user identifier (required in multi-user mode).
+            scopes: Per-query scope narrowing (None = full cascade).
+            group_ids: Explicit group memberships (None = ContextVar / resolver).
 
         Returns:
-            List of memory dictionaries with id, text, metadata, timestamps.
+            List of memory dictionaries with id, text, metadata, timestamps, scope.
         """
         # Resolve internal user ID (handles single-user vs multi-user)
         internal_user_id = await self._resolve_user_id_async(external_user_id)
 
         collection_name = collection or self.default_collection
 
-        async with self.AsyncSession() as session:
-            # Build query filtered by user_id (USER-SPECIFIC)
-            query = (
-                select(self.MemoryModel)
-                .where(
+        read_scopes = normalize_read_scopes(scopes)
+        read_group_ids: Tuple[str, ...] = ()
+        if SCOPE_TYPE_GROUP in read_scopes:
+            read_group_ids = await resolve_read_group_ids(
+                self.formation_id, external_user_id, group_ids
+            )
+
+        from sqlalchemy import and_, or_
+
+        conditions = []
+        if SCOPE_TYPE_USER in read_scopes:
+            conditions.append(
+                and_(
                     self.MemoryModel.user_id == internal_user_id,
                     self.MemoryModel.collection == collection_name,
+                    self.MemoryModel.scope_type == SCOPE_TYPE_USER,
                 )
-                .order_by(desc(self.MemoryModel.created_at))
-                .offset(offset)
-                .limit(limit)
             )
+        if SCOPE_TYPE_GROUP in read_scopes and read_group_ids:
+            conditions.append(
+                and_(
+                    self.MemoryModel.scope_type == SCOPE_TYPE_GROUP,
+                    self.MemoryModel.scope_id.in_(list(read_group_ids)),
+                )
+            )
+        if SCOPE_TYPE_FORMATION in read_scopes:
+            conditions.append(
+                and_(
+                    self.MemoryModel.scope_type == SCOPE_TYPE_FORMATION,
+                    self.MemoryModel.scope_id == self.formation_id,
+                )
+            )
+        if not conditions:
+            return []
+
+        async with self.AsyncSession() as session:
+            query = select(self.MemoryModel).where(or_(*conditions))
+            if read_group_ids:
+                # Group ids are only unique per formation; isolate through
+                # the writers' users rows (same posture as the search
+                # fan-out). The join is a no-op filter for the other
+                # branches -- every memory row has an owning user here.
+                query = query.join(User, self.MemoryModel.user_id == User.id).where(
+                    User.formation_id == self.formation_id
+                )
+            query = query.order_by(desc(self.MemoryModel.created_at)).offset(offset).limit(limit)
 
             result = await session.execute(query)
             memories = result.scalars().all()
@@ -1537,32 +1652,44 @@ class LongTermMemory:
                     "created_at": m.created_at.isoformat() if m.created_at else None,
                     "updated_at": m.updated_at.isoformat() if m.updated_at else None,
                     "collection": m.collection,
+                    "scope_type": m.scope_type or SCOPE_TYPE_USER,
+                    "scope_id": m.scope_id,
                 }
                 for m in memories
             ]
 
     async def delete_extracted_memories(self, external_user_id: Optional[str] = None) -> int:
         """
-        Delete every extraction-derived memory for a user (all collections).
+        Delete every event-sourced memory for a user (all collections).
 
-        Rebuild support for the memory event substrate: only rows written
-        by the extractor (metadata ``source == 'extraction'``) are removed,
-        so conversations, knowledge uploads, and manually created memories
-        survive a flat-fact projection rebuild.
+        Rebuild support for the memory event substrate: only rows a replay
+        recreates are removed -- extractor rows (metadata ``source ==
+        'extraction'``) and any row carrying a ``derived_from_event_id``
+        provenance link (e.g. shared-scope writes recorded through the
+        event substrate). Conversations, knowledge uploads, and manually
+        created user memories are not event-sourced and survive a rebuild.
+        On pre-shared-scope data the two criteria coincide (every
+        extraction row carries the provenance link), so this stays a
+        zero-behavior change for Phase 1 databases.
 
         Returns:
             The number of memories deleted.
         """
         internal_user_id = await self._resolve_user_id_async(external_user_id)
+        from sqlalchemy import or_
+
         # type_coerce gives the JSONType column a JSON-typed expression so
         # the path operator compiles per dialect (``meta_data ->> 'source'``
         # on PostgreSQL, ``JSON_EXTRACT`` elsewhere) instead of failing on
         # the decorator's TEXT impl.
         source_marker = type_coerce(self.MemoryModel.meta_data, JSON)["source"].as_string()
+        event_marker = type_coerce(self.MemoryModel.meta_data, JSON)[
+            "derived_from_event_id"
+        ].as_string()
         stmt = (
             sql_delete(self.MemoryModel)
             .where(self.MemoryModel.user_id == internal_user_id)
-            .where(source_marker == "extraction")
+            .where(or_(source_marker == "extraction", event_marker.is_not(None)))
         )
         async with self.AsyncSession() as session:
             result = await session.execute(stmt)
@@ -1578,12 +1705,31 @@ class LongTermMemory:
         collections: Optional[List[str]] = None,
         filter_metadata: Optional[Dict[str, Any]] = None,
         external_user_id: Optional[str] = None,
+        scopes: Optional[List[str]] = None,
+        group_ids: Optional[List[str]] = None,
     ) -> List[Tuple[float, Dict[str, Any]]]:
         """
         Asynchronously searches for memories with embeddings most similar to the given query embedding.
 
-        Performs a vector similarity search within the specified collection and user scope,
-        optionally filtering by metadata. Returns up to `k` results as tuples of similarity score and memory data.
+        Memory namespaces read fan-out (write-one-read-up): one branch query
+        per scope in the cascade, merged by specificity-weighted score:
+
+        * user branch -- exactly the Phase 1 query (user_id + collection +
+          metadata filters) plus ``scope_type='user'``, which is a no-op
+          filter for all pre-fan-out data.
+        * group branch -- ``scope_type='group' AND scope_id IN <the user's
+          groups>``. Formation isolation comes from the users join (group
+          ids are only unique per formation). No collection filter:
+          collections are a user-space organization scheme; shared rows are
+          addressed by scope.
+        * formation branch -- ``scope_type='formation' AND scope_id =
+          <formation id>`` (the scope id IS the formation id, so no join is
+          needed for isolation).
+
+        Branches are disjoint on scope_type, so the merge cannot duplicate
+        rows. Sorting uses similarity * SCOPE_WEIGHTS[scope_type]
+        (specificity wins on conflicts); the reported score stays the raw
+        similarity so user-scope scores are unchanged from Phase 1.
 
         Parameters:
             query_embedding: The embedding vector to search against.
@@ -1591,6 +1737,8 @@ class LongTermMemory:
             collections: Collections to search in; defaults to the default collection if not specified.
             filter_metadata: Optional dictionary of metadata key-value pairs to filter results.
             external_user_id: External user identifier to scope the search.
+            scopes: Per-query narrowing (None = full user+group+formation cascade).
+            group_ids: Explicit group memberships (None = ContextVar / resolver).
 
         Returns:
             A list of tuples, each containing a similarity score (float) and a dictionary with memory details.
@@ -1610,6 +1758,13 @@ class LongTermMemory:
         # Resolve user identifier to internal user ID (multi-identity support)
         internal_user_id = await self._resolve_user_id_async(external_user_id)
 
+        read_scopes = normalize_read_scopes(scopes)
+        read_group_ids: Tuple[str, ...] = ()
+        if SCOPE_TYPE_GROUP in read_scopes:
+            read_group_ids = await resolve_read_group_ids(
+                self.formation_id, external_user_id, group_ids
+            )
+
         async with self.db_manager.get_async_session() as session:
             # For PostgreSQL with pgvector, we need to cast the query embedding
             if self.db_manager.database_type == "postgresql":
@@ -1621,47 +1776,91 @@ class LongTermMemory:
                     "distance"
                 )
 
-            # Build query
-            query = (
-                select(self.MemoryModel, distance_expr)
-                .filter(
-                    self.MemoryModel.user_id == internal_user_id,
+            def _apply_metadata_filters(query):
+                if filter_metadata:
+                    for key, value in filter_metadata.items():
+                        query = query.filter(self.MemoryModel.meta_data[key].astext == str(value))
+                return query
+
+            branch_queries = []
+
+            if SCOPE_TYPE_USER in read_scopes:
+                user_query = (
+                    select(self.MemoryModel, distance_expr)
+                    .filter(
+                        self.MemoryModel.user_id == internal_user_id,
+                        self.MemoryModel.scope_type == SCOPE_TYPE_USER,
+                    )
+                    .order_by("distance")
+                    .limit(k)
                 )
-                .order_by("distance")
-                .limit(k)
-            )
+                if len(normalized_collections) == 1:
+                    user_query = user_query.filter(
+                        self.MemoryModel.collection == normalized_collections[0]
+                    )
+                else:
+                    user_query = user_query.filter(
+                        self.MemoryModel.collection.in_(normalized_collections)
+                    )
+                branch_queries.append(_apply_metadata_filters(user_query))
 
-            if len(normalized_collections) == 1:
-                query = query.filter(self.MemoryModel.collection == normalized_collections[0])
-            else:
-                query = query.filter(self.MemoryModel.collection.in_(normalized_collections))
-
-            # Add metadata filters if provided
-            if filter_metadata:
-                for key, value in filter_metadata.items():
-                    query = query.filter(self.MemoryModel.meta_data[key].astext == str(value))
-
-            # Execute query
-            result = await session.execute(query)
-            results = result.all()
-
-            # Format results — use index [0] for the model instance since
-            # the dynamic class name varies (Memory_384, Memory_1536, etc.)
-            return [
-                (
-                    1.0 / (1.0 + float(result.distance)),  # Convert distance to similarity score
-                    {
-                        "id": result[0].id,
-                        "text": result[0].text,
-                        "meta_data": result[0].meta_data,
-                        "collection": result[0].collection,
-                        "created_at": (
-                            result[0].created_at.isoformat() if result[0].created_at else None
-                        ),
-                    },
+            if SCOPE_TYPE_GROUP in read_scopes and read_group_ids:
+                group_query = (
+                    select(self.MemoryModel, distance_expr)
+                    .join(User, self.MemoryModel.user_id == User.id)
+                    .filter(
+                        User.formation_id == self.formation_id,
+                        self.MemoryModel.scope_type == SCOPE_TYPE_GROUP,
+                        self.MemoryModel.scope_id.in_(list(read_group_ids)),
+                    )
+                    .order_by("distance")
+                    .limit(k)
                 )
-                for result in results
-            ]
+                branch_queries.append(_apply_metadata_filters(group_query))
+
+            if SCOPE_TYPE_FORMATION in read_scopes:
+                formation_query = (
+                    select(self.MemoryModel, distance_expr)
+                    .filter(
+                        self.MemoryModel.scope_type == SCOPE_TYPE_FORMATION,
+                        self.MemoryModel.scope_id == self.formation_id,
+                    )
+                    .order_by("distance")
+                    .limit(k)
+                )
+                branch_queries.append(_apply_metadata_filters(formation_query))
+
+            merged: List[Tuple[float, float, Dict[str, Any]]] = []
+            for branch_query in branch_queries:
+                result = await session.execute(branch_query)
+                # Use index [0] for the model instance since the dynamic
+                # class name varies (Memory_384, Memory_1536, etc.)
+                for row in result.all():
+                    similarity = 1.0 / (1.0 + float(row.distance))
+                    scope_type = row[0].scope_type or SCOPE_TYPE_USER
+                    weighted = similarity * SCOPE_WEIGHTS.get(scope_type, 1.0)
+                    merged.append(
+                        (
+                            weighted,
+                            similarity,
+                            {
+                                "id": row[0].id,
+                                "text": row[0].text,
+                                "meta_data": row[0].meta_data,
+                                "collection": row[0].collection,
+                                "scope_type": scope_type,
+                                "scope_id": row[0].scope_id,
+                                "created_at": (
+                                    row[0].created_at.isoformat() if row[0].created_at else None
+                                ),
+                            },
+                        )
+                    )
+
+            # Specificity-weighted merge; the exposed score stays the raw
+            # similarity (user-branch scores identical to Phase 1).
+            merged.sort(key=lambda item: item[0], reverse=True)
+            return [(similarity, memory) for _, similarity, memory in merged[:k]]
 
     async def search_text(
         self,

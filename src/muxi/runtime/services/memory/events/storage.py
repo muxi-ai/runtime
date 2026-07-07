@@ -31,6 +31,7 @@ from sqlalchemy import delete as sql_delete, select
 from sqlalchemy.exc import IntegrityError
 
 from ....utils.datetime_utils import utc_now_naive
+from ..scopes import validate_scope
 from .models import (
     DECAY_RATES,
     DECAY_STATIC,
@@ -74,16 +75,26 @@ class MemoryEventStorage:
         expires_at: Optional[datetime] = None,
         agent_id: Optional[str] = None,
         conversation_id: Optional[str] = None,
+        scope_type: Optional[str] = None,
+        scope_id: Optional[str] = None,
     ) -> Tuple[Dict[str, Any], bool]:
         """
         Append one event to the log after validating its payload.
+
+        ``scope_type`` / ``scope_id`` record the memory namespace the
+        projection write carries (memory namespaces Phases 2+3): shared-
+        scope writes pass their true scope so replay reproduces scoped
+        rows. Default (None) is the implicit user scope with scope_id
+        mirroring user_id -- byte-identical to the substrate's Phase 1
+        shape.
 
         Returns:
             (event dict, created) -- created is False when an idempotent
             duplicate was detected and the existing event is returned.
 
         Raises:
-            ValueError: On schema validation failure or invalid decay rate.
+            ValueError: On schema validation failure, invalid decay rate,
+                or an invalid scope.
         """
         user_id = str(user_id)
         validate_event_payload(event_type, payload, event_version)
@@ -91,6 +102,15 @@ class MemoryEventStorage:
             raise ValueError(f"Invalid decay_rate {decay_rate!r}; expected one of {DECAY_RATES}")
         if not source or not str(source).strip():
             raise ValueError("Memory events require a non-empty source")
+
+        if scope_type is None:
+            scope_type, scope_id = SCOPE_TYPE_USER, user_id
+        else:
+            validate_scope(scope_type, scope_id)
+            if scope_type == SCOPE_TYPE_USER:
+                scope_id = user_id
+            elif scope_id is None:  # formation scope defaults to this formation
+                scope_id = self.formation_id
 
         if source_id is not None:
             existing = await self._find_by_source_id(user_id, source, source_id)
@@ -112,6 +132,8 @@ class MemoryEventStorage:
                 expires_at=expires_at,
                 agent_id=agent_id,
                 conversation_id=conversation_id,
+                scope_type=scope_type,
+                scope_id=scope_id,
             )
         except IntegrityError:
             # Lost an idempotency race: another appender inserted the same
@@ -126,16 +148,13 @@ class MemoryEventStorage:
         """Insert one event row; returns (event dict, True)."""
         occurred_at = fields.pop("occurred_at") or utc_now_naive()
         async with self.db_manager.get_async_session() as session:
-            # Memory namespaces Phase 1: every memory write is user
-            # scope, so events record the same (user, owner) shape the
-            # long-term memory rows are stamped with. When shared-scope
-            # writes arrive (Phase 2+), whatever scope the projection
-            # write carries must be recorded here unchanged.
+            # Memory namespaces contract: whatever scope the projection
+            # write carries is recorded here unchanged, so replay can
+            # reproduce scoped rows. ``append`` resolved the default
+            # (user scope, scope_id = user_id) before delegating here.
             event = MemoryEvent(
                 user_id=user_id,
                 formation_id=self.formation_id,
-                scope_type=SCOPE_TYPE_USER,
-                scope_id=user_id,
                 occurred_at=occurred_at,
                 **fields,
             )
