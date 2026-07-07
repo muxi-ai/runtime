@@ -2,6 +2,33 @@
 
 ## [unreleased]
 
+### Memory Namespaces: user, group, and formation scopes (#214, #215)
+
+Memory is no longer single-scope. A memory is written to exactly one scope
+and read up the chain -- a user's queries see their own memories, their
+groups' shared memories, and formation-wide memories, merged by relevance
+with more-specific scopes outranking broader ones.
+
+- **Scope substrate**: ``scope_type`` / ``scope_id`` on the memory tables
+  (additive migration; existing rows read as user scope) with canonical
+  constants shared by the memories store and the event substrate; working-
+  memory partitions generalized to ``session | user | group | formation``,
+  adding the previously missing user-level partition.
+- **Shared writes are grant-gated and event-first**: writing formation or
+  group scope requires a ``memory.write`` grant in the caller's group YAML
+  (403 without one, glob grants supported); the scoped event must append
+  before the row is written, so every shared fact is replayable by
+  construction. Conversation-derived extraction remains user-scope only,
+  always.
+- **Read fan-out**: long-term search/list and working-memory retrieval fan
+  out across ``user -> member groups -> formation`` (GBAC membership, with
+  resolver fallback for non-API callers), support per-query narrowing
+  (``scopes=["user"]``), and never surface another group's memories.
+- Also fixes a silent pre-existing bug where flat-fact memories never
+  reached the clean chat context (wrong keyword argument, exception
+  swallowed) -- long-term recall now actually flows into agent responses.
+
+
 ### Memory Event Substrate (#212)
 
 Every memory write is now recorded as an immutable event; the memory stores
