@@ -26,6 +26,7 @@ from typing import List, Optional
 import pytest
 from pydantic import ValidationError
 
+from muxi.runtime.datatypes.exceptions import WorkflowTimeoutError
 from muxi.runtime.datatypes.workflow import SubTask, TaskStatus, Workflow, WorkflowStatus
 from muxi.runtime.formation.config.validation import FormationValidator
 from muxi.runtime.formation.workflow.config import ReplanningConfig, WorkflowConfig
@@ -74,15 +75,18 @@ class FakeAgent:
 class StubDecomposer:
     """Decomposer double returning scripted workflows and capturing context."""
 
-    def __init__(self, workflows: List[Workflow]):
+    def __init__(self, workflows: List[Workflow], on_call=None):
         self.workflows = list(workflows)
         self.contexts: List[dict] = []
         self.delay: float = 0.0
+        self.on_call = on_call  # e.g. advance a fake clock
 
     async def decompose_request(
         self, request, context=None, analysis=None, requires_approval=False
     ):
         self.contexts.append(context or {})
+        if self.on_call:
+            self.on_call()
         if self.delay:
             await asyncio.sleep(self.delay)
         if not self.workflows:
@@ -228,6 +232,64 @@ class TestReplanningConfig:
         validator = FormationValidator()
         validator._validate_overlord_workflow_config({"replanning": "on"})
         assert any("must be a dictionary" in e for e in validator.result.errors)
+
+    def test_from_formation_data_absent_uses_defaults(self):
+        assert ReplanningConfig.from_formation_data(None) == ReplanningConfig()
+        assert ReplanningConfig.from_formation_data({}) == ReplanningConfig()
+
+    def test_from_formation_data_parses_all_knobs(self):
+        cfg = ReplanningConfig.from_formation_data(
+            {
+                "enabled": True,
+                "max_attempts": 5,
+                "plan_similarity_threshold": 0.4,
+                "preserve_successful_outputs": False,
+                "replan_timeout_seconds": 12,
+                "non_replannable_error_patterns": ["quota exceeded", "banned"],
+            }
+        )
+        assert cfg.enabled is True
+        assert cfg.max_attempts == 5
+        assert cfg.plan_similarity_threshold == 0.4
+        assert cfg.preserve_successful_outputs is False
+        assert cfg.replan_timeout_seconds == 12
+        assert cfg.non_replannable_error_patterns == ["quota exceeded", "banned"]
+
+    def test_custom_patterns_used_by_should_replan(self):
+        cfg = ReplanningConfig.from_formation_data(
+            {"enabled": True, "non_replannable_error_patterns": ["timed out"]}
+        )
+        coordinator = ReplanningCoordinator(StubDecomposer([]), cfg)
+
+        # The custom pattern makes the default-replannable timeout non-replannable
+        should, reason = coordinator.should_replan(failed_workflow(error="request timed out"))
+        assert should is False
+        assert "non-replannable" in reason
+
+        # ...and auth errors (no longer listed) become replannable
+        should, _ = coordinator.should_replan(
+            failed_workflow(error="Authentication failed: invalid credentials")
+        )
+        assert should is True
+
+    @pytest.mark.parametrize("patterns", ["auth", [""], ["  "], [1, 2]])
+    def test_from_formation_data_rejects_malformed_patterns(self, patterns):
+        with pytest.raises(ValidationError):
+            ReplanningConfig.from_formation_data({"non_replannable_error_patterns": patterns})
+
+    def test_formation_validation_patterns(self):
+        validator = FormationValidator()
+        validator._validate_overlord_workflow_config(
+            {"replanning": {"non_replannable_error_patterns": ["quota", "banned"]}}
+        )
+        assert not validator.result.errors
+
+        for bad in ("auth", ["", "x"], [1]):
+            validator = FormationValidator()
+            validator._validate_overlord_workflow_config(
+                {"replanning": {"non_replannable_error_patterns": bad}}
+            )
+            assert any("non_replannable_error_patterns" in e for e in validator.result.errors)
 
 
 # ===================================================================
@@ -532,6 +594,121 @@ class TestExecutorReplanLoop:
 
         assert observability.ConversationEvents.WORKFLOW_REPLANNING_STARTED in events
         assert observability.ConversationEvents.WORKFLOW_REPLANNING_COMPLETED in events
+
+
+# ===================================================================
+# 5b. Budget anchoring across the replan chain (simulated clock)
+# ===================================================================
+
+
+class FakeClock:
+    def __init__(self):
+        self.now = 0.0
+
+    def monotonic(self):
+        return self.now
+
+    def advance(self, seconds):
+        self.now += seconds
+
+
+class TestReplanBudgetAnchoring:
+    """The replan chain's time budget is anchored to the original workflow's
+    wall-clock start and recomputed AFTER replan generation, so generation
+    time is deducted and chained replans can never exceed the original
+    max_timeout_seconds ceiling."""
+
+    MAX_TIMEOUT = 100.0
+
+    def _executor(self, monkeypatch, clock, coordinator, exec_cost):
+        executor = make_executor(
+            {},
+            replanning=coordinator,
+            timeout={
+                "task_timeout": 1.0,
+                "phase_timeout": 600.0,
+                "workflow_timeout": self.MAX_TIMEOUT,
+                "max_timeout_seconds": self.MAX_TIMEOUT,
+            },
+        )
+        monkeypatch.setattr(
+            "muxi.runtime.formation.workflow.executor.time",
+            SimpleNamespace(monotonic=clock.monotonic),
+        )
+
+        dispatches = []
+        max_timeout = self.MAX_TIMEOUT
+
+        async def fake_execute(workflow, context=None, max_timeout_override=None):
+            # Every override must equal ceiling minus elapsed at dispatch time
+            if max_timeout_override is not None:
+                assert max_timeout_override == pytest.approx(max_timeout - clock.now)
+            dispatches.append(max_timeout_override)
+            clock.advance(exec_cost)
+            for task in workflow.tasks.values():
+                task.status = TaskStatus.FAILED
+                task.error_message = "request timed out"
+            workflow.status = WorkflowStatus.FAILED
+            return workflow
+
+        monkeypatch.setattr(executor, "_execute_workflow_with_timeout", fake_execute)
+        return executor, dispatches
+
+    @staticmethod
+    def _plans(count):
+        return [
+            make_workflow(f"wrk_plan_{i}", [make_task("task_1", f"attempt {i}", ["research"])])
+            for i in range(2, 2 + count)
+        ]
+
+    async def test_generation_time_reduces_executing_budget(self, monkeypatch):
+        clock = FakeClock()
+        decomposer = StubDecomposer(self._plans(1), on_call=lambda: clock.advance(10))
+        coordinator = ReplanningCoordinator(
+            decomposer, make_config(max_attempts=1, replan_timeout_seconds=5)
+        )
+        executor, dispatches = self._executor(monkeypatch, clock, coordinator, exec_cost=20)
+
+        original = make_workflow("wrk_plan_1", [make_task("task_1", "attempt 1", ["research"])])
+        await executor.execute_workflow(original)
+
+        # exec (20s) + replan generation (10s) leave 70s of the 100s ceiling
+        assert dispatches == [None, pytest.approx(70.0)]
+
+    async def test_exhausted_after_generation_aborts_instead_of_dispatching(self, monkeypatch):
+        clock = FakeClock()
+        decomposer = StubDecomposer(self._plans(1), on_call=lambda: clock.advance(50))
+        coordinator = ReplanningCoordinator(decomposer, make_config(replan_timeout_seconds=40))
+        executor, dispatches = self._executor(monkeypatch, clock, coordinator, exec_cost=50)
+
+        original = make_workflow("wrk_plan_1", [make_task("task_1", "attempt 1", ["research"])])
+        # The pre-generation budget (50s) passes the gate (> 40s), but
+        # generation consumes the rest -> abort with the timeout outcome
+        with pytest.raises(WorkflowTimeoutError):
+            await executor.execute_workflow(original)
+
+        assert dispatches == [None]  # replanned workflow never executed
+        assert len(decomposer.contexts) == 1  # generation itself did run
+
+    async def test_chained_replans_never_exceed_original_ceiling(self, monkeypatch):
+        clock = FakeClock()
+        decomposer = StubDecomposer(self._plans(5), on_call=lambda: clock.advance(10))
+        coordinator = ReplanningCoordinator(
+            decomposer, make_config(max_attempts=5, replan_timeout_seconds=5)
+        )
+        executor, dispatches = self._executor(monkeypatch, clock, coordinator, exec_cost=30)
+
+        original = make_workflow("wrk_plan_1", [make_task("task_1", "attempt 1", ["research"])])
+        result = await executor.execute_workflow(original)
+
+        # exec1 30s; gen1 +10s -> dispatch with 60s; exec2 30s; gen2 +10s ->
+        # dispatch with 20s; exec3 30s; next replan blocked by the ceiling.
+        assert dispatches == [None, pytest.approx(60.0), pytest.approx(20.0)]
+        budgets = [d for d in dispatches if d is not None]
+        assert budgets == sorted(budgets, reverse=True)  # strictly shrinking
+        assert all(0 < b <= self.MAX_TIMEOUT for b in budgets)
+        assert result.status in (WorkflowStatus.FAILED, WorkflowStatus.FAILED.value)
+        assert len(decomposer.contexts) == 2  # third replan never generated
 
 
 # ===================================================================

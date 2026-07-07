@@ -3144,16 +3144,12 @@ Agent response: {raw_response}"""
                     max_delay=retry_data.get("max_delay", 60.0),
                 )
 
-                # Parse replanning configuration (workflow-level recovery)
-                replanning_data = workflow_config_data.get("replanning", {})
-                replanning_config = ReplanningConfig(
-                    enabled=replanning_data.get("enabled", False),
-                    max_attempts=replanning_data.get("max_attempts", 3),
-                    plan_similarity_threshold=replanning_data.get("plan_similarity_threshold", 0.7),
-                    preserve_successful_outputs=replanning_data.get(
-                        "preserve_successful_outputs", True
-                    ),
-                    replan_timeout_seconds=replanning_data.get("replan_timeout_seconds", 30.0),
+                # Parse replanning configuration (workflow-level recovery).
+                # All knobs -- including non_replannable_error_patterns -- are
+                # parsed and validated by the model; malformed values raise
+                # loudly at load time.
+                replanning_config = ReplanningConfig.from_formation_data(
+                    workflow_config_data.get("replanning", {})
                 )
 
                 # Parse timeout configuration

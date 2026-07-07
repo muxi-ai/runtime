@@ -220,6 +220,36 @@ class ReplanningConfig(BaseModel):
         ),
     )
 
+    @field_validator("non_replannable_error_patterns")
+    @classmethod
+    def validate_patterns_non_empty(cls, v):
+        """Reject blank pattern entries (a blank substring matches everything)."""
+        for pattern in v:
+            if not isinstance(pattern, str) or not pattern.strip():
+                raise ValueError("non_replannable_error_patterns entries must be non-empty strings")
+        return v
+
+    @classmethod
+    def from_formation_data(cls, data: Optional[Dict[str, Any]]) -> "ReplanningConfig":
+        """Build a ReplanningConfig from the overlord.workflow.replanning block.
+
+        Missing keys fall back to the model defaults; provided values are
+        validated by the model (malformed values raise loudly at load time,
+        consistent with the rest of the workflow config block).
+        """
+        data = data or {}
+        kwargs: Dict[str, Any] = {
+            "enabled": data.get("enabled", False),
+            "max_attempts": data.get("max_attempts", 3),
+            "plan_similarity_threshold": data.get("plan_similarity_threshold", 0.7),
+            "preserve_successful_outputs": data.get("preserve_successful_outputs", True),
+            "replan_timeout_seconds": data.get("replan_timeout_seconds", 30.0),
+        }
+        patterns = data.get("non_replannable_error_patterns")
+        if patterns is not None:
+            kwargs["non_replannable_error_patterns"] = patterns
+        return cls(**kwargs)
+
     model_config = ConfigDict(extra="forbid")
 
 

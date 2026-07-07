@@ -2231,6 +2231,16 @@ class FormationValidator:
                     "workflow.replanning.replan_timeout_seconds must be a number >= 1"
                 )
 
+        if "non_replannable_error_patterns" in replanning_config:
+            patterns = replanning_config["non_replannable_error_patterns"]
+            if not isinstance(patterns, list) or not all(
+                isinstance(p, str) and p.strip() for p in patterns
+            ):
+                self.result.add_error(
+                    "workflow.replanning.non_replannable_error_patterns must be a "
+                    "list of non-empty strings"
+                )
+
     def _validate_overlord_response_config(self, response_config: Dict[str, Any]) -> None:
         """Validate overlord response configuration."""
         if not isinstance(response_config, dict):
