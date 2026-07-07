@@ -2,7 +2,84 @@
 
 ## [unreleased]
 
-## v0.20260619.0
+### Group-Based Access Control (#202, #203, #204, #207)
+
+Formation operators can now control who may interact with a formation and
+which agents, triggers, SOPs, and MCP tools each group of users can reach.
+
+- **Auth gate**: ``server.auth: required | open`` (default ``open`` -- existing
+  formations unaffected). Under ``required``, requests from users not present
+  in the formation's database are rejected with 401 on chat and trigger
+  routes. New ``groups`` / ``user_groups`` tables build on the existing
+  ``users`` / ``user_identifiers`` identity substrate; memberships reference
+  external identifiers so operators can populate groups before a user's
+  first interaction.
+- **Auto-discovered group files**: a ``groups/`` directory activates
+  permission filtering. Simplified format -- id from filename stem, plain
+  lists are allow-lists, ``inherits`` with cycle detection, fnmatch globs,
+  union-of-allows / any-deny-wins across a user's groups.
+- **Cascading tool overrides**: one ``tools: {allow, deny}`` structure at four
+  levels (MCP registry catalog, agent attachment, group per-server, group
+  per-agent-per-server); most specific wins, a group override supersedes the
+  inherited config, and ``tools: {deny: "*"}`` hides a server from a group.
+- **Request-time enforcement**: permissions resolve once per request (TTL
+  membership cache + LRU resolution cache) and filter agent routing, direct
+  agent addressing, workflow planning/execution, trigger firing (403), SOP
+  matching, and each agent's per-server MCP tool surface. A denied agent
+  behaves exactly like an unknown one -- no information leak. Formations
+  without a ``groups/`` directory are completely unaffected.
+
+### Memory: Knowledge Graph + Captain's Log (#208, #209)
+
+The first two phases of the memory revamp: structured relationships and a
+temporal narrative layer, built alongside (not replacing) flat-fact
+extraction.
+
+- **Knowledge graph foundation**: ``kg_entities`` / ``kg_relationships`` on
+  Postgres and SQLite, real-time extraction riding the existing extraction
+  pipeline plus an hourly deep-extraction pass, contradiction detection with
+  supersession (retain-never-delete), graph context injected into chat
+  context, and graph algorithms via pgRouting (Postgres) or NetworkX
+  (SQLite) behind a parity-tested interface.
+- **Captain's Log**: periodic per-user digests with full source lineage (a
+  cycle-checked derivation DAG), same-date digest merging, and a new
+  ``/history`` client endpoint.
+- **Lessons loop**: digest-extracted lessons with dedup + confirmation
+  bumps, confidence decay and archiving, embedding-cluster consolidation,
+  a ``record_lesson`` built-in tool, and top-N lesson injection into agent
+  system prompts.
+
+### Performance: request hot path (#190, #192, #194-#200)
+
+- **Working memory vector search**: per-session FAISS partitions replace the
+  formation-wide index -- session-scoped searches no longer scan (or get
+  crowded out of top-k by) other sessions' vectors, fixing a recall bug where
+  busy multi-user formations could return zero results despite good matches
+  (#200); O(1) reverse index mapping removes an O(k*n) scan per search (#190).
+- **Observability off the hot path**: file/stream/trail event transports moved
+  to a batched background writer with connection reuse (#197); events are
+  filtered before redaction and thread spawn (#196); redaction patterns are
+  precompiled and redaction itself runs on the emission thread with a cheap
+  container snapshot guarding against caller mutation -- output unchanged
+  (#198).
+- **Concurrency**: profile-memory collections fetched concurrently (#195);
+  memory-extractor duplicate checks and stores batched with within-batch
+  dedup (#194).
+- **Hygiene**: LRU-bounded agent routing cache (#192); buffer FIFO cleanup
+  moved off the shared multitasking pool onto a dedicated thread so event
+  emitters stop queueing behind it (#199).
+
+### Fixes
+
+- **Knowledge search session filter** (#201): knowledge chunks are stored
+  without a session id but were searched with one, so session-scoped
+  knowledge searches silently returned zero results; the knowledge leg of
+  unified search is no longer session-filtered (conversational memory keeps
+  its session scoping).
+- **Cache keys** (#191, #193): the overlord model cache now includes the
+  model name and a settings digest, so capability model or settings changes
+  no longer serve stale instances; LLM cache keys are order-preserving for
+  list inputs.
 
 ## v0.20260619.0
 
