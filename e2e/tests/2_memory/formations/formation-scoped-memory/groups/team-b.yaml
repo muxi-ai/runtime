@@ -1,0 +1,6 @@
+name: "Team B"
+description: "Members may share group-b memories only (no formation grant)"
+agents: "*"
+memory:
+  write:
+    - group:team-b

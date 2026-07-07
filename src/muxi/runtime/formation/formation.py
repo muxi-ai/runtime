@@ -1515,6 +1515,15 @@ class Formation:
             membership_ttl=membership_ttl,
         )
 
+        # Memory namespaces (Phases 2+3): register the resolver as the
+        # membership fallback for the shared-scope read fan-out. Call
+        # sites inside a chat request read the per-request permissions
+        # ContextVar; API routes and direct service calls that never set
+        # it fall back to this registry, keyed by formation id.
+        from ..services.memory.scopes import register_group_membership_resolver
+
+        register_group_membership_resolver(self.formation_id, self._permission_resolver)
+
         # Observability is disabled during load(), so emitting here would be
         # a silent no-op. Stash the event payload and emit it after
         # observability.enable() in start_overlord().

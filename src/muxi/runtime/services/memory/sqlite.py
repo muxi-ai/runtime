@@ -43,7 +43,13 @@ from ...utils.fastjson import json
 from .. import observability
 from .base import BaseMemory
 from .embedding import DEFAULT_EMBEDDING_MODEL, embed, probe_dimension
-from .long_term import SCOPE_TYPE_USER
+from .long_term import SCOPE_TYPE_FORMATION, SCOPE_TYPE_GROUP, SCOPE_TYPE_USER
+from .scopes import (
+    SCOPE_WEIGHTS,
+    normalize_read_scopes,
+    resolve_read_group_ids,
+    validate_scope,
+)
 
 
 class SQLiteMemory(BaseMemory):
@@ -492,6 +498,7 @@ class SQLiteMemory(BaseMemory):
         user_id: Optional[str] = None,
         collection: Optional[str] = None,
         embedding: Optional[Union[List[float], np.ndarray]] = None,
+        scope: Optional[Tuple[str, str]] = None,
     ) -> str:
         """
         Add content to memory.
@@ -509,6 +516,12 @@ class SQLiteMemory(BaseMemory):
             embedding: Optional pre-computed embedding. When provided,
                 the shared helper is bypassed but ``_ensure_dim()`` is
                 still invoked so the dim-specific table exists.
+            scope: Optional ``(scope_type, scope_id)`` memory namespace.
+                None (default) = user scope, byte-identical to Phase 1.
+                Shared scopes (``formation`` / ``group``) are authorized by
+                the CALLER via a ``memory.write`` grant -- this storage
+                layer stamps what it is told so event replay can reproduce
+                shared rows.
 
         Returns:
             The ID of the newly created memory entry.
@@ -546,8 +559,29 @@ class SQLiteMemory(BaseMemory):
             internal_user_id = self.default_user_id
 
         # Add to database and return memory ID
-        memory_id = self._add_internal(content, embedding, metadata, collection, internal_user_id)
+        memory_id = self._add_internal(
+            content, embedding, metadata, collection, internal_user_id, scope=scope
+        )
         return memory_id
+
+    def _resolve_write_scope(
+        self, scope: Optional[Tuple[str, str]], internal_user_id: int
+    ) -> Tuple[str, str]:
+        """Resolve a write's ``(scope_type, scope_id)`` stamp.
+
+        Mirrors ``LongTermMemory._resolve_write_scope``: None -> user scope
+        with scope_id mirroring the owning internal user id; a formation
+        scope forces scope_id to this formation's id.
+        """
+        if scope is None:
+            return SCOPE_TYPE_USER, str(internal_user_id)
+        scope_type, scope_id = scope
+        validate_scope(scope_type, scope_id)
+        if scope_type == SCOPE_TYPE_USER:
+            return SCOPE_TYPE_USER, str(internal_user_id)
+        if scope_type == SCOPE_TYPE_FORMATION:
+            return SCOPE_TYPE_FORMATION, self.formation_id
+        return scope_type, scope_id
 
     def _add_internal(
         self,
@@ -556,6 +590,7 @@ class SQLiteMemory(BaseMemory):
         metadata: Optional[Dict[str, Any]] = None,
         collection: Optional[str] = None,
         user_id: Optional[int] = None,
+        scope: Optional[Tuple[str, str]] = None,
     ) -> str:
         """
         Internal method to add a memory to the database.
@@ -568,6 +603,8 @@ class SQLiteMemory(BaseMemory):
             embedding: The vector embedding of the text
             metadata: Optional metadata to associate with the content
             collection: Optional collection name
+            user_id: Internal user id of the writer
+            scope: Optional ``(scope_type, scope_id)``; None = user scope
 
         Returns:
             The ID of the newly created memory entry
@@ -585,9 +622,10 @@ class SQLiteMemory(BaseMemory):
         # Generate memory ID
         memory_id = self._generate_id()
 
-        # Insert memory. Phase 1: every write is user scope; scope_id
-        # mirrors the owning internal user id (memory namespaces
-        # substrate).
+        # None = user scope with scope_id mirroring the owning internal
+        # user id; shared scopes stamp the caller-authorized target.
+        scope_type, scope_id = self._resolve_write_scope(scope, user_id)
+
         self.conn.execute(
             f"""
             INSERT INTO {self.memories_table}
@@ -601,8 +639,8 @@ class SQLiteMemory(BaseMemory):
                 text,
                 embedding_bytes,
                 metadata and json.dumps(metadata),
-                SCOPE_TYPE_USER,
-                str(user_id),
+                scope_type,
+                scope_id,
             ),
         )
         self.conn.commit()
@@ -611,13 +649,15 @@ class SQLiteMemory(BaseMemory):
 
     async def delete_extracted_memories(self, user_id: Optional[str] = None) -> int:
         """
-        Delete every extraction-derived memory for a user (all collections).
+        Delete every event-sourced memory for a user (all collections).
 
-        Rebuild support for the memory event substrate: only rows written
-        by the extractor (metadata ``source == 'extraction'``) are removed,
-        so conversations, knowledge uploads, and manually created memories
-        survive a flat-fact projection rebuild. The FTS mirror rows are
-        removed by the table's delete trigger.
+        Rebuild support for the memory event substrate: only rows a replay
+        recreates are removed -- extractor rows (metadata ``source ==
+        'extraction'``) and any row carrying a ``derived_from_event_id``
+        provenance link (e.g. shared-scope writes recorded through the
+        event substrate). On pre-shared-scope data the criteria coincide,
+        so this is a zero-behavior change for Phase 1 databases. The FTS
+        mirror rows are removed by the table's delete trigger.
 
         Returns:
             The number of memories deleted.
@@ -631,7 +671,10 @@ class SQLiteMemory(BaseMemory):
             f"""
             DELETE FROM {self.memories_table}
             WHERE user_id = ?
-              AND json_extract(metadata, '$.source') = 'extraction'
+              AND (
+                json_extract(metadata, '$.source') = 'extraction'
+                OR json_extract(metadata, '$.derived_from_event_id') IS NOT NULL
+              )
             """,
             (internal_user_id,),
         )
@@ -646,12 +689,19 @@ class SQLiteMemory(BaseMemory):
         user_id: Optional[str] = None,
         collection: Optional[str] = None,
         collections: Optional[List[str]] = None,
+        scopes: Optional[List[str]] = None,
+        group_ids: Optional[List[str]] = None,
     ) -> List[Dict[str, Any]]:
         """
         Search for similar content in memory.
 
         This method performs a semantic similarity search for content matching
         the query, using the embedding provider to generate query embeddings.
+
+        Memory namespaces (Phases 2+3): by default the search fans out over
+        the requester's scope chain (user rows, each group the user belongs
+        to, formation rows) merged with specificity-wins weighting.
+        ``scopes=["user"]`` restores the exact Phase 1 user-only query.
 
         Args:
             query: The text query to search for
@@ -660,6 +710,8 @@ class SQLiteMemory(BaseMemory):
             user_id: Optional user ID for filtering
             collection: Optional collection name to filter results
             collections: Optional collection names to search in one query
+            scopes: Per-query scope narrowing (None = full cascade)
+            group_ids: Explicit group memberships (None = ContextVar / resolver)
 
         Returns:
             List of dictionaries containing the search results with content and metadata
@@ -685,6 +737,11 @@ class SQLiteMemory(BaseMemory):
         if user_id:
             internal_user_id = await self.get_or_create_user(user_id)
 
+        read_scopes = normalize_read_scopes(scopes)
+        read_group_ids: Tuple[str, ...] = ()
+        if SCOPE_TYPE_GROUP in read_scopes:
+            read_group_ids = await resolve_read_group_ids(self.formation_id, user_id, group_ids)
+
         # Search with embedding (filter by collection if specified)
         results = self._search_internal(
             query_embedding,
@@ -692,6 +749,8 @@ class SQLiteMemory(BaseMemory):
             collection=collection,
             collections=collections,
             user_id=internal_user_id,
+            scopes=read_scopes,
+            group_ids=read_group_ids,
         )
 
         # Format results
@@ -702,6 +761,8 @@ class SQLiteMemory(BaseMemory):
                     "text": memory["text"],  # Use "text" key to match LongTermMemory format
                     "metadata": memory["metadata"] if "metadata" in memory else {},
                     "score": score,
+                    "scope_type": memory.get("scope_type", SCOPE_TYPE_USER),
+                    "scope_id": memory.get("scope_id"),
                 }
             )
 
@@ -716,6 +777,7 @@ class SQLiteMemory(BaseMemory):
         collection: Optional[str] = None,
         collections: Optional[List[str]] = None,
         query_embedding: Optional[Union[List[float], np.ndarray]] = None,
+        scopes: Optional[List[str]] = None,
     ) -> Dict[str, Any]:
         """
         Build search parameters for the SQLiteMemory search method.
@@ -728,6 +790,7 @@ class SQLiteMemory(BaseMemory):
             collection: Optional collection name (not used in SQLiteMemory public API)
             collections: Optional collection names
             query_embedding: Optional precomputed query embedding
+            scopes: Optional per-query scope narrowing (e.g. ["user"])
 
         Returns:
             Dictionary of parameters for the search method
@@ -743,6 +806,9 @@ class SQLiteMemory(BaseMemory):
         if user_id is not None:
             search_params["user_id"] = user_id
 
+        if scopes is not None:
+            search_params["scopes"] = scopes
+
         if collections:
             search_params["collections"] = collections
         elif collection is not None:
@@ -757,6 +823,8 @@ class SQLiteMemory(BaseMemory):
         collection: Optional[str] = None,
         collections: Optional[List[str]] = None,
         user_id: Optional[int] = None,
+        scopes: Optional[Tuple[str, ...]] = None,
+        group_ids: Optional[Tuple[str, ...]] = None,
     ) -> List[Tuple[float, Dict[str, Any]]]:
         """
         Internal method to search for similar content.
@@ -764,11 +832,22 @@ class SQLiteMemory(BaseMemory):
         This synchronous method performs the actual vector similarity search
         in the SQLite database using cosine distance.
 
+        Memory namespaces read fan-out: the user branch keeps the exact
+        Phase 1 query shapes (plus a ``scope_type='user'`` filter that is a
+        no-op on pre-fan-out data); group and formation branches run as
+        separate scope-addressed queries (no collection filter -- shared
+        rows are addressed by scope) and the merge sorts by similarity *
+        SCOPE_WEIGHTS (specificity wins). The reported score stays the raw
+        similarity, so user-branch scores are unchanged.
+
         Args:
             query_embedding: The query embedding vector
             k: Maximum number of results to return
             collection: Optional collection to search in
             collections: Optional collections to search in one query
+            user_id: Internal user id (None in single-user mode)
+            scopes: Normalized scope set (None = user-only legacy callers)
+            group_ids: Group ids for the group branch (already resolved)
 
         Returns:
             List of tuples containing (similarity_score, memory_dict)
@@ -787,108 +866,174 @@ class SQLiteMemory(BaseMemory):
             )
         )
 
-        # Build query with JOIN to ensure formation isolation
-        # Search across ALL collections if collection is None
-        if normalized_collections and user_id:
-            placeholders = ", ".join("?" for _ in normalized_collections)
-            query = f"""
-                SELECT
-                    m.id,
-                    m.text,
-                    m.metadata,
-                    m.created_at,
-                    vec_distance_cosine(m.embedding, ?) as score
-                FROM {self.memories_table} m
-                JOIN users u ON m.user_id = u.id
-                WHERE m.collection IN ({placeholders})
-                    AND m.user_id = ?
-                    AND u.formation_id = ?
-                ORDER BY score ASC
-                LIMIT ?
-            """
-            params = (
-                query_embedding_bytes,
-                *normalized_collections,
-                user_id,
-                self.formation_id,
-                k,
-            )
-        elif normalized_collections:
-            placeholders = ", ".join("?" for _ in normalized_collections)
-            # No user_id — single-user mode: search the given collection
-            # across all users in this formation (only one user exists in
-            # single-user deployments).
-            query = f"""
-                SELECT
-                    m.id,
-                    m.text,
-                    m.metadata,
-                    m.created_at,
-                    vec_distance_cosine(m.embedding, ?) as score
-                FROM {self.memories_table} m
-                JOIN users u ON m.user_id = u.id
-                WHERE m.collection IN ({placeholders})
-                    AND u.formation_id = ?
-                ORDER BY score ASC
-                LIMIT ?
-            """
-            params = (query_embedding_bytes, *normalized_collections, self.formation_id, k)
-        elif user_id:
-            query = f"""
-                SELECT
-                    m.id,
-                    m.text,
-                    m.metadata,
-                    m.created_at,
-                    vec_distance_cosine(m.embedding, ?) as score
-                FROM {self.memories_table} m
-                JOIN users u ON m.user_id = u.id
-                WHERE m.user_id = ?
-                    AND u.formation_id = ?
-                ORDER BY score ASC
-                LIMIT ?
-            """
-            params = (query_embedding_bytes, user_id, self.formation_id, k)
-        else:
-            # No user_id and no collection — single-user mode: search all
-            # memories in this formation regardless of user or collection.
-            query = f"""
-                SELECT
-                    m.id,
-                    m.text,
-                    m.metadata,
-                    m.created_at,
-                    vec_distance_cosine(m.embedding, ?) as score
-                FROM {self.memories_table} m
-                JOIN users u ON m.user_id = u.id
-                WHERE u.formation_id = ?
-                ORDER BY score ASC
-                LIMIT ?
-            """
-            params = (query_embedding_bytes, self.formation_id, k)
+        read_scopes = scopes if scopes is not None else (SCOPE_TYPE_USER,)
+        read_group_ids = tuple(group_ids or ())
 
-        # Execute search
-        cursor = self.conn.execute(query, params)
+        select_columns = (
+            "m.id, m.text, m.metadata, m.created_at, m.scope_type, m.scope_id, "
+            "vec_distance_cosine(m.embedding, ?) as score"
+        )
 
-        # Format results
-        results = []
-        for row in cursor.fetchall():
-            metadata = json.loads(row[2]) if row[2] else {}
-            # Convert distance to similarity score (1 - distance)
-            similarity = 1.0 - float(row[4])
-            results.append(
+        branches: List[Tuple[str, tuple]] = []
+
+        # User branch: the exact Phase 1 query shapes, restricted to
+        # user-scope rows (a no-op filter for pre-fan-out data).
+        if SCOPE_TYPE_USER in read_scopes:
+            if normalized_collections and user_id:
+                placeholders = ", ".join("?" for _ in normalized_collections)
+                branches.append(
+                    (
+                        f"""
+                        SELECT {select_columns}
+                        FROM {self.memories_table} m
+                        JOIN users u ON m.user_id = u.id
+                        WHERE m.collection IN ({placeholders})
+                            AND m.user_id = ?
+                            AND u.formation_id = ?
+                            AND m.scope_type = ?
+                        ORDER BY score ASC
+                        LIMIT ?
+                        """,
+                        (
+                            query_embedding_bytes,
+                            *normalized_collections,
+                            user_id,
+                            self.formation_id,
+                            SCOPE_TYPE_USER,
+                            k,
+                        ),
+                    )
+                )
+            elif normalized_collections:
+                placeholders = ", ".join("?" for _ in normalized_collections)
+                # No user_id — single-user mode: search the given collection
+                # across all users in this formation (only one user exists in
+                # single-user deployments).
+                branches.append(
+                    (
+                        f"""
+                        SELECT {select_columns}
+                        FROM {self.memories_table} m
+                        JOIN users u ON m.user_id = u.id
+                        WHERE m.collection IN ({placeholders})
+                            AND u.formation_id = ?
+                            AND m.scope_type = ?
+                        ORDER BY score ASC
+                        LIMIT ?
+                        """,
+                        (
+                            query_embedding_bytes,
+                            *normalized_collections,
+                            self.formation_id,
+                            SCOPE_TYPE_USER,
+                            k,
+                        ),
+                    )
+                )
+            elif user_id:
+                branches.append(
+                    (
+                        f"""
+                        SELECT {select_columns}
+                        FROM {self.memories_table} m
+                        JOIN users u ON m.user_id = u.id
+                        WHERE m.user_id = ?
+                            AND u.formation_id = ?
+                            AND m.scope_type = ?
+                        ORDER BY score ASC
+                        LIMIT ?
+                        """,
+                        (query_embedding_bytes, user_id, self.formation_id, SCOPE_TYPE_USER, k),
+                    )
+                )
+            else:
+                # No user_id and no collection — single-user mode: search all
+                # user-scope memories in this formation.
+                branches.append(
+                    (
+                        f"""
+                        SELECT {select_columns}
+                        FROM {self.memories_table} m
+                        JOIN users u ON m.user_id = u.id
+                        WHERE u.formation_id = ?
+                            AND m.scope_type = ?
+                        ORDER BY score ASC
+                        LIMIT ?
+                        """,
+                        (query_embedding_bytes, self.formation_id, SCOPE_TYPE_USER, k),
+                    )
+                )
+
+        # Group branch: scope-addressed; formation isolation through the
+        # writers' users rows (group ids are only unique per formation).
+        if SCOPE_TYPE_GROUP in read_scopes and read_group_ids:
+            group_placeholders = ", ".join("?" for _ in read_group_ids)
+            branches.append(
                 (
-                    similarity,  # similarity score (1 - cosine distance)
-                    {
-                        "id": row[0],
-                        "text": row[1],
-                        "metadata": metadata,
-                        "created_at": row[3],
-                    },
+                    f"""
+                    SELECT {select_columns}
+                    FROM {self.memories_table} m
+                    JOIN users u ON m.user_id = u.id
+                    WHERE u.formation_id = ?
+                        AND m.scope_type = ?
+                        AND m.scope_id IN ({group_placeholders})
+                    ORDER BY score ASC
+                    LIMIT ?
+                    """,
+                    (
+                        query_embedding_bytes,
+                        self.formation_id,
+                        SCOPE_TYPE_GROUP,
+                        *read_group_ids,
+                        k,
+                    ),
                 )
             )
 
-        return results
+        # Formation branch: the scope id IS the formation id.
+        if SCOPE_TYPE_FORMATION in read_scopes:
+            branches.append(
+                (
+                    f"""
+                    SELECT {select_columns}
+                    FROM {self.memories_table} m
+                    WHERE m.scope_type = ?
+                        AND m.scope_id = ?
+                    ORDER BY score ASC
+                    LIMIT ?
+                    """,
+                    (query_embedding_bytes, SCOPE_TYPE_FORMATION, self.formation_id, k),
+                )
+            )
+
+        merged: List[Tuple[float, float, Dict[str, Any]]] = []
+        for branch_sql, branch_params in branches:
+            cursor = self.conn.execute(branch_sql, branch_params)
+            for row in cursor.fetchall():
+                metadata = json.loads(row[2]) if row[2] else {}
+                # Convert distance to similarity score (1 - distance)
+                similarity = 1.0 - float(row[6])
+                scope_type = row[4] or SCOPE_TYPE_USER
+                weighted = similarity * SCOPE_WEIGHTS.get(scope_type, 1.0)
+                merged.append(
+                    (
+                        weighted,
+                        similarity,  # similarity score (1 - cosine distance)
+                        {
+                            "id": row[0],
+                            "text": row[1],
+                            "metadata": metadata,
+                            "created_at": row[3],
+                            "scope_type": scope_type,
+                            "scope_id": row[5],
+                        },
+                    )
+                )
+
+        # Specificity-weighted merge; branches are disjoint on scope_type
+        # so no row can appear twice.
+        merged.sort(key=lambda item: item[0], reverse=True)
+        return [(similarity, memory) for _, similarity, memory in merged[:k]]
 
     def get(self, memory_id: str, user_id: Optional[str] = None) -> Optional[Dict[str, Any]]:
         """

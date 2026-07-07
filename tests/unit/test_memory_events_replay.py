@@ -65,7 +65,7 @@ class FakeLongTermMemory:
         self.rows = {}
         self._counter = 0
 
-    async def add(self, content, metadata=None, user_id=None, collection=None):
+    async def add(self, content, metadata=None, user_id=None, collection=None, scope=None):
         self._counter += 1
         memory_id = f"m{self._counter}"
         self.rows[memory_id] = {
@@ -73,6 +73,9 @@ class FakeLongTermMemory:
             "metadata": dict(metadata or {}),
             "user_id": str(user_id),
             "collection": collection,
+            # Memory namespaces: replay stamps the scope recorded on the
+            # event; None = user scope (mirrors the real backends).
+            "scope": scope,
         }
         return memory_id
 
@@ -80,7 +83,11 @@ class FakeLongTermMemory:
         doomed = [
             memory_id
             for memory_id, row in self.rows.items()
-            if row["user_id"] == str(user_id) and row["metadata"].get("source") == "extraction"
+            if row["user_id"] == str(user_id)
+            and (
+                row["metadata"].get("source") == "extraction"
+                or row["metadata"].get("derived_from_event_id") is not None
+            )
         ]
         for memory_id in doomed:
             del self.rows[memory_id]

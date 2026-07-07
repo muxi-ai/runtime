@@ -82,6 +82,7 @@ class Memobase:
         external_user_id: Optional[str] = None,
         collection: Optional[str] = None,
         user_id: Optional[str] = None,
+        scope: Optional[tuple] = None,
     ) -> str:
         """
         Add content to memory for a specific user.
@@ -99,6 +100,10 @@ class Memobase:
             collection: Optional collection name to store the memory in.
                 If None, uses the default user collection.
             user_id: Alias for external_user_id (extractor compatibility).
+            scope: Optional ``(scope_type, scope_id)`` memory namespace
+                (memory namespaces Phases 2+3). None = user scope. Shared
+                scopes must already be authorized by the caller via a
+                ``memory.write`` grant.
 
         Returns:
             The ID of the newly created memory entry.
@@ -157,6 +162,7 @@ class Memobase:
                 metadata=metadata,
                 external_user_id=external_user_id,
                 collection=collection,
+                scope=scope,
             )
 
             # Log successful memory store
@@ -198,13 +204,17 @@ class Memobase:
         additional_filter: Optional[Dict[str, Any]] = None,
         collection: Optional[str] = None,
         filter_metadata: Optional[Dict[str, Any]] = None,
+        scopes: Optional[List[str]] = None,
+        group_ids: Optional[List[str]] = None,
     ) -> List[Dict[str, Any]]:
         """
         Search for similar content in memory for a specific user.
 
         This method performs a semantic search within a user's memory collection,
         applying appropriate filters to ensure only the user's memories are
-        returned.
+        returned. By default the underlying search fans out over the shared
+        scopes the user can read (memory namespaces Phases 2+3);
+        ``scopes=["user"]`` restores the user-only query.
 
         Args:
             query: The text query to search for.
@@ -216,6 +226,8 @@ class Memobase:
             collection: Optional collection name to search in. If None, uses
                 the default collection for the user.
             filter_metadata: Alias for additional_filter (LongTermMemory compatibility).
+            scopes: Per-query scope narrowing (None = full cascade).
+            group_ids: Explicit group memberships (None = ContextVar / resolver).
 
         Returns:
             A list of memory entries, ordered by relevance.
@@ -268,6 +280,8 @@ class Memobase:
                 limit=limit,
                 collection=collection,
                 external_user_id=external_user_id,
+                scopes=scopes,
+                group_ids=group_ids,
             )
 
             # Convert results to standard format
@@ -276,12 +290,16 @@ class Memobase:
                 results.append(
                     {
                         "content": memory.get("text", ""),
+                        "text": memory.get("text", ""),
                         "metadata": memory.get("metadata", {}),
                         "distance": 1.0
                         - memory.get("score", 0.5),  # Convert similarity score to distance
+                        "score": memory.get("score", 0.0),
                         "source": "memobase",
                         "id": memory.get("id"),
                         "created_at": memory.get("created_at"),
+                        "scope_type": memory.get("scope_type"),
+                        "scope_id": memory.get("scope_id"),
                     }
                 )
 
@@ -330,22 +348,28 @@ class Memobase:
         offset: int = 0,
         external_user_id: Optional[str] = None,
         collection: Optional[str] = None,
+        scopes: Optional[List[str]] = None,
+        group_ids: Optional[List[str]] = None,
     ) -> List[Dict[str, Any]]:
         """
         List memories for a user without vector search (no embeddings required).
 
-        This is USER-SPECIFIC - only returns memories belonging to the specified user.
-        For single-user mode, uses default user.
-        For multi-user mode, requires external_user_id.
+        The user branch is USER-SPECIFIC as before; by default the listing
+        also includes the shared-scope rows the user can read (memory
+        namespaces Phases 2+3). ``scopes=["user"]`` restores the user-only
+        listing. For single-user mode, uses default user. For multi-user
+        mode, requires external_user_id.
 
         Args:
             limit: Maximum number of memories to return.
             offset: Number of memories to skip (for pagination).
             external_user_id: The external user ID. If None, uses the default.
-            collection: Optional collection name to filter by.
+            collection: Optional collection name to filter by (user branch).
+            scopes: Per-query scope narrowing (None = full cascade).
+            group_ids: Explicit group memberships (None = ContextVar / resolver).
 
         Returns:
-            List of memory entries for the user.
+            List of memory entries visible to the user.
         """
         external_user_id = (
             external_user_id if external_user_id is not None else self.default_external_user_id
@@ -364,6 +388,8 @@ class Memobase:
             offset=offset,
             collection=collection,
             external_user_id=external_user_id,
+            scopes=scopes,
+            group_ids=group_ids,
         )
 
     def build_search_parameters(
@@ -375,6 +401,7 @@ class Memobase:
         collection: Optional[str] = None,
         collections: Optional[List[str]] = None,
         query_embedding: Optional[List[float]] = None,
+        scopes: Optional[List[str]] = None,
     ) -> Dict[str, Any]:
         """
         Build search parameters for the Memobase search method.
@@ -387,6 +414,7 @@ class Memobase:
             collection: Optional collection name
             collections: Optional collection names (only a single collection is supported here)
             query_embedding: Optional pre-computed embedding
+            scopes: Optional per-query scope narrowing (e.g. ["user"])
 
         Returns:
             Dictionary of parameters for the search method
@@ -402,6 +430,9 @@ class Memobase:
 
         if user_id is not None:
             search_params["external_user_id"] = user_id
+
+        if scopes is not None:
+            search_params["scopes"] = scopes
 
         if not collection and collections and len(collections) == 1:
             collection = collections[0]

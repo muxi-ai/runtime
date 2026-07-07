@@ -16,6 +16,12 @@ from fastapi.responses import JSONResponse
 from pydantic import BaseModel
 
 from .....datatypes.api import APIEventType, APIObjectType
+from .....services.memory.base import SCOPE_TYPE_GROUP, SCOPE_TYPE_USER
+from .....services.memory.scopes import (
+    SCOPE_TYPES,
+    is_write_scope_allowed,
+    write_scope_target,
+)
 from ...responses import (
     APIResponse,
     create_error_response,
@@ -25,17 +31,31 @@ from ...responses import (
 
 router = APIRouter(tags=["Memory"])
 
+# Collection shared-scope rows are written to. Collections are a
+# user-space organization scheme; shared rows are addressed by scope on
+# the read side, so this is provenance bookkeeping ("context" is the
+# catch-all in MEMORY_COLLECTIONS), not a retrieval filter.
+SHARED_SCOPE_COLLECTION = "context"
+
 
 class MemoryCreate(BaseModel):
     """Model for creating a memory.
 
     Accepts the SDK/spec format: { type, detail } and/or the flat format: { content }.
+
+    Memory namespaces (Phases 2+3): ``scope`` selects the namespace the
+    memory is written to -- ``user`` (default, ungated), ``group``
+    (requires ``scope_id`` = the group id), or ``formation``. Shared
+    scopes require a ``memory.write`` grant in the caller's group YAML;
+    without one the request is rejected with 403.
     """
 
     content: Optional[str] = None
     type: Optional[str] = None
     detail: Optional[str] = None
     metadata: Optional[Dict[str, Any]] = None
+    scope: Optional[str] = None
+    scope_id: Optional[str] = None
 
     def get_content_string(self) -> str:
         """Build the content string for storage.
@@ -122,23 +142,117 @@ def _check_auth_and_user_id(
     return x_user_id, is_admin, None
 
 
+async def _resolve_write_scope(
+    formation,
+    user_id: str,
+    memory: MemoryCreate,
+    request_id: Optional[str],
+) -> Tuple[Optional[Tuple[str, str]], Optional[JSONResponse]]:
+    """Validate and authorize the requested memory write scope.
+
+    Returns ``(scope, error_response)``: scope is None for user-scope
+    writes (today's ungated path, byte-identical to Phase 1) and a
+    ``(scope_type, scope_id)`` tuple for authorized shared-scope writes.
+
+    Shared scopes (memory namespaces PRD, "Interaction with GBAC"):
+    writing group or formation scope requires a ``memory.write`` grant in
+    the caller's group YAML, matched with the same glob semantics as
+    every other GBAC list (``group:hr``, ``formation``, ``group:*``).
+    Denials mirror the GBAC trigger route: an AUTHORIZATION_FAILED
+    observability event plus a generic 403.
+    """
+    scope_type = (memory.scope or SCOPE_TYPE_USER).strip().lower()
+    if scope_type not in SCOPE_TYPES:
+        response = create_error_response(
+            "INVALID_PARAMS",
+            f"Invalid scope '{memory.scope}'; expected one of {list(SCOPE_TYPES)}",
+            None,
+            request_id,
+        )
+        return None, JSONResponse(content=response.model_dump(), status_code=422)
+
+    if scope_type == SCOPE_TYPE_USER:
+        return None, None
+
+    if scope_type == SCOPE_TYPE_GROUP and not (memory.scope_id or "").strip():
+        response = create_error_response(
+            "INVALID_PARAMS",
+            "scope_id (the group id) is required when scope is 'group'",
+            None,
+            request_id,
+        )
+        return None, JSONResponse(content=response.model_dump(), status_code=422)
+
+    scope_id = memory.scope_id.strip() if scope_type == SCOPE_TYPE_GROUP else formation.formation_id
+
+    resolver = getattr(formation, "permission_resolver", None)
+    permissions = None
+    if resolver is not None:
+        # Normalize the identifier the same way the overlord chat path does
+        permissions = await resolver.resolve(str(user_id).lower().strip())
+
+    if not is_write_scope_allowed(permissions, scope_type, scope_id):
+        from .....services.gbac import enforcement as gbac_enforcement
+
+        gbac_enforcement.observe_denied(
+            "memory_scopes",
+            write_scope_target(scope_type, scope_id),
+            permissions=permissions,
+            user_id=user_id,
+            formation_id=formation.formation_id,
+            channel="api",
+        )
+        response = create_error_response(
+            "FORBIDDEN",
+            "Insufficient permissions to write to this memory scope",
+            None,
+            request_id,
+        )
+        return None, JSONResponse(content=response.model_dump(), status_code=403)
+
+    if scope_type == SCOPE_TYPE_GROUP and scope_id not in resolver.group_ids:
+        # A glob grant (group:*) can match groups that don't exist; a
+        # write there would be visible to nobody. Reject explicitly.
+        response = create_error_response(
+            "INVALID_PARAMS",
+            f"Unknown group '{scope_id}'",
+            None,
+            request_id,
+        )
+        return None, JSONResponse(content=response.model_dump(), status_code=422)
+
+    return (scope_type, scope_id), None
+
+
 @router.get("/memories", response_model=APIResponse, operation_id="search_memories")
 async def get_user_memories(
     request: Request,
     x_user_id: Optional[str] = Header(None, alias="X-Muxi-User-ID"),
     limit: int = Query(10, ge=1, le=100, description="Maximum number of memories to return"),
     offset: int = Query(0, ge=0, description="Offset for pagination"),
+    scopes: Optional[str] = Query(
+        None,
+        description=(
+            "Comma-separated scope narrowing (user,group,formation). "
+            "Default: all scopes the user can read"
+        ),
+    ),
 ) -> JSONResponse:
     """
     Get memories for a user.
+
+    By default the listing includes the shared-scope memories the user
+    can read (their groups' rows and formation rows -- memory namespaces
+    Phases 2+3); ``scopes=user`` narrows to the user's own memories.
 
     Args:
         x_user_id: User ID from X-Muxi-User-ID header
         limit: Maximum number of memories to return
         offset: Offset for pagination
+        scopes: Optional comma-separated scope narrowing
 
     Returns:
-        List of user memories
+        List of memories visible to the user
     """
     formation = request.app.state.formation
     request_id = getattr(request.state, "request_id", None)
@@ -147,6 +261,19 @@ async def get_user_memories(
     user_id, error_response = _get_user_id(x_user_id, request_id)
     if error_response:
         return error_response
+
+    scopes_list = None
+    if scopes:
+        scopes_list = [s.strip().lower() for s in scopes.split(",") if s.strip()]
+        invalid = [s for s in scopes_list if s not in SCOPE_TYPES]
+        if invalid or not scopes_list:
+            response = create_error_response(
+                "INVALID_PARAMS",
+                f"Invalid scopes {invalid}; expected a subset of {list(SCOPE_TYPES)}",
+                None,
+                request_id,
+            )
+            return JSONResponse(content=response.model_dump(), status_code=422)
 
     # Check if persistent memory is configured
     if not formation.has_persistent_memory():
@@ -160,11 +287,15 @@ async def get_user_memories(
         return JSONResponse(content=response.model_dump(), status_code=200)
 
     try:
-        # List memories for this user (no vector search required)
+        # List memories visible to this user (no vector search required).
+        # Default fans out to the shared scopes the user can read; the
+        # membership lookup falls back to the formation's registered
+        # resolver when no per-request permissions are set (API path).
         memories = await overlord.long_term_memory.list_memories(
             limit=limit,
             offset=offset,
             external_user_id=user_id,
+            scopes=scopes_list,
         )
 
         # Convert to API format
@@ -176,6 +307,8 @@ async def get_user_memories(
                     "content": mem.get("content") or mem.get("text"),
                     "created_at": mem.get("created_at"),
                     "metadata": mem.get("metadata", {}),
+                    "scope": mem.get("scope_type", SCOPE_TYPE_USER),
+                    "scope_id": mem.get("scope_id"),
                 }
             )
 
@@ -239,19 +372,71 @@ async def create_user_memory(
         )
         return JSONResponse(content=response.model_dump(), status_code=422)
 
-    try:
-        # Add memory
-        memory_id = await overlord.long_term_memory.add(
-            content=content_str,
-            metadata=memory.get_metadata(),
-            external_user_id=user_id,
-        )
+    # Memory namespaces: validate + authorize the requested scope (user
+    # scope returns scope=None and stays on the exact pre-namespaces path).
+    scope, error_response = await _resolve_write_scope(formation, user_id, memory, request_id)
+    if error_response:
+        return error_response
 
+    try:
+        if scope is None:
+            # User scope: today's ungated write path, unchanged.
+            memory_id = await overlord.long_term_memory.add(
+                content=content_str,
+                metadata=memory.get_metadata(),
+                external_user_id=user_id,
+            )
+        else:
+            # Shared scope: record the write on the memory event substrate
+            # with its true scope, then project through the same apply
+            # helper replay uses -- a rebuild reproduces the scoped row.
+            # The event append is failure-isolated (extractor posture);
+            # the projection write proceeds regardless.
+            from .....services.memory.events.models import (
+                EVENT_FACT_EXTRACTED,
+                SOURCE_USER_EDIT,
+            )
+            from .....services.memory.events.projectors import apply_fact_event
+
+            meta = memory.get_metadata()
+            meta.setdefault("source", "user_edit")
+            meta["written_by"] = user_id
+            payload = {
+                "memory": content_str,
+                "collection": SHARED_SCOPE_COLLECTION,
+                "metadata": meta,
+            }
+            event = None
+            memory_events = getattr(overlord, "memory_events", None)
+            if memory_events is not None:
+                event = await memory_events.record(
+                    user_id=str(user_id),
+                    event_type=EVENT_FACT_EXTRACTED,
+                    payload=payload,
+                    source=SOURCE_USER_EDIT,
+                    scope_type=scope[0],
+                    scope_id=scope[1],
+                )
+            memory_id = await apply_fact_event(
+                overlord.long_term_memory,
+                user_id,
+                payload,
+                event_id=event["id"] if event else None,
+                scope=scope,
+            )
+
+        # Scope awareness note: per-user synopsis caches
+        # (user_synopsis_identity / user_synopsis_context) are built from
+        # user-scope sources only (identity collections + captain's log),
+        # so a shared-scope write cannot stale them; the context synopsis
+        # is additionally TTL-bound. No invalidation hook is needed here.
         result = {
             "id": memory_id,
             "content": {"type": memory.type or "general", "detail": content_str},
             "created_at": datetime.now(timezone.utc).isoformat().replace("+00:00", "Z"),
             "metadata": memory.get_metadata(),
+            "scope": scope[0] if scope else SCOPE_TYPE_USER,
+            "scope_id": scope[1] if scope else None,
         }
 
         response = create_success_response(

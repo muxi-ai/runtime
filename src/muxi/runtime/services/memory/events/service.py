@@ -92,9 +92,15 @@ class MemoryEventService:
         expires_at: Optional[datetime] = None,
         agent_id: Optional[str] = None,
         conversation_id: Optional[str] = None,
+        scope_type: Optional[str] = None,
+        scope_id: Optional[str] = None,
     ) -> Optional[Dict[str, Any]]:
         """
         Append one event to the log; never raises.
+
+        ``scope_type`` / ``scope_id`` record the memory namespace of the
+        projection write (shared-scope writes pass their true scope so
+        replay reproduces scoped rows); None keeps the implicit user scope.
 
         Returns the event dict (existing one on an idempotent duplicate),
         or None when the substrate is disabled or the append failed. A
@@ -116,6 +122,8 @@ class MemoryEventService:
                 expires_at=expires_at,
                 agent_id=agent_id,
                 conversation_id=conversation_id,
+                scope_type=scope_type,
+                scope_id=scope_id,
             )
         except Exception as e:
             observability.observe(

@@ -86,7 +86,12 @@ def _make_orchestrator(
 
     if long_term_memories_results is not None:
         overlord.long_term_memory = MagicMock()
-        overlord.long_term_memory.search = AsyncMock(return_value=long_term_memories_results)
+        # The bundle fetch routes through the persistent memory manager
+        # (backend-adapted parameters + shared-scope read fan-out).
+        overlord.persistent_memory_manager = MagicMock()
+        overlord.persistent_memory_manager.search_long_term_memory = AsyncMock(
+            return_value=long_term_memories_results
+        )
     else:
         overlord.long_term_memory = None
 

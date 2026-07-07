@@ -1602,7 +1602,16 @@ class ChatOrchestrator:
                     ]
                     if not collections_to_search:
                         collections_to_search = ["conversations"]
-                    results = await self.overlord.long_term_memory.search(
+                    # Route through the persistent memory manager, which
+                    # adapts parameters per backend. The previous direct
+                    # backend call passed k=/user_id= kwargs no backend
+                    # accepts, so the TypeError was swallowed and flat
+                    # facts never reached the clean chat context. Going
+                    # through the manager also picks up the shared-scope
+                    # read fan-out (memory namespaces Phases 2+3): group
+                    # and formation memories join user-context recall
+                    # here, membership-gated per request.
+                    results = await self.overlord.persistent_memory_manager.search_long_term_memory(
                         query=current_user_message,
                         user_id=user_id,
                         collections=collections_to_search,
