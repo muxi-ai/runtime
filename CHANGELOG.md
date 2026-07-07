@@ -83,8 +83,6 @@ extraction.
 
 ## v0.20260619.0
 
-## v0.20260619.0
-
 ### PII/secret redaction hardening + entity-based redaction
 
 Observability and memory now redact secrets and personal data far more
