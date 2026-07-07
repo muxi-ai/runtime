@@ -781,11 +781,11 @@ MEMORY_DELETION_REQUESTED,ConversationEvents,YES,,src/muxi/runtime/services/memo
 MEMORY_EVENT_APPENDED,ConversationEvents,YES,,src/muxi/runtime/services/memory/events/service.py,144,observability.observe(
 MEMORY_EVENT_APPEND_FAILED,ConversationEvents,YES,,src/muxi/runtime/services/memory/events/service.py,129,observability.observe(
 MEMORY_EVENT_IDEMPOTENT_SKIP,ConversationEvents,YES,,src/muxi/runtime/services/memory/events/service.py,156,observability.observe(
-MEMORY_INGESTION_ACCEPTED,ConversationEvents,YES,,src/muxi/runtime/services/memory/ingest/service.py,369,observability.observe(
-MEMORY_INGESTION_COMPLETED,ConversationEvents,YES,,src/muxi/runtime/services/memory/ingest/service.py,484,observability.observe(
-MEMORY_INGESTION_FAILED,ConversationEvents,YES,,src/muxi/runtime/services/memory/ingest/service.py,497,observability.observe(
-MEMORY_INGESTION_FILTERED,ConversationEvents,YES,,src/muxi/runtime/services/memory/ingest/service.py,577,observability.observe(
-MEMORY_INGESTION_STARTED,ConversationEvents,YES,,src/muxi/runtime/services/memory/ingest/service.py,450,observability.observe(
+MEMORY_INGESTION_ACCEPTED,ConversationEvents,YES,,src/muxi/runtime/services/memory/ingest/service.py,383,observability.observe(
+MEMORY_INGESTION_COMPLETED,ConversationEvents,YES,,src/muxi/runtime/services/memory/ingest/service.py,498,observability.observe(
+MEMORY_INGESTION_FAILED,ConversationEvents,YES,,src/muxi/runtime/services/memory/ingest/service.py,511,observability.observe(
+MEMORY_INGESTION_FILTERED,ConversationEvents,YES,,src/muxi/runtime/services/memory/ingest/service.py,591,observability.observe(
+MEMORY_INGESTION_STARTED,ConversationEvents,YES,,src/muxi/runtime/services/memory/ingest/service.py,464,observability.observe(
 MEMORY_INITIALIZATION_FAILED,ErrorEvents,YES,,src/muxi/runtime/formation/initialization.py,805,observability.observe(
 MEMORY_INITIALIZATION_FAILED,ErrorEvents,YES,,src/muxi/runtime/formation/initialization.py,834,observability.observe(
 MEMORY_INITIALIZATION_FAILED,ErrorEvents,YES,,src/muxi/runtime/formation/initialization.py,862,observability.observe(

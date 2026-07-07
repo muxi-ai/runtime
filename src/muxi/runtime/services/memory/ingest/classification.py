@@ -152,23 +152,29 @@ def build_category_specs() -> Dict[str, IntentSpec]:
     return specs
 
 
+# Built once at import time: the specs are pure constants (frozen
+# dataclasses over the exemplar lists above), so classify calls at
+# ingestion scale reuse the same objects instead of reconstructing five
+# specs with ~40-element negative sets per item.
+CATEGORY_SPECS: Dict[str, IntentSpec] = build_category_specs()
+
+
 async def classify_content(classifier, text: str) -> Tuple[str, float]:
     """Triage one content string into a category via prototype similarity.
 
-    Registers the ingestion IntentSpecs on the shared classifier
-    (idempotent -- registration is cached per process) and returns
-    ``(category, margin)`` for the best-scoring category.
+    Registers the module-constant ingestion IntentSpecs on the shared
+    classifier (idempotent -- registration is cached per process) and
+    returns ``(category, margin)`` for the best-scoring category.
 
     Raises whatever the classifier raises (embedding backend failures);
     the ingestion service catches and fails open to CATEGORY_UNKNOWN.
     """
-    specs = build_category_specs()
-    for spec in specs.values():
+    for spec in CATEGORY_SPECS.values():
         await classifier.register(spec)
 
     best_category = CATEGORY_UNKNOWN
     best_margin = float("-inf")
-    for category, spec in specs.items():
+    for category, spec in CATEGORY_SPECS.items():
         _, margin = await classifier.classify_binary(spec.name, text)
         if margin > best_margin:
             best_category = category

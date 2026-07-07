@@ -449,6 +449,14 @@ async def _handle_ingestion(
     except IngestionUnavailableError as e:
         response = create_error_response("SERVICE_UNAVAILABLE", str(e), None, request_id)
         return JSONResponse(content=response.model_dump(), status_code=503)
+    except Exception as e:
+        # Unexpected accept-path failure (tracker/task machinery): the
+        # service released its in-flight slot on the way out, so a retry
+        # is safe -- surface a formatted error, never a raw 500.
+        response = create_error_response(
+            "INTERNAL_ERROR", f"Failed to accept memory for ingestion: {str(e)}", None, request_id
+        )
+        return JSONResponse(content=response.model_dump(), status_code=500)
 
     result = outcome["results"][0]
     if result["status"] == STATUS_INVALID:  # defensive; validate_item runs first
@@ -775,6 +783,16 @@ async def ingest_memories_batch(
         except IngestionUnavailableError as e:
             response = create_error_response("SERVICE_UNAVAILABLE", str(e), None, request_id)
             return JSONResponse(content=response.model_dump(), status_code=503)
+        except Exception as e:
+            # Unexpected accept-path failure: the service released its
+            # in-flight slot on the way out, so a retry is safe.
+            response = create_error_response(
+                "INTERNAL_ERROR",
+                f"Failed to accept memory batch for ingestion: {str(e)}",
+                None,
+                request_id,
+            )
+            return JSONResponse(content=response.model_dump(), status_code=500)
         processing_id = outcome["processing_id"]
         item_results.update(outcome["results"])
 

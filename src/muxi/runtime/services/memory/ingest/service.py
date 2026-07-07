@@ -307,6 +307,14 @@ class MemoryIngestionService:
         # would be burned without any processing ever running.
         await self._acquire_slot(user_id)
 
+        # Ownership-transfer pattern: this coroutine owns the slot release
+        # until the processing task has been successfully created. Only
+        # then does release responsibility transfer to _process_job's
+        # finally -- a failure anywhere before that point (event appends,
+        # tracker registration, task creation) releases the slot here, so
+        # a transient error can never leak the counter and 429 the user
+        # forever.
+        slot_owned = True
         results: Dict[int, Dict[str, Any]] = {}
         to_process: List[Tuple[int, IngestItem, Dict[str, Any]]] = []
         try:
@@ -344,27 +352,33 @@ class MemoryIngestionService:
                         "event_id": event["public_id"],
                         "derived_events": await self._derived_events(user_id, event),
                     }
-        except BaseException:
-            await self._release_slot(user_id)
-            raise
 
-        if not to_process:
-            # Nothing new to run: all duplicates/invalid. Release the slot
-            # and report without a processing_id.
-            await self._release_slot(user_id)
-            return {"processing_id": None, "results": results}
+            if not to_process:
+                # Nothing new to run: all duplicates/invalid. The finally
+                # releases the slot; report without a processing_id.
+                return {"processing_id": None, "results": results}
 
-        processing_id = f"ing_{get_default_nanoid()}"
-        tracker = self.overlord.request_tracker
-        state = RequestState(
-            id=processing_id,
-            status=RequestStatus.PENDING,
-            start_time=time.time(),
-            user_id=user_id,
-        )
-        await tracker.track_request(processing_id, state)
-        task = asyncio.create_task(self._process_job(processing_id, user_id, to_process))
-        state.task_ref = task
+            processing_id = f"ing_{get_default_nanoid()}"
+            tracker = self.overlord.request_tracker
+            state = RequestState(
+                id=processing_id,
+                status=RequestStatus.PENDING,
+                start_time=time.time(),
+                user_id=user_id,
+            )
+            await tracker.track_request(processing_id, state)
+            try:
+                task = asyncio.create_task(self._process_job(processing_id, user_id, to_process))
+            except BaseException:
+                # Don't leave an orphaned queued entry that never runs.
+                await tracker.remove_request(processing_id)
+                raise
+            state.task_ref = task
+            # The task now exists: its finally releases the slot.
+            slot_owned = False
+        finally:
+            if slot_owned:
+                await self._release_slot(user_id)
 
         observability.observe(
             event_type=observability.ConversationEvents.MEMORY_INGESTION_ACCEPTED,

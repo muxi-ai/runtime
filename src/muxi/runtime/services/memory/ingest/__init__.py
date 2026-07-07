@@ -9,6 +9,7 @@
 # =============================================================================
 
 from .classification import (
+    CATEGORY_SPECS,
     CATEGORY_UNKNOWN,
     CONTENT_CATEGORIES,
     DEFAULT_FILTER_LEVEL,
@@ -33,6 +34,7 @@ from .service import (
 )
 
 __all__ = [
+    "CATEGORY_SPECS",
     "CATEGORY_UNKNOWN",
     "CONTENT_CATEGORIES",
     "DEFAULT_FILTER_LEVEL",

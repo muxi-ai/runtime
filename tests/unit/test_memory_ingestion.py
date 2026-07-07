@@ -94,9 +94,11 @@ class StubClassifier:
         self.margins = margins or {}
         self.fail = fail
         self.registered = []
+        self.registered_specs = []
 
     async def register(self, spec):
         self.registered.append(spec.name)
+        self.registered_specs.append(spec)
 
     async def classify_binary(self, name, text):
         if self.fail:
@@ -335,6 +337,29 @@ class TestTriage:
 
         # Unknown-category items are always kept (fail-open triage).
         assert not is_filtered("unknown", "strict")
+
+    async def test_repeated_classify_reuses_module_constant_specs(self):
+        # The category specs are pure constants: repeated classify calls
+        # (and independent classifier instances) must register the exact
+        # same spec objects, never per-call rebuilds.
+        from muxi.runtime.services.memory.ingest.classification import CATEGORY_SPECS
+
+        first = StubClassifier(margins_for(CATEGORY_PERSONAL))
+        second = StubClassifier(margins_for(CATEGORY_PERSONAL))
+        await classify_content(first, "note one")
+        await classify_content(first, "note two")
+        await classify_content(second, "note three")
+
+        constant_ids = {id(spec) for spec in CATEGORY_SPECS.values()}
+        assert {id(spec) for spec in first.registered_specs} == constant_ids
+        assert {id(spec) for spec in second.registered_specs} == constant_ids
+        # Two calls on the same classifier registered the same objects twice.
+        assert len(first.registered_specs) == 2 * len(CATEGORY_SPECS)
+        for a, b in zip(
+            first.registered_specs[: len(CATEGORY_SPECS)],
+            first.registered_specs[len(CATEGORY_SPECS) :],
+        ):
+            assert a is b
 
     def test_per_source_filter_config(self, memory_events):
         overlord = make_overlord(
@@ -619,6 +644,112 @@ class TestInFlightCap:
         for pid in (other["processing_id"], retry["processing_id"]):
             state = await overlord.request_tracker.get_request(pid)
             await state.task_ref
+
+
+# ----------------------------------------------------------------------
+# Slot ownership transfer (accept-path failures must never leak slots)
+# ----------------------------------------------------------------------
+
+
+class BrokenTracker:
+    """Tracker double whose registration always fails."""
+
+    async def track_request(self, *args, **kwargs):
+        raise RuntimeError("tracker down")
+
+
+class TestSlotOwnershipTransfer:
+    async def test_tracker_failure_releases_slot(self, memory_events):
+        overlord = make_overlord(
+            memory_events,
+            extractor=StubExtractor(memory_events),
+            ingestion_config={"max_in_flight_per_user": 1},
+        )
+        service = overlord.memory_ingestion
+        good_tracker = overlord.request_tracker
+
+        overlord.request_tracker = BrokenTracker()
+        with pytest.raises(RuntimeError, match="tracker down"):
+            await service.submit("alice", [(0, make_item(source_id="m-1"))])
+        assert service.in_flight("alice") == 0
+
+        # The slot was returned, not leaked: with the tracker healthy
+        # again, the next submit is accepted instead of 429'd forever.
+        overlord.request_tracker = good_tracker
+        outcome = await service.submit("alice", [(0, make_item(source_id="m-2"))])
+        assert outcome["results"][0]["status"] == STATUS_ACCEPTED
+        await finish_job(overlord, outcome["processing_id"])
+        assert service.in_flight("alice") == 0
+
+    async def test_task_creation_failure_releases_slot_and_untracks(self, memory_events):
+        overlord = make_overlord(
+            memory_events,
+            extractor=StubExtractor(memory_events),
+            ingestion_config={"max_in_flight_per_user": 1},
+        )
+        service = overlord.memory_ingestion
+
+        def boom(*args, **kwargs):
+            raise RuntimeError("task creation failed")
+
+        original_process_job = service._process_job
+        service._process_job = boom
+        with pytest.raises(RuntimeError, match="task creation failed"):
+            await service.submit("alice", [(0, make_item(source_id="m-1"))])
+        assert service.in_flight("alice") == 0
+        # No orphaned queued entry that would never run.
+        assert await overlord.request_tracker.get_all_requests() == {}
+
+        service._process_job = original_process_job
+        outcome = await service.submit("alice", [(0, make_item(source_id="m-2"))])
+        assert outcome["results"][0]["status"] == STATUS_ACCEPTED
+        await finish_job(overlord, outcome["processing_id"])
+
+    async def test_happy_path_releases_slot_exactly_once(self, memory_events):
+        overlord = make_overlord(memory_events, extractor=StubExtractor(memory_events))
+        service = overlord.memory_ingestion
+
+        releases = []
+        original_release = service._release_slot
+
+        async def counting_release(user_id):
+            releases.append(user_id)
+            await original_release(user_id)
+
+        service._release_slot = counting_release
+
+        outcome = await service.submit("alice", [(0, make_item(source_id="m-1"))])
+        state = await finish_job(overlord, outcome["processing_id"])
+        assert state.status == RequestStatus.COMPLETED
+        assert releases == ["alice"], "slot must be released exactly once (by the job)"
+        assert service.in_flight("alice") == 0
+
+        # Duplicate-only submits (no job) also release exactly once.
+        releases.clear()
+        duplicate = await service.submit("alice", [(0, make_item(source_id="m-1"))])
+        assert duplicate["processing_id"] is None
+        assert releases == ["alice"]
+        assert service.in_flight("alice") == 0
+
+    async def test_route_maps_accept_failure_to_formatted_500(self, memory_events):
+        overlord = make_overlord(memory_events, extractor=StubExtractor(memory_events))
+        formation = make_formation(overlord)
+        overlord.request_tracker = BrokenTracker()
+
+        response = await _handle_ingestion(
+            formation,
+            overlord,
+            "alice",
+            MemoryCreate(content="x", source="s", source_id="m-1"),
+            "req-1",
+        )
+        assert response.status_code == 500
+        body = response_data(response)
+        assert body["success"] is False
+        assert body["error"]["code"] == "INTERNAL_ERROR"
+        assert "Failed to accept memory" in body["error"]["message"]
+        # The failed accept did not consume the user's in-flight budget.
+        assert overlord.memory_ingestion.in_flight("alice") == 0
 
 
 # ----------------------------------------------------------------------
