@@ -17,6 +17,13 @@ from .....datatypes.api import APIEventType, APIObjectType
 from .....services import observability
 from .....utils.id_generator import generate_request_id
 from .....utils.response_converter import extract_response_content
+from ....background.transformers import (
+    TransformerConfig,
+    deliver_via_transformer,
+    extract_parse_values,
+    load_transformer,
+    parse_trigger_frontmatter,
+)
 from ...responses import (
     APIResponse,
     create_api_response,
@@ -26,6 +33,17 @@ from ...responses import (
 from ...utils import get_header_case_insensitive, render_trigger_template
 
 router = APIRouter(tags=["Triggers"])
+
+
+def _default_agent_name(formation) -> Optional[str]:
+    """Best-effort default agent name for transformer template variables."""
+    agents = formation.config.get("agents") or []
+    for agent in agents:
+        if isinstance(agent, dict) and agent.get("default"):
+            return agent.get("name") or agent.get("id")
+    if agents and isinstance(agents[0], dict):
+        return agents[0].get("name") or agents[0].get("id")
+    return None
 
 
 class TriggerRequest(BaseModel):
@@ -289,6 +307,42 @@ async def execute_trigger(
             detail=f"Failed to read trigger template: {str(e)}",
         )
 
+    # Parse optional YAML frontmatter (outbound routing: webhook/transformer,
+    # inbound extraction: parse). Triggers without frontmatter pass through
+    # unchanged and take the exact same code path as before.
+    try:
+        trigger_meta, template = parse_trigger_frontmatter(template)
+    except ValueError as e:
+        raise HTTPException(
+            status_code=400,
+            detail=f"Invalid frontmatter in trigger '{trigger_name}': {str(e)}",
+        )
+
+    # Fail fast on malformed/missing transformer config before any LLM work
+    transformer_config: Optional[TransformerConfig] = None
+    if trigger_meta.get("transformer"):
+        try:
+            transformer_config = load_transformer(formation_dir, trigger_meta["transformer"])
+        except ValueError as e:
+            raise HTTPException(
+                status_code=400,
+                detail=f"Invalid transformer for trigger '{trigger_name}': {str(e)}",
+            )
+    webhook_override: Optional[str] = trigger_meta.get("webhook")
+
+    # Extract platform request values (message/user_id/context) per parse spec
+    try:
+        parsed_request = extract_parse_values(trigger_meta.get("parse"), trigger_request.data)
+    except ValueError as e:
+        raise HTTPException(
+            status_code=400,
+            detail=f"Invalid parse spec in trigger '{trigger_name}': {str(e)}",
+        )
+
+    # The parsed platform user (e.g. Slack user id) scopes conversation and
+    # memory; the header user remains the authenticated principal for GBAC.
+    chat_user_id = parsed_request.get("user_id") or user_id
+
     # Render template with provided data
     try:
         rendered_message = render_trigger_template(template, trigger_request.data)
@@ -324,20 +378,83 @@ async def execute_trigger(
     # Get overlord for processing
     overlord = formation._overlord
 
+    async def deliver_transformed(response: Any, response_content: str) -> None:
+        """Format the agent response with the trigger's transformer and deliver it."""
+        if transformer_config is None:  # Callers only schedule this when a transformer exists
+            return
+        try:
+            await deliver_via_transformer(
+                webhook_manager=overlord.webhook_manager,
+                secrets_manager=formation.secrets_manager,
+                transformer=transformer_config,
+                response_content=response_content,
+                response=response,
+                request_message=parsed_request.get("message"),
+                request_user_id=chat_user_id,
+                request_files=parsed_request.get("files"),
+                context=parsed_request.get("context"),
+                agent_name=_default_agent_name(formation),
+                request_id=request_id,
+                formation_id=formation_id,
+                fallback_webhook_url=getattr(overlord, "async_webhook_url", None),
+            )
+        except Exception as e:
+            observability.observe(
+                event_type=observability.ConversationEvents.WEBHOOK_FAILED,
+                level=observability.EventLevel.ERROR,
+                data={
+                    "request_id": request_id,
+                    "formation_id": formation_id,
+                    "trigger_name": trigger_name,
+                    "type": "transformer",
+                    "transformer": transformer_config.name,
+                    "error": str(e),
+                    "error_type": type(e).__name__,
+                },
+                description=f"Transformer delivery for trigger '{trigger_name}' failed: {e}",
+            )
+
     if trigger_request.use_async:
         # Process asynchronously
         async def process_async() -> None:
             """Background task to process trigger."""
             try:
-                # Use overlord's chat method (non-streaming)
-                # Bypass workflow approval for triggers (automated execution)
-                await overlord.chat(
-                    rendered_message,
-                    user_id=user_id,
-                    session_id=trigger_request.session_id,
-                    request_id=request_id,
-                    bypass_workflow_approval=True,
-                )
+                if transformer_config is not None:
+                    # Transformer routing: run the request to completion here
+                    # (forced sync, non-streaming) so the final content can be
+                    # formatted and delivered to the transformer endpoint.
+                    response = await overlord.chat(
+                        rendered_message,
+                        user_id=chat_user_id,
+                        session_id=trigger_request.session_id,
+                        request_id=request_id,
+                        bypass_workflow_approval=True,
+                        use_async=False,
+                        stream=False,
+                    )
+                elif webhook_override is not None:
+                    # Webhook routing: force async so the standard MUXI
+                    # payload is always delivered to the override URL.
+                    await overlord.chat(
+                        rendered_message,
+                        user_id=chat_user_id,
+                        session_id=trigger_request.session_id,
+                        request_id=request_id,
+                        bypass_workflow_approval=True,
+                        use_async=True,
+                        webhook_url=webhook_override,
+                    )
+                else:
+                    # Default routing: unchanged trigger behavior
+                    # Use overlord's chat method (non-streaming)
+                    # Bypass workflow approval for triggers (automated execution)
+                    await overlord.chat(
+                        rendered_message,
+                        user_id=chat_user_id,
+                        session_id=trigger_request.session_id,
+                        request_id=request_id,
+                        bypass_workflow_approval=True,
+                    )
 
                 observability.observe(
                     event_type=observability.ConversationEvents.REQUEST_COMPLETED,
@@ -350,6 +467,10 @@ async def execute_trigger(
                     },
                     description=f"Trigger '{trigger_name}' completed",
                 )
+
+                if transformer_config is not None:
+                    response_content = await extract_response_content(response)
+                    await deliver_transformed(response, response_content)
 
             except Exception as e:
                 observability.observe(
@@ -385,15 +506,21 @@ async def execute_trigger(
             # Explicitly disable streaming to get actual content, not a generator
             response = await overlord.chat(
                 rendered_message,
-                user_id=user_id,
+                user_id=chat_user_id,
                 session_id=trigger_request.session_id,
                 request_id=request_id,
                 bypass_workflow_approval=True,
                 stream=False,
+                webhook_url=webhook_override,
             )
 
             # Extract content from response (handles async generators, MuxiResponse, strings, etc.)
             response_content = await extract_response_content(response)
+
+            # Deliver the formatted response to the transformer endpoint in
+            # the background; the caller still receives the standard payload.
+            if transformer_config is not None:
+                background_tasks.add_task(deliver_transformed, response, response_content)
 
             observability.observe(
                 event_type=observability.ConversationEvents.REQUEST_COMPLETED,
