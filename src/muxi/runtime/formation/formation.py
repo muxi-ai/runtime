@@ -1421,7 +1421,11 @@ class Formation:
         the directory the feature is inert and nothing changes.
 
         Malformed group files, unknown inheritance parents, and circular
-        inheritance fail the formation load with a precise error.
+        inheritance fail the formation load with a precise error. Group
+        files also require ``server.auth: required`` (2026-07-07 ruling):
+        with open auth, unknown users would bypass the very restrictions
+        registered users are subject to, so that combination fails the
+        load too. An empty ``groups/`` directory stays inert.
 
         This method is idempotent -- _prepare_services() may run more than
         once (load() and start_overlord()); the resolver is built once so
@@ -1474,6 +1478,28 @@ class Formation:
                 ),
             )
             return
+
+        # Group permission filtering only makes sense behind the auth gate:
+        # with open auth, unknown users would bypass the very restrictions
+        # registered users are subject to (inverted trust). Fail the load.
+        auth_mode = (getattr(self, "_server_config", None) or {}).get("auth", "open")
+        if auth_mode != "required":
+            raise ConfigurationValidationError(
+                [
+                    f"groups/ directory at {groups_dir} requires server.auth: 'required' "
+                    f"(current auth: {auth_mode!r})"
+                ],
+                {
+                    "groups_dir": groups_dir,
+                    "current_value": auth_mode,
+                    "suggestion": (
+                        "Group permission filtering requires 'server.auth: required'. "
+                        "Set 'server.auth: required' in your formation.afs, or remove "
+                        "the groups/ directory"
+                    ),
+                    "example": {"server": {"auth": "required"}},
+                },
+            )
 
         runtime_config = self.config.get("runtime", {}) if self.config else {}
         membership_ttl = 60.0

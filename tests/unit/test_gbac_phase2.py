@@ -807,6 +807,9 @@ class TestFormationWiring:
             _group_permissions={},
             formation_id=FORMATION_ID,
             config={"runtime": {}},
+            # Group files require the auth gate (see
+            # test_gbac_auth_groups_validation.py for the rule itself)
+            _server_config={"auth": "required"},
         )
 
     def test_no_groups_dir_is_inert(self, tmp_path):
@@ -967,6 +970,7 @@ class TestGroupsLoadedEventDeferral:
             _group_permissions={},
             formation_id=FORMATION_ID,
             config={"runtime": {}},
+            _server_config={"auth": "required"},
         )
         Formation._setup_groups(stub)
         event = stub._groups_loaded_event

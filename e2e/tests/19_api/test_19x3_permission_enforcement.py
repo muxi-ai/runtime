@@ -17,6 +17,10 @@ explicit membership-cache invalidation, mirroring the 60s TTL expiry a
 multi-user Postgres deployment would see). The trigger channel resolves
 the caller's header identity directly (same pattern as the Phase 1 auth
 gate), so it exercises two distinct users in a single phase.
+
+The formation runs with server.auth: required (groups/ demands it as of
+the 2026-07-07 ruling), so every HTTP identity is seeded into
+users/user_identifiers before the requests fire.
 """
 
 import asyncio
@@ -32,10 +36,12 @@ sys.path.insert(0, str(Path(__file__).parent.parent))
 from common import BaseE2ETest, TestOutputFormatter  # noqa: E402
 
 from muxi.runtime.services.memory.long_term import UserGroup  # noqa: E402
+from muxi.runtime.utils.user_resolution import resolve_user_identifier  # noqa: E402
 
 CHAT_USER = "0"  # SQLite backend: all chat requests execute as user "0"
 HR_USER = "alice@example.com"
 ENG_USER = "carol@example.com"
+NO_GROUPS_USER = "stranger@example.com"
 FORMATION_ID = "api-test-enforcement"
 
 
@@ -98,14 +104,27 @@ class TestPermissionEnforcement(BaseE2ETest):
             print("✅ Formation loaded with groups: engineering, hr")
             checks.append("formation with enforcement groups loads")
 
-            print("\n2. Seeding memberships (chat user→hr, alice→hr, carol→engineering)...")
+            print("\n2. Registering HTTP identities with the auth gate...")
+            # groups/ requires server.auth: required, so every header
+            # identity must exist in users/user_identifiers to chat at all
+            for identity in (HR_USER, ENG_USER, NO_GROUPS_USER):
+                await resolve_user_identifier(
+                    identifier=identity,
+                    formation_id=FORMATION_ID,
+                    db_manager=self.formation._db_manager,
+                    kv_cache=None,
+                    create_if_missing=True,
+                )
+            print("✅ Identities registered (auth gate)")
+
+            print("\n3. Seeding memberships (chat user→hr, alice→hr, carol→engineering)...")
             await self._set_memberships(CHAT_USER, "hr")
             await self._set_memberships(HR_USER, "hr")
             await self._set_memberships(ENG_USER, "engineering")
             print("✅ Memberships seeded")
 
             async with httpx.AsyncClient(timeout=120.0) as client:
-                print("\n3. HR-group user directly addresses hr-assistant (permitted)...")
+                print("\n4. HR-group user directly addresses hr-assistant (permitted)...")
                 r = await client.post(
                     f"{self.base_url}/chat",
                     headers=self._user_headers(HR_USER),
@@ -119,7 +138,7 @@ class TestPermissionEnforcement(BaseE2ETest):
                 print("✅ Permitted direct address returns 200")
                 checks.append("group-A user reaches agent-A (direct address)")
 
-                print("\n4. Trigger channel: alice (hr) permitted, carol (engineering) denied...")
+                print("\n5. Trigger channel: alice (hr) permitted, carol (engineering) denied...")
                 r = await client.post(
                     f"{self.base_url}/triggers/hr-report",
                     headers=self._user_headers(HR_USER),
@@ -139,10 +158,10 @@ class TestPermissionEnforcement(BaseE2ETest):
                 print("✅ Denied trigger returns 403 with a generic message")
                 checks.append("denied trigger returns 403")
 
-                print("\n5. Switching chat user to group engineering...")
+                print("\n6. Switching chat user to group engineering...")
                 await self._set_memberships(CHAT_USER, "engineering")
 
-                print("\n6. Engineering user directly addresses hr-assistant (denied)...")
+                print("\n7. Engineering user directly addresses hr-assistant (denied)...")
                 r_denied = await client.post(
                     f"{self.base_url}/chat",
                     headers=self._user_headers(ENG_USER),
@@ -174,7 +193,7 @@ class TestPermissionEnforcement(BaseE2ETest):
                 print("✅ Denied agent is indistinguishable from a nonexistent one")
                 checks.append("denied direct address == unknown agent (no leak)")
 
-                print("\n7. Engineering user asks an HR question (routed)...")
+                print("\n8. Engineering user asks an HR question (routed)...")
                 r = await client.post(
                     f"{self.base_url}/chat",
                     headers=self._user_headers(ENG_USER),
@@ -197,11 +216,11 @@ class TestPermissionEnforcement(BaseE2ETest):
                 print(f"✅ hr-assistant never selected (selected: {selected or 'overlord-direct'})")
                 checks.append("denied agent never selected for group-B user")
 
-                print("\n8. User with no group memberships chats (graceful response)...")
+                print("\n9. User with no group memberships chats (graceful response)...")
                 await self._set_memberships(CHAT_USER)  # clear all memberships
                 r = await client.post(
                     f"{self.base_url}/chat",
-                    headers=self._user_headers("stranger@example.com"),
+                    headers=self._user_headers(NO_GROUPS_USER),
                     json={"message": "What is Dave's salary?", "stream": False},
                 )
                 assert r.status_code == 200, f"Expected 200, got {r.status_code}: {r.text}"
