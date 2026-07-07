@@ -29,11 +29,18 @@
 import asyncio
 import time
 from collections import OrderedDict, deque
+from datetime import date as date_type
 from typing import Any, Deque, Dict, List, Optional, Tuple
 
 from ....utils.datetime_utils import utc_now_naive
 from ... import observability
 from ..embedding import DEFAULT_EMBEDDING_MODEL, embed
+from ..events.models import (
+    EVENT_LESSON_RECORDED,
+    EVENT_LOG_ENTRY,
+    SOURCE_CAPTAINS_LOG,
+    SOURCE_TOOL,
+)
 from ..graph.extractor import KnowledgeGraphExtractor
 from ..graph.service import _schedule_to_seconds
 from .models import SOURCE_TYPE_BUFFER_ITEM
@@ -84,6 +91,7 @@ class CaptainsLogService:
         lessons_config: Optional[Dict[str, Any]] = None,
         knowledge_graph=None,
         embedding_model: Optional[str] = None,
+        event_log=None,
     ):
         """
         Initialize the captain's log service.
@@ -97,6 +105,10 @@ class CaptainsLogService:
                 for the digest's entity/relationship integration.
             embedding_model: Slug used for lesson-consolidation clustering;
                 defaults to the shared memory embedding default.
+            event_log: MemoryEventService (or None). When present, digest
+                entries and lessons are appended to the memory event log
+                before the projection writes (dual-write; append failures
+                are isolated inside the event service).
         """
         config = config or {}
         lessons_config = lessons_config or {}
@@ -126,6 +138,7 @@ class CaptainsLogService:
         self.graph_extractor = KnowledgeGraphExtractor(confidence_threshold=DIGEST_GRAPH_CONFIDENCE)
         self.knowledge_graph = knowledge_graph
         self.embedding_model = embedding_model or DEFAULT_EMBEDDING_MODEL
+        self.event_log = event_log
 
         # Turns accumulated per user since the last run, with the capture
         # timestamp used as the buffer_item source key.
@@ -296,27 +309,36 @@ class CaptainsLogService:
         if digest is None:
             return {"entries": 0, "sources": 0, "lessons": 0}
 
-        entry = await self.storage.upsert_entry(
-            user_id,
-            entry_date,
-            summary=digest["summary"],
-            decisions=digest["decisions"],
-            projects=digest["projects"],
-            context=digest["context"],
-        )
-        source_counts = await self.storage.add_sources(
-            user_id,
-            entry["id"],
-            [
+        # Dual-write (Memory Event Substrate): the digest result becomes a
+        # log.entry event first, then the projection write goes through the
+        # same apply path the event replay uses.
+        entry_payload = {
+            "date": entry_date.isoformat(),
+            "summary": digest["summary"],
+            "decisions": digest["decisions"],
+            "projects": digest["projects"],
+            "context": digest["context"],
+            "sources": [
                 {"source_type": SOURCE_TYPE_BUFFER_ITEM, "source_id": timestamp_key}
                 for timestamp_key, _ in turns
             ],
+        }
+        event = None
+        if self.event_log is not None:
+            event = await self.event_log.record(
+                user_id=user_id,
+                event_type=EVENT_LOG_ENTRY,
+                payload=entry_payload,
+                source=SOURCE_CAPTAINS_LOG,
+            )
+        entry, source_counts = await self.apply_log_entry_event(
+            user_id, entry_payload, event_id=event["id"] if event else None
         )
 
         lessons_stored = 0
         if extract_lessons:
             lessons_stored = await self._store_lessons(
-                user_id, digest["lessons"], source_log_id=entry["id"]
+                user_id, digest["lessons"], source_log_date=entry_payload["date"]
             )
 
         # Knowledge graph integration: the same digest response carries
@@ -328,7 +350,9 @@ class CaptainsLogService:
                 extraction = self.graph_extractor.parse_response(
                     raw_response, DIGEST_GRAPH_CONFIDENCE
                 )
-                stored = await self.knowledge_graph.store_extraction(user_id, extraction)
+                stored = await self.knowledge_graph.store_extraction(
+                    user_id, extraction, source=SOURCE_CAPTAINS_LOG
+                )
                 if stored["entities"] or stored["relationships"]:
                     observability.observe(
                         event_type=observability.ConversationEvents.MEMORY_AUTO_EXTRACTED,
@@ -370,18 +394,33 @@ class CaptainsLogService:
         self,
         user_id: str,
         lessons: List[Dict[str, Optional[str]]],
-        source_log_id: Optional[int] = None,
+        source_log_date: Optional[str] = None,
         agent_id: str = "overlord",
     ) -> int:
-        """Upsert digest-extracted lessons; returns stored count."""
+        """Upsert digest-extracted lessons; returns stored count.
+
+        Lessons reference their source entry by date (the stable digest
+        key) rather than by integer id so replayed events resolve against
+        the rebuilt entry rows.
+        """
         stored = 0
         for item in lessons:
-            lesson, created = await self.lessons.upsert_lesson(
-                user_id=user_id,
-                agent_id=agent_id,
-                rule=item["rule"],
-                context=item.get("context"),
-                source_log_id=source_log_id,
+            payload = {
+                "agent_id": agent_id,
+                "rule": item["rule"],
+                "context": item.get("context"),
+                "source_log_date": source_log_date,
+            }
+            event = None
+            if self.event_log is not None:
+                event = await self.event_log.record(
+                    user_id=user_id,
+                    event_type=EVENT_LESSON_RECORDED,
+                    payload=payload,
+                    source=SOURCE_CAPTAINS_LOG,
+                )
+            lesson, created = await self.apply_lesson_event(
+                user_id, payload, event_id=event["id"] if event else None
             )
             stored += 1
             observability.observe(
@@ -398,6 +437,61 @@ class CaptainsLogService:
                 description="Lesson recorded from captain's log digest",
             )
         return stored
+
+    # ------------------------------------------------------------------
+    # Event apply path (shared by dual-write and replay rebuild)
+    # ------------------------------------------------------------------
+
+    async def apply_log_entry_event(
+        self, user_id: str, payload: Dict[str, Any], event_id: Optional[int] = None
+    ) -> Tuple[Dict[str, Any], Dict[str, int]]:
+        """
+        Apply one log.entry payload to the captains_log projection.
+
+        Deterministic write shared by the live digest path and the event
+        replay: upserts the (user, date) entry and attaches its source
+        lineage rows. Returns (entry dict, source counts).
+        """
+        entry = await self.storage.upsert_entry(
+            str(user_id),
+            date_type.fromisoformat(payload["date"]),
+            summary=payload.get("summary"),
+            decisions=payload.get("decisions"),
+            projects=payload.get("projects"),
+            context=payload.get("context"),
+            event_id=event_id,
+        )
+        counts = await self.storage.add_sources(
+            str(user_id), entry["id"], payload.get("sources") or []
+        )
+        return entry, counts
+
+    async def apply_lesson_event(
+        self, user_id: str, payload: Dict[str, Any], event_id: Optional[int] = None
+    ) -> Tuple[Dict[str, Any], bool]:
+        """
+        Apply one lesson.recorded payload to the lessons projection.
+
+        Resolves the source entry by date at apply time so the same event
+        links to the rebuilt entry row after a replay. Returns
+        (lesson dict, created).
+        """
+        user_id = str(user_id)
+        source_log_id = None
+        source_log_date = payload.get("source_log_date")
+        if source_log_date:
+            entry = await self.storage.get_entry(user_id, date_type.fromisoformat(source_log_date))
+            if entry is not None:
+                source_log_id = entry["id"]
+        return await self.lessons.upsert_lesson(
+            user_id=user_id,
+            agent_id=payload["agent_id"],
+            rule=payload["rule"],
+            context=payload.get("context"),
+            confidence=payload.get("confidence", 0.5),
+            source_log_id=source_log_id,
+            event_id=event_id,
+        )
 
     # ------------------------------------------------------------------
     # Lessons: write path (agent tool) and read path (prompt injection)
@@ -421,8 +515,18 @@ class CaptainsLogService:
         if not rule or not rule.strip():
             raise ValueError("record_lesson requires a non-empty rule")
 
-        lesson, created = await self.lessons.upsert_lesson(
-            user_id=str(user_id), agent_id=agent_id, rule=rule, context=context
+        payload = {"agent_id": str(agent_id), "rule": rule.strip(), "context": context}
+        event = None
+        if self.event_log is not None:
+            event = await self.event_log.record(
+                user_id=str(user_id),
+                event_type=EVENT_LESSON_RECORDED,
+                payload=payload,
+                source=SOURCE_TOOL,
+                agent_id=str(agent_id),
+            )
+        lesson, created = await self.apply_lesson_event(
+            str(user_id), payload, event_id=event["id"] if event else None
         )
         observability.observe(
             event_type=observability.ConversationEvents.MEMORY_LESSON_RECORDED,

@@ -37,6 +37,14 @@ class MemoryItemUpdate(BaseModel):
     value: Any
 
 
+class MemoryRebuildRequest(BaseModel):
+    """Model for a memory projection rebuild request."""
+
+    user_id: str
+    projection: Optional[str] = None
+    dry_run: bool = False
+
+
 @router.get("/memory", response_model=APIResponse)
 async def get_memory_config(request: Request) -> JSONResponse:
     """
@@ -132,6 +140,52 @@ async def get_buffer_stats(request: Request) -> JSONResponse:
         APIEventType.MEMORY_RETRIEVED,
         data,
         request_id,
+    )
+    return JSONResponse(content=response.model_dump(), status_code=200)
+
+
+@router.post("/memory/rebuild", response_model=APIResponse, operation_id="rebuild_memory")
+async def rebuild_memory_projections(
+    request: Request, rebuild: MemoryRebuildRequest
+) -> JSONResponse:
+    """
+    Rebuild memory projections from the event log (Memory Event Substrate).
+
+    Wipes the requested projection(s) for a user and replays that user's
+    memory events through the projection builders. Omit ``projection`` to
+    rebuild every registered projection; set ``dry_run`` to report the
+    event counts that would be replayed without touching derived state.
+    """
+    formation = request.app.state.formation
+    request_id = getattr(request.state, "request_id", None)
+
+    overlord = getattr(formation, "_overlord", None)
+    memory_events = getattr(overlord, "memory_events", None) if overlord else None
+    if memory_events is None:
+        response = create_error_response(
+            "SERVICE_UNAVAILABLE",
+            "Memory event substrate is not available",
+            None,
+            request_id,
+        )
+        return JSONResponse(content=response.model_dump(), status_code=503)
+
+    try:
+        report = await memory_events.rebuild(
+            rebuild.user_id, projection=rebuild.projection, dry_run=rebuild.dry_run
+        )
+    except ValueError as e:
+        response = create_error_response("INVALID_PARAMS", str(e), None, request_id)
+        return JSONResponse(content=response.model_dump(), status_code=422)
+    except Exception as e:
+        response = create_error_response(
+            "INTERNAL_ERROR", f"Failed to rebuild projections: {str(e)}", None, request_id
+        )
+        return JSONResponse(content=response.model_dump(), status_code=500)
+
+    data = {"user_id": rebuild.user_id, "dry_run": rebuild.dry_run, "projections": report}
+    response = create_success_response(
+        APIObjectType.MEMORY, APIEventType.MEMORY_RETRIEVED, data, request_id
     )
     return JSONResponse(content=response.model_dump(), status_code=200)
 

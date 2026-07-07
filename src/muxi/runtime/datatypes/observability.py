@@ -769,6 +769,34 @@ class ConversationEvents(Enum):
     MEMORY_LESSON_ARCHIVED = "memory.lesson.archived"
     # When lessons are archived by confidence decay
 
+    # Memory event substrate operations (Memory Platform Phase 2)
+    MEMORY_EVENT_APPENDED = "memory.event.appended"
+    # When a memory event is appended to the immutable event log
+
+    MEMORY_EVENT_APPEND_FAILED = "memory.event.append_failed"
+    # When a memory event append fails (isolated; projection writes continue)
+
+    MEMORY_EVENT_IDEMPOTENT_SKIP = "memory.event.idempotent_skip"
+    # When a duplicate (source, source_id) append is detected and skipped
+
+    MEMORY_PROJECTION_APPLIED = "memory.projection.applied"
+    # When an event is applied to a projection during replay
+
+    MEMORY_PROJECTION_FAILED = "memory.projection.failed"
+    # When applying an event to a projection fails during replay
+
+    MEMORY_REBUILD_STARTED = "memory.rebuild.started"
+    # When a projection rebuild from the event log is initiated
+
+    MEMORY_REBUILD_COMPLETED = "memory.rebuild.completed"
+    # When a projection rebuild finishes (report attached)
+
+    MEMORY_DELETION_REQUESTED = "memory.deletion.requested"
+    # When a user-initiated memory-event deletion is recorded
+
+    MEMORY_DELETION_HARD_PURGED = "memory.deletion.hard_purged"
+    # When the post-grace-period hard purge removes soft-deleted events
+
     USER_INFO_EXTRACTION_STARTED = "user.info.extraction.started"
     # When background user information extraction task is initiated
 

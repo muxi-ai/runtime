@@ -30,6 +30,7 @@ from typing import Any, Deque, Dict, List, Optional, Tuple
 from sqlalchemy import text
 
 from ... import observability
+from ..events.models import EVENT_GRAPH_EXTRACTED, SOURCE_INTERACTION, SOURCE_PERIODIC
 from .algorithms import NetworkXAlgorithms, PgRoutingAlgorithms
 from .extractor import USER_ENTITY_NAME, USER_ENTITY_TYPE, KnowledgeGraphExtractor
 from .storage import KnowledgeGraphStorage, normalize_type
@@ -48,7 +49,13 @@ _SCHEDULE_SECONDS = {"hourly": 3600, "daily": 86400}
 class KnowledgeGraphService:
     """Owns knowledge graph storage, extraction, and query surface."""
 
-    def __init__(self, db_manager, formation_id: str, config: Optional[Dict[str, Any]] = None):
+    def __init__(
+        self,
+        db_manager,
+        formation_id: str,
+        config: Optional[Dict[str, Any]] = None,
+        event_log=None,
+    ):
         """
         Initialize the knowledge graph service.
 
@@ -56,6 +63,11 @@ class KnowledgeGraphService:
             db_manager: Shared DatabaseManager (PostgreSQL or SQLite).
             formation_id: Formation identifier scoping all graph rows.
             config: The ``memory.graph`` formation config section.
+            event_log: MemoryEventService (or None). When present, every
+                extraction batch is appended to the memory event log before
+                the projection write (dual-write; append failures are
+                isolated inside the event service and never block the
+                graph write).
         """
         config = config or {}
         extraction_config = config.get("extraction") or {}
@@ -77,6 +89,7 @@ class KnowledgeGraphService:
         self.db_manager = db_manager
         self.storage = KnowledgeGraphStorage(db_manager, formation_id)
         self.extractor = KnowledgeGraphExtractor(confidence_threshold=self.realtime_confidence)
+        self.event_log = event_log
 
         # Backend selection: pgRouting on PostgreSQL when the extension is
         # installable, NetworkX on SQLite and as the safe fallback when the
@@ -126,12 +139,14 @@ class KnowledgeGraphService:
         agent_response: str,
         user_id: Any,
         model,
+        caused_by_event_id: Optional[int] = None,
     ) -> None:
         """
         Run the real-time graph extraction pass for one conversation turn.
 
         Never raises: extraction or storage failures are logged and the
-        chat turn continues unaffected.
+        chat turn continues unaffected. ``caused_by_event_id`` links the
+        recorded graph.extracted event to its interaction.turn event.
         """
         if not self.enabled or model is None:
             return
@@ -147,7 +162,9 @@ class KnowledgeGraphService:
             result = await self.extractor.extract(
                 conversation, model, confidence_threshold=self.realtime_confidence
             )
-            stored = await self._store_extraction(user_id, result)
+            stored = await self.store_extraction(
+                user_id, result, source=SOURCE_INTERACTION, caused_by=caused_by_event_id
+            )
             if stored["entities"] or stored["relationships"]:
                 observability.observe(
                     event_type=observability.ConversationEvents.MEMORY_AUTO_EXTRACTED,
@@ -177,21 +194,46 @@ class KnowledgeGraphService:
             )
 
     async def store_extraction(
-        self, user_id: Any, result: Dict[str, List[Dict[str, Any]]]
+        self,
+        user_id: Any,
+        result: Dict[str, List[Dict[str, Any]]],
+        source: str = SOURCE_INTERACTION,
+        caused_by: Optional[int] = None,
     ) -> Dict[str, int]:
-        """Persist an externally-produced extraction result.
+        """Record and persist an extraction result (dual-write path).
 
-        Public entry point for the Captain's Log digest integration
-        (Memory Revamp Phase 2): the digest response's entity/relationship
-        fields are validated with this service's extractor contract and
-        stored through the same upsert path as the built-in passes.
+        Public entry point for the built-in extraction passes and the
+        Captain's Log digest integration. Appends a ``graph.extracted``
+        event to the memory event log first (failure-isolated inside the
+        event service), then applies the same result through the upsert
+        path the replay rebuild uses.
         """
-        return await self._store_extraction(user_id, result)
+        event = None
+        if self.event_log is not None and (result.get("entities") or result.get("relationships")):
+            event = await self.event_log.record(
+                user_id=str(user_id),
+                event_type=EVENT_GRAPH_EXTRACTED,
+                payload={
+                    "entities": result.get("entities", []),
+                    "relationships": result.get("relationships", []),
+                },
+                source=source,
+                caused_by=caused_by,
+            )
+        return await self.apply_extraction(user_id, result, event_id=event["id"] if event else None)
 
-    async def _store_extraction(
-        self, user_id: Any, result: Dict[str, List[Dict[str, Any]]]
+    async def apply_extraction(
+        self,
+        user_id: Any,
+        result: Dict[str, List[Dict[str, Any]]],
+        event_id: Optional[int] = None,
     ) -> Dict[str, int]:
-        """Persist one extraction result; returns stored counts."""
+        """Persist one extraction result; returns stored counts.
+
+        Deterministic projection write shared by the live dual-write path
+        and the event-replay rebuild: given the same result batches in the
+        same order it converges to the same graph state.
+        """
         user_id = str(user_id)
         entity_ids: Dict[Tuple[str, str], int] = {}
         stored_entities = 0
@@ -204,16 +246,22 @@ class KnowledgeGraphService:
                 name=item["name"],
                 attributes=item.get("attributes"),
                 confidence=item["confidence"],
+                event_id=event_id,
             )
             entity_ids[(entity["type"], _name_key(entity["name"]))] = entity["id"]
             stored_entities += 1
 
         for item in result.get("relationships", []):
             from_id = await self._resolve_endpoint(
-                user_id, item["from"], item.get("from_type"), item["confidence"], entity_ids
+                user_id,
+                item["from"],
+                item.get("from_type"),
+                item["confidence"],
+                entity_ids,
+                event_id,
             )
             to_id = await self._resolve_endpoint(
-                user_id, item["to"], item.get("to_type"), item["confidence"], entity_ids
+                user_id, item["to"], item.get("to_type"), item["confidence"], entity_ids, event_id
             )
             if from_id is None or to_id is None or from_id == to_id:
                 continue
@@ -224,6 +272,7 @@ class KnowledgeGraphService:
                 rel_type=item["type"],
                 attributes=item.get("attributes"),
                 confidence=item["confidence"],
+                event_id=event_id,
             )
             stored_relationships += 1
 
@@ -239,6 +288,7 @@ class KnowledgeGraphService:
         entity_type: Optional[str],
         confidence: float,
         entity_ids: Dict[Tuple[str, str], int],
+        event_id: Optional[int] = None,
     ) -> Optional[int]:
         """Resolve a relationship endpoint to an entity id, creating it if typed."""
         key_name = _name_key(name)
@@ -253,6 +303,7 @@ class KnowledgeGraphService:
                 entity_type=normalized,
                 name=name,
                 confidence=confidence,
+                event_id=event_id,
             )
             entity_ids[(entity["type"], key_name)] = entity["id"]
             return entity["id"]
@@ -336,7 +387,7 @@ class KnowledgeGraphService:
                 result = await self.extractor.extract(
                     conversation, model, confidence_threshold=self.periodic_confidence
                 )
-                stored = await self._store_extraction(user_id, result)
+                stored = await self.store_extraction(user_id, result, source=SOURCE_PERIODIC)
                 totals["entities"] += stored["entities"]
                 totals["relationships"] += stored["relationships"]
             except Exception as e:

@@ -36,6 +36,7 @@ from typing import Any, Dict, List, Optional, Tuple, Union
 import numpy as np
 from pgvector.sqlalchemy import Vector
 from sqlalchemy import (
+    JSON,
     Column,
     DateTime,
     ForeignKey,
@@ -43,9 +44,11 @@ from sqlalchemy import (
     String,
     Text,
     UniqueConstraint,
+    delete as sql_delete,
     desc,
     func,
     select,
+    type_coerce,
 )
 
 from ...datatypes.json_type import JSONType
@@ -1482,6 +1485,34 @@ class LongTermMemory:
                 }
                 for m in memories
             ]
+
+    async def delete_extracted_memories(self, external_user_id: Optional[str] = None) -> int:
+        """
+        Delete every extraction-derived memory for a user (all collections).
+
+        Rebuild support for the memory event substrate: only rows written
+        by the extractor (metadata ``source == 'extraction'``) are removed,
+        so conversations, knowledge uploads, and manually created memories
+        survive a flat-fact projection rebuild.
+
+        Returns:
+            The number of memories deleted.
+        """
+        internal_user_id = await self._resolve_user_id_async(external_user_id)
+        # type_coerce gives the JSONType column a JSON-typed expression so
+        # the path operator compiles per dialect (``meta_data ->> 'source'``
+        # on PostgreSQL, ``JSON_EXTRACT`` elsewhere) instead of failing on
+        # the decorator's TEXT impl.
+        source_marker = type_coerce(self.MemoryModel.meta_data, JSON)["source"].as_string()
+        stmt = (
+            sql_delete(self.MemoryModel)
+            .where(self.MemoryModel.user_id == internal_user_id)
+            .where(source_marker == "extraction")
+        )
+        async with self.AsyncSession() as session:
+            result = await session.execute(stmt)
+            await session.commit()
+            return int(result.rowcount or 0)
 
     # Async collection methods removed - using simple column-based collections
 

@@ -582,6 +582,35 @@ class SQLiteMemory(BaseMemory):
 
         return memory_id
 
+    async def delete_extracted_memories(self, user_id: Optional[str] = None) -> int:
+        """
+        Delete every extraction-derived memory for a user (all collections).
+
+        Rebuild support for the memory event substrate: only rows written
+        by the extractor (metadata ``source == 'extraction'``) are removed,
+        so conversations, knowledge uploads, and manually created memories
+        survive a flat-fact projection rebuild. The FTS mirror rows are
+        removed by the table's delete trigger.
+
+        Returns:
+            The number of memories deleted.
+        """
+        await self._ensure_dim()
+        if user_id:
+            internal_user_id = await self.get_or_create_user(str(user_id))
+        else:
+            internal_user_id = self.default_user_id
+        cursor = self.conn.execute(
+            f"""
+            DELETE FROM {self.memories_table}
+            WHERE user_id = ?
+              AND json_extract(metadata, '$.source') = 'extraction'
+            """,
+            (internal_user_id,),
+        )
+        self.conn.commit()
+        return int(cursor.rowcount or 0)
+
     async def search(
         self,
         query: str,

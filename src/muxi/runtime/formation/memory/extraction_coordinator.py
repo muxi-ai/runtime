@@ -8,6 +8,7 @@ from conversations, including triggering extraction and managing the process.
 from typing import Any
 
 from ...datatypes import observability
+from ...services.memory.events.models import EVENT_INTERACTION_TURN, SOURCE_INTERACTION
 from ...services.memory.extractor import MemoryExtractor
 
 
@@ -96,6 +97,31 @@ class ExtractionCoordinator:
             # Use the provided extraction model or fall back to the overlord's default
             model_to_use = extraction_model or self.overlord.extraction_model
 
+            # Memory event substrate: record the raw turn as an
+            # interaction.turn event before any extraction pass runs. The
+            # event id links every extracted fact back to its originating
+            # turn (provenance), and the raw turn stays replayable through
+            # future extraction logic. record() is failure-isolated: a
+            # None return leaves extraction unaffected.
+            caused_by_event_id = None
+            memory_events = getattr(self.overlord, "memory_events", None)
+            if memory_events is not None:
+                # agent_response is optional in the event schema: omit the
+                # key entirely when the agent has not responded yet rather
+                # than storing an empty string on every such turn.
+                payload = {"user_message": user_message}
+                if agent_response:
+                    payload["agent_response"] = agent_response
+                turn_event = await memory_events.record(
+                    user_id=str(user_id),
+                    event_type=EVENT_INTERACTION_TURN,
+                    payload=payload,
+                    source=SOURCE_INTERACTION,
+                    agent_id=agent_id,
+                )
+                if turn_event is not None:
+                    caused_by_event_id = turn_event["id"]
+
             # Create a temporary extractor if needed or use the existing one
             if hasattr(self.overlord, "extractor") and self.overlord.extractor:
                 extractor = self.overlord.extractor
@@ -115,6 +141,7 @@ class ExtractionCoordinator:
                 agent_response=agent_response,
                 user_id=user_id,
                 message_count=1,  # We don't track message count here
+                caused_by_event_id=caused_by_event_id,
             )
 
             # Knowledge graph pass (Memory Revamp Phase 1): runs alongside the
@@ -128,6 +155,7 @@ class ExtractionCoordinator:
                     agent_response=agent_response,
                     user_id=user_id,
                     model=getattr(self.overlord, "default_model", None),
+                    caused_by_event_id=caused_by_event_id,
                 )
 
             # Captain's log intake (Memory Revamp Phase 2): buffer the turn

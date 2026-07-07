@@ -39,6 +39,8 @@ from ...utils.fastjson import json
 from ...utils.redaction import DEFAULT_ENTITY_THRESHOLD, get_entity_detector
 from ...utils.sensitive_terms import SENSITIVE_KEY_TERMS
 from .. import observability
+from .events.models import EVENT_FACT_EXTRACTED, SOURCE_INTERACTION
+from .events.projectors import apply_fact_event
 
 
 class MemoryExtractor:
@@ -99,7 +101,7 @@ class MemoryExtractor:
         self._sensitive_key_patterns = SENSITIVE_KEY_TERMS
 
     async def process_conversation_turn(
-        self, user_message, agent_response, user_id, message_count=1
+        self, user_message, agent_response, user_id, message_count=1, caused_by_event_id=None
     ):
         """
         Process a conversation turn and extract information if needed.
@@ -113,6 +115,9 @@ class MemoryExtractor:
             agent_response: The response from the agent
             user_id: The user's ID
             message_count: Current message count for this user
+            caused_by_event_id: The interaction.turn memory event that
+                triggered this extraction (links extracted facts to their
+                originating turn in the event log)
         """
         if not self.auto_extract:
             return
@@ -151,7 +156,9 @@ class MemoryExtractor:
         extraction_results = await self._extract_user_information(conversation)
 
         # Process and store results if confidence threshold is met
-        await self._process_extraction_results(extraction_results, user_id)
+        await self._process_extraction_results(
+            extraction_results, user_id, caused_by_event_id=caused_by_event_id
+        )
 
     def opt_out_user(self, user_id: int) -> bool:
         """
@@ -392,7 +399,9 @@ class MemoryExtractor:
             "IMPORTANT: Always follow the extraction rules and age conversion rule above."
         )
 
-    async def _process_extraction_results(self, extraction_results, user_id):
+    async def _process_extraction_results(
+        self, extraction_results, user_id, caused_by_event_id=None
+    ):
         """
         Process extraction results and update context memory.
 
@@ -403,6 +412,8 @@ class MemoryExtractor:
         Args:
             extraction_results: Dictionary of extracted information
             user_id: The user's ID
+            caused_by_event_id: The interaction.turn memory event that
+                triggered this extraction, if any
         """
         if not extraction_results or "extracted_info" not in extraction_results:
             return
@@ -503,7 +514,10 @@ class MemoryExtractor:
 
         # Store all non-duplicate memories concurrently
         add_results = await asyncio.gather(
-            *(self._store_memory(memory_data, user_id) for memory_data in to_store),
+            *(
+                self._store_memory(memory_data, user_id, caused_by_event_id=caused_by_event_id)
+                for memory_data in to_store
+            ),
             return_exceptions=True,
         )
 
@@ -605,13 +619,20 @@ class MemoryExtractor:
         )
         return False
 
-    async def _store_memory(self, memory_data, user_id) -> None:
+    async def _store_memory(self, memory_data, user_id, caused_by_event_id=None) -> None:
         """
         Store a single extracted memory in long-term memory.
+
+        Dual-write (Memory Event Substrate): the fact becomes a
+        fact.extracted event first, then the flat-fact write goes through
+        the same apply helper the event replay uses. An event append
+        failure never blocks the memory write.
 
         Args:
             memory_data: The memory dict produced by extraction
             user_id: The user's ID
+            caused_by_event_id: The interaction.turn memory event that
+                triggered this extraction, if any
         """
         # Create metadata
         memory_metadata = {
@@ -624,15 +645,30 @@ class MemoryExtractor:
             "collection": memory_data["collection"],  # Keep in metadata for reference
         }
 
-        # Build add params - use user_id for both backends
-        add_params = {
-            "content": memory_data["memory"],
-            "metadata": memory_metadata,
-            "user_id": user_id,
+        payload = {
+            "memory": memory_data["memory"],
             "collection": memory_data["collection"],
+            "metadata": memory_metadata,
         }
+        event = None
+        memory_events = getattr(self.overlord, "memory_events", None)
+        if memory_events is not None:
+            event = await memory_events.record(
+                user_id=str(user_id),
+                event_type=EVENT_FACT_EXTRACTED,
+                payload=payload,
+                source=SOURCE_INTERACTION,
+                source_confidence=memory_data["confidence"],
+                caused_by=caused_by_event_id,
+                agent_id=memory_metadata["agent_id"],
+            )
 
-        await self.overlord.long_term_memory.add(**add_params)
+        await apply_fact_event(
+            self.overlord.long_term_memory,
+            user_id,
+            payload,
+            event_id=event["id"] if event else None,
+        )
 
     def _log_memory_storage_failure(
         self, error, memory_data, user_id, operation: str = "long_term_memory_add"

@@ -486,6 +486,24 @@ class Memobase:
             )
             raise
 
+    async def delete_extracted_memories(self, external_user_id: Optional[str] = None) -> int:
+        """
+        Delete every extraction-derived memory for a user (all collections).
+
+        Rebuild support for the memory event substrate; delegates to the
+        wrapped LongTermMemory. Anonymous users store nothing, so the call
+        is a no-op for them.
+
+        Returns:
+            The number of memories deleted.
+        """
+        external_user_id = (
+            external_user_id if external_user_id is not None else self.default_external_user_id
+        )
+        if external_user_id in ["default", "anonymous", "0"]:
+            return 0
+        return await self.long_term_memory.delete_extracted_memories(external_user_id)
+
     def clear_user_memory(self, external_user_id: Optional[str] = None) -> None:
         """
         Clear memory for a specific user by recreating their collection.

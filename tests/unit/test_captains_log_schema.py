@@ -69,6 +69,7 @@ class TestTableCreation:
             "decisions",
             "projects",
             "context",
+            "derived_from_event_ids",
             "created_at",
             "updated_at",
         }
@@ -89,6 +90,7 @@ class TestTableCreation:
             "context",
             "rule_hash",
             "source_log_id",
+            "derived_from_event_ids",
             "confidence",
             "hits",
             "last_applied_at",

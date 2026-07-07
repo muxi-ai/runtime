@@ -33,9 +33,10 @@ import hashlib
 from datetime import date as date_type, datetime
 from typing import Any, Dict, List, Optional, Tuple
 
-from sqlalchemy import func, select
+from sqlalchemy import delete as sql_delete, func, select
 
 from ....utils.datetime_utils import utc_now_naive
+from ..events.models import append_event_id
 from ..graph.algorithms import lexicographic_topological_sort
 from .models import SOURCE_TYPE_LOG_ENTRY, SOURCE_TYPES, CaptainsLogEntry, CaptainsLogSource, Lesson
 
@@ -72,13 +73,16 @@ class CaptainsLogStorage:
         decisions: Optional[List[str]] = None,
         projects: Optional[List[str]] = None,
         context: Optional[str] = None,
+        event_id: Optional[int] = None,
     ) -> Dict[str, Any]:
         """
         Insert or update the entry keyed by (user, formation, date).
 
         The caller passes the full merged section content (the digest
         prompt already folds the previous entry in), so an update
-        replaces the stored sections rather than appending.
+        replaces the stored sections rather than appending. When
+        ``event_id`` is provided it is appended to the entry's provenance
+        list (idempotently).
 
         Returns:
             Dict representation of the stored entry.
@@ -94,6 +98,9 @@ class CaptainsLogStorage:
                 existing.decisions = decisions or []
                 existing.projects = projects or []
                 existing.context = context
+                existing.derived_from_event_ids = append_event_id(
+                    existing.derived_from_event_ids, event_id
+                )
                 await session.flush()
                 return existing.to_dict()
 
@@ -105,6 +112,7 @@ class CaptainsLogStorage:
                 decisions=decisions or [],
                 projects=projects or [],
                 context=context,
+                derived_from_event_ids=append_event_id([], event_id),
             )
             session.add(entry)
             await session.flush()
@@ -257,6 +265,40 @@ class CaptainsLogStorage:
                     continue  # malformed source_id: not part of the DAG
             return edges
 
+    # ------------------------------------------------------------------
+    # Rebuild support (Memory Event Substrate)
+    # ------------------------------------------------------------------
+
+    async def delete_all_for_user(self, user_id: str) -> Dict[str, int]:
+        """
+        Delete the user's log entries and their source lineage rows.
+
+        Only the projection rebuild path may call this: the captain's log
+        is derived state and is repopulated by replaying log.entry events.
+
+        Returns:
+            {"entries": n, "sources": n} deleted counts.
+        """
+        user_id = str(user_id)
+        async with self.db_manager.get_async_session() as session:
+            id_stmt = select(CaptainsLogEntry.id).filter_by(
+                user_id=user_id, formation_id=self.formation_id
+            )
+            log_ids = [int(row[0]) for row in (await session.execute(id_stmt)).all()]
+            sources = 0
+            if log_ids:
+                source_stmt = sql_delete(CaptainsLogSource).where(
+                    CaptainsLogSource.log_id.in_(log_ids)
+                )
+                sources = int((await session.execute(source_stmt)).rowcount or 0)
+            entry_stmt = (
+                sql_delete(CaptainsLogEntry)
+                .where(CaptainsLogEntry.user_id == user_id)
+                .where(CaptainsLogEntry.formation_id == self.formation_id)
+            )
+            entries = int((await session.execute(entry_stmt)).rowcount or 0)
+            return {"entries": entries, "sources": sources}
+
 
 class LessonStorage:
     """Persistence layer for the lessons self-improvement loop."""
@@ -281,13 +323,16 @@ class LessonStorage:
         confidence: float = 0.5,
         source_log_id: Optional[int] = None,
         hits: int = 1,
+        event_id: Optional[int] = None,
     ) -> Tuple[Dict[str, Any], bool]:
         """
         Insert a lesson or confirm an existing one.
 
         Dedup key is sha256(normalize(rule)) per (user, agent, formation).
         On conflict the write is a confirmation: hits increments, confidence
-        is bumped, and a previously archived lesson is revived.
+        is bumped, and a previously archived lesson is revived. When
+        ``event_id`` is provided it is appended to the lesson's provenance
+        list (idempotently).
 
         Returns:
             (lesson dict, created) where created is False on confirmation.
@@ -315,6 +360,9 @@ class LessonStorage:
                     existing.context = context
                 if source_log_id is not None:
                     existing.source_log_id = source_log_id
+                existing.derived_from_event_ids = append_event_id(
+                    existing.derived_from_event_ids, event_id
+                )
                 if existing.archived:
                     existing.archived = False  # re-confirmation revives it
                 await session.flush()
@@ -328,6 +376,7 @@ class LessonStorage:
                 context=context,
                 rule_hash=digest,
                 source_log_id=source_log_id,
+                derived_from_event_ids=append_event_id([], event_id),
                 confidence=confidence,
                 hits=hits,
             )
@@ -430,6 +479,27 @@ class LessonStorage:
             )
             rows = (await session.execute(stmt)).all()
             return [(row[0], row[1], int(row[2])) for row in rows]
+
+    # ------------------------------------------------------------------
+    # Rebuild support (Memory Event Substrate)
+    # ------------------------------------------------------------------
+
+    async def delete_all_for_user(self, user_id: str) -> int:
+        """
+        Delete every lesson for a user (all agents, archived included).
+
+        Only the projection rebuild path may call this: lessons are derived
+        state and are repopulated by replaying lesson.recorded events.
+        Returns the number of lessons deleted.
+        """
+        async with self.db_manager.get_async_session() as session:
+            stmt = (
+                sql_delete(Lesson)
+                .where(Lesson.user_id == str(user_id))
+                .where(Lesson.formation_id == self.formation_id)
+            )
+            result = await session.execute(stmt)
+            return int(result.rowcount or 0)
 
 
 def normalize_rule(rule: str) -> str:

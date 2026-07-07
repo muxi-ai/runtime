@@ -756,6 +756,11 @@ def initialize_memory_systems(formation) -> None:
                 embedding_dim = getattr(ltm, "dimension", 1536) if ltm else 1536
                 _create_all_database_tables(formation._db_manager, embedding_dim)
 
+                # Initialize the memory event substrate first: the knowledge
+                # graph and captain's log dual-write through it, so it must
+                # exist before they are constructed.
+                _initialize_memory_events(formation, memory_config.get("events", {}) or {})
+
                 # Initialize the knowledge graph service (Memory Revamp Phase 1).
                 # Placed after table creation (kg_entities/kg_relationships must
                 # exist) and after LLM configuration in the formation load order
@@ -767,6 +772,71 @@ def initialize_memory_systems(formation) -> None:
                 # extracted entities/relationships into it and register the
                 # captains_log_sources DAG on the shared algorithms layer.
                 _initialize_captains_log(formation, memory_config)
+
+                # Register the projection builders with the substrate now
+                # that every projection service exists. The registry is the
+                # extension point for later projections (Knowledge Index).
+                _register_memory_projectors(formation)
+
+
+def _initialize_memory_events(formation, events_config: Dict[str, Any]) -> None:
+    """Initialize the memory event substrate on top of persistent memory."""
+    if events_config.get("enabled", True) is False:
+        formation._memory_events = None
+        return
+
+    try:
+        from ..services.memory.events import MemoryEventService
+
+        formation_id = getattr(formation, "formation_id", "default-formation")
+        formation._memory_events = MemoryEventService(
+            db_manager=formation._db_manager,
+            formation_id=formation_id,
+            config=events_config,
+        )
+        print(
+            InitEventFormatter.format_ok(
+                "Initializing memory event substrate",
+                f"grace period {formation._memory_events.grace_period_days}d",
+            )
+        )
+    except Exception as e:
+        formation._memory_events = None
+        observability.observe(
+            event_type=observability.ErrorEvents.MEMORY_INITIALIZATION_FAILED,
+            level=observability.EventLevel.WARNING,
+            data={"error": str(e), "service": "memory_events"},
+            description=f"Failed to initialize memory event substrate: {str(e)}",
+        )
+        # Don't raise - the event substrate is additive to persistent memory
+
+
+def _register_memory_projectors(formation) -> None:
+    """Register the built-in projection builders with the event substrate."""
+    memory_events = getattr(formation, "_memory_events", None)
+    if memory_events is None:
+        return
+
+    try:
+        from ..services.memory.events import (
+            CaptainsLogProjector,
+            FlatFactProjector,
+            KnowledgeGraphProjector,
+        )
+
+        if getattr(formation, "_knowledge_graph", None) is not None:
+            memory_events.register_projector(KnowledgeGraphProjector(formation._knowledge_graph))
+        if getattr(formation, "_captains_log", None) is not None:
+            memory_events.register_projector(CaptainsLogProjector(formation._captains_log))
+        if getattr(formation, "_long_term_memory", None) is not None:
+            memory_events.register_projector(FlatFactProjector(formation._long_term_memory))
+    except Exception as e:
+        observability.observe(
+            event_type=observability.ErrorEvents.MEMORY_INITIALIZATION_FAILED,
+            level=observability.EventLevel.WARNING,
+            data={"error": str(e), "service": "memory_events"},
+            description=f"Failed to register memory projectors: {str(e)}",
+        )
 
 
 def _initialize_knowledge_graph(formation, graph_config: Dict[str, Any]) -> None:
@@ -783,6 +853,7 @@ def _initialize_knowledge_graph(formation, graph_config: Dict[str, Any]) -> None
             db_manager=formation._db_manager,
             formation_id=formation_id,
             config=graph_config,
+            event_log=getattr(formation, "_memory_events", None),
         )
         backend = "pgRouting" if formation._knowledge_graph.pgrouting_available else "NetworkX"
         print(InitEventFormatter.format_ok("Initializing knowledge graph", f"{backend} backend"))
@@ -816,6 +887,7 @@ def _initialize_captains_log(formation, memory_config: Dict[str, Any]) -> None:
             lessons_config=memory_config.get("lessons", {}) or {},
             knowledge_graph=getattr(formation, "_knowledge_graph", None),
             embedding_model=embedding_model,
+            event_log=getattr(formation, "_memory_events", None),
         )
         lessons_status = "lessons on" if formation._captains_log.lessons_enabled else "lessons off"
         print(InitEventFormatter.format_ok("Initializing captain's log", lessons_status))
@@ -1096,6 +1168,35 @@ def _migrate_add_meta_data_column(db_manager, table_name: str) -> None:
         pass  # Table may not exist yet on first run; create_tables handles it
 
 
+def _migrate_add_derived_from_event_ids_column(db_manager, table_name: str) -> None:
+    """Add the provenance column to projection tables from older schema versions."""
+    from sqlalchemy import text
+
+    try:
+        with db_manager.engine.connect() as conn:
+            if db_manager.database_type == "postgresql":
+                conn.execute(
+                    text(
+                        f"ALTER TABLE {table_name} ADD COLUMN IF NOT EXISTS "
+                        f"derived_from_event_ids JSON NOT NULL DEFAULT '[]'"
+                    )
+                )
+            else:
+                # SQLite: check if column exists via PRAGMA, add if missing
+                result = conn.execute(text(f"PRAGMA table_info({table_name})"))
+                columns = [row[1] for row in result]
+                if "derived_from_event_ids" not in columns:
+                    conn.execute(
+                        text(
+                            f"ALTER TABLE {table_name} ADD COLUMN "
+                            f"derived_from_event_ids TEXT DEFAULT '[]'"
+                        )
+                    )
+            conn.commit()
+    except Exception:
+        pass  # Table may not exist yet on first run; create_tables handles it
+
+
 def _create_all_database_tables(db_manager, embedding_dimension: int = 1536) -> None:
     """
     Create all database tables for the MUXI runtime.
@@ -1115,6 +1216,10 @@ def _create_all_database_tables(db_manager, embedding_dimension: int = 1536) -> 
 
         # Get Base from db module
         from ..services.db import Base
+        from ..services.memory.events.models import (  # noqa: F401
+            MemoryEvent,
+            ProjectionCheckpoint,
+        )
         from ..services.memory.graph.models import KGEntity, KGRelationship  # noqa: F401
         from ..services.memory.log.models import (  # noqa: F401
             CaptainsLogEntry,
@@ -1156,6 +1261,10 @@ def _create_all_database_tables(db_manager, embedding_dimension: int = 1536) -> 
         # (CREATE TABLE IF NOT EXISTS won't add columns to existing tables)
         memories_table = f"memories_{embedding_dimension}"
         _migrate_add_meta_data_column(db_manager, memories_table)
+        # Migrate: ensure the provenance column exists on projection tables
+        # created before the memory event substrate shipped
+        for projection_table in ("kg_entities", "kg_relationships", "captains_log", "lessons"):
+            _migrate_add_derived_from_event_ids_column(db_manager, projection_table)
         ensure_memory_table_indexes(db_manager, embedding_dimension)
         table_names = [
             "users",
@@ -1163,6 +1272,8 @@ def _create_all_database_tables(db_manager, embedding_dimension: int = 1536) -> 
             "groups",
             "user_groups",  # Group-based access control tables
             memories_table,  # Memory system tables (dimension-specific)
+            "memory_events",
+            "projection_checkpoints",  # Memory event substrate tables
             "kg_entities",
             "kg_relationships",  # Knowledge graph tables
             "captains_log",
