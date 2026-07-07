@@ -95,6 +95,9 @@ class KGEntity(Base, AsyncModelMixin):
     # bookkeeping never fights the schema over insertion order).
     contradicted_by = Column(Integer, nullable=True)
     superseded_by = Column(Integer, nullable=True)
+    # Provenance bridge (Memory Event Substrate): the memory_events ids this
+    # row was derived from, appended on every contributing upsert.
+    derived_from_event_ids = Column(JSONType, nullable=False, default=[])
     created_at = Column(DateTime, nullable=False, default=utc_now_naive)
     updated_at = Column(DateTime, default=utc_now_naive, onupdate=utc_now_naive)
 
@@ -120,6 +123,7 @@ class KGEntity(Base, AsyncModelMixin):
             "status": self.status,
             "contradicted_by": self.contradicted_by,
             "superseded_by": self.superseded_by,
+            "derived_from_event_ids": self.derived_from_event_ids or [],
             "created_at": self.created_at.isoformat() if self.created_at else None,
             "updated_at": self.updated_at.isoformat() if self.updated_at else None,
         }
@@ -143,6 +147,9 @@ class KGRelationship(Base, AsyncModelMixin):
     status = Column(String(20), nullable=False, default=STATUS_ACTIVE)
     contradicted_by = Column(Integer, nullable=True)
     superseded_by = Column(Integer, nullable=True)
+    # Provenance bridge (Memory Event Substrate): the memory_events ids this
+    # row was derived from, appended on every contributing upsert.
+    derived_from_event_ids = Column(JSONType, nullable=False, default=[])
     created_at = Column(DateTime, nullable=False, default=utc_now_naive)
     updated_at = Column(DateTime, default=utc_now_naive, onupdate=utc_now_naive)
 
@@ -167,6 +174,7 @@ class KGRelationship(Base, AsyncModelMixin):
             "status": self.status,
             "contradicted_by": self.contradicted_by,
             "superseded_by": self.superseded_by,
+            "derived_from_event_ids": self.derived_from_event_ids or [],
             "created_at": self.created_at.isoformat() if self.created_at else None,
             "updated_at": self.updated_at.isoformat() if self.updated_at else None,
         }

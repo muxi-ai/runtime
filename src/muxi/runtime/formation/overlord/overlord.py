@@ -551,6 +551,13 @@ class Overlord:
         # Formation alongside persistent memory; None when disabled/unavailable.
         self.captains_log = configured_services.get("captains_log") if configured_services else None
 
+        # Memory event substrate - initialized by the Formation alongside
+        # persistent memory; None when disabled/unavailable. Every memory
+        # write path dual-writes through it (append event + direct write).
+        self.memory_events = (
+            configured_services.get("memory_events") if configured_services else None
+        )
+
         # Configure extraction settings (intelligence concerns)
         self.auto_extract_user_info = auto_extract_user_info
 
@@ -1494,6 +1501,10 @@ class Overlord:
                 lambda: getattr(self, "extraction_model", None)
                 or getattr(self, "default_model", None)
             )
+
+        # Start the memory event substrate's retention hard-purge loop.
+        if getattr(self, "memory_events", None):
+            self.memory_events.start()
 
         # Populate formation capabilities after all services are loaded
         self._populate_formation_capabilities()
@@ -4115,6 +4126,18 @@ Agent response: {raw_response}"""
                     level=observability.EventLevel.WARNING,
                     data={"error": str(e), "service": "captains_log"},
                     description=f"Error stopping captain's log service: {e}",
+                )
+
+        # Stop the memory event substrate's hard-purge loop if running
+        if getattr(self, "memory_events", None):
+            try:
+                await self.memory_events.stop()
+            except Exception as e:
+                observability.observe(
+                    event_type=observability.ErrorEvents.INTERNAL_ERROR,
+                    level=observability.EventLevel.WARNING,
+                    data={"error": str(e), "service": "memory_events"},
+                    description=f"Error stopping memory event service: {e}",
                 )
 
         observability.observe(

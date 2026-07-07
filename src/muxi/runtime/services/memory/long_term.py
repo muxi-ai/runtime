@@ -1483,6 +1483,30 @@ class LongTermMemory:
                 for m in memories
             ]
 
+    async def delete_extracted_memories(self, external_user_id: Optional[str] = None) -> int:
+        """
+        Delete every extraction-derived memory for a user (all collections).
+
+        Rebuild support for the memory event substrate: only rows written
+        by the extractor (metadata ``source == 'extraction'``) are removed,
+        so conversations, knowledge uploads, and manually created memories
+        survive a flat-fact projection rebuild.
+
+        Returns:
+            The number of memories deleted.
+        """
+        internal_user_id = await self._resolve_user_id_async(external_user_id)
+        deleted = 0
+        async with self.AsyncSession() as session:
+            query = select(self.MemoryModel).where(self.MemoryModel.user_id == internal_user_id)
+            rows = (await session.execute(query)).scalars().all()
+            for memory in rows:
+                if (memory.meta_data or {}).get("source") == "extraction":
+                    await session.delete(memory)
+                    deleted += 1
+            await session.commit()
+        return deleted
+
     # Async collection methods removed - using simple column-based collections
 
     async def _search_internal_async(

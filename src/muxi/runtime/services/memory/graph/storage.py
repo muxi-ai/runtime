@@ -25,7 +25,7 @@
 
 from typing import Any, Dict, List, Optional
 
-from sqlalchemy import select
+from sqlalchemy import delete as sql_delete, select
 
 from .models import (
     EXCLUSIVE_RELATIONSHIP_TYPES,
@@ -63,12 +63,14 @@ class KnowledgeGraphStorage:
         name: str,
         attributes: Optional[Dict[str, Any]] = None,
         confidence: float = 0.5,
+        event_id: Optional[int] = None,
     ) -> Dict[str, Any]:
         """
         Insert or update an entity keyed by (user, formation, type, name).
 
         Existing entities merge the new attributes over the old ones and
-        keep the highest confidence seen.
+        keep the highest confidence seen. When ``event_id`` is provided it
+        is appended to the row's provenance list (idempotently).
 
         Returns:
             Dict representation of the stored entity.
@@ -91,6 +93,9 @@ class KnowledgeGraphStorage:
                 merged.update(attributes or {})
                 existing.attributes = merged
                 existing.confidence = max(existing.confidence or 0.0, confidence)
+                existing.derived_from_event_ids = _append_event_id(
+                    existing.derived_from_event_ids, event_id
+                )
                 if existing.status == STATUS_SUPERSEDED:
                     # A fresh observation revives a previously superseded entity.
                     existing.status = STATUS_ACTIVE
@@ -105,6 +110,7 @@ class KnowledgeGraphStorage:
                 name=name,
                 attributes=attributes or {},
                 confidence=confidence,
+                derived_from_event_ids=_append_event_id([], event_id),
             )
             session.add(entity)
             await session.flush()
@@ -190,6 +196,7 @@ class KnowledgeGraphStorage:
         rel_type: str,
         attributes: Optional[Dict[str, Any]] = None,
         confidence: float = 0.5,
+        event_id: Optional[int] = None,
     ) -> Dict[str, Any]:
         """
         Insert or update a relationship with contradiction detection.
@@ -198,6 +205,8 @@ class KnowledgeGraphStorage:
         exclusive predicates a different object either supersedes the old
         fact (confidence delta above SUPERSEDE_CONFIDENCE_DELTA) or marks
         both facts conflicted. Old facts are retained, never deleted.
+        When ``event_id`` is provided it is appended to the row's
+        provenance list (idempotently).
 
         Returns:
             Dict representation of the stored relationship.
@@ -221,6 +230,9 @@ class KnowledgeGraphStorage:
                     merged.update(attributes or {})
                     existing.attributes = merged
                     existing.confidence = max(existing.confidence or 0.0, confidence)
+                    existing.derived_from_event_ids = _append_event_id(
+                        existing.derived_from_event_ids, event_id
+                    )
                     if existing.status == STATUS_SUPERSEDED:
                         existing.status = STATUS_ACTIVE
                         existing.superseded_by = None
@@ -235,6 +247,7 @@ class KnowledgeGraphStorage:
                 type=rel_type,
                 attributes=attributes or {},
                 confidence=confidence,
+                derived_from_event_ids=_append_event_id([], event_id),
             )
 
             # Contradiction detection on exclusive predicates.
@@ -320,7 +333,45 @@ class KnowledgeGraphStorage:
             rows = (await session.execute(stmt)).scalars().all()
             return [row.to_dict() for row in rows]
 
+    # ------------------------------------------------------------------
+    # Rebuild support (Memory Event Substrate)
+    # ------------------------------------------------------------------
+
+    async def delete_all_for_user(self, user_id: str) -> Dict[str, int]:
+        """
+        Delete the user's entire subgraph (relationships first, then
+        entities). Only the projection rebuild path may call this: the
+        knowledge graph is derived state and is repopulated by replaying
+        graph.extracted events.
+
+        Returns:
+            {"entities": n, "relationships": n} deleted counts.
+        """
+        user_id = str(user_id)
+        async with self.db_manager.get_async_session() as session:
+            rel_stmt = (
+                sql_delete(KGRelationship)
+                .where(KGRelationship.user_id == user_id)
+                .where(KGRelationship.formation_id == self.formation_id)
+            )
+            relationships = int((await session.execute(rel_stmt)).rowcount or 0)
+            entity_stmt = (
+                sql_delete(KGEntity)
+                .where(KGEntity.user_id == user_id)
+                .where(KGEntity.formation_id == self.formation_id)
+            )
+            entities = int((await session.execute(entity_stmt)).rowcount or 0)
+            return {"entities": entities, "relationships": relationships}
+
 
 def normalize_type(value: str) -> str:
     """Normalize an entity/relationship type to the storage form."""
     return value.strip().lower().replace(" ", "_")[:50]
+
+
+def _append_event_id(current, event_id: Optional[int]) -> list:
+    """Return the provenance list with ``event_id`` appended (idempotent)."""
+    ids = list(current or [])
+    if event_id is not None and event_id not in ids:
+        ids.append(event_id)
+    return ids

@@ -70,6 +70,9 @@ class CaptainsLogEntry(Base, AsyncModelMixin):
     decisions = Column(JSONType, nullable=False, default=[])
     projects = Column(JSONType, nullable=False, default=[])
     context = Column(Text, nullable=True)
+    # Provenance bridge (Memory Event Substrate): the memory_events ids this
+    # entry was derived from, appended on every contributing digest upsert.
+    derived_from_event_ids = Column(JSONType, nullable=False, default=[])
     created_at = Column(DateTime, nullable=False, default=utc_now_naive)
     updated_at = Column(DateTime, default=utc_now_naive, onupdate=utc_now_naive)
 
@@ -90,6 +93,7 @@ class CaptainsLogEntry(Base, AsyncModelMixin):
             "decisions": self.decisions or [],
             "projects": self.projects or [],
             "context": self.context,
+            "derived_from_event_ids": self.derived_from_event_ids or [],
             "created_at": self.created_at.isoformat() if self.created_at else None,
             "updated_at": self.updated_at.isoformat() if self.updated_at else None,
         }
@@ -141,6 +145,9 @@ class Lesson(Base, AsyncModelMixin):
     # backends without a dialect-specific type.
     rule_hash = Column(String(64), nullable=False)
     source_log_id = Column(Integer, ForeignKey("captains_log.id"), nullable=True)
+    # Provenance bridge (Memory Event Substrate): the memory_events ids this
+    # lesson was derived from, appended on every write/confirmation.
+    derived_from_event_ids = Column(JSONType, nullable=False, default=[])
     confidence = Column(Float, nullable=False, default=0.5)
     hits = Column(Integer, nullable=False, default=1)
     last_applied_at = Column(DateTime, nullable=True)
@@ -171,6 +178,7 @@ class Lesson(Base, AsyncModelMixin):
             "context": self.context,
             "rule_hash": self.rule_hash,
             "source_log_id": self.source_log_id,
+            "derived_from_event_ids": self.derived_from_event_ids or [],
             "confidence": self.confidence,
             "hits": self.hits,
             "last_applied_at": (self.last_applied_at.isoformat() if self.last_applied_at else None),

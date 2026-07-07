@@ -66,6 +66,7 @@ class TestTableCreation:
             "status",
             "contradicted_by",
             "superseded_by",
+            "derived_from_event_ids",
             "created_at",
             "updated_at",
         }
@@ -85,6 +86,7 @@ class TestTableCreation:
             "status",
             "contradicted_by",
             "superseded_by",
+            "derived_from_event_ids",
             "created_at",
             "updated_at",
         }
