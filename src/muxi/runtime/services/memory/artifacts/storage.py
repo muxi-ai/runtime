@@ -19,8 +19,10 @@
 # Previous versions' blobs are retained for history.
 #
 # Retention (PRD 1.5): ``expires_at`` is computed at capture time by the
-# service; ``mark_expired`` soft-deletes every live row past its expiry
-# and returns the affected rows so the service can prune their blobs.
+# service; ``mark_expired`` soft-deletes every live row past its expiry --
+# cascading through each retired row's ancestor versions so superseded
+# history cannot outlive its chain head -- and returns the affected rows
+# so the service can prune their blobs.
 # =============================================================================
 
 from datetime import datetime
@@ -209,6 +211,14 @@ class ArtifactMemoryStorage:
         """
         Soft-delete every live artifact past its expiry.
 
+        The expiry cascades through version chains: when an expired row is
+        retired, every live ancestor version (reached through ``parent_id``)
+        is retired with it in the same pass. Ancestors are strictly older
+        than their descendants and are invisible to latest-only listings,
+        so once the row that superseded them ages out they serve no purpose
+        -- without the cascade, non-latest versions whose ``expires_at`` is
+        NULL would keep their blobs forever.
+
         Returns the affected rows (as dicts) so the caller can prune the
         corresponding blobs. Metadata rows are retained for audit.
         """
@@ -224,7 +234,22 @@ class ArtifactMemoryStorage:
                     Artifact.deleted_at.is_(None),
                 )
             )
-            for artifact in (await session.execute(stmt)).scalars().all():
+            to_retire = {
+                artifact.id: artifact for artifact in (await session.execute(stmt)).scalars().all()
+            }
+
+            # Cascade: walk each expired row's ancestor chain and retire
+            # every live version it supersedes.
+            for artifact in list(to_retire.values()):
+                parent_id = artifact.parent_id
+                while parent_id is not None and parent_id not in to_retire:
+                    parent = await session.get(Artifact, parent_id)
+                    if parent is None or parent.deleted_at is not None:
+                        break
+                    to_retire[parent.id] = parent
+                    parent_id = parent.parent_id
+
+            for artifact in to_retire.values():
                 artifact.deleted_at = now
                 expired.append(artifact.to_dict())
             await session.flush()

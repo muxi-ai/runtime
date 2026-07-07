@@ -17,6 +17,7 @@ from datetime import datetime, timedelta
 
 import pytest
 from sqlalchemy import select
+from sqlalchemy.exc import SQLAlchemyError
 
 from muxi.runtime.datatypes.artifacts import ArtifactMetadata, MuxiArtifact
 from muxi.runtime.services.db import Base, DatabaseManager
@@ -110,6 +111,15 @@ async def backdate_expiry(db_manager, public_id: str, days: int) -> None:
         stmt = select(Artifact).filter_by(public_id=public_id)
         artifact = (await session.execute(stmt)).scalars().first()
         artifact.expires_at = utc_now_naive() - timedelta(days=days)
+        await session.flush()
+
+
+async def clear_expiry(db_manager, public_id: str) -> None:
+    """Give an artifact a NULL expiry (captured under duration: 0)."""
+    async with db_manager.get_async_session() as session:
+        stmt = select(Artifact).filter_by(public_id=public_id)
+        artifact = (await session.execute(stmt)).scalars().first()
+        artifact.expires_at = None
         await session.flush()
 
 
@@ -218,6 +228,37 @@ class TestCaptureGuards:
         captured = await service.capture_response_artifacts([text_artifact()], user_id="u1")
         assert captured == []
         assert not store_dir.exists()  # no blob directory is ever created
+
+    async def test_db_failure_cleans_up_orphaned_blob(self, db_manager, store_dir):
+        # Force a real metadata-persist failure by dropping the artifacts
+        # table after the service is built: the blob is written first, so
+        # the compensating cleanup must remove it before re-raising --
+        # otherwise it is unlocatable (random public_id) and invisible to
+        # the retention sweep forever.
+        service = make_service(db_manager, store_dir)
+        Artifact.__table__.drop(db_manager.engine)
+        try:
+            with pytest.raises(SQLAlchemyError):
+                await service._capture_one(
+                    text_artifact(), user_id="u1", agent_id=None, conversation_id=None
+                )
+            blobs = list(store_dir.rglob("*.bin")) if store_dir.exists() else []
+            assert blobs == [], f"Orphaned blobs left behind: {blobs}"
+        finally:
+            # Restore the table so the shared fixture teardown stays valid.
+            Artifact.__table__.create(db_manager.engine)
+
+    async def test_db_failure_is_swallowed_by_batch_capture(self, db_manager, store_dir):
+        # The public capture path wraps the same failure without raising.
+        service = make_service(db_manager, store_dir)
+        Artifact.__table__.drop(db_manager.engine)
+        try:
+            captured = await service.capture_response_artifacts([text_artifact()], user_id="u1")
+            assert captured == []
+            blobs = list(store_dir.rglob("*.bin")) if store_dir.exists() else []
+            assert blobs == []
+        finally:
+            Artifact.__table__.create(db_manager.engine)
 
 
 class TestVersioning:
@@ -352,6 +393,68 @@ class TestRetention:
 
         # The sweep is idempotent.
         assert await service.run_retention_sweep() == 0
+
+    async def test_sweep_cascades_to_ancestor_versions(self, db_manager, store_dir):
+        # Build a 3-version chain whose ancestors carry NULL expiry (as if
+        # captured under duration: 0) while the head expires: the sweep
+        # must retire the whole chain, or the superseded versions' blobs
+        # leak forever -- non-latest rows are invisible to latest-only
+        # listings and would never be reached again.
+        service = make_service(
+            db_manager,
+            store_dir,
+            config={"retention": {"policy": "last_updated", "duration": 1}},
+        )
+        chain = []
+        for body in ("v1", "v2", "v3"):
+            captured = await service.capture_response_artifacts(
+                [text_artifact(content=body)], user_id="u1"
+            )
+            chain.append(captured[0])
+        v1, v2, v3 = chain
+        await clear_expiry(db_manager, v1["public_id"])
+        await clear_expiry(db_manager, v2["public_id"])
+        await backdate_expiry(db_manager, v3["public_id"], days=2)
+
+        assert await service.run_retention_sweep() == 3
+
+        # All three rows soft-deleted (metadata retained for audit) and
+        # all three blobs pruned.
+        assert await service.list_artifacts("u1", latest_only=False) == []
+        audit = await service.list_artifacts("u1", latest_only=False, include_deleted=True)
+        assert len(audit) == 3
+        assert all(row["deleted_at"] is not None for row in audit)
+        for row in (v1, v2, v3):
+            assert not (store_dir / row["storage_ref"]).exists()
+
+    async def test_sweep_leaves_live_chains_untouched(self, db_manager, store_dir):
+        # A chain whose head is still live is not cascaded into, even when
+        # an unrelated artifact expires in the same pass.
+        service = make_service(
+            db_manager,
+            store_dir,
+            config={"retention": {"policy": "last_updated", "duration": 30}},
+        )
+        chain = []
+        for body in ("v1", "v2", "v3"):
+            captured = await service.capture_response_artifacts(
+                [text_artifact(content=body)], user_id="u1"
+            )
+            chain.append(captured[0])
+        unrelated = (
+            await service.capture_response_artifacts(
+                [text_artifact("other.md", "expires soon")], user_id="u1"
+            )
+        )[0]
+        await backdate_expiry(db_manager, unrelated["public_id"], days=31)
+
+        assert await service.run_retention_sweep() == 1
+
+        survivors = await service.list_artifacts("u1", latest_only=False)
+        assert {row["public_id"] for row in survivors} == {row["public_id"] for row in chain}
+        for row in chain:
+            assert (store_dir / row["storage_ref"]).exists()
+        assert not (store_dir / unrelated["storage_ref"]).exists()
 
     async def test_last_accessed_read_extends_expiry(self, db_manager, store_dir):
         service = make_service(

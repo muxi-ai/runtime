@@ -305,21 +305,46 @@ class ArtifactMemoryService:
         storage_ref = self.blob_store.ref_for(user_id, public_id)
         self.blob_store.write(storage_ref, blob)
 
-        row = await self.storage.save_artifact(
-            user_id=user_id,
-            public_id=public_id,
-            name=name,
-            content_type=content_type,
-            category=getattr(artifact, "type", None),
-            summary=self._build_summary(name, content_type, len(raw), agent_id),
-            storage_ref=storage_ref,
-            size_bytes=len(raw),
-            compressed_bytes=compressed_bytes,
-            checksum_sha256=blob_checksum(blob),
-            agent_id=agent_id,
-            conversation_id=conversation_id,
-            expires_at=self._compute_expiry(),
-        )
+        try:
+            row = await self.storage.save_artifact(
+                user_id=user_id,
+                public_id=public_id,
+                name=name,
+                content_type=content_type,
+                category=getattr(artifact, "type", None),
+                summary=self._build_summary(name, content_type, len(raw), agent_id),
+                storage_ref=storage_ref,
+                size_bytes=len(raw),
+                compressed_bytes=compressed_bytes,
+                checksum_sha256=blob_checksum(blob),
+                agent_id=agent_id,
+                conversation_id=conversation_id,
+                expires_at=self._compute_expiry(),
+            )
+        except Exception:
+            # Compensating cleanup: without a metadata row the blob is
+            # unlocatable (random public_id) and invisible to the retention
+            # sweep, so remove it before surfacing the original failure.
+            # Best-effort -- a cleanup failure must not mask that error.
+            try:
+                self.blob_store.delete(storage_ref)
+            except Exception as cleanup_error:
+                observability.observe(
+                    event_type=observability.ConversationEvents.MEMORY_ARTIFACT_CAPTURE_FAILED,
+                    level=observability.EventLevel.WARNING,
+                    data={
+                        "user_id": user_id,
+                        "artifact_name": name,
+                        "storage_ref": storage_ref,
+                        "reason": "orphaned_blob_cleanup_failed",
+                        "error": str(cleanup_error),
+                        "error_type": type(cleanup_error).__name__,
+                    },
+                    description=(
+                        f"Could not remove orphaned artifact blob {storage_ref}: {cleanup_error}"
+                    ),
+                )
+            raise
 
         await self._record_saved_event(row)
 
