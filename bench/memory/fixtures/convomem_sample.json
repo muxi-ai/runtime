@@ -1,0 +1,89 @@
+[
+  {
+    "id": "fixture_user_evidence_1",
+    "category": "user_evidence",
+    "question": "What instrument does the user play?",
+    "answer": "The cello",
+    "message_evidences": [
+      {"speaker": "user", "text": "I've played the cello since I was nine, and I still practice every evening after work."}
+    ],
+    "conversations": [
+      {
+        "messages": [
+          {"speaker": "user", "text": "Can you help me plan a productive morning routine?"},
+          {"speaker": "assistant", "text": "Sure - start with a consistent wake time, ten minutes of stretching, and plan your top three tasks before checking email."},
+          {"speaker": "user", "text": "I like that. I'll try it next week."}
+        ]
+      },
+      {
+        "messages": [
+          {"speaker": "user", "text": "I've played the cello since I was nine, and I still practice every evening after work."},
+          {"speaker": "assistant", "text": "That's wonderful dedication. Daily practice after work is a great way to keep your cello skills sharp."},
+          {"speaker": "user", "text": "Do you have suggestions for pieces to learn next?"},
+          {"speaker": "assistant", "text": "If you enjoy romantic repertoire, try Saint-Saens' 'The Swan' or Faure's 'Elegie'."}
+        ]
+      },
+      {
+        "messages": [
+          {"speaker": "user", "text": "What's the best way to store fresh basil?"},
+          {"speaker": "assistant", "text": "Treat it like flowers: trim the stems and keep it in a glass of water at room temperature, loosely covered."}
+        ]
+      }
+    ]
+  },
+  {
+    "id": "fixture_assistant_evidence_1",
+    "category": "assistant_evidence",
+    "question": "Which city did the assistant recommend for a first solo trip to Japan?",
+    "answer": "Kyoto",
+    "message_evidences": [
+      {"speaker": "assistant", "text": "For a first solo trip to Japan I'd recommend Kyoto: it's walkable, safe, packed with temples, and easy to navigate by bus."}
+    ],
+    "conversations": [
+      {
+        "messages": [
+          {"speaker": "user", "text": "I'm thinking about a solo trip to Japan this autumn. Where should I go?"},
+          {"speaker": "assistant", "text": "For a first solo trip to Japan I'd recommend Kyoto: it's walkable, safe, packed with temples, and easy to navigate by bus."},
+          {"speaker": "user", "text": "How many days should I spend there?"},
+          {"speaker": "assistant", "text": "Four to five days covers the main temples, Arashiyama, and a day trip to Nara."}
+        ]
+      },
+      {
+        "messages": [
+          {"speaker": "user", "text": "My sourdough starter smells like acetone. Is it dead?"},
+          {"speaker": "assistant", "text": "Not dead - that smell means it's hungry. Feed it twice daily for a few days and the aroma should return to pleasantly sour."}
+        ]
+      }
+    ]
+  },
+  {
+    "id": "fixture_user_evidence_2",
+    "category": "user_evidence",
+    "question": "What is the name of the user's startup?",
+    "answer": "Fernweh Labs",
+    "message_evidences": [
+      {"speaker": "user", "text": "My startup, Fernweh Labs, builds route-planning software for cycling tour companies."}
+    ],
+    "conversations": [
+      {
+        "messages": [
+          {"speaker": "user", "text": "My startup, Fernweh Labs, builds route-planning software for cycling tour companies."},
+          {"speaker": "assistant", "text": "Fernweh Labs sounds like a great niche - cycling tour operators have very specific routing needs like elevation limits and cafe stops."},
+          {"speaker": "user", "text": "Exactly. We're onboarding our first three customers this month."}
+        ]
+      },
+      {
+        "messages": [
+          {"speaker": "user", "text": "Explain the difference between a lease and a loan for a car."},
+          {"speaker": "assistant", "text": "A loan buys the car over time so you own it; a lease rents it for a term with mileage limits and no equity at the end."}
+        ]
+      },
+      {
+        "messages": [
+          {"speaker": "user", "text": "Give me a 20-minute bodyweight workout."},
+          {"speaker": "assistant", "text": "Four rounds: 10 push-ups, 15 squats, 10 lunges per leg, 30-second plank, 30 seconds rest between rounds."}
+        ]
+      }
+    ]
+  }
+]

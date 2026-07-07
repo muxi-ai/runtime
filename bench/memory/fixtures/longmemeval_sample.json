@@ -1,0 +1,205 @@
+[
+  {
+    "question_id": "fixture_ssu_001",
+    "question_type": "single-session-user",
+    "question": "What breed is my dog?",
+    "answer": "A border collie",
+    "question_date": "2023/05/20 (Sat) 10:00",
+    "haystack_dates": [
+      "2023/04/02 (Sun) 09:12",
+      "2023/04/11 (Tue) 18:45",
+      "2023/04/29 (Sat) 14:30",
+      "2023/05/06 (Sat) 11:05"
+    ],
+    "haystack_session_ids": [
+      "fixture_ssu_001_s1",
+      "fixture_ssu_001_s2",
+      "fixture_ssu_001_s3",
+      "fixture_ssu_001_s4"
+    ],
+    "haystack_sessions": [
+      [
+        {"role": "user", "content": "Can you suggest a good pasta recipe for a weeknight dinner?"},
+        {"role": "assistant", "content": "A simple aglio e olio works well: garlic, olive oil, chili flakes, and spaghetti, ready in about 20 minutes."},
+        {"role": "user", "content": "Great, I'll try that tonight."}
+      ],
+      [
+        {"role": "user", "content": "I just adopted a dog! She's a two-year-old border collie named Pixel.", "has_answer": true},
+        {"role": "assistant", "content": "Congratulations on adopting Pixel! Border collies are highly intelligent and need plenty of exercise and mental stimulation."},
+        {"role": "user", "content": "Any toy recommendations for her?"},
+        {"role": "assistant", "content": "Puzzle feeders and frisbees are excellent choices for border collies."}
+      ],
+      [
+        {"role": "user", "content": "How do I fix a leaky kitchen faucet?"},
+        {"role": "assistant", "content": "Usually you need to replace the cartridge or the O-ring. Turn off the water supply under the sink first."}
+      ],
+      [
+        {"role": "user", "content": "What's a good beginner workout plan for building strength?"},
+        {"role": "assistant", "content": "Three full-body sessions per week with squats, push-ups, rows, and planks is a solid start."}
+      ]
+    ],
+    "answer_session_ids": ["fixture_ssu_001_s2"]
+  },
+  {
+    "question_id": "fixture_ssa_001",
+    "question_type": "single-session-assistant",
+    "question": "What internal temperature did you tell me chicken should reach to be safe?",
+    "answer": "165 degrees Fahrenheit (74 degrees Celsius)",
+    "question_date": "2023/06/12 (Mon) 09:30",
+    "haystack_dates": [
+      "2023/05/14 (Sun) 17:20",
+      "2023/05/21 (Sun) 12:10",
+      "2023/06/01 (Thu) 19:40"
+    ],
+    "haystack_session_ids": [
+      "fixture_ssa_001_s1",
+      "fixture_ssa_001_s2",
+      "fixture_ssa_001_s3"
+    ],
+    "haystack_sessions": [
+      [
+        {"role": "user", "content": "I'm roasting a whole chicken on Sunday. How do I know when it's done?"},
+        {"role": "assistant", "content": "Use a meat thermometer: chicken is safe to eat when the thickest part of the thigh reaches 165 degrees Fahrenheit, which is 74 degrees Celsius.", "has_answer": true},
+        {"role": "user", "content": "Perfect, thanks!"}
+      ],
+      [
+        {"role": "user", "content": "Recommend some podcasts about space exploration."},
+        {"role": "assistant", "content": "Try 'Houston We Have a Podcast' by NASA and 'Planetary Radio' by The Planetary Society."}
+      ],
+      [
+        {"role": "user", "content": "My laptop battery drains fast. Any tips?"},
+        {"role": "assistant", "content": "Lower screen brightness, disable background apps, and check battery health in your OS settings."}
+      ]
+    ],
+    "answer_session_ids": ["fixture_ssa_001_s1"]
+  },
+  {
+    "question_id": "fixture_ssp_001",
+    "question_type": "single-session-preference",
+    "question": "Plan a dinner party menu for me. Remember my dietary restriction when you do.",
+    "answer": "The user is allergic to shellfish, so the menu must avoid shrimp, crab, lobster, and other shellfish.",
+    "question_date": "2023/07/03 (Mon) 16:00",
+    "haystack_dates": [
+      "2023/06/10 (Sat) 13:25",
+      "2023/06/18 (Sun) 10:50",
+      "2023/06/25 (Sun) 20:15"
+    ],
+    "haystack_session_ids": [
+      "fixture_ssp_001_s1",
+      "fixture_ssp_001_s2",
+      "fixture_ssp_001_s3"
+    ],
+    "haystack_sessions": [
+      [
+        {"role": "user", "content": "What are some good books on habit formation?"},
+        {"role": "assistant", "content": "'Atomic Habits' by James Clear and 'Tiny Habits' by BJ Fogg are both excellent."}
+      ],
+      [
+        {"role": "user", "content": "I had a scary reaction at a restaurant last night. Turns out I'm severely allergic to shellfish - shrimp, crab, lobster, all of it.", "has_answer": true},
+        {"role": "assistant", "content": "That sounds frightening. With a severe shellfish allergy you should always mention it when dining out, and consider carrying an epinephrine auto-injector after consulting your doctor."},
+        {"role": "user", "content": "Yes, my doctor prescribed an EpiPen today."}
+      ],
+      [
+        {"role": "user", "content": "Help me plan a weekend trip to Portland."},
+        {"role": "assistant", "content": "Visit Powell's Books, the Japanese Garden, and food carts downtown. Two days is enough for the highlights."}
+      ]
+    ],
+    "answer_session_ids": ["fixture_ssp_001_s2"]
+  },
+  {
+    "question_id": "fixture_ms_001",
+    "question_type": "multi-session",
+    "question": "How many marathons have I mentioned running this year in total?",
+    "answer": "Two: the Chicago Marathon in April and the Berlin Marathon in September",
+    "question_date": "2023/10/15 (Sun) 08:45",
+    "haystack_dates": [
+      "2023/04/24 (Mon) 07:30",
+      "2023/06/05 (Mon) 12:00",
+      "2023/09/26 (Tue) 21:10",
+      "2023/10/01 (Sun) 15:40"
+    ],
+    "haystack_session_ids": [
+      "fixture_ms_001_s1",
+      "fixture_ms_001_s2",
+      "fixture_ms_001_s3",
+      "fixture_ms_001_s4"
+    ],
+    "haystack_sessions": [
+      [
+        {"role": "user", "content": "I finished the Chicago Marathon yesterday! My time was 3:58, my first sub-four marathon.", "has_answer": true},
+        {"role": "assistant", "content": "Congratulations on breaking four hours at the Chicago Marathon! That's a huge milestone."}
+      ],
+      [
+        {"role": "user", "content": "What's the difference between trail running shoes and road running shoes?"},
+        {"role": "assistant", "content": "Trail shoes have deeper lugs for grip and stiffer soles for rocky terrain; road shoes are lighter with more cushioning."}
+      ],
+      [
+        {"role": "user", "content": "Just got back from Germany - I ran the Berlin Marathon on Sunday and set a personal best of 3:51!", "has_answer": true},
+        {"role": "assistant", "content": "A personal best of 3:51 at the Berlin Marathon is fantastic - that course is famously fast."}
+      ],
+      [
+        {"role": "user", "content": "Can you recommend recovery stretches for tight calves?"},
+        {"role": "assistant", "content": "Wall calf stretches, downward dog, and foam rolling are effective for tight calves."}
+      ]
+    ],
+    "answer_session_ids": ["fixture_ms_001_s1", "fixture_ms_001_s3"]
+  },
+  {
+    "question_id": "fixture_ku_001",
+    "question_type": "knowledge-update",
+    "question": "Which team do I work on now?",
+    "answer": "The platform infrastructure team",
+    "question_date": "2023/09/09 (Sat) 11:20",
+    "haystack_dates": [
+      "2023/03/15 (Wed) 09:00",
+      "2023/05/30 (Tue) 17:35",
+      "2023/08/21 (Mon) 10:05"
+    ],
+    "haystack_session_ids": [
+      "fixture_ku_001_s1",
+      "fixture_ku_001_s2",
+      "fixture_ku_001_s3"
+    ],
+    "haystack_sessions": [
+      [
+        {"role": "user", "content": "I work on the mobile apps team and we're debating React Native versus native development."},
+        {"role": "assistant", "content": "For a small mobile apps team, React Native speeds up cross-platform delivery; go native if you need heavy platform-specific features."}
+      ],
+      [
+        {"role": "user", "content": "What are good practices for sprint retrospectives?"},
+        {"role": "assistant", "content": "Keep them under an hour, rotate facilitators, and end with one or two concrete action items."}
+      ],
+      [
+        {"role": "user", "content": "Big news - I transferred from the mobile apps team to the platform infrastructure team last week. Now I'm learning Kubernetes.", "has_answer": true},
+        {"role": "assistant", "content": "Congratulations on the move to platform infrastructure! For Kubernetes, start with pods, deployments, and services before diving into operators."}
+      ]
+    ],
+    "answer_session_ids": ["fixture_ku_001_s3"]
+  },
+  {
+    "question_id": "fixture_tr_001_abs",
+    "question_type": "temporal-reasoning",
+    "question": "What color did I paint my garage in August?",
+    "answer": "The user never mentioned painting a garage.",
+    "question_date": "2023/09/30 (Sat) 14:00",
+    "haystack_dates": [
+      "2023/08/05 (Sat) 10:30",
+      "2023/08/19 (Sat) 16:45"
+    ],
+    "haystack_session_ids": [
+      "fixture_tr_001_s1",
+      "fixture_tr_001_s2"
+    ],
+    "haystack_sessions": [
+      [
+        {"role": "user", "content": "I repainted my bedroom a calming sage green this weekend."},
+        {"role": "assistant", "content": "Sage green is a great choice for bedrooms - it pairs well with warm wood tones and white trim."}
+      ],
+      [
+        {"role": "user", "content": "What vegetables can I still plant in late August?"},
+        {"role": "assistant", "content": "Spinach, radishes, lettuce, and kale all do well when planted in late August for a fall harvest."}
+      ]
+    ],
+    "answer_session_ids": []
+  }
+]

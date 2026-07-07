@@ -1,0 +1,218 @@
+{
+  "benchmark": "convomem",
+  "config": {
+    "fetch_limit": 25,
+    "formation_yaml": "bench/memory/formation/formation.yaml",
+    "max_embed_chars": 6000,
+    "mode": "combined",
+    "qa": true,
+    "text_model": "openai/gpt-4o-mini",
+    "working_embedding_model": "local/nomic-ai/nomic-embed-text-v1.5"
+  },
+  "dataset": {
+    "cases": 3,
+    "fixture": true,
+    "path": "bench/memory/fixtures/convomem_sample.json",
+    "questions": 3,
+    "seed": 42,
+    "sessions": 8,
+    "split": "all"
+  },
+  "k": 5,
+  "metrics": {
+    "k": 5,
+    "qa": {
+      "by_question_type": {
+        "assistant_evidence": {
+          "accuracy": 1.0,
+          "questions": 1
+        },
+        "user_evidence": {
+          "accuracy": 1.0,
+          "questions": 2
+        }
+      },
+      "overall": {
+        "accuracy": 1.0,
+        "questions": 3
+      }
+    },
+    "questions_abstention": 0,
+    "questions_errored": 0,
+    "questions_scored": 3,
+    "questions_total": 3,
+    "retrieval": {
+      "session_level": {
+        "by_question_type": {
+          "assistant_evidence": {
+            "coverage@5": 1.0,
+            "mrr": 1.0,
+            "questions": 1,
+            "recall@5": 1.0
+          },
+          "user_evidence": {
+            "coverage@5": 1.0,
+            "mrr": 1.0,
+            "questions": 2,
+            "recall@5": 1.0
+          }
+        },
+        "overall": {
+          "coverage@5": 1.0,
+          "mrr": 1.0,
+          "questions": 3,
+          "recall@5": 1.0
+        }
+      },
+      "turn_level": {
+        "by_question_type": {
+          "assistant_evidence": {
+            "coverage@5": 1.0,
+            "mrr": 1.0,
+            "questions": 1,
+            "recall@5": 1.0
+          },
+          "user_evidence": {
+            "coverage@5": 1.0,
+            "mrr": 1.0,
+            "questions": 2,
+            "recall@5": 1.0
+          }
+        },
+        "overall": {
+          "coverage@5": 1.0,
+          "mrr": 1.0,
+          "questions": 3,
+          "recall@5": 1.0
+        }
+      }
+    }
+  },
+  "mode": "combined",
+  "results": [
+    {
+      "elapsed_seconds": 2.125,
+      "error": null,
+      "evidence_session_ids": [
+        "conv_0"
+      ],
+      "evidence_turn_ids": [
+        "conv_0:1"
+      ],
+      "is_abstention": false,
+      "qa_answer": "The assistant recommended Kyoto for a first solo trip to Japan.",
+      "qa_correct": true,
+      "question_id": "fixture_assistant_evidence_1",
+      "question_type": "assistant_evidence",
+      "retrieved_session_ids": [
+        "conv_0",
+        "conv_1"
+      ],
+      "retrieved_turn_ids": [
+        "conv_0:1",
+        "conv_0:0",
+        "conv_0:3",
+        "conv_1:1",
+        "conv_0:2",
+        "conv_1:0"
+      ]
+    },
+    {
+      "elapsed_seconds": 2.152,
+      "error": null,
+      "evidence_session_ids": [
+        "conv_1"
+      ],
+      "evidence_turn_ids": [
+        "conv_1:0"
+      ],
+      "is_abstention": false,
+      "qa_answer": "The user plays the cello.",
+      "qa_correct": true,
+      "question_id": "fixture_user_evidence_1",
+      "question_type": "user_evidence",
+      "retrieved_session_ids": [
+        "conv_1",
+        "conv_0",
+        "conv_2"
+      ],
+      "retrieved_turn_ids": [
+        "conv_1:0",
+        "conv_1:3",
+        "conv_0:2",
+        "conv_1:1",
+        "conv_1:2",
+        "conv_2:1",
+        "conv_0:1",
+        "conv_0:0",
+        "conv_2:0"
+      ]
+    },
+    {
+      "elapsed_seconds": 2.05,
+      "error": null,
+      "evidence_session_ids": [
+        "conv_0"
+      ],
+      "evidence_turn_ids": [
+        "conv_0:0"
+      ],
+      "is_abstention": false,
+      "qa_answer": "The user's startup is called Fernweh Labs.",
+      "qa_correct": true,
+      "question_id": "fixture_user_evidence_2",
+      "question_type": "user_evidence",
+      "retrieved_session_ids": [
+        "conv_0",
+        "conv_1",
+        "conv_2"
+      ],
+      "retrieved_turn_ids": [
+        "conv_0:0",
+        "conv_0:2",
+        "conv_0:1",
+        "conv_1:1",
+        "conv_2:1",
+        "conv_2:0",
+        "conv_1:0"
+      ]
+    }
+  ],
+  "run": {
+    "git_commit": "3b8fb6f2e5c03e094dbfe8b617ac090de10fa389",
+    "python": "3.11.13",
+    "started_at": "2026-07-07T20:44:53Z",
+    "wall_seconds": 28.93
+  },
+  "schema_version": "1.0",
+  "usage": {
+    "cost": {
+      "estimated_usd": 0.000205,
+      "note": "List-price estimate for reporting only; local/* models are free.",
+      "per_model_usd": {
+        "openai/gpt-4o-mini": 0.000205
+      },
+      "unpriced_models": []
+    },
+    "ingested_turns": 22,
+    "llm_requests": 6,
+    "searches": 3,
+    "tokens": {
+      "in": 1237,
+      "out": 33,
+      "total": 1270,
+      "total_cached": 0
+    },
+    "tokens_by_model": {
+      "openai/gpt-4o-mini": [
+        1270,
+        1237,
+        33,
+        0,
+        0,
+        0
+      ]
+    },
+    "truncated_turns": 0
+  }
+}

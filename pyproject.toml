@@ -348,7 +348,7 @@ ignore = [
 ]
 
 [tool.ruff.lint.isort]
-known-first-party = ["muxi"]
+known-first-party = ["muxi", "bench"]
 combine-as-imports = true
 
 [tool.ruff.format]

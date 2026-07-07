@@ -1,0 +1,374 @@
+{
+  "benchmark": "locomo",
+  "config": {
+    "fetch_limit": 50,
+    "formation_yaml": "bench/memory/formation/formation.yaml",
+    "max_embed_chars": 6000,
+    "mode": "combined",
+    "qa": true,
+    "text_model": "openai/gpt-4o-mini",
+    "working_embedding_model": "local/nomic-ai/nomic-embed-text-v1.5"
+  },
+  "dataset": {
+    "cases": 1,
+    "fixture": true,
+    "path": "bench/memory/fixtures/locomo_sample.json",
+    "questions": 6,
+    "seed": 42,
+    "sessions": 3,
+    "split": "all"
+  },
+  "k": 10,
+  "metrics": {
+    "k": 10,
+    "qa": {
+      "by_question_type": {
+        "adversarial": {
+          "accuracy": 1.0,
+          "questions": 1
+        },
+        "multi-hop": {
+          "accuracy": 1.0,
+          "questions": 1
+        },
+        "single-hop": {
+          "accuracy": 1.0,
+          "questions": 2
+        },
+        "temporal": {
+          "accuracy": 0.5,
+          "questions": 2
+        }
+      },
+      "overall": {
+        "accuracy": 0.8333333333333334,
+        "questions": 6
+      }
+    },
+    "questions_abstention": 1,
+    "questions_errored": 0,
+    "questions_scored": 5,
+    "questions_total": 6,
+    "retrieval": {
+      "session_level": {
+        "by_question_type": {
+          "multi-hop": {
+            "coverage@10": 1.0,
+            "mrr": 1.0,
+            "questions": 1,
+            "recall@10": 1.0
+          },
+          "single-hop": {
+            "coverage@10": 1.0,
+            "mrr": 1.0,
+            "questions": 2,
+            "recall@10": 1.0
+          },
+          "temporal": {
+            "coverage@10": 1.0,
+            "mrr": 1.0,
+            "questions": 2,
+            "recall@10": 1.0
+          }
+        },
+        "overall": {
+          "coverage@10": 1.0,
+          "mrr": 1.0,
+          "questions": 5,
+          "recall@10": 1.0
+        }
+      },
+      "turn_level": {
+        "by_question_type": {
+          "multi-hop": {
+            "coverage@10": 1.0,
+            "mrr": 1.0,
+            "questions": 1,
+            "recall@10": 1.0
+          },
+          "single-hop": {
+            "coverage@10": 1.0,
+            "mrr": 1.0,
+            "questions": 2,
+            "recall@10": 1.0
+          },
+          "temporal": {
+            "coverage@10": 1.0,
+            "mrr": 1.0,
+            "questions": 2,
+            "recall@10": 1.0
+          }
+        },
+        "overall": {
+          "coverage@10": 1.0,
+          "mrr": 1.0,
+          "questions": 5,
+          "recall@10": 1.0
+        }
+      }
+    }
+  },
+  "mode": "combined",
+  "results": [
+    {
+      "elapsed_seconds": 2.479,
+      "error": null,
+      "evidence_session_ids": [
+        "session_1"
+      ],
+      "evidence_turn_ids": [
+        "D1:4"
+      ],
+      "is_abstention": false,
+      "qa_answer": "Omar's cat is named Biscuit.",
+      "qa_correct": true,
+      "question_id": "fixture_1:q0",
+      "question_type": "single-hop",
+      "retrieved_session_ids": [
+        "session_1",
+        "session_3",
+        "session_2"
+      ],
+      "retrieved_turn_ids": [
+        "D1:4",
+        "D3:3",
+        "D1:6",
+        "D2:2",
+        "D3:1",
+        "D1:1",
+        "D2:4",
+        "D1:2",
+        "D1:5",
+        "D3:2",
+        "D2:1",
+        "D2:3",
+        "D1:3",
+        "D3:4",
+        "D2:5"
+      ]
+    },
+    {
+      "elapsed_seconds": 2.782,
+      "error": null,
+      "evidence_session_ids": [
+        "session_3"
+      ],
+      "evidence_turn_ids": [
+        "D3:2"
+      ],
+      "is_abstention": false,
+      "qa_answer": "Nadia made a full dinner set, which included six plates and six bowls, for her pottery final project.",
+      "qa_correct": true,
+      "question_id": "fixture_1:q1",
+      "question_type": "single-hop",
+      "retrieved_session_ids": [
+        "session_3",
+        "session_2",
+        "session_1"
+      ],
+      "retrieved_turn_ids": [
+        "D3:2",
+        "D2:1",
+        "D1:1",
+        "D1:2",
+        "D3:4",
+        "D2:5",
+        "D1:3",
+        "D2:3",
+        "D1:5",
+        "D3:3",
+        "D2:2",
+        "D3:1",
+        "D2:4",
+        "D1:4",
+        "D1:6"
+      ]
+    },
+    {
+      "elapsed_seconds": 2.51,
+      "error": null,
+      "evidence_session_ids": [
+        "session_2",
+        "session_3"
+      ],
+      "evidence_turn_ids": [
+        "D2:2",
+        "D2:4",
+        "D3:1"
+      ],
+      "is_abstention": false,
+      "qa_answer": "Omar was a data analyst when he traveled to Rotterdam, and he was later promoted to senior data analyst.",
+      "qa_correct": true,
+      "question_id": "fixture_1:q2",
+      "question_type": "multi-hop",
+      "retrieved_session_ids": [
+        "session_2",
+        "session_3",
+        "session_1"
+      ],
+      "retrieved_turn_ids": [
+        "D2:4",
+        "D3:1",
+        "D2:2",
+        "D1:6",
+        "D2:5",
+        "D3:3",
+        "D1:1",
+        "D1:4",
+        "D1:2",
+        "D2:3",
+        "D1:3",
+        "D3:2",
+        "D3:4",
+        "D2:1",
+        "D1:5"
+      ]
+    },
+    {
+      "elapsed_seconds": 2.667,
+      "error": null,
+      "evidence_session_ids": [
+        "session_1",
+        "session_3"
+      ],
+      "evidence_turn_ids": [
+        "D1:1",
+        "D3:2"
+      ],
+      "is_abstention": false,
+      "qa_answer": "Nadia finished the pottery course on 30 April 2023, which is approximately four months and two weeks after she signed up on 8 January 2023.",
+      "qa_correct": false,
+      "question_id": "fixture_1:q3",
+      "question_type": "temporal",
+      "retrieved_session_ids": [
+        "session_1",
+        "session_2",
+        "session_3"
+      ],
+      "retrieved_turn_ids": [
+        "D1:1",
+        "D2:1",
+        "D1:3",
+        "D3:2",
+        "D3:4",
+        "D1:2",
+        "D2:5",
+        "D2:3",
+        "D1:5",
+        "D3:3",
+        "D2:4",
+        "D2:2",
+        "D3:1",
+        "D1:6",
+        "D1:4"
+      ]
+    },
+    {
+      "elapsed_seconds": 2.75,
+      "error": null,
+      "evidence_session_ids": [
+        "session_1"
+      ],
+      "evidence_turn_ids": [
+        "D1:4"
+      ],
+      "is_abstention": false,
+      "qa_answer": "Omar adopted his cat, Biscuit, on the weekend before 8 January 2023.",
+      "qa_correct": true,
+      "question_id": "fixture_1:q4",
+      "question_type": "temporal",
+      "retrieved_session_ids": [
+        "session_1",
+        "session_3",
+        "session_2"
+      ],
+      "retrieved_turn_ids": [
+        "D1:4",
+        "D1:6",
+        "D3:3",
+        "D2:2",
+        "D2:4",
+        "D1:1",
+        "D3:1",
+        "D1:2",
+        "D1:5",
+        "D2:3",
+        "D2:1",
+        "D3:2",
+        "D1:3",
+        "D3:4",
+        "D2:5"
+      ]
+    },
+    {
+      "elapsed_seconds": 2.411,
+      "error": null,
+      "evidence_session_ids": [],
+      "evidence_turn_ids": [],
+      "is_abstention": true,
+      "qa_answer": "I do not know.",
+      "qa_correct": true,
+      "question_id": "fixture_1:q5",
+      "question_type": "adversarial",
+      "retrieved_session_ids": [
+        "session_1",
+        "session_2",
+        "session_3"
+      ],
+      "retrieved_turn_ids": [
+        "D1:1",
+        "D2:3",
+        "D3:4",
+        "D2:5",
+        "D1:3",
+        "D2:1",
+        "D3:2",
+        "D1:5",
+        "D1:2",
+        "D1:4",
+        "D2:2",
+        "D1:6",
+        "D2:4",
+        "D3:3",
+        "D3:1"
+      ]
+    }
+  ],
+  "run": {
+    "git_commit": "3b8fb6f2e5c03e094dbfe8b617ac090de10fa389",
+    "python": "3.11.13",
+    "started_at": "2026-07-07T20:44:23Z",
+    "wall_seconds": 37.4
+  },
+  "schema_version": "1.0",
+  "usage": {
+    "cost": {
+      "estimated_usd": 0.000639,
+      "note": "List-price estimate for reporting only; local/* models are free.",
+      "per_model_usd": {
+        "openai/gpt-4o-mini": 0.000639
+      },
+      "unpriced_models": []
+    },
+    "ingested_turns": 15,
+    "llm_requests": 12,
+    "searches": 6,
+    "tokens": {
+      "in": 3761,
+      "out": 125,
+      "total": 3886,
+      "total_cached": 0
+    },
+    "tokens_by_model": {
+      "openai/gpt-4o-mini": [
+        3886,
+        3761,
+        125,
+        0,
+        0,
+        0
+      ]
+    },
+    "truncated_turns": 0
+  }
+}

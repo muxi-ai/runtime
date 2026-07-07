@@ -1,0 +1,315 @@
+{
+  "benchmark": "longmemeval",
+  "config": {
+    "fetch_limit": 25,
+    "formation_yaml": "bench/memory/formation/formation.yaml",
+    "max_embed_chars": 6000,
+    "mode": "working",
+    "qa": false,
+    "text_model": "openai/gpt-4o-mini",
+    "working_embedding_model": "local/nomic-ai/nomic-embed-text-v1.5"
+  },
+  "dataset": {
+    "cases": 6,
+    "fixture": true,
+    "path": "bench/memory/fixtures/longmemeval_sample.json",
+    "questions": 6,
+    "seed": 42,
+    "sessions": 19,
+    "split": "all"
+  },
+  "k": 5,
+  "metrics": {
+    "k": 5,
+    "qa": null,
+    "questions_abstention": 1,
+    "questions_errored": 0,
+    "questions_scored": 5,
+    "questions_total": 6,
+    "retrieval": {
+      "session_level": {
+        "by_question_type": {
+          "knowledge-update": {
+            "coverage@5": 1.0,
+            "mrr": 1.0,
+            "questions": 1,
+            "recall@5": 1.0
+          },
+          "multi-session": {
+            "coverage@5": 1.0,
+            "mrr": 1.0,
+            "questions": 1,
+            "recall@5": 1.0
+          },
+          "single-session-assistant": {
+            "coverage@5": 1.0,
+            "mrr": 1.0,
+            "questions": 1,
+            "recall@5": 1.0
+          },
+          "single-session-preference": {
+            "coverage@5": 1.0,
+            "mrr": 1.0,
+            "questions": 1,
+            "recall@5": 1.0
+          },
+          "single-session-user": {
+            "coverage@5": 1.0,
+            "mrr": 1.0,
+            "questions": 1,
+            "recall@5": 1.0
+          }
+        },
+        "overall": {
+          "coverage@5": 1.0,
+          "mrr": 1.0,
+          "questions": 5,
+          "recall@5": 1.0
+        }
+      },
+      "turn_level": {
+        "by_question_type": {
+          "knowledge-update": {
+            "coverage@5": 1.0,
+            "mrr": 1.0,
+            "questions": 1,
+            "recall@5": 1.0
+          },
+          "multi-session": {
+            "coverage@5": 1.0,
+            "mrr": 1.0,
+            "questions": 1,
+            "recall@5": 1.0
+          },
+          "single-session-assistant": {
+            "coverage@5": 1.0,
+            "mrr": 1.0,
+            "questions": 1,
+            "recall@5": 1.0
+          },
+          "single-session-preference": {
+            "coverage@5": 1.0,
+            "mrr": 0.5,
+            "questions": 1,
+            "recall@5": 1.0
+          },
+          "single-session-user": {
+            "coverage@5": 1.0,
+            "mrr": 1.0,
+            "questions": 1,
+            "recall@5": 1.0
+          }
+        },
+        "overall": {
+          "coverage@5": 1.0,
+          "mrr": 0.9,
+          "questions": 5,
+          "recall@5": 1.0
+        }
+      }
+    }
+  },
+  "mode": "working",
+  "results": [
+    {
+      "elapsed_seconds": 0.069,
+      "error": null,
+      "evidence_session_ids": [
+        "fixture_ku_001_s3"
+      ],
+      "evidence_turn_ids": [
+        "fixture_ku_001_s3:0"
+      ],
+      "is_abstention": false,
+      "qa_answer": null,
+      "qa_correct": null,
+      "question_id": "fixture_ku_001",
+      "question_type": "knowledge-update",
+      "retrieved_session_ids": [
+        "fixture_ku_001_s3",
+        "fixture_ku_001_s1",
+        "fixture_ku_001_s2"
+      ],
+      "retrieved_turn_ids": [
+        "fixture_ku_001_s3:0",
+        "fixture_ku_001_s1:0",
+        "fixture_ku_001_s3:1",
+        "fixture_ku_001_s1:1",
+        "fixture_ku_001_s2:1",
+        "fixture_ku_001_s2:0"
+      ]
+    },
+    {
+      "elapsed_seconds": 0.069,
+      "error": null,
+      "evidence_session_ids": [
+        "fixture_ms_001_s1",
+        "fixture_ms_001_s3"
+      ],
+      "evidence_turn_ids": [
+        "fixture_ms_001_s1:0",
+        "fixture_ms_001_s3:0"
+      ],
+      "is_abstention": false,
+      "qa_answer": null,
+      "qa_correct": null,
+      "question_id": "fixture_ms_001",
+      "question_type": "multi-session",
+      "retrieved_session_ids": [
+        "fixture_ms_001_s1",
+        "fixture_ms_001_s3",
+        "fixture_ms_001_s2",
+        "fixture_ms_001_s4"
+      ],
+      "retrieved_turn_ids": [
+        "fixture_ms_001_s1:0",
+        "fixture_ms_001_s1:1",
+        "fixture_ms_001_s3:1",
+        "fixture_ms_001_s3:0",
+        "fixture_ms_001_s2:1",
+        "fixture_ms_001_s2:0",
+        "fixture_ms_001_s4:1",
+        "fixture_ms_001_s4:0"
+      ]
+    },
+    {
+      "elapsed_seconds": 0.061,
+      "error": null,
+      "evidence_session_ids": [
+        "fixture_ssa_001_s1"
+      ],
+      "evidence_turn_ids": [
+        "fixture_ssa_001_s1:1"
+      ],
+      "is_abstention": false,
+      "qa_answer": null,
+      "qa_correct": null,
+      "question_id": "fixture_ssa_001",
+      "question_type": "single-session-assistant",
+      "retrieved_session_ids": [
+        "fixture_ssa_001_s1",
+        "fixture_ssa_001_s3",
+        "fixture_ssa_001_s2"
+      ],
+      "retrieved_turn_ids": [
+        "fixture_ssa_001_s1:1",
+        "fixture_ssa_001_s1:0",
+        "fixture_ssa_001_s1:2",
+        "fixture_ssa_001_s3:1",
+        "fixture_ssa_001_s2:0",
+        "fixture_ssa_001_s2:1",
+        "fixture_ssa_001_s3:0"
+      ]
+    },
+    {
+      "elapsed_seconds": 0.072,
+      "error": null,
+      "evidence_session_ids": [
+        "fixture_ssp_001_s2"
+      ],
+      "evidence_turn_ids": [
+        "fixture_ssp_001_s2:0"
+      ],
+      "is_abstention": false,
+      "qa_answer": null,
+      "qa_correct": null,
+      "question_id": "fixture_ssp_001",
+      "question_type": "single-session-preference",
+      "retrieved_session_ids": [
+        "fixture_ssp_001_s2",
+        "fixture_ssp_001_s1",
+        "fixture_ssp_001_s3"
+      ],
+      "retrieved_turn_ids": [
+        "fixture_ssp_001_s2:1",
+        "fixture_ssp_001_s2:0",
+        "fixture_ssp_001_s1:1",
+        "fixture_ssp_001_s3:1",
+        "fixture_ssp_001_s2:2",
+        "fixture_ssp_001_s3:0",
+        "fixture_ssp_001_s1:0"
+      ]
+    },
+    {
+      "elapsed_seconds": 0.069,
+      "error": null,
+      "evidence_session_ids": [
+        "fixture_ssu_001_s2"
+      ],
+      "evidence_turn_ids": [
+        "fixture_ssu_001_s2:0"
+      ],
+      "is_abstention": false,
+      "qa_answer": null,
+      "qa_correct": null,
+      "question_id": "fixture_ssu_001",
+      "question_type": "single-session-user",
+      "retrieved_session_ids": [
+        "fixture_ssu_001_s2",
+        "fixture_ssu_001_s1",
+        "fixture_ssu_001_s3",
+        "fixture_ssu_001_s4"
+      ],
+      "retrieved_turn_ids": [
+        "fixture_ssu_001_s2:0",
+        "fixture_ssu_001_s2:1",
+        "fixture_ssu_001_s2:3",
+        "fixture_ssu_001_s2:2",
+        "fixture_ssu_001_s1:2",
+        "fixture_ssu_001_s3:1",
+        "fixture_ssu_001_s1:1",
+        "fixture_ssu_001_s4:0",
+        "fixture_ssu_001_s4:1",
+        "fixture_ssu_001_s1:0",
+        "fixture_ssu_001_s3:0"
+      ]
+    },
+    {
+      "elapsed_seconds": 0.068,
+      "error": null,
+      "evidence_session_ids": [],
+      "evidence_turn_ids": [],
+      "is_abstention": true,
+      "qa_answer": null,
+      "qa_correct": null,
+      "question_id": "fixture_tr_001_abs",
+      "question_type": "temporal-reasoning",
+      "retrieved_session_ids": [
+        "fixture_tr_001_s1",
+        "fixture_tr_001_s2"
+      ],
+      "retrieved_turn_ids": [
+        "fixture_tr_001_s1:0",
+        "fixture_tr_001_s2:1",
+        "fixture_tr_001_s1:1",
+        "fixture_tr_001_s2:0"
+      ]
+    }
+  ],
+  "run": {
+    "git_commit": "3b8fb6f2e5c03e094dbfe8b617ac090de10fa389",
+    "python": "3.11.13",
+    "started_at": "2026-07-07T20:52:17Z",
+    "wall_seconds": 23.8
+  },
+  "schema_version": "1.0",
+  "usage": {
+    "cost": {
+      "estimated_usd": 0.0,
+      "note": "List-price estimate for reporting only; local/* models are free.",
+      "per_model_usd": {},
+      "unpriced_models": []
+    },
+    "ingested_turns": 43,
+    "llm_requests": 0,
+    "searches": 6,
+    "tokens": {
+      "in": 0,
+      "out": 0,
+      "total": 0,
+      "total_cached": 0
+    },
+    "tokens_by_model": {},
+    "truncated_turns": 0
+  }
+}
