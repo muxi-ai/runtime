@@ -1,0 +1,77 @@
+schema: "1.0.0"
+id: "replanning-test-formation"
+description: "Test formation for workflow-level replanning (fast failures, replanning enabled)"
+
+llm:
+  api_keys:
+    openai: "${{ secrets.OPENAI_API_KEY }}"
+    anthropic: "${{ secrets.ANTHROPIC_API_KEY }}"
+
+  models:
+    - text: "openai/gpt-4o-mini"
+      settings:
+        temperature: 0.3
+        max_tokens: 2000
+        timeout_seconds: 30
+
+memory:
+  working:
+    max_memory_mb: 256
+    fifo_interval_min: 30
+    mode: "local"
+
+  buffer:
+    size: 5
+    multiplier: 5
+
+overlord:
+  workflow:
+    auto_decomposition: true
+    plan_approval_threshold: 10  # Higher to avoid approval prompts
+    complexity_method: "heuristic"
+    complexity_threshold: 7.0
+    routing_strategy: "capability_based"
+    error_recovery: "fail_fast"  # Fail tasks immediately so replanning triggers fast
+
+    timeouts:
+      # Long enough for real agent tasks (multi-call LLM planning), short
+      # enough that an injected hang fails the task quickly.
+      task_timeout: 60
+      workflow_timeout: 600
+      phase_timeout: 600
+      enable_adaptive_timeout: false
+
+    parallel_execution: false  # Sequential for consistency
+    max_parallel_tasks: 1
+
+    # Workflow-level replanning under test
+    replanning:
+      enabled: true
+      max_attempts: 2
+      preserve_successful_outputs: true
+      replan_timeout_seconds: 60
+
+# Minimal MCP configuration for testing
+mcp:
+  max_tool_iterations: 3
+  max_tool_calls: 10
+  max_timeout_in_seconds: 60
+  enhance_user_prompts: false
+
+# No runtime MCPs to avoid file generation complexity
+runtime:
+  built_in_mcps: false
+
+logging:
+  system:
+    level: "warning"
+    destination: "stdout"
+  conversation:
+    enabled: false
+
+# Agents configuration remains in agents/ directory
+agents:
+  - coder
+  - project-manager
+  - researcher
+  - writer

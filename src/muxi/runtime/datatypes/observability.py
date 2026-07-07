@@ -710,6 +710,18 @@ class ConversationEvents(Enum):
     WORKFLOW_APPROVAL_RECEIVED = "workflow.approval.received"
     # When user responds to workflow approval request
 
+    WORKFLOW_REPLANNING_STARTED = "workflow.replanning.started"
+    # When workflow-level replanning is initiated after a workflow failure
+
+    WORKFLOW_REPLANNING_COMPLETED = "workflow.replanning.completed"
+    # When a replacement workflow plan is generated successfully
+
+    WORKFLOW_REPLANNING_FAILED = "workflow.replanning.failed"
+    # When replanning fails (duplicate plan, timeout, or generation error)
+
+    WORKFLOW_REPLANNING_SKIPPED = "workflow.replanning.skipped"
+    # When replanning is not applicable (budget exhausted, non-replannable errors, timeout ceiling)
+
     # ===================================================================
     # SOP (Standard Operating Procedures) EVENTS
     # ===================================================================

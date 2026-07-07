@@ -407,6 +407,10 @@ class TaskDecomposer:
                     # Only include safe, simple values
                     safe_context = {}
                     for k, v in context.items():
+                        if k == "replan":
+                            # Rendered separately as a structured replanning
+                            # section below; skip the raw dict here.
+                            continue
                         if isinstance(v, (str, int, float, bool, list, tuple)):
                             safe_context[k] = v
                         else:
@@ -448,8 +452,83 @@ Analysis Results:
             .replace("{{capabilities_info}}", capabilities_info)
         )
 
+        # Replanning: append failure context so the new plan avoids the
+        # previous failure modes. Appended in code (not in the template file)
+        # so non-replan decompositions produce byte-identical prompts.
+        replan_data = (context or {}).get("replan")
+        if isinstance(replan_data, dict) and replan_data.get("is_replan"):
+            system_prompt = (
+                f"{system_prompt}\n<replanning>\n"
+                f"{self._build_replan_info(replan_data)}\n</replanning>"
+            )
+
         # User content: the actual request
         return system_prompt, request
+
+    @staticmethod
+    def _build_replan_info(replan_data: Dict[str, Any]) -> str:
+        """Render the replanning context section for the decomposition prompt.
+
+        Args:
+            replan_data: The "replan" context dict built by the
+                ReplanningCoordinator (failed/successful tasks, blocked
+                capabilities, constraints).
+
+        Returns:
+            Formatted replanning section text
+        """
+        lines = [
+            "## REPLANNING CONTEXT",
+            (
+                f"This is attempt {replan_data.get('attempt', 1)} of "
+                f"{replan_data.get('max_attempts', 1)} to complete this request. "
+                "The previous plan FAILED."
+            ),
+        ]
+
+        failed_tasks = replan_data.get("failed_tasks") or []
+        if failed_tasks:
+            lines.append("")
+            lines.append("### Previous failure analysis")
+            for task in failed_tasks:
+                lines.append(
+                    f"- Task \"{task.get('description', task.get('id', 'unknown'))}\" "
+                    f"failed: {task.get('error_message', 'unknown error')}"
+                )
+
+        successful_tasks = replan_data.get("successful_tasks") or []
+        if successful_tasks:
+            lines.append("")
+            lines.append("### What already worked (do NOT redo these tasks)")
+            lines.append(
+                "The following tasks completed successfully and their results are "
+                "already available. Plan only the remaining work."
+            )
+            for task in successful_tasks:
+                lines.append(f"- {task.get('description', task.get('id', 'unknown'))}")
+                excerpt = task.get("result_excerpt")
+                if excerpt:
+                    lines.append(f"  Result: {excerpt}")
+
+        blocked = replan_data.get("blocked_capabilities") or []
+        if blocked:
+            lines.append("")
+            lines.append("### Blocked capabilities (their approach just failed)")
+            lines.append(f"- {', '.join(blocked)}")
+
+        constraints = replan_data.get("constraints") or []
+        if constraints:
+            lines.append("")
+            lines.append("### Constraints for the new plan")
+            for constraint in constraints:
+                lines.append(f"- {constraint}")
+
+        lines.append("")
+        lines.append(
+            "IMPORTANT: Generate a DIFFERENT approach that avoids the failure "
+            "modes listed above. Do not repeat the failed plan."
+        )
+        return "\n".join(lines)
 
     def _get_available_capabilities_info(self) -> str:
         """

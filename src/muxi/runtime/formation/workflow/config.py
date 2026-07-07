@@ -174,6 +174,55 @@ class ObservabilityConfig(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
 
+class ReplanningConfig(BaseModel):
+    """Configuration for workflow-level replanning.
+
+    When a workflow fails after task-level recovery (retries, fallbacks) is
+    exhausted, replanning asks the TaskDecomposer for a fundamentally
+    different plan that avoids the observed failure modes. Disabled by
+    default so existing formations keep byte-identical behavior.
+    """
+
+    enabled: bool = Field(default=False, description="Enable workflow-level replanning")
+    max_attempts: int = Field(
+        default=3, ge=1, le=10, description="Maximum replanning attempts per original workflow"
+    )
+    plan_similarity_threshold: float = Field(
+        default=0.7,
+        ge=0.0,
+        le=1.0,
+        description=(
+            "Replanned workflows with task-signature similarity at or above this "
+            "threshold are rejected as duplicates of the failed plan"
+        ),
+    )
+    preserve_successful_outputs: bool = Field(
+        default=True,
+        description="Include successful task results in the replan context so completed work is not redone",
+    )
+    replan_timeout_seconds: float = Field(
+        default=30.0, ge=1.0, description="Timeout for generating a replacement plan"
+    )
+    non_replannable_error_patterns: List[str] = Field(
+        default_factory=lambda: [
+            "auth",
+            "unauthorized",
+            "forbidden",
+            "permission",
+            "credential",
+            "configuration error",
+            "invalid api key",
+            "data corruption",
+        ],
+        description=(
+            "Case-insensitive substrings identifying task errors that replanning "
+            "cannot fix (a different plan hits the same wall)"
+        ),
+    )
+
+    model_config = ConfigDict(extra="forbid")
+
+
 class WorkflowBehaviorConfig(BaseModel):
     """Configuration for workflow execution behavior"""
 
@@ -222,6 +271,10 @@ class WorkflowConfig(BaseModel):
     )
     retry_config: RetryConfig = Field(
         default_factory=RetryConfig, description="Configuration for retry logic"
+    )
+    replanning: ReplanningConfig = Field(
+        default_factory=ReplanningConfig,
+        description="Configuration for workflow-level replanning (disabled by default)",
     )
 
     @property
