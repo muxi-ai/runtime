@@ -13,6 +13,7 @@ import asyncio
 import os
 import sys
 import time
+from datetime import datetime, timezone
 from pathlib import Path
 from typing import List, Optional
 
@@ -122,7 +123,18 @@ def build_arg_parser(benchmark: str, default_k: int) -> argparse.ArgumentParser:
     parser.add_argument(
         "--run-dir",
         default=None,
-        help="Run directory for the rendered formation + SQLite DB (default: temp dir).",
+        help=(
+            "Run directory for the rendered formation + SQLite DB (default: a temp "
+            "dir removed after the run; an explicit --run-dir is never deleted)."
+        ),
+    )
+    parser.add_argument(
+        "--keep-run-dir",
+        action="store_true",
+        help=(
+            "Keep the temp run dir (SQLite DB, rendered formation, event log) for "
+            "debugging. Also honored via MUXI_BENCH_KEEP_RUN_DIR=1."
+        ),
     )
     parser.add_argument(
         "--secrets-dir",
@@ -190,6 +202,7 @@ async def run_benchmark(benchmark: str, args: argparse.Namespace) -> int:
         formation_yaml=Path(args.formation),
         run_dir=Path(args.run_dir) if args.run_dir else None,
         secrets_dir=Path(args.secrets_dir) if args.secrets_dir else None,
+        keep_run_dir=args.keep_run_dir,
     )
 
     print(
@@ -198,10 +211,14 @@ async def run_benchmark(benchmark: str, args: argparse.Namespace) -> int:
         f"fixture={used_fixture})"
     )
 
+    started_at = datetime.now(timezone.utc)
     started = time.monotonic()
     results: List[QuestionResult] = []
-    await adapter.start()
+    # start() inside the try: a formation-load failure must still reach
+    # stop(), which tears down partial state and removes the temp run
+    # dir (stop() is idempotent and tolerates a never-started adapter).
     try:
+        await adapter.start()
         for case_index, case in enumerate(dataset.cases, start=1):
             adapter.clear_case()
             user_id = f"bench-{benchmark}-{case.case_id}"
@@ -261,6 +278,7 @@ async def run_benchmark(benchmark: str, args: argparse.Namespace) -> int:
         metrics=metrics,
         results=results,
         usage=usage,
+        started_at=started_at,
         wall_seconds=time.monotonic() - started,
         repo_root=REPO_ROOT,
     )

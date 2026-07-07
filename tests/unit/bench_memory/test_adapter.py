@@ -149,3 +149,95 @@ class TestFormationTemplate:
         # Buffer must hold the largest LongMemEval-S haystack (~2.5k turns).
         buffer = config["memory"]["buffer"]
         assert buffer["size"] * buffer["multiplier"] >= 2500
+
+
+class TestStopAndRunDirCleanup:
+    async def test_stop_on_never_started_adapter(self):
+        adapter = _adapter()
+        await adapter.stop()  # must not raise
+        assert adapter.formation is None
+
+    async def test_stop_is_idempotent(self, tmp_path):
+        adapter = _adapter(secrets_dir=tmp_path / "nosecrets")
+        adapter._prepare_run_dir()
+        await adapter.stop()
+        await adapter.stop()  # second call is a no-op, must not raise
+
+    async def test_temp_run_dir_removed_on_stop(self, tmp_path):
+        adapter = _adapter(secrets_dir=tmp_path / "nosecrets")
+        adapter._prepare_run_dir()  # run_dir=None -> adapter-created temp dir
+        run_dir = adapter.run_dir
+        assert run_dir.exists()
+        await adapter.stop()
+        assert not run_dir.exists()
+
+    async def test_keep_run_dir_flag_preserves_temp_dir(self, tmp_path):
+        adapter = _adapter(secrets_dir=tmp_path / "nosecrets", keep_run_dir=True)
+        adapter._prepare_run_dir()
+        run_dir = adapter.run_dir
+        await adapter.stop()
+        assert run_dir.exists()
+        # Manual cleanup since the adapter intentionally kept it.
+        import shutil
+
+        shutil.rmtree(run_dir, ignore_errors=True)
+
+    async def test_keep_run_dir_env_var_preserves_temp_dir(self, tmp_path, monkeypatch):
+        monkeypatch.setenv("MUXI_BENCH_KEEP_RUN_DIR", "1")
+        adapter = _adapter(secrets_dir=tmp_path / "nosecrets")
+        adapter._prepare_run_dir()
+        run_dir = adapter.run_dir
+        await adapter.stop()
+        assert run_dir.exists()
+        import shutil
+
+        shutil.rmtree(run_dir, ignore_errors=True)
+
+    async def test_keep_run_dir_env_var_false_values_ignored(self, tmp_path, monkeypatch):
+        monkeypatch.setenv("MUXI_BENCH_KEEP_RUN_DIR", "0")
+        adapter = _adapter(secrets_dir=tmp_path / "nosecrets")
+        adapter._prepare_run_dir()
+        run_dir = adapter.run_dir
+        await adapter.stop()
+        assert not run_dir.exists()
+
+    async def test_user_supplied_run_dir_never_removed(self, tmp_path):
+        run_dir = tmp_path / "my-run"
+        adapter = _adapter(run_dir=run_dir, secrets_dir=tmp_path / "nosecrets")
+        adapter._prepare_run_dir()
+        await adapter.stop()
+        assert run_dir.exists()
+
+    async def test_corrupt_yaml_failure_cleans_temp_dir(self, tmp_path):
+        # Unparseable YAML fails during run-dir rendering, before the
+        # Formation exists; stop() must still remove the temp dir.
+        import yaml as yaml_module
+
+        bad_yaml = tmp_path / "broken.yaml"
+        bad_yaml.write_text("agents: [unbalanced")
+        adapter = _adapter(formation_yaml=bad_yaml, secrets_dir=tmp_path / "nosecrets")
+        with pytest.raises(yaml_module.YAMLError):
+            await adapter.start()
+        run_dir = adapter.run_dir
+        assert run_dir is not None and run_dir.exists()
+        await adapter.stop()
+        assert not run_dir.exists()
+
+    @pytest.mark.timeout(120)
+    async def test_formation_load_failure_reaches_stop_and_cleans_temp_dir(self, tmp_path):
+        # Valid YAML but an invalid formation: Formation.load() raises
+        # after the Formation object exists (the partially-started
+        # case); stop() must tear it down and remove the temp dir.
+        from muxi.runtime.datatypes.exceptions import ConfigurationValidationError
+
+        bad_yaml = tmp_path / "invalid.yaml"
+        bad_yaml.write_text('schema: "1.0.0"\nid: "broken"\nagents: []\n')  # no llm/description
+        adapter = _adapter(formation_yaml=bad_yaml, secrets_dir=tmp_path / "nosecrets")
+        with pytest.raises(ConfigurationValidationError):
+            await adapter.start()
+        run_dir = adapter.run_dir
+        assert run_dir is not None and run_dir.exists()
+        assert adapter.formation is not None  # partially started
+        await adapter.stop()
+        assert not run_dir.exists()
+        assert adapter.formation is None

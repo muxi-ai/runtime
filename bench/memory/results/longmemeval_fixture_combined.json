@@ -143,7 +143,7 @@
   "mode": "combined",
   "results": [
     {
-      "elapsed_seconds": 2.67,
+      "elapsed_seconds": 3.939,
       "error": null,
       "evidence_session_ids": [
         "fixture_ku_001_s3"
@@ -171,7 +171,7 @@
       ]
     },
     {
-      "elapsed_seconds": 2.257,
+      "elapsed_seconds": 2.397,
       "error": null,
       "evidence_session_ids": [
         "fixture_ms_001_s1",
@@ -204,7 +204,7 @@
       ]
     },
     {
-      "elapsed_seconds": 2.999,
+      "elapsed_seconds": 2.44,
       "error": null,
       "evidence_session_ids": [
         "fixture_ssa_001_s1"
@@ -233,7 +233,7 @@
       ]
     },
     {
-      "elapsed_seconds": 4.556,
+      "elapsed_seconds": 3.693,
       "error": null,
       "evidence_session_ids": [
         "fixture_ssp_001_s2"
@@ -242,7 +242,7 @@
         "fixture_ssp_001_s2:0"
       ],
       "is_abstention": false,
-      "qa_answer": "For your dinner party menu, consider the following options that avoid shellfish:\n\n**Appetizers:**\n- Caprese skewers (mozzarella, cherry tomatoes, and basil)\n- Stuffed mushrooms with cream cheese and herbs\n\n**Main Course:**\n- Grilled chicken with lemon and herbs\n- Vegetarian pasta primavera with seasonal vegetables\n\n**Side Dishes:**\n- Quinoa salad with cucumbers, bell peppers, and a lemon vinaigrette\n- Roasted seasonal vegetables\n\n**Dessert:**\n- Chocolate mousse or fruit salad\n\nMake sure to communicate your shellfish allergy to your guests to ensure everyone's safety. Enjoy your dinner party!",
+      "qa_answer": "For your dinner party menu, consider the following options that avoid shellfish:\n\n**Appetizers:**\n- Caprese skewers (mozzarella, cherry tomatoes, and basil)\n- Stuffed mushrooms (filled with cream cheese, herbs, and breadcrumbs)\n\n**Main Course:**\n- Grilled chicken with lemon and herbs\n- Vegetarian pasta primavera (with seasonal vegetables)\n\n**Side Dishes:**\n- Roasted seasonal vegetables\n- Quinoa salad with cucumbers, tomatoes, and a lemon vinaigrette\n\n**Dessert:**\n- Chocolate mousse or fruit salad\n\nMake sure to communicate your shellfish allergy to your guests to ensure everyone's safety. Enjoy your dinner party!",
       "qa_correct": true,
       "question_id": "fixture_ssp_001",
       "question_type": "single-session-preference",
@@ -262,7 +262,7 @@
       ]
     },
     {
-      "elapsed_seconds": 2.8,
+      "elapsed_seconds": 2.343,
       "error": null,
       "evidence_session_ids": [
         "fixture_ssu_001_s2"
@@ -296,7 +296,7 @@
       ]
     },
     {
-      "elapsed_seconds": 1.91,
+      "elapsed_seconds": 2.224,
       "error": null,
       "evidence_session_ids": [],
       "evidence_turn_ids": [],
@@ -318,18 +318,18 @@
     }
   ],
   "run": {
-    "git_commit": "3b8fb6f2e5c03e094dbfe8b617ac090de10fa389",
+    "git_commit": "6d380d46f532424bdada54fcb91e7494a3ab4803",
     "python": "3.11.13",
-    "started_at": "2026-07-07T20:42:37Z",
-    "wall_seconds": 51.3
+    "started_at": "2026-07-07T21:10:31Z",
+    "wall_seconds": 42.78
   },
   "schema_version": "1.0",
   "usage": {
     "cost": {
-      "estimated_usd": 0.000615,
+      "estimated_usd": 0.000618,
       "note": "List-price estimate for reporting only; local/* models are free.",
       "per_model_usd": {
-        "openai/gpt-4o-mini": 0.000615
+        "openai/gpt-4o-mini": 0.000618
       },
       "unpriced_models": []
     },
@@ -337,16 +337,16 @@
     "llm_requests": 12,
     "searches": 6,
     "tokens": {
-      "in": 3241,
-      "out": 214,
-      "total": 3455,
+      "in": 3246,
+      "out": 219,
+      "total": 3465,
       "total_cached": 0
     },
     "tokens_by_model": {
       "openai/gpt-4o-mini": [
-        3455,
-        3241,
-        214,
+        3465,
+        3246,
+        219,
         0,
         0,
         0

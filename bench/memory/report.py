@@ -115,9 +115,18 @@ def build_report(
     results: Sequence[QuestionResult],
     usage: Dict[str, Any],
     wall_seconds: float,
+    started_at: Optional[datetime] = None,
     repo_root: Optional[Union[str, Path]] = None,
 ) -> Dict[str, Any]:
-    """Assemble the structured report for one benchmark run."""
+    """Assemble the structured report for one benchmark run.
+
+    ``started_at`` is the wall-clock moment the run began, captured by
+    the runner alongside its monotonic timer so ``started_at +
+    wall_seconds`` equals the real finish time. Falls back to "now"
+    only for callers that do not time a run of their own.
+    """
+    if started_at is None:
+        started_at = datetime.now(timezone.utc)
     sorted_results = sorted(results, key=lambda result: result.question_id)
     return {
         "schema_version": REPORT_SCHEMA_VERSION,
@@ -125,7 +134,7 @@ def build_report(
         "mode": mode,
         "k": k,
         "run": {
-            "started_at": datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ"),
+            "started_at": started_at.astimezone(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ"),
             "wall_seconds": round(wall_seconds, 2),
             "python": platform.python_version(),
             "git_commit": _git_commit(repo_root) if repo_root else None,

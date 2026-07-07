@@ -82,10 +82,12 @@ done
 ```
 
 Useful flags: `--limit N` (smoke runs), `--k`, `--fetch-limit`,
-`--seed` (split shuffle), `--output`, `--run-dir` (keep the rendered
-formation, SQLite DB, and the run's `membench-events.jsonl` event
-log). Exit code is 0 only when every question completed without a
-harness error.
+`--seed` (split shuffle), `--output`. The per-run temp dir (rendered
+formation, SQLite DB, `membench-events.jsonl` event log) is removed
+after the run — the JSON report is the durable artifact. To inspect
+it, pass `--keep-run-dir` (or set `MUXI_BENCH_KEEP_RUN_DIR=1`), or
+supply an explicit `--run-dir`, which is never deleted. Exit code is
+0 only when every question completed without a harness error.
 
 ## Datasets and licensing
 

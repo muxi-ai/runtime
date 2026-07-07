@@ -1,6 +1,7 @@
 """Report generation and cost-estimation tests."""
 
 import json
+from datetime import datetime, timedelta, timezone
 
 import pytest
 
@@ -121,6 +122,17 @@ class TestBuildReport:
 
     def test_report_is_json_serializable(self):
         json.dumps(_report())
+
+    def test_started_at_uses_injected_run_start(self):
+        started = datetime(2026, 7, 7, 12, 30, 45, tzinfo=timezone.utc)
+        report = _report(started_at=started)
+        assert report["run"]["started_at"] == "2026-07-07T12:30:45Z"
+
+    def test_started_at_normalized_to_utc(self):
+        cet = timezone(timedelta(hours=2))
+        started = datetime(2026, 7, 7, 14, 30, 45, tzinfo=cet)
+        report = _report(started_at=started)
+        assert report["run"]["started_at"] == "2026-07-07T12:30:45Z"
 
 
 class TestWriteReport:

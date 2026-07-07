@@ -30,6 +30,8 @@ scope for Tier 1 (it depends on per-turn KG extraction; see README).
 
 from __future__ import annotations
 
+import asyncio
+import os
 import shutil
 import uuid
 from dataclasses import dataclass
@@ -98,6 +100,7 @@ class MuxiMemoryAdapter:
         run_dir: Optional[Path] = None,
         secrets_dir: Optional[Path] = None,
         max_embed_chars: int = DEFAULT_MAX_EMBED_CHARS,
+        keep_run_dir: bool = False,
     ):
         if mode not in MODES:
             raise ValueError(f"Unknown mode: {mode} (expected one of {MODES})")
@@ -106,10 +109,13 @@ class MuxiMemoryAdapter:
         self.run_dir = Path(run_dir) if run_dir else None
         self.secrets_dir = Path(secrets_dir or DEFAULT_SECRETS_DIR)
         self.max_embed_chars = max_embed_chars
+        self.keep_run_dir = keep_run_dir
 
         self.formation = None
         self.overlord = None
         self._token_context = None
+        self._created_run_dir = False
+        self._stopped = False
         self.llm_requests = 0
         self.ingested_turns = 0
         self.truncated_turns = 0
@@ -123,6 +129,7 @@ class MuxiMemoryAdapter:
             import tempfile
 
             self.run_dir = Path(tempfile.mkdtemp(prefix="muxi-membench-"))
+            self._created_run_dir = True
         self.run_dir.mkdir(parents=True, exist_ok=True)
 
         with open(self.formation_yaml, "r", encoding="utf-8") as handle:
@@ -189,8 +196,61 @@ class MuxiMemoryAdapter:
         set_request_context(self._token_context)
 
     async def stop(self) -> None:
+        """Tear down the formation and remove the temp run directory.
+
+        Idempotent and safe on a never- or partially-started adapter
+        (e.g. when ``start()`` failed mid-load), so the runner can call
+        it unconditionally in a ``finally`` block.
+
+        Teardown mirrors the e2e suite's canonical sequence
+        (``e2e/tests/common/base.py::cleanup_formation``): the runtime
+        has no single fuller shutdown than these three steps combined —
+        ``stop_overlord()`` drains agents, disconnects MCP servers, and
+        disposes the database engine; the observability manager stop
+        releases its background tasks/stream transports; and
+        ``Formation.stop()`` clears remaining service references
+        without exiting the process.
+        """
+        if self._stopped:
+            return
+        self._stopped = True
+
         if self.formation is not None:
-            await self.formation.stop_overlord()
+            try:
+                await asyncio.wait_for(self.formation.stop_overlord(), timeout=30.0)
+            except Exception:
+                pass  # partially-started formation; continue teardown
+            manager = getattr(self.formation, "_observability_manager", None)
+            if manager is not None:
+                try:
+                    await manager.stop()
+                except Exception:
+                    pass
+            try:
+                self.formation.stop()
+            except Exception:
+                pass
+
+        self.formation = None
+        self.overlord = None
+        self._cleanup_run_dir()
+
+    def _cleanup_run_dir(self) -> None:
+        """Remove the adapter-created temp run dir.
+
+        The JSON report under ``results/`` is the durable artifact; the
+        run dir (SQLite DB, rendered formation, event log) is scratch.
+        Kept when: the caller supplied ``--run-dir`` (never deleted),
+        ``keep_run_dir=True`` (``--keep-run-dir``), or the
+        ``MUXI_BENCH_KEEP_RUN_DIR`` environment variable is set.
+        """
+        if not self._created_run_dir or self.run_dir is None:
+            return
+        if self.keep_run_dir:
+            return
+        if os.environ.get("MUXI_BENCH_KEEP_RUN_DIR", "").lower() not in ("", "0", "false"):
+            return
+        shutil.rmtree(self.run_dir, ignore_errors=True)
 
     # -- ingestion ---------------------------------------------------------
 
