@@ -2,6 +2,34 @@
 
 ## [unreleased]
 
+### Memory Event Substrate (#212)
+
+Every memory write is now recorded as an immutable event; the memory stores
+become rebuildable projections.
+
+- **Event log**: ``memory_events`` on Postgres and SQLite with idempotency
+  keys (``source`` + ``source_id``), versioned payload schemas validated at
+  write time, causation chains, and forward-compatible scope columns.
+- **Dual-write**: knowledge-graph extraction, Captain's Log digests, lessons,
+  and flat-fact extraction all append events alongside their existing writes
+  (Phase A of the migration plan); event append failures never affect the
+  projection write or the chat turn.
+- **Replay**: a projector registry with wipe-and-rebuild
+  (``POST /v1/memory/rebuild``), proven replay-equivalent for all three
+  projections -- improve extraction logic, re-project history.
+- **Selective forgetting**: ``forget_source`` soft deletion with audit events
+  and a daily hard-purge loop -- the GDPR substrate the memory platform
+  builds on.
+
+### Access control hardening (#211)
+
+A ``groups/`` directory now requires ``server.auth: "required"`` -- the
+"open formation with groups" combination is a load-time validation error.
+Its documented semantics gave unknown users full access while registered
+users got filtered access (inverted trust); the combination is no longer
+expressible.
+
+
 ### Group-Based Access Control (#202, #203, #204, #207)
 
 Formation operators can now control who may interact with a formation and
