@@ -9,7 +9,7 @@ Buffer endpoints support both ClientKey and AdminKey:
 
 import secrets
 from datetime import datetime, timezone
-from typing import Any, Dict, Optional, Tuple
+from typing import Any, Dict, List, Optional, Tuple
 
 from fastapi import APIRouter, Header, Query, Request
 from fastapi.responses import JSONResponse
@@ -18,11 +18,21 @@ from pydantic import BaseModel
 from .....datatypes.api import APIEventType, APIObjectType
 from .....services import observability
 from .....services.memory.base import SCOPE_TYPE_GROUP, SCOPE_TYPE_USER
+from .....services.memory.ingest import (
+    STATUS_ACCEPTED,
+    STATUS_DUPLICATE,
+    STATUS_INVALID,
+    IngestionBusyError,
+    IngestionUnavailableError,
+    validate_item,
+)
 from .....services.memory.scopes import (
     SCOPE_TYPES,
     is_write_scope_allowed,
     write_scope_target,
 )
+from .....utils.fastjson import json
+from ....background.request_tracker import RequestStatus
 from ...responses import (
     APIResponse,
     create_error_response,
@@ -49,14 +59,27 @@ class MemoryCreate(BaseModel):
     (requires ``scope_id`` = the group id), or ``formation``. Shared
     scopes require a ``memory.write`` grant in the caller's group YAML;
     without one the request is rejected with 403.
+
+    Memory ingestion (Phase 3a): providing ``source`` switches the
+    request onto the ingestion contract -- the item is validated,
+    appended to the event log under the (source, source_id) idempotency
+    key, and processed asynchronously (classify -> filter -> extract ->
+    embed -> link -> store). The response returns fast with a
+    ``processing_id`` pollable at GET /v1/memories/ingestion/{id}.
+    ``content`` may be structured (an object) on the ingestion path.
     """
 
-    content: Optional[str] = None
+    content: Optional[Any] = None
     type: Optional[str] = None
     detail: Optional[str] = None
     metadata: Optional[Dict[str, Any]] = None
     scope: Optional[str] = None
     scope_id: Optional[str] = None
+    # Ingestion contract fields (Memory Ingestion Phase 3a)
+    source: Optional[str] = None
+    source_id: Optional[str] = None
+    timestamp: Optional[str] = None
+    subject: Optional[str] = None
 
     def get_content_string(self) -> str:
         """Build the content string for storage.
@@ -64,6 +87,11 @@ class MemoryCreate(BaseModel):
         SDK format: { type: "preference", detail: "Prefers Python" }
         Flat format: { content: "User prefers Python" }
         """
+        if self.content is not None and not isinstance(self.content, str):
+            raise ValueError(
+                "Structured 'content' requires the ingestion contract; "
+                "include 'source' to route through POST /v1/memories ingestion"
+            )
         if self.content:
             return self.content
         if self.detail:
@@ -319,6 +347,151 @@ async def _write_shared_memory(
     return memory_id, None
 
 
+# ---------------------------------------------------------------------------
+# Memory ingestion (Phase 3a): contract validation + async accept helpers
+# ---------------------------------------------------------------------------
+
+# RequestTracker statuses -> the ingestion status vocabulary developers see.
+_INGESTION_STATUS_MAP = {
+    RequestStatus.PENDING: "queued",
+    RequestStatus.PROCESSING: "processing",
+    RequestStatus.RUNNING: "processing",
+    RequestStatus.AWAITING_CLARIFICATION: "processing",
+    RequestStatus.COMPLETED: "completed",
+    RequestStatus.FAILED: "failed",
+    RequestStatus.CANCELLED: "failed",
+}
+
+
+class MemoryIngestBatch(BaseModel):
+    """Body for POST /v1/memories/batch: up to input_limits.max_batch_items
+    ingestion items, each following the single-item contract (``source``
+    required per item)."""
+
+    items: List[MemoryCreate]
+
+
+def _ingest_payload(memory: MemoryCreate) -> Dict[str, Any]:
+    """Map the request model onto the ingestion validator's contract keys."""
+    return {
+        "content": memory.content if memory.content is not None else memory.detail,
+        "source": memory.source,
+        "source_id": memory.source_id,
+        "timestamp": memory.timestamp,
+        "subject": memory.subject,
+        "metadata": memory.metadata,
+    }
+
+
+def _error_details(error_response: JSONResponse) -> str:
+    """Extract the human-readable message from a formed error response.
+
+    Used to fold per-item scope-authorization failures into the batch
+    endpoint's 207-style per-item results while the single-item path
+    returns the same response verbatim -- one source of truth for the
+    denial semantics (403 grant checks, 422 scope validation).
+    """
+    try:
+        body = json.loads(error_response.body)
+        return body["error"]["message"]
+    except Exception:
+        return "Request rejected"
+
+
+def _ingestion_service_or_error(overlord, request_id):
+    """Resolve the overlord's ingestion service, or a formed 503."""
+    service = getattr(overlord, "memory_ingestion", None)
+    if service is None:
+        response = create_error_response(
+            "SERVICE_UNAVAILABLE",
+            "Memory ingestion service not available",
+            None,
+            request_id,
+        )
+        return None, JSONResponse(content=response.model_dump(), status_code=503)
+    return service, None
+
+
+async def _handle_ingestion(
+    formation, overlord, user_id: str, memory: MemoryCreate, request_id: Optional[str]
+) -> JSONResponse:
+    """POST /v1/memories with ``source``: the single-item ingestion path.
+
+    Idempotency contract: (source, source_id) within this formation+user
+    never creates duplicates. A replayed POST returns 200 with
+    ``duplicate: true``, the original event id, and the events already
+    derived from it -- never an error. New items return 202 with the
+    ``processing_id`` to poll.
+    """
+    service, error_response = _ingestion_service_or_error(overlord, request_id)
+    if error_response:
+        return error_response
+
+    item, error_message = validate_item(
+        _ingest_payload(memory), getattr(overlord, "input_validator", None)
+    )
+    if error_message:
+        response = create_error_response("INVALID_PARAMS", error_message, None, request_id)
+        return JSONResponse(content=response.model_dump(), status_code=422)
+
+    # Scope + grant behavior is identical to the direct memory write path
+    # (memory namespaces Phases 2+3): same validation, same 403 semantics.
+    scope, error_response = await _resolve_write_scope(formation, user_id, memory, request_id)
+    if error_response:
+        return error_response
+    item.scope = scope
+
+    try:
+        outcome = await service.submit(user_id, [(0, item)])
+    except IngestionBusyError as e:
+        response = create_error_response("RATE_LIMITED", str(e), None, request_id)
+        return JSONResponse(content=response.model_dump(), status_code=429)
+    except IngestionUnavailableError as e:
+        response = create_error_response("SERVICE_UNAVAILABLE", str(e), None, request_id)
+        return JSONResponse(content=response.model_dump(), status_code=503)
+    except Exception as e:
+        # Unexpected accept-path failure (tracker/task machinery): the
+        # service released its in-flight slot on the way out, so a retry
+        # is safe -- surface a formatted error, never a raw 500.
+        response = create_error_response(
+            "INTERNAL_ERROR", f"Failed to accept memory for ingestion: {str(e)}", None, request_id
+        )
+        return JSONResponse(content=response.model_dump(), status_code=500)
+
+    result = outcome["results"][0]
+    if result["status"] == STATUS_INVALID:  # defensive; validate_item runs first
+        response = create_error_response(
+            "INVALID_PARAMS", result.get("error", "Invalid ingestion item"), None, request_id
+        )
+        return JSONResponse(content=response.model_dump(), status_code=422)
+
+    duplicate = result["status"] == STATUS_DUPLICATE
+    data: Dict[str, Any] = {
+        "status": result["status"],
+        "duplicate": duplicate,
+        "event_id": result["event_id"],
+        "source": item.source,
+        "source_id": item.source_id,
+        "scope": scope[0] if scope else SCOPE_TYPE_USER,
+        "scope_id": scope[1] if scope else None,
+    }
+    if duplicate:
+        # The original accept's outcome: events the pipeline derived from
+        # the first ingestion of this (source, source_id).
+        data["derived_events"] = result.get("derived_events", [])
+        status_code = 200
+    else:
+        processing_id = outcome["processing_id"]
+        data["processing_id"] = processing_id
+        data["status_url"] = f"/v1/memories/ingestion/{processing_id}"
+        status_code = 202
+
+    response = create_success_response(
+        APIObjectType.MEMORY_INGESTION, APIEventType.MEMORY_INGESTION_ACCEPTED, data, request_id
+    )
+    return JSONResponse(content=response.model_dump(), status_code=status_code)
+
+
 @router.get("/memories", response_model=APIResponse, operation_id="search_memories")
 async def get_user_memories(
     request: Request,
@@ -456,6 +629,13 @@ async def create_user_memory(
         )
         return JSONResponse(content=response.model_dump(), status_code=503)
 
+    # Memory ingestion (Phase 3a): a request carrying `source` follows the
+    # ingestion contract (idempotent accept + async pipeline). Requests
+    # without `source` stay on the direct write path, byte-identical to
+    # the pre-ingestion behavior.
+    if memory.source is not None:
+        return await _handle_ingestion(formation, overlord, user_id, memory, request_id)
+
     try:
         content_str = memory.get_content_string()
     except ValueError as e:
@@ -513,6 +693,204 @@ async def create_user_memory(
             "INTERNAL_ERROR", f"Failed to create memory: {str(e)}", None, request_id
         )
         return JSONResponse(content=response.model_dump(), status_code=500)
+
+
+@router.post("/memories/batch", response_model=APIResponse, operation_id="ingest_memories_batch")
+async def ingest_memories_batch(
+    request: Request,
+    batch: MemoryIngestBatch,
+    x_user_id: Optional[str] = Header(None, alias="X-Muxi-User-ID"),
+) -> JSONResponse:
+    """
+    Ingest a batch of memories (Memory Ingestion Phase 3a).
+
+    Accepts up to input_limits.max_batch_items items, each following the
+    single-item ingestion contract (``source`` required). The response is
+    207-style: one entry per item, in order, with status
+    accepted | duplicate | invalid. Accepted items share one background
+    processing job (``processing_id``) whose per-item pipeline outcomes
+    are pollable at GET /v1/memories/ingestion/{processing_id}.
+
+    Duplicates within the formation+user's (source, source_id) space are
+    never re-created and never errors; invalid items never block the rest
+    of the batch.
+    """
+    formation = request.app.state.formation
+    request_id = getattr(request.state, "request_id", None)
+
+    user_id, error_response = _get_user_id(x_user_id, request_id)
+    if error_response:
+        return error_response
+
+    if not formation.has_persistent_memory():
+        response = create_error_response(
+            "SERVICE_UNAVAILABLE", "Persistent memory not configured", None, request_id
+        )
+        return JSONResponse(content=response.model_dump(), status_code=503)
+
+    overlord = getattr(formation, "_overlord", None)
+    if not overlord or not hasattr(overlord, "long_term_memory") or not overlord.long_term_memory:
+        response = create_error_response(
+            "SERVICE_UNAVAILABLE", "Memory service not available", None, request_id
+        )
+        return JSONResponse(content=response.model_dump(), status_code=503)
+
+    service, error_response = _ingestion_service_or_error(overlord, request_id)
+    if error_response:
+        return error_response
+
+    if not batch.items:
+        response = create_error_response(
+            "INVALID_PARAMS", "'items' must contain at least one item", None, request_id
+        )
+        return JSONResponse(content=response.model_dump(), status_code=422)
+
+    input_validator = getattr(overlord, "input_validator", None)
+    if input_validator is not None:
+        try:
+            input_validator.validate_batch_size(batch.items)
+        except ValueError as e:
+            response = create_error_response("INVALID_PARAMS", str(e), None, request_id)
+            return JSONResponse(content=response.model_dump(), status_code=422)
+
+    # Per-item validation + scope authorization. Invalid items are
+    # reported in place; they never block the rest of the batch.
+    item_results: Dict[int, Dict[str, Any]] = {}
+    to_submit = []
+    for index, entry in enumerate(batch.items):
+        item, error_message = validate_item(_ingest_payload(entry), input_validator)
+        if error_message:
+            item_results[index] = {"status": STATUS_INVALID, "error": error_message}
+            continue
+        scope, error_response = await _resolve_write_scope(formation, user_id, entry, request_id)
+        if error_response:
+            item_results[index] = {
+                "status": STATUS_INVALID,
+                "error": _error_details(error_response),
+            }
+            continue
+        item.scope = scope
+        to_submit.append((index, item))
+
+    processing_id = None
+    if to_submit:
+        try:
+            outcome = await service.submit(user_id, to_submit)
+        except IngestionBusyError as e:
+            # Nothing was appended: the whole batch is safely retryable.
+            response = create_error_response("RATE_LIMITED", str(e), None, request_id)
+            return JSONResponse(content=response.model_dump(), status_code=429)
+        except IngestionUnavailableError as e:
+            response = create_error_response("SERVICE_UNAVAILABLE", str(e), None, request_id)
+            return JSONResponse(content=response.model_dump(), status_code=503)
+        except Exception as e:
+            # Unexpected accept-path failure: the service released its
+            # in-flight slot on the way out, so a retry is safe.
+            response = create_error_response(
+                "INTERNAL_ERROR",
+                f"Failed to accept memory batch for ingestion: {str(e)}",
+                None,
+                request_id,
+            )
+            return JSONResponse(content=response.model_dump(), status_code=500)
+        processing_id = outcome["processing_id"]
+        item_results.update(outcome["results"])
+
+    items_data = []
+    for index in range(len(batch.items)):
+        entry_result = dict(item_results[index])
+        entry_result["index"] = index
+        items_data.append(entry_result)
+
+    counts = {
+        "accepted": sum(1 for r in items_data if r["status"] == STATUS_ACCEPTED),
+        "duplicate": sum(1 for r in items_data if r["status"] == STATUS_DUPLICATE),
+        "invalid": sum(1 for r in items_data if r["status"] == STATUS_INVALID),
+    }
+    data: Dict[str, Any] = {
+        "processing_id": processing_id,
+        "items": items_data,
+        "counts": counts,
+    }
+    if processing_id:
+        data["status_url"] = f"/v1/memories/ingestion/{processing_id}"
+
+    response = create_success_response(
+        APIObjectType.MEMORY_INGESTION, APIEventType.MEMORY_INGESTION_ACCEPTED, data, request_id
+    )
+    return JSONResponse(content=response.model_dump(), status_code=200)
+
+
+@router.get(
+    "/memories/ingestion/{processing_id}",
+    response_model=APIResponse,
+    operation_id="get_ingestion_status",
+)
+async def get_ingestion_status(
+    request: Request,
+    processing_id: str,
+    x_user_id: Optional[str] = Header(None, alias="X-Muxi-User-ID"),
+) -> JSONResponse:
+    """
+    Poll an ingestion processing job (Memory Ingestion Phase 3a).
+
+    Status lifecycle: queued -> processing -> completed | failed.
+    Completed jobs report per-item pipeline outcomes (classification,
+    filter level, disposition, extracted-fact counts) plus the job's
+    token usage for cost attribution. Completed results are retained for
+    a short TTL (default 5 minutes) after completion.
+
+    With ClientKey: X-Muxi-User-ID required; only the submitting user's
+    jobs are visible. With AdminKey: any job.
+    """
+    formation = request.app.state.formation
+    request_id = getattr(request.state, "request_id", None)
+
+    user_id, is_admin, error_response = _check_auth_and_user_id(request, x_user_id, request_id)
+    if error_response:
+        return error_response
+
+    overlord = getattr(formation, "_overlord", None)
+    if not overlord:
+        response = create_error_response(
+            "SERVICE_UNAVAILABLE", "Overlord service not available", None, request_id
+        )
+        return JSONResponse(content=response.model_dump(), status_code=503)
+
+    state = await overlord.request_tracker.get_request(processing_id)
+    if state is None:
+        response = create_error_response(
+            "NOT_FOUND",
+            f"Unknown or expired processing_id '{processing_id}' "
+            "(completed results are retained for 5 minutes)",
+            None,
+            request_id,
+        )
+        return JSONResponse(content=response.model_dump(), status_code=404)
+
+    if user_id and state.user_id != user_id:
+        response = create_error_response(
+            "FORBIDDEN", "Ingestion job does not belong to this user", None, request_id
+        )
+        return JSONResponse(content=response.model_dump(), status_code=403)
+
+    data: Dict[str, Any] = {
+        "processing_id": processing_id,
+        "status": _INGESTION_STATUS_MAP.get(state.status, state.status.value),
+        "created_at": state.get_created_timestamp(),
+    }
+    if state.end_time:
+        data["completed_at"] = state.end_time
+    if state.error:
+        data["error"] = state.error
+    if isinstance(state.result, dict):
+        # Per-item pipeline outcomes + counts + token usage.
+        data.update(state.result)
+
+    response = create_success_response(
+        APIObjectType.MEMORY_INGESTION, APIEventType.MEMORY_INGESTION_STATUS, data, request_id
+    )
+    return JSONResponse(content=response.model_dump(), status_code=200)
 
 
 @router.delete("/memories/{memory_id}", response_model=APIResponse, operation_id="delete_memory")

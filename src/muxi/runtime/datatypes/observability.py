@@ -797,6 +797,22 @@ class ConversationEvents(Enum):
     MEMORY_DELETION_HARD_PURGED = "memory.deletion.hard_purged"
     # When the post-grace-period hard purge removes soft-deleted events
 
+    # Memory ingestion pipeline (Memory Ingestion Phase 3a)
+    MEMORY_INGESTION_ACCEPTED = "memory.ingestion.accepted"
+    # When POST /v1/memories(/batch) accepts items and enqueues processing
+
+    MEMORY_INGESTION_STARTED = "memory.ingestion.started"
+    # When a background ingestion processing job begins running
+
+    MEMORY_INGESTION_COMPLETED = "memory.ingestion.completed"
+    # When an ingestion job finishes (per-item dispositions + token usage)
+
+    MEMORY_INGESTION_FAILED = "memory.ingestion.failed"
+    # When an ingestion job fails as a whole (per-item failures don't)
+
+    MEMORY_INGESTION_FILTERED = "memory.ingestion.filtered"
+    # When the noise gate drops an ingested item (disposition event recorded)
+
     USER_INFO_EXTRACTION_STARTED = "user.info.extraction.started"
     # When background user information extraction task is initiated
 

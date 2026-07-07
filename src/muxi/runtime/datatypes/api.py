@@ -42,6 +42,8 @@ class APIEventType(str, Enum):
     MEMORY_LIST = "memory.list"
     MEMORY_CONFIG_RETRIEVED = "memory.config.retrieved"
     MEMORY_CONFIG_UPDATED = "memory.config.updated"
+    MEMORY_INGESTION_ACCEPTED = "memory.ingestion.accepted"
+    MEMORY_INGESTION_STATUS = "memory.ingestion.status"
 
     JOB_RETRIEVED = "job.retrieved"
     JOB_DELETED = "job.deleted"
@@ -159,6 +161,7 @@ class APIObjectType(str, Enum):
     MEMORY = "memory"
     MEMORY_LIST = "memory_list"
     MEMORY_CONFIG = "memory_config"
+    MEMORY_INGESTION = "memory_ingestion"
     JOB = "job"
     JOB_LIST = "job_list"
     ERROR = "error"

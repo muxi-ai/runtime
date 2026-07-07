@@ -101,7 +101,13 @@ class MemoryExtractor:
         self._sensitive_key_patterns = SENSITIVE_KEY_TERMS
 
     async def process_conversation_turn(
-        self, user_message, agent_response, user_id, message_count=1, caused_by_event_id=None
+        self,
+        user_message,
+        agent_response,
+        user_id,
+        message_count=1,
+        caused_by_event_id=None,
+        event_source=None,
     ):
         """
         Process a conversation turn and extract information if needed.
@@ -118,6 +124,10 @@ class MemoryExtractor:
             caused_by_event_id: The interaction.turn memory event that
                 triggered this extraction (links extracted facts to their
                 originating turn in the event log)
+            event_source: Source stamped on the fact.extracted events
+                (default: interaction). The ingestion pipeline passes the
+                developer's source ("gmail", ...) so derived facts carry
+                their true origin.
         """
         if not self.auto_extract:
             return
@@ -157,7 +167,10 @@ class MemoryExtractor:
 
         # Process and store results if confidence threshold is met
         await self._process_extraction_results(
-            extraction_results, user_id, caused_by_event_id=caused_by_event_id
+            extraction_results,
+            user_id,
+            caused_by_event_id=caused_by_event_id,
+            event_source=event_source,
         )
 
     def opt_out_user(self, user_id: int) -> bool:
@@ -400,7 +413,7 @@ class MemoryExtractor:
         )
 
     async def _process_extraction_results(
-        self, extraction_results, user_id, caused_by_event_id=None
+        self, extraction_results, user_id, caused_by_event_id=None, event_source=None
     ):
         """
         Process extraction results and update context memory.
@@ -414,6 +427,8 @@ class MemoryExtractor:
             user_id: The user's ID
             caused_by_event_id: The interaction.turn memory event that
                 triggered this extraction, if any
+            event_source: Source stamped on the fact.extracted events
+                (default: interaction)
         """
         if not extraction_results or "extracted_info" not in extraction_results:
             return
@@ -515,7 +530,12 @@ class MemoryExtractor:
         # Store all non-duplicate memories concurrently
         add_results = await asyncio.gather(
             *(
-                self._store_memory(memory_data, user_id, caused_by_event_id=caused_by_event_id)
+                self._store_memory(
+                    memory_data,
+                    user_id,
+                    caused_by_event_id=caused_by_event_id,
+                    event_source=event_source,
+                )
                 for memory_data in to_store
             ),
             return_exceptions=True,
@@ -623,7 +643,9 @@ class MemoryExtractor:
         )
         return False
 
-    async def _store_memory(self, memory_data, user_id, caused_by_event_id=None) -> None:
+    async def _store_memory(
+        self, memory_data, user_id, caused_by_event_id=None, event_source=None
+    ) -> None:
         """
         Store a single extracted memory in long-term memory.
 
@@ -644,6 +666,9 @@ class MemoryExtractor:
             user_id: The user's ID
             caused_by_event_id: The interaction.turn memory event that
                 triggered this extraction, if any
+            event_source: Source stamped on the fact.extracted event
+                (default: interaction; the ingestion pipeline passes the
+                developer's source so facts trace to their true origin)
         """
         # Create metadata
         memory_metadata = {
@@ -668,7 +693,7 @@ class MemoryExtractor:
                 user_id=str(user_id),
                 event_type=EVENT_FACT_EXTRACTED,
                 payload=payload,
-                source=SOURCE_INTERACTION,
+                source=event_source or SOURCE_INTERACTION,
                 source_confidence=memory_data["confidence"],
                 caused_by=caused_by_event_id,
                 agent_id=memory_metadata["agent_id"],
