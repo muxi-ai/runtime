@@ -221,6 +221,7 @@ async def run_benchmark(benchmark: str, args: argparse.Namespace) -> int:
     started = time.monotonic()
     results: List[QuestionResult] = []
     partial = False
+    report_failed = False
     abort_reason: Optional[str] = None
     cases_completed = 0
     cases_failed = 0
@@ -370,10 +371,13 @@ async def run_benchmark(benchmark: str, args: argparse.Namespace) -> int:
             print(render_summary(report))
             print(f"Report written to {output}")
         except Exception as report_exc:
-            # Never mask the in-flight exception with a report failure.
+            # Never mask the in-flight exception with a report failure --
+            # but a run without a report is a failed run, so record it
+            # for the exit code below.
+            report_failed = True
             print(f"[membench] failed to write report: {report_exc}", file=sys.stderr)
 
-    return 1 if (partial or metrics.get("questions_errored")) else 0
+    return 1 if (partial or report_failed or metrics.get("questions_errored")) else 0
 
 
 def main(benchmark: str, default_k: int, argv: Optional[List[str]] = None) -> int:

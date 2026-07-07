@@ -186,3 +186,19 @@ class TestIngestionFailureIsolation:
         # Cleanup still ran.
         (adapter,) = _StubAdapter.instances
         assert adapter.stop_called == 1
+
+
+class TestReportWriteFailureExitCode:
+    """A run whose report cannot be written must not exit 0 (review P1)."""
+
+    async def test_report_write_failure_returns_nonzero(self, monkeypatch, tmp_path):
+        import bench.memory.runner as runner_mod
+
+        def exploding_write(report, output):
+            raise OSError("disk full")
+
+        monkeypatch.setattr(runner_mod, "write_report", exploding_write)
+        exit_code = await run_benchmark(
+            "longmemeval", _args("--output", str(tmp_path / "report.json"))
+        )
+        assert exit_code != 0
