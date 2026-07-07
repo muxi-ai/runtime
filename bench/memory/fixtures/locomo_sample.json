@@ -1,0 +1,71 @@
+[
+  {
+    "sample_id": "fixture_1",
+    "conversation": {
+      "speaker_a": "Nadia",
+      "speaker_b": "Omar",
+      "session_1_date_time": "1:15 pm on 8 January, 2023",
+      "session_1": [
+        {"speaker": "Nadia", "dia_id": "D1:1", "text": "Omar! Guess what - I finally signed up for the pottery class at the community studio."},
+        {"speaker": "Omar", "dia_id": "D1:2", "text": "That's awesome, Nadia! You've been talking about pottery for months. When does it start?"},
+        {"speaker": "Nadia", "dia_id": "D1:3", "text": "First class is next Tuesday evening. It runs for eight weeks."},
+        {"speaker": "Omar", "dia_id": "D1:4", "text": "Nice. I've been busy too - I adopted a grey tabby cat last weekend. Named him Biscuit."},
+        {"speaker": "Nadia", "dia_id": "D1:5", "text": "Biscuit! That's adorable. Is he settling in okay?"},
+        {"speaker": "Omar", "dia_id": "D1:6", "text": "He hid under the couch for two days but now he owns the apartment."}
+      ],
+      "session_2_date_time": "7:40 pm on 25 February, 2023",
+      "session_2": [
+        {"speaker": "Nadia", "dia_id": "D2:1", "text": "I made my first proper bowl in pottery class! It's lopsided but I love it."},
+        {"speaker": "Omar", "dia_id": "D2:2", "text": "Ha! Lopsided bowls have character. I have news too - I got promoted to senior data analyst at the logistics company."},
+        {"speaker": "Nadia", "dia_id": "D2:3", "text": "Congratulations! Does that mean more travel?"},
+        {"speaker": "Omar", "dia_id": "D2:4", "text": "A bit. I'll be visiting the Rotterdam office in April for two weeks."},
+        {"speaker": "Nadia", "dia_id": "D2:5", "text": "Rotterdam in spring sounds lovely. Take pictures of the architecture for me."}
+      ],
+      "session_3_date_time": "11:05 am on 30 April, 2023",
+      "session_3": [
+        {"speaker": "Omar", "dia_id": "D3:1", "text": "Back from Rotterdam! The office visit went well and I tried herring from a street stall. Biscuit sulked the whole time I was gone, according to my sister."},
+        {"speaker": "Nadia", "dia_id": "D3:2", "text": "Poor Biscuit. While you were away I finished the pottery course - our final projects were glazed last week. I made a full dinner set, six plates and six bowls."},
+        {"speaker": "Omar", "dia_id": "D3:3", "text": "A whole dinner set! You went from lopsided bowl to production line in two months."},
+        {"speaker": "Nadia", "dia_id": "D3:4", "text": "I'm signing up for the intermediate wheel-throwing course in May."}
+      ]
+    },
+    "qa": [
+      {
+        "question": "What is the name of Omar's cat?",
+        "answer": "Biscuit",
+        "evidence": ["D1:4"],
+        "category": 4
+      },
+      {
+        "question": "What did Nadia make for her pottery final project?",
+        "answer": "A full dinner set with six plates and six bowls",
+        "evidence": ["D3:2"],
+        "category": 4
+      },
+      {
+        "question": "What job title did Omar hold when he traveled to Rotterdam?",
+        "answer": "Senior data analyst",
+        "evidence": ["D2:2", "D2:4", "D3:1"],
+        "category": 1
+      },
+      {
+        "question": "How long after signing up for the pottery class did Nadia finish the course?",
+        "answer": "About three and a half months (signed up in early January, finished in late April)",
+        "evidence": ["D1:1", "D3:2"],
+        "category": 2
+      },
+      {
+        "question": "When did Omar adopt his cat?",
+        "answer": "The first weekend of January 2023",
+        "evidence": ["D1:4"],
+        "category": 2
+      },
+      {
+        "question": "What color is Nadia's car?",
+        "adversarial_answer": "Nadia never mentioned owning a car.",
+        "evidence": [],
+        "category": 5
+      }
+    ]
+  }
+]

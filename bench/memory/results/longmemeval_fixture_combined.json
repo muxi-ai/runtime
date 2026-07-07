@@ -1,0 +1,362 @@
+{
+  "benchmark": "longmemeval",
+  "config": {
+    "fetch_limit": 25,
+    "formation_yaml": "bench/memory/formation/formation.yaml",
+    "max_embed_chars": 6000,
+    "mode": "combined",
+    "qa": true,
+    "text_model": "openai/gpt-4o-mini",
+    "working_embedding_model": "local/nomic-ai/nomic-embed-text-v1.5"
+  },
+  "dataset": {
+    "cases": 6,
+    "fixture": true,
+    "path": "bench/memory/fixtures/longmemeval_sample.json",
+    "questions": 6,
+    "seed": 42,
+    "sessions": 19,
+    "split": "all"
+  },
+  "k": 5,
+  "metrics": {
+    "k": 5,
+    "qa": {
+      "by_question_type": {
+        "knowledge-update": {
+          "accuracy": 1.0,
+          "questions": 1
+        },
+        "multi-session": {
+          "accuracy": 1.0,
+          "questions": 1
+        },
+        "single-session-assistant": {
+          "accuracy": 1.0,
+          "questions": 1
+        },
+        "single-session-preference": {
+          "accuracy": 1.0,
+          "questions": 1
+        },
+        "single-session-user": {
+          "accuracy": 1.0,
+          "questions": 1
+        },
+        "temporal-reasoning": {
+          "accuracy": 1.0,
+          "questions": 1
+        }
+      },
+      "overall": {
+        "accuracy": 1.0,
+        "questions": 6
+      }
+    },
+    "questions_abstention": 1,
+    "questions_errored": 0,
+    "questions_scored": 5,
+    "questions_total": 6,
+    "retrieval": {
+      "session_level": {
+        "by_question_type": {
+          "knowledge-update": {
+            "coverage@5": 1.0,
+            "mrr": 1.0,
+            "questions": 1,
+            "recall@5": 1.0
+          },
+          "multi-session": {
+            "coverage@5": 1.0,
+            "mrr": 1.0,
+            "questions": 1,
+            "recall@5": 1.0
+          },
+          "single-session-assistant": {
+            "coverage@5": 1.0,
+            "mrr": 1.0,
+            "questions": 1,
+            "recall@5": 1.0
+          },
+          "single-session-preference": {
+            "coverage@5": 1.0,
+            "mrr": 1.0,
+            "questions": 1,
+            "recall@5": 1.0
+          },
+          "single-session-user": {
+            "coverage@5": 1.0,
+            "mrr": 1.0,
+            "questions": 1,
+            "recall@5": 1.0
+          }
+        },
+        "overall": {
+          "coverage@5": 1.0,
+          "mrr": 1.0,
+          "questions": 5,
+          "recall@5": 1.0
+        }
+      },
+      "turn_level": {
+        "by_question_type": {
+          "knowledge-update": {
+            "coverage@5": 1.0,
+            "mrr": 1.0,
+            "questions": 1,
+            "recall@5": 1.0
+          },
+          "multi-session": {
+            "coverage@5": 1.0,
+            "mrr": 1.0,
+            "questions": 1,
+            "recall@5": 1.0
+          },
+          "single-session-assistant": {
+            "coverage@5": 1.0,
+            "mrr": 1.0,
+            "questions": 1,
+            "recall@5": 1.0
+          },
+          "single-session-preference": {
+            "coverage@5": 1.0,
+            "mrr": 0.5,
+            "questions": 1,
+            "recall@5": 1.0
+          },
+          "single-session-user": {
+            "coverage@5": 1.0,
+            "mrr": 1.0,
+            "questions": 1,
+            "recall@5": 1.0
+          }
+        },
+        "overall": {
+          "coverage@5": 1.0,
+          "mrr": 0.9,
+          "questions": 5,
+          "recall@5": 1.0
+        }
+      }
+    }
+  },
+  "mode": "combined",
+  "results": [
+    {
+      "elapsed_seconds": 2.194,
+      "error": null,
+      "evidence_session_ids": [
+        "fixture_ku_001_s3"
+      ],
+      "evidence_turn_ids": [
+        "fixture_ku_001_s3:0"
+      ],
+      "is_abstention": false,
+      "qa_answer": "You work on the platform infrastructure team.",
+      "qa_correct": true,
+      "question_id": "fixture_ku_001",
+      "question_type": "knowledge-update",
+      "retrieved_session_ids": [
+        "fixture_ku_001_s3",
+        "fixture_ku_001_s1",
+        "fixture_ku_001_s2"
+      ],
+      "retrieved_turn_ids": [
+        "fixture_ku_001_s3:0",
+        "fixture_ku_001_s1:0",
+        "fixture_ku_001_s3:1",
+        "fixture_ku_001_s1:1",
+        "fixture_ku_001_s2:1",
+        "fixture_ku_001_s2:0"
+      ]
+    },
+    {
+      "elapsed_seconds": 2.375,
+      "error": null,
+      "evidence_session_ids": [
+        "fixture_ms_001_s1",
+        "fixture_ms_001_s3"
+      ],
+      "evidence_turn_ids": [
+        "fixture_ms_001_s1:0",
+        "fixture_ms_001_s3:0"
+      ],
+      "is_abstention": false,
+      "qa_answer": "You have mentioned running two marathons this year: the Chicago Marathon and the Berlin Marathon.",
+      "qa_correct": true,
+      "question_id": "fixture_ms_001",
+      "question_type": "multi-session",
+      "retrieved_session_ids": [
+        "fixture_ms_001_s1",
+        "fixture_ms_001_s3",
+        "fixture_ms_001_s2",
+        "fixture_ms_001_s4"
+      ],
+      "retrieved_turn_ids": [
+        "fixture_ms_001_s1:0",
+        "fixture_ms_001_s1:1",
+        "fixture_ms_001_s3:1",
+        "fixture_ms_001_s3:0",
+        "fixture_ms_001_s2:1",
+        "fixture_ms_001_s2:0",
+        "fixture_ms_001_s4:1",
+        "fixture_ms_001_s4:0"
+      ]
+    },
+    {
+      "elapsed_seconds": 2.374,
+      "error": null,
+      "evidence_session_ids": [
+        "fixture_ssa_001_s1"
+      ],
+      "evidence_turn_ids": [
+        "fixture_ssa_001_s1:1"
+      ],
+      "is_abstention": false,
+      "qa_answer": "I told you that chicken is safe to eat when the thickest part of the thigh reaches 165 degrees Fahrenheit, which is 74 degrees Celsius.",
+      "qa_correct": true,
+      "question_id": "fixture_ssa_001",
+      "question_type": "single-session-assistant",
+      "retrieved_session_ids": [
+        "fixture_ssa_001_s1",
+        "fixture_ssa_001_s3",
+        "fixture_ssa_001_s2"
+      ],
+      "retrieved_turn_ids": [
+        "fixture_ssa_001_s1:1",
+        "fixture_ssa_001_s1:0",
+        "fixture_ssa_001_s1:2",
+        "fixture_ssa_001_s3:1",
+        "fixture_ssa_001_s2:0",
+        "fixture_ssa_001_s2:1",
+        "fixture_ssa_001_s3:0"
+      ]
+    },
+    {
+      "elapsed_seconds": 4.336,
+      "error": null,
+      "evidence_session_ids": [
+        "fixture_ssp_001_s2"
+      ],
+      "evidence_turn_ids": [
+        "fixture_ssp_001_s2:0"
+      ],
+      "is_abstention": false,
+      "qa_answer": "For your dinner party menu, consider the following options that avoid shellfish:\n\n**Appetizers:**\n- Caprese skewers (mozzarella, tomatoes, basil)\n- Stuffed mushrooms (with cream cheese and herbs)\n\n**Main Course:**\n- Grilled chicken with lemon and herbs\n- Vegetarian pasta primavera (with seasonal vegetables)\n\n**Side Dishes:**\n- Roasted vegetables (carrots, zucchini, bell peppers)\n- Quinoa salad with cucumbers, tomatoes, and a lemon vinaigrette\n\n**Dessert:**\n- Chocolate mousse or fruit salad\n\nMake sure to inform your guests about your shellfish allergy to ensure a safe dining experience!",
+      "qa_correct": true,
+      "question_id": "fixture_ssp_001",
+      "question_type": "single-session-preference",
+      "retrieved_session_ids": [
+        "fixture_ssp_001_s2",
+        "fixture_ssp_001_s1",
+        "fixture_ssp_001_s3"
+      ],
+      "retrieved_turn_ids": [
+        "fixture_ssp_001_s2:1",
+        "fixture_ssp_001_s2:0",
+        "fixture_ssp_001_s1:1",
+        "fixture_ssp_001_s3:1",
+        "fixture_ssp_001_s2:2",
+        "fixture_ssp_001_s3:0",
+        "fixture_ssp_001_s1:0"
+      ]
+    },
+    {
+      "elapsed_seconds": 2.444,
+      "error": null,
+      "evidence_session_ids": [
+        "fixture_ssu_001_s2"
+      ],
+      "evidence_turn_ids": [
+        "fixture_ssu_001_s2:0"
+      ],
+      "is_abstention": false,
+      "qa_answer": "Your dog is a border collie.",
+      "qa_correct": true,
+      "question_id": "fixture_ssu_001",
+      "question_type": "single-session-user",
+      "retrieved_session_ids": [
+        "fixture_ssu_001_s2",
+        "fixture_ssu_001_s1",
+        "fixture_ssu_001_s3",
+        "fixture_ssu_001_s4"
+      ],
+      "retrieved_turn_ids": [
+        "fixture_ssu_001_s2:0",
+        "fixture_ssu_001_s2:1",
+        "fixture_ssu_001_s2:3",
+        "fixture_ssu_001_s2:2",
+        "fixture_ssu_001_s1:2",
+        "fixture_ssu_001_s3:1",
+        "fixture_ssu_001_s1:1",
+        "fixture_ssu_001_s4:0",
+        "fixture_ssu_001_s4:1",
+        "fixture_ssu_001_s1:0",
+        "fixture_ssu_001_s3:0"
+      ]
+    },
+    {
+      "elapsed_seconds": 2.125,
+      "error": null,
+      "evidence_session_ids": [],
+      "evidence_turn_ids": [],
+      "is_abstention": true,
+      "qa_answer": "I do not know.",
+      "qa_correct": true,
+      "question_id": "fixture_tr_001_abs",
+      "question_type": "temporal-reasoning",
+      "retrieved_session_ids": [
+        "fixture_tr_001_s1",
+        "fixture_tr_001_s2"
+      ],
+      "retrieved_turn_ids": [
+        "fixture_tr_001_s1:0",
+        "fixture_tr_001_s2:1",
+        "fixture_tr_001_s1:1",
+        "fixture_tr_001_s2:0"
+      ]
+    }
+  ],
+  "run": {
+    "cases": {
+      "completed": 6,
+      "failed": 0,
+      "skipped": 0
+    },
+    "git_commit": "192b6cbd91a35f99bf6d63ba640028ce0dccd58e",
+    "python": "3.11.13",
+    "started_at": "2026-07-07T21:30:34Z",
+    "wall_seconds": 42.32
+  },
+  "schema_version": "1.0",
+  "usage": {
+    "cost": {
+      "estimated_usd": 0.000616,
+      "note": "List-price estimate for reporting only; local/* models are free.",
+      "per_model_usd": {
+        "openai/gpt-4o-mini": 0.000616
+      },
+      "unpriced_models": []
+    },
+    "ingested_turns": 43,
+    "llm_requests": 12,
+    "searches": 6,
+    "tokens": {
+      "in": 3243,
+      "out": 216,
+      "total": 3459,
+      "total_cached": 0
+    },
+    "tokens_by_model": {
+      "openai/gpt-4o-mini": [
+        3459,
+        3243,
+        216,
+        0,
+        0,
+        0
+      ]
+    },
+    "truncated_turns": 0
+  }
+}

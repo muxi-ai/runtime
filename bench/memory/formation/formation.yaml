@@ -1,0 +1,69 @@
+# Memory benchmarking formation (Tier 1).
+#
+# Cheap-model configuration by design:
+#   - Embeddings: local Nomic v1.5 (ONNX, free, 768-dim) — retrieval-only
+#     runs cost $0 in API spend.
+#   - Text model: openai/gpt-4o-mini — only called with --qa (answer +
+#     judge); roughly $0.15/$0.60 per 1M tokens in/out.
+#   - Persistent memory: SQLite + sqlite-vec. The connection_string is
+#     rewritten to a run-local path by the harness, so this file is a
+#     template; do not point it at a shared database.
+#
+# The buffer must hold the largest single case (LongMemEval-S haystacks
+# reach ~2,500 turns); the harness clears the buffer between cases.
+
+schema: "1.0.0"
+id: "membench"
+description: "Formation used by the Tier 1 memory benchmark harness"
+
+runtime:
+  built_in_mcps: false
+
+llm:
+  settings:
+    temperature: 0.0
+    max_tokens: 400
+  api_keys:
+    openai: "${{ secrets.OPENAI_API_KEY }}"
+  models:
+    - text: "openai/gpt-4o-mini"
+    - embedding: "local/nomic-ai/nomic-embed-text-v1.5"
+
+agents:
+  - id: "membench-agent"
+    name: "MemBench Agent"
+    description: "Answers questions from retrieved conversation excerpts"
+    model: "openai/gpt-4o-mini"
+    system_message: |
+      You answer questions about a user's past conversations using only
+      the provided excerpts. If the excerpts do not contain the answer,
+      say you do not know.
+
+overlord:
+  clarification:
+    enabled: false
+
+memory:
+  buffer:
+    size: 400
+    multiplier: 10
+    vector_search: true
+
+  persistent:
+    provider: "sqlite"
+    connection_string: "membench.db"
+
+# Conversation events (model.request.*, memory.*) go to a run-local
+# JSONL file (path rewritten by the harness) so stdout stays readable
+# and every run leaves an auditable event log.
+logging:
+  system:
+    level: "warning"
+    destination: "stdout"
+  conversation:
+    enabled: true
+    streams:
+      - transport: "file"
+        destination: "membench-events.jsonl"
+        level: "info"
+        format: "jsonl"
