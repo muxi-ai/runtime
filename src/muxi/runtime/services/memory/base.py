@@ -53,6 +53,13 @@
 from abc import ABC, abstractmethod
 from typing import Any, Dict, List, Optional
 
+# Memory scope types (memory-namespaces): canonical home for the constants
+# shared by the memories store (long_term.py, sqlite.py) and the event
+# substrate (events/models.py) so the two stores can never drift apart.
+SCOPE_TYPE_USER = "user"
+SCOPE_TYPE_GROUP = "group"
+SCOPE_TYPE_FORMATION = "formation"
+
 
 class BaseMemory(ABC):
     """

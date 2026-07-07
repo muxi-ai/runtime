@@ -43,6 +43,7 @@ from ...utils.fastjson import json
 from .. import observability
 from .base import BaseMemory
 from .embedding import DEFAULT_EMBEDDING_MODEL, embed, probe_dimension
+from .long_term import SCOPE_TYPE_USER
 
 
 class SQLiteMemory(BaseMemory):
@@ -206,9 +207,25 @@ class SQLiteMemory(BaseMemory):
                 metadata TEXT,
                 created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
                 updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                scope_type TEXT NOT NULL DEFAULT '{SCOPE_TYPE_USER}',
+                scope_id TEXT,
                 FOREIGN KEY (user_id) REFERENCES users(id)
             )
             """)
+        # Memory namespaces Phase 1: additive migration for tables created
+        # before the scope columns existed (pre-baked dims from
+        # init_schema_sqlite.sql or older runtimes). The server-side
+        # default backfills existing rows as user scope; a NULL scope_id
+        # reads as "the row's owning user_id" (no backfill UPDATE — same
+        # posture as the meta_data column migration).
+        existing_columns = [row[1] for row in self.conn.execute(f"PRAGMA table_info({table})")]
+        if "scope_type" not in existing_columns:
+            self.conn.execute(
+                f"ALTER TABLE {table} ADD COLUMN "
+                f"scope_type TEXT NOT NULL DEFAULT '{SCOPE_TYPE_USER}'"
+            )
+        if "scope_id" not in existing_columns:
+            self.conn.execute(f"ALTER TABLE {table} ADD COLUMN scope_id TEXT")
         # Secondary indexes (match init_schema_sqlite.sql)
         self.conn.execute(f"CREATE INDEX IF NOT EXISTS idx_{table}_user_id ON {table}(user_id)")
         self.conn.execute(
@@ -223,6 +240,12 @@ class SQLiteMemory(BaseMemory):
         self.conn.execute(
             f"CREATE INDEX IF NOT EXISTS idx_{table}_user_created_at "
             f"ON {table}(user_id, created_at)"
+        )
+        # Scope fan-out index (parity with ensure_memory_table_indexes on
+        # the PostgreSQL side; consumed by Phase 2's read fan-out).
+        self.conn.execute(
+            f"CREATE INDEX IF NOT EXISTS idx_{table}_scope "
+            f"ON {table}(scope_type, scope_id, collection)"
         )
         # FTS5 virtual table + sync triggers (full-text search parity
         # with the PostgreSQL GIN index on the equivalent dim table).
@@ -562,12 +585,14 @@ class SQLiteMemory(BaseMemory):
         # Generate memory ID
         memory_id = self._generate_id()
 
-        # Insert memory
+        # Insert memory. Phase 1: every write is user scope; scope_id
+        # mirrors the owning internal user id (memory namespaces
+        # substrate).
         self.conn.execute(
             f"""
             INSERT INTO {self.memories_table}
-            (id, user_id, collection, text, embedding, metadata)
-            VALUES (?, ?, ?, ?, ?, ?)
+            (id, user_id, collection, text, embedding, metadata, scope_type, scope_id)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?)
             """,
             (
                 memory_id,
@@ -576,6 +601,8 @@ class SQLiteMemory(BaseMemory):
                 text,
                 embedding_bytes,
                 metadata and json.dumps(metadata),
+                SCOPE_TYPE_USER,
+                str(user_id),
             ),
         )
         self.conn.commit()

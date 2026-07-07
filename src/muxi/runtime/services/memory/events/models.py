@@ -128,7 +128,7 @@ SOURCE_TOOL = "tool"  # the record_lesson agent tool
 SOURCE_USER_EDIT = "user_edit"  # user-initiated corrections/deletions
 
 # Scope shape recorded for forward compatibility with memory namespaces.
-SCOPE_TYPE_USER = "user"
+from ..base import SCOPE_TYPE_USER  # noqa: E402 -- canonical scope constants
 
 
 def validate_event_payload(event_type: str, payload: Any, event_version: int = 1) -> None:

@@ -1197,6 +1197,50 @@ def _migrate_add_derived_from_event_ids_column(db_manager, table_name: str) -> N
         pass  # Table may not exist yet on first run; create_tables handles it
 
 
+def _migrate_add_scope_columns(db_manager, table_name: str) -> None:
+    """Add the memory-namespaces scope columns to memories tables from older schema versions.
+
+    Backfill semantics (memory namespaces Phase 1): ``scope_type`` backfills
+    existing rows as ``'user'`` through the server-side column default;
+    ``scope_id`` stays NULL on old rows and reads as "the row's owning
+    user_id" — no backfill UPDATE is issued, matching the additive posture
+    of the meta_data / derived_from_event_ids migrations above.
+    """
+    from sqlalchemy import text
+
+    try:
+        with db_manager.engine.connect() as conn:
+            if db_manager.database_type == "postgresql":
+                conn.execute(
+                    text(
+                        f"ALTER TABLE {table_name} ADD COLUMN IF NOT EXISTS "
+                        f"scope_type VARCHAR(20) NOT NULL DEFAULT 'user'"
+                    )
+                )
+                conn.execute(
+                    text(
+                        f"ALTER TABLE {table_name} ADD COLUMN IF NOT EXISTS "
+                        f"scope_id VARCHAR(255)"
+                    )
+                )
+            else:
+                # SQLite: check if columns exist via PRAGMA, add if missing
+                result = conn.execute(text(f"PRAGMA table_info({table_name})"))
+                columns = [row[1] for row in result]
+                if "scope_type" not in columns:
+                    conn.execute(
+                        text(
+                            f"ALTER TABLE {table_name} ADD COLUMN "
+                            f"scope_type TEXT NOT NULL DEFAULT 'user'"
+                        )
+                    )
+                if "scope_id" not in columns:
+                    conn.execute(text(f"ALTER TABLE {table_name} ADD COLUMN scope_id TEXT"))
+            conn.commit()
+    except Exception:
+        pass  # Table may not exist yet on first run; create_tables handles it
+
+
 def _create_all_database_tables(db_manager, embedding_dimension: int = 1536) -> None:
     """
     Create all database tables for the MUXI runtime.
@@ -1265,6 +1309,9 @@ def _create_all_database_tables(db_manager, embedding_dimension: int = 1536) -> 
         # created before the memory event substrate shipped
         for projection_table in ("kg_entities", "kg_relationships", "captains_log", "lessons"):
             _migrate_add_derived_from_event_ids_column(db_manager, projection_table)
+        # Migrate: ensure the memory-namespaces scope columns exist on
+        # memories tables created before the scope substrate shipped
+        _migrate_add_scope_columns(db_manager, memories_table)
         ensure_memory_table_indexes(db_manager, embedding_dimension)
         table_names = [
             "users",

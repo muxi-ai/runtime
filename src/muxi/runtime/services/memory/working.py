@@ -76,10 +76,25 @@ from faissx import client as faiss
 from .. import observability
 from .embedding import DEFAULT_EMBEDDING_MODEL, embed, probe_dimension
 
-# Partition key for vectors that are not scoped to a single session:
-# non-"buffer" namespaces (sops, knowledge, docs) and "buffer" items
-# whose metadata carries no session_id.
-SHARED_PARTITION = "__shared__"
+# Structured partition-key scheme (memory namespaces Phase 1). Vector
+# partitions are keyed by scope:
+#
+#   "session:{id}"  transient per-session retrieval plumbing (from #200)
+#   "user:{id}"     cross-session items owned by one user
+#   "group:{id}"    reserved for Phase 3 (group-scope fan-out); no writer yet
+#   "formation"     formation-global items (sops, knowledge, docs, and
+#                   buffer items carrying neither session nor user)
+#
+# The item-kind tag (namespace: buffer / sops / knowledge / doc) stays
+# orthogonal, exactly as before. Search fan-out is unchanged in Phase 1:
+# a session-scoped search reads its session partition, namespaced
+# (sops/knowledge) searches read the formation partition, and unscoped
+# searches merge all partitions — group/user fan-out arrives with the
+# read-up-the-chain semantics in later phases.
+SESSION_PARTITION_PREFIX = "session:"
+USER_PARTITION_PREFIX = "user:"
+GROUP_PARTITION_PREFIX = "group:"
+FORMATION_PARTITION = "formation"
 
 
 class _IndexPartition:
@@ -233,11 +248,12 @@ class WorkingMemory:
         elif mode != "local" and mode != "remote":
             raise ValueError(f"Invalid mode: {mode}. Must be 'local' or 'remote'")
 
-        # Initialize vector storage. Vectors are partitioned by session:
-        # each "buffer"-namespace item carrying a session_id goes to a
-        # per-session FAISS index; everything else (sops, knowledge,
-        # docs, buffer items without a session) shares the
-        # ``SHARED_PARTITION`` index. Partitions are created lazily on
+        # Initialize vector storage. Vectors are partitioned by scope
+        # key: each "buffer"-namespace item carrying a session_id goes
+        # to a per-session FAISS index; buffer items with only a
+        # user_id go to that user's cross-session index; everything
+        # else (sops, knowledge, docs, buffer items with neither)
+        # shares the ``FORMATION_PARTITION`` index. Partitions are created lazily on
         # first write with the provisional dim and reset the first time
         # ``_ensure_dim`` resolves a different real dim; this is safe
         # because no vectors have been added yet.
@@ -289,17 +305,23 @@ class WorkingMemory:
             return probed
 
     def _partition_key(self, namespace: str, metadata: Optional[Dict[str, Any]]) -> str:
-        """Derive the vector partition key for an item.
+        """Derive the structured scope partition key for an item.
 
         "buffer"-namespace items carrying a session_id are partitioned
-        per session; everything else (sops, knowledge, docs, and buffer
-        items with no session) shares one partition.
+        per session (``session:{id}``); buffer items carrying a user_id
+        but no session land in the user's cross-session partition
+        (``user:{id}``); everything else (sops, knowledge, docs, and
+        buffer items with neither) is formation-global (``formation``).
         """
         if namespace == "buffer":
-            session_id = (metadata or {}).get("session_id")
+            md = metadata or {}
+            session_id = md.get("session_id")
             if session_id:
-                return str(session_id)
-        return SHARED_PARTITION
+                return f"{SESSION_PARTITION_PREFIX}{session_id}"
+            user_id = md.get("user_id")
+            if user_id:
+                return f"{USER_PARTITION_PREFIX}{user_id}"
+        return FORMATION_PARTITION
 
     def _get_partition(self, key: str) -> _IndexPartition:
         """Return the partition for ``key``, creating it lazily."""
@@ -843,12 +865,15 @@ class WorkingMemory:
             # filter below excluded every other item anyway (items in
             # other partitions carry no matching session_id). Namespaced
             # searches without a session (sops / knowledge) only need
-            # the shared partition, where all non-"buffer" vectors live.
-            # Unscoped searches merge results from all partitions.
+            # the formation partition, where all non-"buffer" vectors
+            # live. Unscoped searches merge results from all partitions.
+            # This fan-out is unchanged by the structured partition keys
+            # (memory namespaces Phase 1) — user/group fan-out arrives
+            # in later phases.
             if session_id:
-                partition_keys = [str(session_id)]
+                partition_keys = [f"{SESSION_PARTITION_PREFIX}{session_id}"]
             elif namespace and namespace != "buffer":
-                partition_keys = [SHARED_PARTITION]
+                partition_keys = [FORMATION_PARTITION]
             else:
                 partition_keys = list(self.partitions.keys())
 

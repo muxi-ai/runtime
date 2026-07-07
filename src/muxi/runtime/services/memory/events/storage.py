@@ -126,6 +126,11 @@ class MemoryEventStorage:
         """Insert one event row; returns (event dict, True)."""
         occurred_at = fields.pop("occurred_at") or utc_now_naive()
         async with self.db_manager.get_async_session() as session:
+            # Memory namespaces Phase 1: every memory write is user
+            # scope, so events record the same (user, owner) shape the
+            # long-term memory rows are stamped with. When shared-scope
+            # writes arrive (Phase 2+), whatever scope the projection
+            # write carries must be recorded here unchanged.
             event = MemoryEvent(
                 user_id=user_id,
                 formation_id=self.formation_id,

@@ -58,7 +58,23 @@ class TestMemoryModelFactory:
             "created_at",
             "updated_at",
             "collection",
+            "scope_type",
+            "scope_id",
         }
+
+    def test_scope_columns_shape(self):
+        """Memory namespaces Phase 1: scope columns with user-scope defaults."""
+        from muxi.runtime.services.memory.long_term import get_memory_model
+
+        model = get_memory_model(384)
+        scope_type = model.__table__.columns["scope_type"]
+        scope_id = model.__table__.columns["scope_id"]
+        assert scope_type.nullable is False
+        # Server-side default backfills pre-existing rows as user scope.
+        assert scope_type.server_default is not None
+        assert scope_type.server_default.arg == "user"
+        # NULL scope_id on old rows reads as "the owning user_id".
+        assert scope_id.nullable is True
 
 
 class TestDimensionTiers:
