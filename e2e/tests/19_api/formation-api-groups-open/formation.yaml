@@ -1,6 +1,6 @@
 schema: "1.0.0"
-id: api-test-groups-circular
-description: "Formation with a groups/ directory for GBAC circular inheritance failure testing"
+id: api-test-groups-open
+description: "Formation combining groups/ with default (open) auth -- must FAIL to load (2026-07-07 ruling)"
 
 llm:
   api_keys:
@@ -26,7 +26,8 @@ agents:
 server:
   enabled: true
   port: 8271
-  auth: required  # groups/ requires the auth gate (2026-07-07 ruling)
+  # auth deliberately absent (default: open) -- with groups/ present this
+  # formation must fail to load with a clear error
   api_keys:
     admin_key: test-admin-key-123
     client_key: test-client-key-456

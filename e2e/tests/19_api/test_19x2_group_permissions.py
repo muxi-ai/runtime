@@ -7,6 +7,12 @@ Covers GBAC Phase 2 end to end:
 - the PermissionResolver resolves seeded user_groups memberships with
   inheritance, deny-overrides, and empty-membership semantics
 - a formation with circular group inheritance FAILS to load with a clear error
+- a formation combining groups/ with open (default) auth FAILS to load
+  (2026-07-07 ruling: group files require server.auth: required)
+
+Formations with group files run with server.auth: required, so HTTP users
+are seeded into users/user_identifiers before chatting (same pattern as
+the 19x1 auth gate test).
 """
 
 import asyncio
@@ -24,6 +30,7 @@ from common import BaseE2ETest, TestOutputFormatter  # noqa: E402
 from muxi.runtime.datatypes.exceptions import ConfigurationValidationError  # noqa: E402
 from muxi.runtime.formation import Formation  # noqa: E402
 from muxi.runtime.services.memory.long_term import UserGroup  # noqa: E402
+from muxi.runtime.utils.user_resolution import resolve_user_identifier  # noqa: E402
 
 ANALYST_USER = "alice@example.com"
 UNGROUPED_USER = "stranger@example.com"
@@ -88,6 +95,15 @@ class TestGroupPermissions(BaseE2ETest):
             checks.append("groups auto-discovered from groups/ directory")
 
             print("\n3. Testing chat with groups loaded (zero behavior regression)...")
+            # groups/ requires server.auth: required, so register the user
+            # with the auth gate first (identity only -- no group membership)
+            await resolve_user_identifier(
+                identifier=UNGROUPED_USER,
+                formation_id=FORMATION_ID,
+                db_manager=self.formation._db_manager,
+                kv_cache=None,
+                create_if_missing=True,
+            )
             async with httpx.AsyncClient(timeout=90.0) as client:
                 r = await client.post(
                     f"{self.base_url}/chat",
@@ -143,6 +159,22 @@ class TestGroupPermissions(BaseE2ETest):
                 print("✅ Formation load failed with a clear circular-inheritance error")
                 checks.append("circular inheritance fails formation load")
             assert failed, "circular-inheritance formation loaded but should have failed"
+
+            # Phase C: groups/ with open (default) auth fails formation load
+            print("\n8. Loading formation combining groups/ with open auth...")
+            failed = False
+            try:
+                bad_formation = Formation()
+                await bad_formation.load(str(Path(__file__).parent / "formation-api-groups-open"))
+            except ConfigurationValidationError as e:
+                failed = True
+                message = str(e)
+                assert "server.auth" in message, message
+                assert "required" in message, message
+                assert "groups" in message, message
+                print("✅ Formation load failed: groups/ requires server.auth: required")
+                checks.append("groups/ with open auth fails formation load")
+            assert failed, "open-auth groups formation loaded but should have failed"
 
             formatter.print_test_result(
                 test_name="test_19x2_group_permissions",
