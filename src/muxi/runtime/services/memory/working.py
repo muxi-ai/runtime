@@ -68,13 +68,14 @@ import asyncio
 import collections
 import threading
 import time
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List, Optional, Sequence
 
 import numpy as np
 from faissx import client as faiss
 
 from .. import observability
 from .embedding import DEFAULT_EMBEDDING_MODEL, embed, probe_dimension
+from .scopes import resolve_read_group_ids
 
 # Structured partition-key scheme (memory namespaces). Vector partitions
 # are keyed by scope:
@@ -334,22 +335,26 @@ class WorkingMemory:
                 return f"{USER_PARTITION_PREFIX}{user_id}"
         return FORMATION_PARTITION
 
-    def _fanout_partition_keys(self, requester_user_id: Optional[str] = None) -> List[str]:
+    def _fanout_partition_keys(
+        self,
+        requester_user_id: Optional[str] = None,
+        group_ids: Sequence[str] = (),
+    ) -> List[str]:
         """The identity-chain partitions a user-context search reads.
 
         Write-one-read-up (memory namespaces): the requester's own
         cross-session partition, one partition per group the requester
-        belongs to (from the per-request GBAC ResolvedPermissions -- no
-        permissions set means no group partitions), and the formation
-        partition. Ordering is most-specific-first for readability; the
-        merge is score-based.
+        belongs to, and the formation partition. ``group_ids`` is
+        resolved by the caller through the same shared helper the
+        long-term backends use (``scopes.resolve_read_group_ids``), so
+        working memory and long-term memory can never disagree about a
+        user's group set. Ordering is most-specific-first for
+        readability; the merge is score-based.
         """
-        from .scopes import current_group_ids
-
         keys: List[str] = []
         if requester_user_id:
             keys.append(f"{USER_PARTITION_PREFIX}{requester_user_id}")
-        for group_id in current_group_ids():
+        for group_id in group_ids:
             keys.append(f"{GROUP_PARTITION_PREFIX}{group_id}")
         keys.append(FORMATION_PARTITION)
         return keys
@@ -910,17 +915,18 @@ class WorkingMemory:
             requester_user_id = (filter_metadata or {}).get("user_id")
             fanout_keys: set = set()
             if session_id:
+                # Same three-level membership resolution as the long-term
+                # backends: per-request permissions ContextVar, then the
+                # formation's registered resolver by user id, then none.
+                group_ids = await resolve_read_group_ids(self.formation_id, requester_user_id)
                 partition_keys = [f"{SESSION_PARTITION_PREFIX}{session_id}"]
-                fanout_keys = set(self._fanout_partition_keys(requester_user_id))
+                fanout_keys = set(self._fanout_partition_keys(requester_user_id, group_ids))
                 partition_keys.extend(key for key in fanout_keys if key in self.partitions)
             elif namespace and namespace != "buffer":
                 partition_keys = [FORMATION_PARTITION]
             else:
-                from .scopes import current_group_ids
-
-                allowed_groups = {
-                    f"{GROUP_PARTITION_PREFIX}{group_id}" for group_id in current_group_ids()
-                }
+                group_ids = await resolve_read_group_ids(self.formation_id, requester_user_id)
+                allowed_groups = {f"{GROUP_PARTITION_PREFIX}{group_id}" for group_id in group_ids}
                 partition_keys = [
                     key
                     for key in self.partitions

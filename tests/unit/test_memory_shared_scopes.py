@@ -597,6 +597,131 @@ class TestWorkingMemoryFanOut:
             assert "team-a shared note" in texts
             assert "team-b shared note" not in texts
 
+    async def test_session_fanout_uses_registered_resolver_fallback(self):
+        """No ContextVar permissions, but a registered resolver: working
+        memory resolves group memberships through the same shared helper
+        the long-term backends use, so internal callers (background jobs,
+        direct service calls) see the same group set as LTM."""
+
+        class FakeResolver:
+            async def resolve(self, user_id):
+                return _permissions(group_ids=("team-a",))
+
+        probe_patch, embed_patch = _wm_patched()
+        with probe_patch as mock_probe, embed_patch:
+            mock_probe.return_value = WM_DIM
+            mem = await self._seeded()
+            register_group_membership_resolver(FORMATION_ID, FakeResolver())
+            try:
+                results = await mem.search(
+                    "q",
+                    query_vector=_one_hot(0),
+                    limit=10,
+                    session_id="s1",
+                    filter_metadata={"user_id": "u1"},
+                )
+            finally:
+                register_group_membership_resolver(FORMATION_ID, None)
+            texts = {r["text"] for r in results}
+            assert "team-a shared note" in texts
+            assert "team-b shared note" not in texts
+
+
+# ----------------------------------------------------------------------
+# Shared writes are event-coupled (no orphan rows)
+# ----------------------------------------------------------------------
+
+
+class _RecordingLTM:
+    """Minimal LTM double that records add() calls."""
+
+    def __init__(self):
+        self.rows = []
+
+    async def add(self, content, metadata=None, user_id=None, collection=None, scope=None):
+        self.rows.append(
+            {
+                "content": content,
+                "metadata": dict(metadata or {}),
+                "user_id": user_id,
+                "collection": collection,
+                "scope": scope,
+            }
+        )
+        return f"m{len(self.rows)}"
+
+
+class TestSharedWriteEventCoupling:
+    """Shared-scope API writes require a successful event append: a row
+    without a derived_from_event_id provenance link would survive every
+    wipe-and-rebuild (reset never wipes it, replay never recreates it)."""
+
+    @staticmethod
+    def _overlord(memory_events):
+        class StubOverlord:
+            pass
+
+        overlord = StubOverlord()
+        overlord.long_term_memory = _RecordingLTM()
+        overlord.memory_events = memory_events
+        return overlord
+
+    async def _write(self, overlord):
+        from muxi.runtime.formation.server.routes.client.memory import _write_shared_memory
+
+        return await _write_shared_memory(
+            overlord, "alice", "team fact", {}, ("group", "team-a"), "req-1"
+        )
+
+    async def test_substrate_absent_rejects_and_writes_nothing(self):
+        overlord = self._overlord(memory_events=None)
+        memory_id, error = await self._write(overlord)
+        assert memory_id is None
+        assert error is not None and error.status_code == 503
+        assert overlord.long_term_memory.rows == []
+
+    async def test_record_failure_rejects_and_writes_nothing(self):
+        class FailingEvents:
+            async def record(self, **kwargs):
+                return None  # record() never raises; None = append failed
+
+        overlord = self._overlord(memory_events=FailingEvents())
+        memory_id, error = await self._write(overlord)
+        assert memory_id is None
+        assert error is not None and error.status_code == 503
+        assert overlord.long_term_memory.rows == []
+
+    async def test_successful_event_writes_scoped_provenanced_row(self):
+        class OkEvents:
+            def __init__(self):
+                self.recorded = None
+
+            async def record(self, **kwargs):
+                self.recorded = kwargs
+                return {"id": 41}
+
+        events = OkEvents()
+        overlord = self._overlord(memory_events=events)
+        memory_id, error = await self._write(overlord)
+        assert error is None and memory_id == "m1"
+        assert events.recorded["scope_type"] == "group"
+        assert events.recorded["scope_id"] == "team-a"
+        (row,) = overlord.long_term_memory.rows
+        assert row["scope"] == ("group", "team-a")
+        assert row["metadata"][FACT_EVENT_METADATA_KEY] == 41
+
+    async def test_user_scope_writes_do_not_touch_the_substrate(self, sqlite_mem):
+        # The user-scope POST path is the plain backend add() -- pinned
+        # here at the backend level: no event machinery involved and the
+        # row is stamped user scope.
+        memory_id = await sqlite_mem.add("a private note", user_id="alice")
+        row = sqlite_mem.conn.execute(
+            f"SELECT scope_type, metadata FROM {sqlite_mem.memories_table} WHERE id = ?",
+            (memory_id,),
+        ).fetchone()
+        assert row[0] == "user"
+        assert FACT_EVENT_METADATA_KEY not in (row[1] or "")
+
 
 # ----------------------------------------------------------------------
 # Memories route: scope authorization helper (403 semantics)

@@ -224,6 +224,72 @@ async def _resolve_write_scope(
     return (scope_type, scope_id), None
 
 
+async def _write_shared_memory(
+    overlord,
+    user_id: str,
+    content_str: str,
+    metadata: Dict[str, Any],
+    scope: Tuple[str, str],
+    request_id: Optional[str],
+) -> Tuple[Optional[str], Optional[JSONResponse]]:
+    """Perform an authorized shared-scope write through the event substrate.
+
+    Shared facts must be replayable by construction: the fact.extracted
+    event (carrying the true scope) is appended FIRST, and the projection
+    row is only written once the append succeeded. Without the event, a
+    shared row would carry no ``derived_from_event_id`` provenance --
+    ``FlatFactProjector.reset`` would never wipe it and no replay would
+    recreate it, so it would silently survive (and duplicate across)
+    every wipe-and-rebuild. If the substrate is unavailable or the
+    append fails, the write is rejected with 503 and no row is written.
+
+    Returns ``(memory_id, error_response)``.
+    """
+    from .....services.memory.events.models import EVENT_FACT_EXTRACTED, SOURCE_USER_EDIT
+    from .....services.memory.events.projectors import apply_fact_event
+
+    meta = dict(metadata)
+    meta.setdefault("source", "user_edit")
+    meta["written_by"] = user_id
+    payload = {
+        "memory": content_str,
+        "collection": SHARED_SCOPE_COLLECTION,
+        "metadata": meta,
+    }
+
+    memory_events = getattr(overlord, "memory_events", None)
+    event = None
+    if memory_events is not None:
+        # record() is failure-isolated by contract: it returns None on
+        # append failure (or when the substrate is disabled), never raises.
+        event = await memory_events.record(
+            user_id=str(user_id),
+            event_type=EVENT_FACT_EXTRACTED,
+            payload=payload,
+            source=SOURCE_USER_EDIT,
+            scope_type=scope[0],
+            scope_id=scope[1],
+        )
+    if event is None:
+        response = create_error_response(
+            "SERVICE_UNAVAILABLE",
+            "Shared-scope memories require the memory event substrate; "
+            "the write was not recorded",
+            None,
+            request_id,
+        )
+        return None, JSONResponse(content=response.model_dump(), status_code=503)
+
+    memory_id = await apply_fact_event(
+        overlord.long_term_memory,
+        user_id,
+        payload,
+        event_id=event["id"],
+        scope=scope,
+    )
+    return memory_id, None
+
+
 @router.get("/memories", response_model=APIResponse, operation_id="search_memories")
 async def get_user_memories(
     request: Request,
@@ -387,43 +453,12 @@ async def create_user_memory(
                 external_user_id=user_id,
             )
         else:
-            # Shared scope: record the write on the memory event substrate
-            # with its true scope, then project through the same apply
-            # helper replay uses -- a rebuild reproduces the scoped row.
-            # The event append is failure-isolated (extractor posture);
-            # the projection write proceeds regardless.
-            from .....services.memory.events.models import (
-                EVENT_FACT_EXTRACTED,
-                SOURCE_USER_EDIT,
+            # Shared scope: event-first write (see _write_shared_memory).
+            memory_id, error_response = await _write_shared_memory(
+                overlord, user_id, content_str, memory.get_metadata(), scope, request_id
             )
-            from .....services.memory.events.projectors import apply_fact_event
-
-            meta = memory.get_metadata()
-            meta.setdefault("source", "user_edit")
-            meta["written_by"] = user_id
-            payload = {
-                "memory": content_str,
-                "collection": SHARED_SCOPE_COLLECTION,
-                "metadata": meta,
-            }
-            event = None
-            memory_events = getattr(overlord, "memory_events", None)
-            if memory_events is not None:
-                event = await memory_events.record(
-                    user_id=str(user_id),
-                    event_type=EVENT_FACT_EXTRACTED,
-                    payload=payload,
-                    source=SOURCE_USER_EDIT,
-                    scope_type=scope[0],
-                    scope_id=scope[1],
-                )
-            memory_id = await apply_fact_event(
-                overlord.long_term_memory,
-                user_id,
-                payload,
-                event_id=event["id"] if event else None,
-                scope=scope,
-            )
+            if error_response:
+                return error_response
 
         # Scope awareness note: per-user synopsis caches
         # (user_synopsis_identity / user_synopsis_context) are built from
