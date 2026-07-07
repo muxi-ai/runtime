@@ -2,6 +2,32 @@
 
 ## [unreleased]
 
+### Memory Ingestion: the /v1/memories platform endpoint (#218)
+
+MUXI now builds memory from more than interaction: developers and pipelines
+can push content into a formation's memory through a first-class ingestion
+API.
+
+- **Contract**: ``POST /v1/memories`` with ``source`` / ``source_id`` /
+  ``timestamp`` / ``metadata`` (plus the existing scope fields);
+  ``POST /v1/memories/batch`` with per-item accepted/duplicate/invalid
+  statuses; ``GET /v1/memories/ingestion/{processing_id}`` for async status
+  with per-stage outcomes and token-usage cost attribution.
+- **Idempotent by construction**: ``(source, source_id)`` rides the event
+  substrate's unique index -- a replayed POST returns the original event id
+  and its derived events (``duplicate: true``), never creates copies, and
+  batches are safely retryable (limits fire before any append).
+- **Tiered pipeline**: cheap local-classifier triage (no frontier LLM),
+  aggressive-by-default per-source noise filtering (tunable via
+  ``memory.ingestion.sources.<source>.filter``), then extraction through
+  the existing flat-fact/knowledge-graph machinery with source provenance
+  carried onto every derived fact. Filtered items are recorded as
+  replayable events -- improve the filters later and re-project history
+  instead of re-ingesting it.
+- Per-user in-flight caps with leak-proof slot accounting; shared-scope
+  ingestion honors the ``memory.write`` grants from memory namespaces.
+
+
 ### Memory Namespaces: user, group, and formation scopes (#214, #215)
 
 Memory is no longer single-scope. A memory is written to exactly one scope
