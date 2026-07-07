@@ -140,6 +140,7 @@ class KnowledgeGraphService:
         user_id: Any,
         model,
         caused_by_event_id: Optional[int] = None,
+        event_source: Optional[str] = None,
     ) -> None:
         """
         Run the real-time graph extraction pass for one conversation turn.
@@ -147,6 +148,9 @@ class KnowledgeGraphService:
         Never raises: extraction or storage failures are logged and the
         chat turn continues unaffected. ``caused_by_event_id`` links the
         recorded graph.extracted event to its interaction.turn event.
+        ``event_source`` overrides the source stamped on that event
+        (default: interaction; the ingestion pipeline passes the
+        developer's source so graph provenance carries the true origin).
         """
         if not self.enabled or model is None:
             return
@@ -163,7 +167,10 @@ class KnowledgeGraphService:
                 conversation, model, confidence_threshold=self.realtime_confidence
             )
             stored = await self.store_extraction(
-                user_id, result, source=SOURCE_INTERACTION, caused_by=caused_by_event_id
+                user_id,
+                result,
+                source=event_source or SOURCE_INTERACTION,
+                caused_by=caused_by_event_id,
             )
             if stored["entities"] or stored["relationships"]:
                 observability.observe(

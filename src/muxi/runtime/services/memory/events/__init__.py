@@ -11,9 +11,11 @@
 from .models import (
     EVENT_FACT_EXTRACTED,
     EVENT_GRAPH_EXTRACTED,
+    EVENT_INGESTION_FILTERED,
     EVENT_INTERACTION_TURN,
     EVENT_LESSON_RECORDED,
     EVENT_LOG_ENTRY,
+    EVENT_MEMORY_INGESTED,
     EVENT_USER_DELETION,
     MemoryEvent,
     ProjectionCheckpoint,
@@ -31,9 +33,11 @@ from .storage import MemoryEventStorage
 __all__ = [
     "EVENT_FACT_EXTRACTED",
     "EVENT_GRAPH_EXTRACTED",
+    "EVENT_INGESTION_FILTERED",
     "EVENT_INTERACTION_TURN",
     "EVENT_LESSON_RECORDED",
     "EVENT_LOG_ENTRY",
+    "EVENT_MEMORY_INGESTED",
     "EVENT_USER_DELETION",
     "MemoryEvent",
     "ProjectionCheckpoint",

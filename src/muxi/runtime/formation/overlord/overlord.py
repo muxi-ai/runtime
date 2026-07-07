@@ -832,6 +832,14 @@ class Overlord:
         self.user_context_manager = UserContextManager(self)
         self.extraction_coordinator = ExtractionCoordinator(self)
 
+        # Memory ingestion pipeline (Memory Ingestion Phase 3a): the accept
+        # + processing service behind POST /v1/memories. Construction is
+        # cheap (config parse only); the classifier and event substrate it
+        # rides are resolved lazily per request.
+        from ...services.memory.ingest import MemoryIngestionService
+
+        self.memory_ingestion = MemoryIngestionService(self)
+
         # ===================================================================
         # INTELLIGENCE MODELS AND CACHE - Intelligence concerns
         # ===================================================================

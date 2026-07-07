@@ -66,6 +66,18 @@ EVENT_LESSON_RECORDED = "lesson.recorded"
 # events are soft-deleted, not removed).
 EVENT_USER_DELETION = "user.deletion"
 
+# One raw item accepted by the ingestion endpoint (Memory Ingestion Phase
+# 3a). Appended BEFORE any pipeline stage runs, carrying the developer's
+# (source, source_id) idempotency key, so the raw content stays replayable
+# through future pipeline logic even when today's filters discard it.
+EVENT_MEMORY_INGESTED = "memory.ingested"
+
+# The ingestion pipeline's filtered disposition for one memory.ingested
+# event (caused_by links back to it). The raw event keeps the content;
+# this event records that the noise gate dropped it and why, so improved
+# filters can find and reprocess exactly the filtered set later.
+EVENT_INGESTION_FILTERED = "ingestion.filtered"
+
 # Versioned payload schemas. "required" keys must be present; keys outside
 # required + optional are rejected -- schema evolution happens by adding a
 # new version, never by silently widening an existing one.
@@ -106,6 +118,22 @@ EVENT_SCHEMAS: Dict[str, Dict[int, Dict[str, tuple]]] = {
             "optional": ("source", "target_event_ids"),
         }
     },
+    EVENT_MEMORY_INGESTED: {
+        1: {
+            # content is the raw item as submitted (string or structured);
+            # subject defaults to the authenticated user when omitted.
+            "required": ("content",),
+            "optional": ("metadata", "subject"),
+        }
+    },
+    EVENT_INGESTION_FILTERED: {
+        1: {
+            # category is the classifier's triage label; filter_level is
+            # the per-source noise-gate setting that dropped the item.
+            "required": ("category", "filter_level"),
+            "optional": ("reason",),
+        }
+    },
 }
 
 # Payload keys that must be lists when present (shape checks beyond presence).
@@ -119,8 +147,10 @@ DECAY_DECAYING = "decaying"
 DECAY_VOLATILE = "volatile"
 DECAY_RATES = {DECAY_STATIC, DECAY_DECAYING, DECAY_VOLATILE}
 
-# Source vocabulary used by the internal writers that exist today. External
-# ingestion sources (gmail, osint, ...) join this vocabulary in Phase 3.
+# Source vocabulary used by the internal writers. External ingestion
+# sources are developer-chosen strings ("gmail", "desktop-daemon", ...)
+# supplied per POST /v1/memories request (Memory Ingestion Phase 3a); they
+# share this column but are not enumerated here.
 SOURCE_INTERACTION = "interaction"  # real-time chat-turn extraction passes
 SOURCE_PERIODIC = "periodic"  # the knowledge graph's periodic deep pass
 SOURCE_CAPTAINS_LOG = "captains_log"  # digest-derived writes (entries, lessons, graph facts)
