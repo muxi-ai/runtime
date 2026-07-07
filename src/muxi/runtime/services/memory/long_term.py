@@ -58,7 +58,6 @@ from ...utils.datetime_utils import utc_now_naive
 from ...utils.id_generator import get_default_nanoid
 from .. import observability
 from ..db import AsyncModelMixin, Base, DatabaseManager
-from .embedding import DEFAULT_EMBEDDING_MODEL, embed, probe_dimension
 
 # Memory scopes (memory namespaces Phase 1). A memory row is written to
 # exactly one scope; Phase 1 is pure substrate, so every write is user
@@ -70,9 +69,9 @@ from .embedding import DEFAULT_EMBEDDING_MODEL, embed, probe_dimension
 # the server-side column default, and a NULL ``scope_id`` means "the
 # row's owning user_id" (no backfill UPDATE is issued — same additive
 # migration posture as the meta_data / derived_from_event_ids columns).
-SCOPE_TYPE_USER = "user"
-SCOPE_TYPE_GROUP = "group"
-SCOPE_TYPE_FORMATION = "formation"
+# Re-exported from base for existing importers; base.py is canonical
+from .base import SCOPE_TYPE_FORMATION, SCOPE_TYPE_GROUP, SCOPE_TYPE_USER  # noqa: F401
+from .embedding import DEFAULT_EMBEDDING_MODEL, embed, probe_dimension
 
 # Memory collection definitions for organizing long-term storage
 MEMORY_COLLECTIONS = {
