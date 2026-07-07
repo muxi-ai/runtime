@@ -778,6 +778,12 @@ def initialize_memory_systems(formation) -> None:
                 # extension point for later projections (Knowledge Index).
                 _register_memory_projectors(formation)
 
+                # Initialize artifact memory (Artifact Memory Phase 1).
+                # Placed after the event substrate so captures can record
+                # artifact.saved audit events. Requires persistent memory;
+                # formations without it get no artifact capture.
+                _initialize_artifact_memory(formation)
+
 
 def _initialize_memory_events(formation, events_config: Dict[str, Any]) -> None:
     """Initialize the memory event substrate on top of persistent memory."""
@@ -809,6 +815,50 @@ def _initialize_memory_events(formation, events_config: Dict[str, Any]) -> None:
             description=f"Failed to initialize memory event substrate: {str(e)}",
         )
         # Don't raise - the event substrate is additive to persistent memory
+
+
+def _initialize_artifact_memory(formation) -> None:
+    """Initialize artifact memory capture (Artifact Memory Phase 1)."""
+    artifacts_config = (getattr(formation, "config", None) or {}).get("artifacts") or {}
+    if artifacts_config.get("enabled", True) is False:
+        formation._artifact_memory = None
+        return
+
+    try:
+        from ..services.memory.artifacts import ArtifactMemoryService
+
+        formation_dir = None
+        formation_path = formation.get_formation_path()
+        if formation_path:
+            from pathlib import Path
+
+            fp = Path(formation_path)
+            formation_dir = str(fp.parent if fp.is_file() else fp)
+
+        formation._artifact_memory = ArtifactMemoryService(
+            db_manager=formation._db_manager,
+            formation_id=getattr(formation, "formation_id", "default-formation"),
+            config=artifacts_config,
+            formation_dir=formation_dir,
+            memory_events=getattr(formation, "_memory_events", None),
+        )
+        settings = formation._artifact_memory.settings
+        retention = f"{settings.retention_days}d" if settings.retention_days else "forever"
+        print(
+            InitEventFormatter.format_ok(
+                "Initializing artifact memory",
+                f"{settings.storage_type} storage, retention {retention}",
+            )
+        )
+    except Exception as e:
+        formation._artifact_memory = None
+        observability.observe(
+            event_type=observability.ErrorEvents.MEMORY_INITIALIZATION_FAILED,
+            level=observability.EventLevel.WARNING,
+            data={"error": str(e), "service": "artifact_memory"},
+            description=f"Failed to initialize artifact memory: {str(e)}",
+        )
+        # Don't raise - artifact memory is additive to persistent memory
 
 
 def _register_memory_projectors(formation) -> None:
@@ -1260,6 +1310,7 @@ def _create_all_database_tables(db_manager, embedding_dimension: int = 1536) -> 
 
         # Get Base from db module
         from ..services.db import Base
+        from ..services.memory.artifacts.models import Artifact, SystemConfig  # noqa: F401
         from ..services.memory.distillery.models import RegisteredDistillery  # noqa: F401
         from ..services.memory.events.models import (  # noqa: F401
             MemoryEvent,
@@ -1328,6 +1379,8 @@ def _create_all_database_tables(db_manager, embedding_dimension: int = 1536) -> 
             "captains_log",
             "captains_log_sources",
             "lessons",  # Captain's log tables
+            "artifacts",
+            "system_config",  # Artifact memory tables (Phase 1)
             "credentials",  # Credential storage
             "scheduled_jobs",
             "scheduled_job_audit",  # Scheduler tables

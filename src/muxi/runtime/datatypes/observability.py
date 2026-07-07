@@ -832,6 +832,19 @@ class ConversationEvents(Enum):
     MEMORY_DISTILLERY_REVOKED = "memory.distillery.revoked"
     # When an admin revokes a distillery registration (subsequent batches get 410)
 
+    # Artifact memory operations (Artifact Memory Phase 1)
+    MEMORY_ARTIFACT_CAPTURED = "memory.artifact.captured"
+    # When a produced artifact is persisted into artifact memory
+
+    MEMORY_ARTIFACT_CAPTURE_FAILED = "memory.artifact.capture_failed"
+    # When persisting a produced artifact fails (isolated; response unaffected)
+
+    MEMORY_ARTIFACT_CAPTURE_SKIPPED = "memory.artifact.capture_skipped"
+    # When capture guards skip an artifact (empty or secret-bearing content)
+
+    MEMORY_ARTIFACT_RETENTION_SWEPT = "memory.artifact.retention_swept"
+    # When the retention sweep soft-deletes expired artifacts and prunes blobs
+
     USER_INFO_EXTRACTION_STARTED = "user.info.extraction.started"
     # When background user information extraction task is initiated
 

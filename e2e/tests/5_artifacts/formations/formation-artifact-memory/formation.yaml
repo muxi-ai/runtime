@@ -1,0 +1,38 @@
+schema: "1.0.0"
+id: "artifact-memory-test"
+description: "Formation with artifact memory capture and retention configured"
+
+llm:
+  api_keys:
+    openai: "${{ secrets.OPENAI_API_KEY }}"
+    anthropic: "${{ secrets.ANTHROPIC_API_KEY }}"
+    google: "${{ secrets.GEMINI_API_KEY }}"
+  models:
+    - text: "openai/gpt-4o-mini"
+    - embedding: "openai/text-embedding-3-small"
+
+agents:
+  - generator
+
+memory:
+  buffer:
+    size: 50
+    multiplier: 10
+    vector_search: false
+
+# Artifact Memory Phase 1: capture produced work with a retention window.
+artifacts:
+  retention:
+    policy: last_updated
+    duration: 30
+
+logging:
+  system:
+    level: "debug"
+    destination: "stdout"
+  conversation:
+    enabled: true
+    streams:
+      - transport: "stdout"
+        level: "info"
+        format: "jsonl"

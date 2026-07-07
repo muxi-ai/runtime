@@ -391,6 +391,10 @@ class FormationValidator:
         if "scheduler" in config:
             self._validate_scheduler_config(config["scheduler"])
 
+        # Validate artifact memory configuration
+        if "artifacts" in config:
+            self._validate_artifacts_config(config["artifacts"])
+
         # Validate runtime configuration
         if "runtime" in config:
             self._validate_runtime_config(config["runtime"])
@@ -398,6 +402,17 @@ class FormationValidator:
         # Validate user credentials configuration
         if "user_credentials" in config:
             self._validate_user_credentials_config(config["user_credentials"])
+
+    def _validate_artifacts_config(self, artifacts_config: Dict[str, Any]) -> None:
+        """Validate artifact memory configuration (Artifact Memory Phase 1)."""
+        # Reuse the service-level parser so the validator and the runtime
+        # can never disagree about what a valid artifacts block looks like.
+        from ...services.memory.artifacts import parse_artifacts_config
+
+        try:
+            parse_artifacts_config(artifacts_config)
+        except ValueError as e:
+            self.result.add_error(str(e))
 
     def _validate_user_credentials_config(self, credentials_config: Dict[str, Any]) -> None:
         """Validate user credentials configuration."""
