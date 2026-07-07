@@ -2,6 +2,36 @@
 
 ## [unreleased]
 
+### Memory Distillery: runtime endpoint (#221)
+
+On-premises distilleries can now push pre-processed memory into a formation
+through a signed, verified channel.
+
+- ``POST /v1/memories/distilled`` with fail-closed Ed25519 verification:
+  domain-separated signatures over the raw request body, header-bound
+  against replay, one indistinct 401 for every failure mode.
+- Distillery registration/trust registry (admin API + table on both
+  backends) with per-registration authority scoping (user patterns, event
+  types, daily quotas) -- distilleries are system principals; their events
+  land user-scoped and visibility stays group-governed at retrieval.
+- Idempotent by construction on the event substrate; quota gates only
+  net-new events, so full-duplicate replays always succeed. Pre-computed
+  embeddings accepted on exact model match, re-embedded otherwise.
+- Inert without ``memory.distillery`` config. The on-prem distillery server
+  itself is a separate open-source project; this is the runtime side of
+  the contract.
+
+### Memory benchmarking harness, Tier 1 (#220)
+
+``bench/memory/``: reproducible retrieval + QA benchmarks over the real
+memory stack (LongMemEval, LoCoMo, ConvoMem runners) with committed
+synthetic fixtures for CI, documented full-dataset downloads, cheap-model
+configs (retrieval-only runs cost $0), per-run token/cost reporting,
+deterministic seeds, structured JSON reports, and failure-isolated runs
+that always produce a (possibly partial) report with a nonzero exit code
+on any incomplete run.
+
+
 ### Memory Ingestion: the /v1/memories platform endpoint (#218)
 
 MUXI now builds memory from more than interaction: developers and pipelines
