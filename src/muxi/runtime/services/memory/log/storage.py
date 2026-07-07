@@ -36,6 +36,7 @@ from typing import Any, Dict, List, Optional, Tuple
 from sqlalchemy import delete as sql_delete, func, select
 
 from ....utils.datetime_utils import utc_now_naive
+from ..events.models import append_event_id
 from ..graph.algorithms import lexicographic_topological_sort
 from .models import SOURCE_TYPE_LOG_ENTRY, SOURCE_TYPES, CaptainsLogEntry, CaptainsLogSource, Lesson
 
@@ -97,7 +98,7 @@ class CaptainsLogStorage:
                 existing.decisions = decisions or []
                 existing.projects = projects or []
                 existing.context = context
-                existing.derived_from_event_ids = _append_event_id(
+                existing.derived_from_event_ids = append_event_id(
                     existing.derived_from_event_ids, event_id
                 )
                 await session.flush()
@@ -111,7 +112,7 @@ class CaptainsLogStorage:
                 decisions=decisions or [],
                 projects=projects or [],
                 context=context,
-                derived_from_event_ids=_append_event_id([], event_id),
+                derived_from_event_ids=append_event_id([], event_id),
             )
             session.add(entry)
             await session.flush()
@@ -359,7 +360,7 @@ class LessonStorage:
                     existing.context = context
                 if source_log_id is not None:
                     existing.source_log_id = source_log_id
-                existing.derived_from_event_ids = _append_event_id(
+                existing.derived_from_event_ids = append_event_id(
                     existing.derived_from_event_ids, event_id
                 )
                 if existing.archived:
@@ -375,7 +376,7 @@ class LessonStorage:
                 context=context,
                 rule_hash=digest,
                 source_log_id=source_log_id,
-                derived_from_event_ids=_append_event_id([], event_id),
+                derived_from_event_ids=append_event_id([], event_id),
                 confidence=confidence,
                 hits=hits,
             )
@@ -509,11 +510,3 @@ def normalize_rule(rule: str) -> str:
 def rule_hash(rule: str) -> str:
     """Return the hex sha256 of the normalized rule text."""
     return hashlib.sha256(normalize_rule(rule).encode("utf-8")).hexdigest()
-
-
-def _append_event_id(current, event_id: Optional[int]) -> list:
-    """Return the provenance list with ``event_id`` appended (idempotent)."""
-    ids = list(current or [])
-    if event_id is not None and event_id not in ids:
-        ids.append(event_id)
-    return ids

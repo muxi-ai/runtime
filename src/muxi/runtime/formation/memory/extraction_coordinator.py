@@ -106,13 +106,16 @@ class ExtractionCoordinator:
             caused_by_event_id = None
             memory_events = getattr(self.overlord, "memory_events", None)
             if memory_events is not None:
+                # agent_response is optional in the event schema: omit the
+                # key entirely when the agent has not responded yet rather
+                # than storing an empty string on every such turn.
+                payload = {"user_message": user_message}
+                if agent_response:
+                    payload["agent_response"] = agent_response
                 turn_event = await memory_events.record(
                     user_id=str(user_id),
                     event_type=EVENT_INTERACTION_TURN,
-                    payload={
-                        "user_message": user_message,
-                        "agent_response": agent_response or "",
-                    },
+                    payload=payload,
                     source=SOURCE_INTERACTION,
                     agent_id=agent_id,
                 )

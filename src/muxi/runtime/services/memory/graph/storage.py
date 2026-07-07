@@ -27,6 +27,7 @@ from typing import Any, Dict, List, Optional
 
 from sqlalchemy import delete as sql_delete, select
 
+from ..events.models import append_event_id
 from .models import (
     EXCLUSIVE_RELATIONSHIP_TYPES,
     STATUS_ACTIVE,
@@ -93,7 +94,7 @@ class KnowledgeGraphStorage:
                 merged.update(attributes or {})
                 existing.attributes = merged
                 existing.confidence = max(existing.confidence or 0.0, confidence)
-                existing.derived_from_event_ids = _append_event_id(
+                existing.derived_from_event_ids = append_event_id(
                     existing.derived_from_event_ids, event_id
                 )
                 if existing.status == STATUS_SUPERSEDED:
@@ -110,7 +111,7 @@ class KnowledgeGraphStorage:
                 name=name,
                 attributes=attributes or {},
                 confidence=confidence,
-                derived_from_event_ids=_append_event_id([], event_id),
+                derived_from_event_ids=append_event_id([], event_id),
             )
             session.add(entity)
             await session.flush()
@@ -230,7 +231,7 @@ class KnowledgeGraphStorage:
                     merged.update(attributes or {})
                     existing.attributes = merged
                     existing.confidence = max(existing.confidence or 0.0, confidence)
-                    existing.derived_from_event_ids = _append_event_id(
+                    existing.derived_from_event_ids = append_event_id(
                         existing.derived_from_event_ids, event_id
                     )
                     if existing.status == STATUS_SUPERSEDED:
@@ -247,7 +248,7 @@ class KnowledgeGraphStorage:
                 type=rel_type,
                 attributes=attributes or {},
                 confidence=confidence,
-                derived_from_event_ids=_append_event_id([], event_id),
+                derived_from_event_ids=append_event_id([], event_id),
             )
 
             # Contradiction detection on exclusive predicates.
@@ -367,11 +368,3 @@ class KnowledgeGraphStorage:
 def normalize_type(value: str) -> str:
     """Normalize an entity/relationship type to the storage form."""
     return value.strip().lower().replace(" ", "_")[:50]
-
-
-def _append_event_id(current, event_id: Optional[int]) -> list:
-    """Return the provenance list with ``event_id`` appended (idempotent)."""
-    ids = list(current or [])
-    if event_id is not None and event_id not in ids:
-        ids.append(event_id)
-    return ids

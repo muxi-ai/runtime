@@ -162,6 +162,21 @@ def validate_event_payload(event_type: str, payload: Any, event_version: int = 1
             raise ValueError(f"Payload key {key!r} for {event_type!r} must be a list")
 
 
+def append_event_id(current, event_id) -> list:
+    """
+    Return a ``derived_from_event_ids`` provenance list with ``event_id``
+    appended (idempotent; a None event_id or an already-present id leaves
+    the list unchanged).
+
+    Shared by every projection storage layer that maintains the provenance
+    bridge back into ``memory_events``.
+    """
+    ids = list(current or [])
+    if event_id is not None and event_id not in ids:
+        ids.append(event_id)
+    return ids
+
+
 class MemoryEvent(Base, AsyncModelMixin):
     """One immutable row in the append-only memory event log."""
 

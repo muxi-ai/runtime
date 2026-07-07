@@ -17,6 +17,7 @@ from .models import (
     EVENT_USER_DELETION,
     MemoryEvent,
     ProjectionCheckpoint,
+    append_event_id,
 )
 from .projectors import (
     CaptainsLogProjector,
@@ -36,6 +37,7 @@ __all__ = [
     "EVENT_USER_DELETION",
     "MemoryEvent",
     "ProjectionCheckpoint",
+    "append_event_id",
     "CaptainsLogProjector",
     "FlatFactProjector",
     "KnowledgeGraphProjector",
