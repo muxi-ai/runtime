@@ -16,6 +16,7 @@ from fastapi.responses import JSONResponse
 from pydantic import BaseModel
 
 from .....datatypes.api import APIEventType, APIObjectType
+from .....services import observability
 from .....services.memory.base import SCOPE_TYPE_GROUP, SCOPE_TYPE_USER
 from .....services.memory.scopes import (
     SCOPE_TYPES,
@@ -188,8 +189,36 @@ async def _resolve_write_scope(
     resolver = getattr(formation, "permission_resolver", None)
     permissions = None
     if resolver is not None:
-        # Normalize the identifier the same way the overlord chat path does
-        permissions = await resolver.resolve(str(user_id).lower().strip())
+        try:
+            # Normalize the identifier the same way the overlord chat path does
+            permissions = await resolver.resolve(str(user_id).lower().strip())
+        except Exception as exc:
+            # A transient membership-lookup failure (e.g. DB hiccup) must
+            # produce a formatted 503 and an observability event, not a raw
+            # 500 -- and it must never fall through to an authorization
+            # decision made without the user's actual permissions.
+            observability.observe(
+                event_type=observability.ErrorEvents.AUTHORIZATION_FAILED,
+                level=observability.EventLevel.ERROR,
+                data={
+                    "service": "formation_api_server",
+                    "kind": "memory_scopes",
+                    "resource_id": write_scope_target(scope_type, scope_id),
+                    "user_id": user_id,
+                    "formation_id": formation.formation_id,
+                    "channel": "api",
+                    "error": str(exc),
+                    "error_type": type(exc).__name__,
+                },
+                description="Shared-memory write authorization could not be resolved",
+            )
+            response = create_error_response(
+                "SERVICE_UNAVAILABLE",
+                "Could not resolve write permissions; try again shortly",
+                None,
+                request_id,
+            )
+            return None, JSONResponse(content=response.model_dump(), status_code=503)
 
     if not is_write_scope_allowed(permissions, scope_type, scope_id):
         from .....services.gbac import enforcement as gbac_enforcement

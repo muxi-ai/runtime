@@ -823,3 +823,37 @@ class TestResolverRegistry:
         assert memory_scopes._membership_resolvers["f1"] is sentinel
         register_group_membership_resolver("f1", None)
         assert "f1" not in memory_scopes._membership_resolvers
+
+
+class TestWriteAuthResolutionFailure:
+    """A failing membership lookup returns a formatted 503, never a raw 500.
+
+    Review follow-up on #215: resolver.resolve() raising (transient DB
+    failure) must produce create_error_response formatting plus an
+    observability event, and must not fall through to an authorization
+    decision made without the user's actual permissions.
+    """
+
+    async def test_resolver_failure_yields_503(self, monkeypatch):
+        from types import SimpleNamespace
+
+        from muxi.runtime.formation.server.routes.client import memory as memory_route
+
+        class ExplodingResolver:
+            group_ids = ()
+
+            async def resolve(self, user_id):
+                raise RuntimeError("membership lookup failed")
+
+        formation = SimpleNamespace(
+            permission_resolver=ExplodingResolver(),
+            formation_id=FORMATION_ID,
+        )
+        payload = SimpleNamespace(scope="formation", scope_id=None)
+
+        result, error = await memory_route._resolve_write_scope(
+            formation, "alice", payload, "req-1"
+        )
+        assert result is None
+        assert error is not None
+        assert error.status_code == 503
