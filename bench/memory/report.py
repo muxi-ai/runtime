@@ -116,6 +116,9 @@ def build_report(
     usage: Dict[str, Any],
     wall_seconds: float,
     started_at: Optional[datetime] = None,
+    partial: bool = False,
+    abort_reason: Optional[str] = None,
+    case_stats: Optional[Dict[str, int]] = None,
     repo_root: Optional[Union[str, Path]] = None,
 ) -> Dict[str, Any]:
     """Assemble the structured report for one benchmark run.
@@ -124,27 +127,39 @@ def build_report(
     the runner alongside its monotonic timer so ``started_at +
     wall_seconds`` equals the real finish time. Falls back to "now"
     only for callers that do not time a run of their own.
+
+    ``partial=True`` marks a run that was cut short (start failure,
+    crash, systematic-failure early stop) and records ``abort_reason``;
+    a complete run carries neither key. ``case_stats`` (completed /
+    failed / skipped counts) is included whenever provided.
     """
     if started_at is None:
         started_at = datetime.now(timezone.utc)
     sorted_results = sorted(results, key=lambda result: result.question_id)
-    return {
+    run_block: Dict[str, Any] = {
+        "started_at": started_at.astimezone(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ"),
+        "wall_seconds": round(wall_seconds, 2),
+        "python": platform.python_version(),
+        "git_commit": _git_commit(repo_root) if repo_root else None,
+    }
+    if case_stats is not None:
+        run_block["cases"] = dict(case_stats)
+    report: Dict[str, Any] = {
         "schema_version": REPORT_SCHEMA_VERSION,
         "benchmark": benchmark,
         "mode": mode,
         "k": k,
-        "run": {
-            "started_at": started_at.astimezone(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ"),
-            "wall_seconds": round(wall_seconds, 2),
-            "python": platform.python_version(),
-            "git_commit": _git_commit(repo_root) if repo_root else None,
-        },
+        "run": run_block,
         "dataset": {"path": relativize(dataset_path, repo_root), **dataset_stats},
         "config": config,
         "usage": usage,
         "metrics": metrics,
         "results": [asdict(result) for result in sorted_results],
     }
+    if partial:
+        report["partial"] = True
+        run_block["abort_reason"] = abort_reason
+    return report
 
 
 def write_report(report: Dict[str, Any], path: Union[str, Path]) -> Path:
@@ -181,6 +196,16 @@ def render_summary(report: Dict[str, Any]) -> str:
         f"abstention: {metrics['questions_abstention']}  "
         f"errors: {metrics['questions_errored']}"
     )
+    case_stats = report["run"].get("cases")
+    if case_stats:
+        lines.append(
+            f"Cases: {case_stats.get('completed', 0)} completed, "
+            f"{case_stats.get('failed', 0)} failed, "
+            f"{case_stats.get('skipped', 0)} skipped"
+        )
+    if report.get("partial"):
+        lines.append("")
+        lines.append(f"PARTIAL RUN — aborted: {report['run'].get('abort_reason')}")
 
     for level_name, label in (("session_level", "Session"), ("turn_level", "Turn")):
         level = metrics["retrieval"].get(level_name)

@@ -140,7 +140,7 @@
       ]
     },
     {
-      "elapsed_seconds": 0.069,
+      "elapsed_seconds": 0.09,
       "error": null,
       "evidence_session_ids": [
         "fixture_ms_001_s1",
@@ -173,7 +173,7 @@
       ]
     },
     {
-      "elapsed_seconds": 0.061,
+      "elapsed_seconds": 0.069,
       "error": null,
       "evidence_session_ids": [
         "fixture_ssa_001_s1"
@@ -202,7 +202,7 @@
       ]
     },
     {
-      "elapsed_seconds": 0.072,
+      "elapsed_seconds": 0.088,
       "error": null,
       "evidence_session_ids": [
         "fixture_ssp_001_s2"
@@ -231,7 +231,7 @@
       ]
     },
     {
-      "elapsed_seconds": 0.069,
+      "elapsed_seconds": 0.06,
       "error": null,
       "evidence_session_ids": [
         "fixture_ssu_001_s2"
@@ -265,7 +265,7 @@
       ]
     },
     {
-      "elapsed_seconds": 0.068,
+      "elapsed_seconds": 0.063,
       "error": null,
       "evidence_session_ids": [],
       "evidence_turn_ids": [],
@@ -287,10 +287,15 @@
     }
   ],
   "run": {
-    "git_commit": "3b8fb6f2e5c03e094dbfe8b617ac090de10fa389",
+    "cases": {
+      "completed": 6,
+      "failed": 0,
+      "skipped": 0
+    },
+    "git_commit": "192b6cbd91a35f99bf6d63ba640028ce0dccd58e",
     "python": "3.11.13",
-    "started_at": "2026-07-07T20:52:17Z",
-    "wall_seconds": 23.8
+    "started_at": "2026-07-07T21:31:41Z",
+    "wall_seconds": 23.88
   },
   "schema_version": "1.0",
   "usage": {

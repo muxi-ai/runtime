@@ -134,6 +134,24 @@ class TestBuildReport:
         report = _report(started_at=started)
         assert report["run"]["started_at"] == "2026-07-07T12:30:45Z"
 
+    def test_complete_run_has_no_partial_or_abort_keys(self):
+        report = _report()
+        assert "partial" not in report
+        assert "abort_reason" not in report["run"]
+
+    def test_partial_run_records_flag_and_abort_reason(self):
+        report = _report(partial=True, abort_reason="RuntimeError: boom")
+        assert report["partial"] is True
+        assert report["run"]["abort_reason"] == "RuntimeError: boom"
+
+    def test_case_stats_included_when_provided(self):
+        stats = {"completed": 3, "failed": 2, "skipped": 1}
+        report = _report(case_stats=stats)
+        assert report["run"]["cases"] == stats
+
+    def test_case_stats_absent_when_not_provided(self):
+        assert "cases" not in _report()["run"]
+
 
 class TestWriteReport:
     def test_writes_sorted_deterministic_json(self, tmp_path):
@@ -179,3 +197,17 @@ class TestRenderSummary:
         summary = render_summary(_report())
         assert "multi-session" in summary
         assert "single-hop" in summary
+
+    def test_partial_run_banner_and_case_counts(self):
+        report = _report(
+            partial=True,
+            abort_reason="aborted after 3 consecutive case ingestion failures",
+            case_stats={"completed": 1, "failed": 3, "skipped": 2},
+        )
+        summary = render_summary(report)
+        assert "PARTIAL RUN" in summary
+        assert "consecutive case ingestion failures" in summary
+        assert "Cases: 1 completed, 3 failed, 2 skipped" in summary
+
+    def test_complete_run_has_no_partial_banner(self):
+        assert "PARTIAL RUN" not in render_summary(_report())

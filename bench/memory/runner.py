@@ -29,6 +29,12 @@ RESULTS_DIR = Path(__file__).resolve().parent / "results"
 
 DATA_DIR_ENV = "MUXI_BENCH_DATA_DIR"
 
+# Early-stop threshold for systematic environment failures: when this
+# many cases in a row fail INGESTION (embedding model unavailable,
+# database unwritable, ...), the run aborts and writes a partial
+# report instead of burning hours failing every remaining case.
+MAX_CONSECUTIVE_CASE_FAILURES = 3
+
 DATASET_FILENAMES = {
     "longmemeval": "longmemeval_s_cleaned.json",
     "locomo": "locomo10.json",
@@ -214,16 +220,68 @@ async def run_benchmark(benchmark: str, args: argparse.Namespace) -> int:
     started_at = datetime.now(timezone.utc)
     started = time.monotonic()
     results: List[QuestionResult] = []
-    # start() inside the try: a formation-load failure must still reach
-    # stop(), which tears down partial state and removes the temp run
-    # dir (stop() is idempotent and tolerates a never-started adapter).
+    partial = False
+    abort_reason: Optional[str] = None
+    cases_completed = 0
+    cases_failed = 0
+    consecutive_failures = 0
+    usage: dict = {}
+    config: dict = {}
+    metrics: dict = {}
+
+    # Everything after this point runs under one try/finally:
+    # - start() inside the try, so a formation-load failure still
+    #   reaches stop() (idempotent; tears down partial state and
+    #   removes the temp run dir).
+    # - The report is built and written in the finally path, so EVERY
+    #   exit — clean finish, early abort, unexpected crash, even
+    #   KeyboardInterrupt — leaves a report with whatever completed
+    #   (marked ``partial`` when the run was cut short).
     try:
         await adapter.start()
         for case_index, case in enumerate(dataset.cases, start=1):
             adapter.clear_case()
             user_id = f"bench-{benchmark}-{case.case_id}"
-            for session in case.sessions:
-                await adapter.ingest_session(user_id, session)
+
+            # Ingestion failures are isolated per case: the case is
+            # recorded as failed (its questions carry the error) and
+            # the run moves on — a broken haystack must not throw away
+            # hours of completed work.
+            try:
+                for session in case.sessions:
+                    await adapter.ingest_session(user_id, session)
+            except Exception as exc:
+                cases_failed += 1
+                consecutive_failures += 1
+                error = f"case ingestion failed: {type(exc).__name__}: {exc}"
+                for question in case.questions:
+                    results.append(
+                        QuestionResult(
+                            question_id=question.question_id,
+                            question_type=question.question_type,
+                            is_abstention=question.is_abstention,
+                            evidence_session_ids=list(question.evidence_session_ids),
+                            evidence_turn_ids=list(question.evidence_turn_ids),
+                            error=error,
+                        )
+                    )
+                print(
+                    f"[membench] case {case_index}/{len(dataset.cases)} FAILED "
+                    f"({case.case_id}): {error}",
+                    file=sys.stderr,
+                )
+                # A failure storm means the environment is broken
+                # (embedding model missing, database unwritable, ...):
+                # stop early instead of burning hours failing every case.
+                if consecutive_failures >= MAX_CONSECUTIVE_CASE_FAILURES:
+                    partial = True
+                    abort_reason = (
+                        f"aborted after {consecutive_failures} consecutive case "
+                        f"ingestion failures (systematic environment failure); "
+                        f"last error: {error}"
+                    )
+                    break
+                continue
 
             for question in case.questions:
                 q_started = time.monotonic()
@@ -249,50 +307,73 @@ async def run_benchmark(benchmark: str, args: argparse.Namespace) -> int:
                 result.elapsed_seconds = round(time.monotonic() - q_started, 3)
                 results.append(result)
 
+            cases_completed += 1
+            consecutive_failures = 0
             print(
                 f"[membench] case {case_index}/{len(dataset.cases)} done "
                 f"({case.case_id}: {len(case.sessions)} sessions, "
                 f"{len(case.questions)} questions)"
             )
-
-        usage = adapter.usage_snapshot()
-        config = adapter.config_snapshot()
     finally:
+        # An in-flight exception (start() failure, unexpected crash,
+        # KeyboardInterrupt) marks the report partial; it propagates
+        # after the report is written.
+        in_flight = sys.exc_info()[1]
+        if in_flight is not None and abort_reason is None:
+            partial = True
+            abort_reason = f"{type(in_flight).__name__}: {in_flight}"
+
+        # Snapshot before stop() clears the formation reference.
+        try:
+            usage = adapter.usage_snapshot()
+            config = adapter.config_snapshot()
+        except Exception:
+            pass
         await adapter.stop()
 
-    metrics = aggregate_results(results, args.k)
-    report = build_report(
-        benchmark=benchmark,
-        mode=args.mode,
-        k=args.k,
-        dataset_path=str(dataset_path),
-        dataset_stats={
-            "cases": len(dataset.cases),
-            "questions": dataset.question_count,
-            "sessions": dataset.session_count,
-            "fixture": used_fixture,
-            "split": args.split,
-            "seed": args.seed,
-        },
-        config={**config, "fetch_limit": fetch_limit, "qa": args.qa},
-        metrics=metrics,
-        results=results,
-        usage=usage,
-        started_at=started_at,
-        wall_seconds=time.monotonic() - started,
-        repo_root=REPO_ROOT,
-    )
+        try:
+            metrics = aggregate_results(results, args.k)
+            report = build_report(
+                benchmark=benchmark,
+                mode=args.mode,
+                k=args.k,
+                dataset_path=str(dataset_path),
+                dataset_stats={
+                    "cases": len(dataset.cases),
+                    "questions": dataset.question_count,
+                    "sessions": dataset.session_count,
+                    "fixture": used_fixture,
+                    "split": args.split,
+                    "seed": args.seed,
+                },
+                config={**config, "fetch_limit": fetch_limit, "qa": args.qa},
+                metrics=metrics,
+                results=results,
+                usage=usage,
+                started_at=started_at,
+                wall_seconds=time.monotonic() - started,
+                partial=partial,
+                abort_reason=abort_reason,
+                case_stats={
+                    "completed": cases_completed,
+                    "failed": cases_failed,
+                    "skipped": len(dataset.cases) - cases_completed - cases_failed,
+                },
+                repo_root=REPO_ROOT,
+            )
+            output = (
+                Path(args.output)
+                if args.output
+                else default_output_path(benchmark, args.mode, args.split, used_fixture)
+            )
+            write_report(report, output)
+            print(render_summary(report))
+            print(f"Report written to {output}")
+        except Exception as report_exc:
+            # Never mask the in-flight exception with a report failure.
+            print(f"[membench] failed to write report: {report_exc}", file=sys.stderr)
 
-    output = (
-        Path(args.output)
-        if args.output
-        else default_output_path(benchmark, args.mode, args.split, used_fixture)
-    )
-    write_report(report, output)
-    print(render_summary(report))
-    print(f"Report written to {output}")
-
-    return 1 if metrics["questions_errored"] else 0
+    return 1 if (partial or metrics.get("questions_errored")) else 0
 
 
 def main(benchmark: str, default_k: int, argv: Optional[List[str]] = None) -> int:

@@ -28,7 +28,7 @@
           "questions": 1
         },
         "multi-hop": {
-          "accuracy": 1.0,
+          "accuracy": 0.0,
           "questions": 1
         },
         "single-hop": {
@@ -36,7 +36,7 @@
           "questions": 2
         },
         "temporal": {
-          "accuracy": 0.5,
+          "accuracy": 1.0,
           "questions": 2
         }
       },
@@ -111,7 +111,7 @@
   "mode": "combined",
   "results": [
     {
-      "elapsed_seconds": 2.479,
+      "elapsed_seconds": 3.697,
       "error": null,
       "evidence_session_ids": [
         "session_1"
@@ -148,7 +148,7 @@
       ]
     },
     {
-      "elapsed_seconds": 2.782,
+      "elapsed_seconds": 2.557,
       "error": null,
       "evidence_session_ids": [
         "session_3"
@@ -185,7 +185,7 @@
       ]
     },
     {
-      "elapsed_seconds": 2.51,
+      "elapsed_seconds": 2.264,
       "error": null,
       "evidence_session_ids": [
         "session_2",
@@ -197,8 +197,8 @@
         "D3:1"
       ],
       "is_abstention": false,
-      "qa_answer": "Omar was a data analyst when he traveled to Rotterdam, and he was later promoted to senior data analyst.",
-      "qa_correct": true,
+      "qa_answer": "Omar was a data analyst when he traveled to Rotterdam.",
+      "qa_correct": false,
       "question_id": "fixture_1:q2",
       "question_type": "multi-hop",
       "retrieved_session_ids": [
@@ -225,7 +225,7 @@
       ]
     },
     {
-      "elapsed_seconds": 2.667,
+      "elapsed_seconds": 2.914,
       "error": null,
       "evidence_session_ids": [
         "session_1",
@@ -236,8 +236,8 @@
         "D3:2"
       ],
       "is_abstention": false,
-      "qa_answer": "Nadia finished the pottery course on 30 April 2023, which is approximately four months and two weeks after she signed up on 8 January 2023.",
-      "qa_correct": false,
+      "qa_answer": "Nadia signed up for the pottery class on 8 January 2023 and finished the course on 30 April 2023. This means she finished the course approximately 3 months and 22 days after signing up.",
+      "qa_correct": true,
       "question_id": "fixture_1:q3",
       "question_type": "temporal",
       "retrieved_session_ids": [
@@ -264,7 +264,7 @@
       ]
     },
     {
-      "elapsed_seconds": 2.75,
+      "elapsed_seconds": 4.764,
       "error": null,
       "evidence_session_ids": [
         "session_1"
@@ -301,7 +301,7 @@
       ]
     },
     {
-      "elapsed_seconds": 2.411,
+      "elapsed_seconds": 2.22,
       "error": null,
       "evidence_session_ids": [],
       "evidence_turn_ids": [],
@@ -335,18 +335,23 @@
     }
   ],
   "run": {
-    "git_commit": "3b8fb6f2e5c03e094dbfe8b617ac090de10fa389",
+    "cases": {
+      "completed": 1,
+      "failed": 0,
+      "skipped": 0
+    },
+    "git_commit": "192b6cbd91a35f99bf6d63ba640028ce0dccd58e",
     "python": "3.11.13",
-    "started_at": "2026-07-07T20:44:23Z",
-    "wall_seconds": 37.4
+    "started_at": "2026-07-07T21:33:04Z",
+    "wall_seconds": 39.31
   },
   "schema_version": "1.0",
   "usage": {
     "cost": {
-      "estimated_usd": 0.000639,
+      "estimated_usd": 0.00064,
       "note": "List-price estimate for reporting only; local/* models are free.",
       "per_model_usd": {
-        "openai/gpt-4o-mini": 0.000639
+        "openai/gpt-4o-mini": 0.00064
       },
       "unpriced_models": []
     },
@@ -354,16 +359,16 @@
     "llm_requests": 12,
     "searches": 6,
     "tokens": {
-      "in": 3761,
-      "out": 125,
-      "total": 3886,
+      "in": 3762,
+      "out": 126,
+      "total": 3888,
       "total_cached": 0
     },
     "tokens_by_model": {
       "openai/gpt-4o-mini": [
-        3886,
-        3761,
-        125,
+        3888,
+        3762,
+        126,
         0,
         0,
         0
