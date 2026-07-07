@@ -371,6 +371,7 @@ class TestMemoryIndexCreation:
 
         joined = "\n".join(statements)
         assert "idx_memories_384_user_collection" in joined
+        assert "idx_memories_384_scope" in joined
         assert "idx_memories_384_embedding_ivfflat" in joined
         assert "USING ivfflat" in joined
 
@@ -383,7 +384,8 @@ class TestMemoryIndexCreation:
         with patch("muxi.runtime.services.memory.long_term.observability.observe") as observe:
             ensure_memory_table_indexes(db_manager, 384)
 
-        assert observe.call_count == 2
+        # One warning per index: lookup, scope (memory namespaces), ivfflat.
+        assert observe.call_count == 3
         for call in observe.call_args_list:
             assert call.kwargs["event_type"] == observability.ErrorEvents.DATABASE_OPERATION_FAILED
             assert call.kwargs["level"] == observability.EventLevel.WARNING

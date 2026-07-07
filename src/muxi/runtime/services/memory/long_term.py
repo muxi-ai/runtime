@@ -60,6 +60,20 @@ from .. import observability
 from ..db import AsyncModelMixin, Base, DatabaseManager
 from .embedding import DEFAULT_EMBEDDING_MODEL, embed, probe_dimension
 
+# Memory scopes (memory namespaces Phase 1). A memory row is written to
+# exactly one scope; Phase 1 is pure substrate, so every write is user
+# scope and reads do not fan out yet. ``scope_id`` semantics per scope:
+#   user      -> the owning row's internal user id (stringified)
+#   group     -> the group id (YAML filename stem)         [Phase 3]
+#   formation -> the formation id                          [Phase 2]
+# Existing rows are read as user scope: ``scope_type`` backfills through
+# the server-side column default, and a NULL ``scope_id`` means "the
+# row's owning user_id" (no backfill UPDATE is issued — same additive
+# migration posture as the meta_data / derived_from_event_ids columns).
+SCOPE_TYPE_USER = "user"
+SCOPE_TYPE_GROUP = "group"
+SCOPE_TYPE_FORMATION = "formation"
+
 # Memory collection definitions for organizing long-term storage
 MEMORY_COLLECTIONS = {
     "conversations": "Raw chat history and full message exchanges",
@@ -194,6 +208,15 @@ def get_memory_model(dimension: int):
             "created_at": Column(DateTime, default=utc_now_naive),
             "updated_at": Column(DateTime, default=utc_now_naive, onupdate=utc_now_naive),
             "collection": Column(String(255), nullable=False, index=True),
+            # Memory namespaces Phase 1: scope columns. The server-side
+            # default backfills pre-existing rows as user scope on the
+            # additive ALTER migration; scope_id stays nullable so old
+            # rows read NULL-as-"the owning user_id" without a backfill
+            # UPDATE. New writes always stamp both columns explicitly.
+            "scope_type": Column(
+                String(20), nullable=False, default=SCOPE_TYPE_USER, server_default=SCOPE_TYPE_USER
+            ),
+            "scope_id": Column(String(255), nullable=True),
         },
     )
 
@@ -210,6 +233,7 @@ def ensure_memory_table_indexes(db_manager: DatabaseManager, dimension: int) -> 
 
     table_name = f"memories_{dimension}"
     user_collection_index = f"idx_{table_name}_user_collection"
+    scope_index = f"idx_{table_name}_scope"
     embedding_index = f"idx_{table_name}_embedding_ivfflat"
 
     try:
@@ -232,6 +256,31 @@ def ensure_memory_table_indexes(db_manager: DatabaseManager, dimension: int) -> 
                 "database_type": db_manager.database_type,
             },
             description=f"Failed to create memory lookup index on {table_name}: {e}",
+        )
+
+    # Memory namespaces Phase 1: index for the scope fan-out queries
+    # arriving in Phase 2 (formation isolation is via the users join,
+    # so formation_id is not part of this index).
+    try:
+        with db_manager.engine.connect() as conn:
+            conn.execute(
+                text(
+                    f"CREATE INDEX IF NOT EXISTS {scope_index} "
+                    f"ON {table_name} (scope_type, scope_id, collection)"
+                )
+            )
+            conn.commit()
+    except Exception as e:
+        observability.observe(
+            event_type=observability.ErrorEvents.DATABASE_OPERATION_FAILED,
+            level=observability.EventLevel.WARNING,
+            data={
+                "table": table_name,
+                "index": scope_index,
+                "error": str(e),
+                "database_type": db_manager.database_type,
+            },
+            description=f"Failed to create memory scope index on {table_name}: {e}",
         )
 
     try:
@@ -750,7 +799,9 @@ class LongTermMemory:
             if isinstance(embedding, np.ndarray):
                 embedding = embedding.tolist()
 
-            # Create memory using async model helper with internal user ID
+            # Create memory using async model helper with internal user ID.
+            # Phase 1: every write is user scope; scope_id mirrors the
+            # owning internal user id (memory namespaces substrate).
             memory = await self.MemoryModel.create(
                 session,
                 user_id=internal_user_id,  # Use resolved internal ID
@@ -758,6 +809,8 @@ class LongTermMemory:
                 embedding=embedding,
                 meta_data=metadata,
                 collection=collection,
+                scope_type=SCOPE_TYPE_USER,
+                scope_id=str(internal_user_id),
             )
 
             # Return ID
@@ -801,13 +854,16 @@ class LongTermMemory:
             if isinstance(embedding, np.ndarray):
                 embedding = embedding.tolist()
 
-            # Create memory
+            # Create memory (Phase 1: user scope, scope_id mirrors the
+            # owning internal user id — memory namespaces substrate)
             memory = self.MemoryModel(
                 user_id=internal_user_id,
                 text=text,
                 embedding=embedding,
                 meta_data=metadata,
                 collection=collection,
+                scope_type=SCOPE_TYPE_USER,
+                scope_id=str(internal_user_id),
             )
 
             # Add to database

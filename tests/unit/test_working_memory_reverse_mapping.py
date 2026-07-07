@@ -16,7 +16,7 @@ from __future__ import annotations
 
 from unittest.mock import AsyncMock, patch
 
-from muxi.runtime.services.memory.working import SHARED_PARTITION, WorkingMemory
+from muxi.runtime.services.memory.working import FORMATION_PARTITION, WorkingMemory
 
 DIM = 8
 
@@ -126,9 +126,9 @@ async def test_mappings_stay_inverse_after_rebuild():
         assert mem.index_count == 3
         _assert_inverse(mem)
         # Buffer index 0 now holds what was item 1; FAISS row 0 in the
-        # shared partition (no session_id on these items) must resolve
-        # back to buffer index 0.
-        assert mem.partitions[SHARED_PARTITION].reverse_index_mapping[0] == 0
+        # formation partition (no session/user on these items) must
+        # resolve back to buffer index 0.
+        assert mem.partitions[FORMATION_PARTITION].reverse_index_mapping[0] == 0
 
 
 async def test_clear_resets_both_mappings():
