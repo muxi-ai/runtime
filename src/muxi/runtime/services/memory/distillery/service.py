@@ -566,16 +566,37 @@ class MemoryDistilleryService:
         is_multi_user = bool(getattr(self.overlord, "is_multi_user", False))
         events: List[Any] = meta["events"]
 
-        await self._check_quota(distillery, len(events))
-
+        # Pass 1 (read-only): validate every event and resolve duplicates
+        # against the substrate's idempotency key, WITHOUT appending or
+        # consuming anything.
         rejections: List[Dict[str, Any]] = []
         duplicates = 0
-        to_process: List[Tuple[int, DistilledEvent, Dict[str, Any]]] = []
+        net_new: List[Tuple[int, DistilledEvent]] = []
         for index, entry in enumerate(events):
             event, reason = validate_distilled_event(entry, scope, trust_level, is_multi_user)
             if event is None:
                 rejections.append({"index": index, "reason": reason})
                 continue
+            existing = await memory_events.storage.find_by_source_id(
+                event.user_id, SOURCE_DISTILLERY, event.source_id
+            )
+            if existing is not None:
+                duplicates += 1
+            else:
+                net_new.append((index, event))
+
+        # Quota gates the NET-NEW event count only: a full-duplicate retry
+        # must always succeed regardless of quota state (the idempotent
+        # retry guarantee), and mixed batches only need headroom for the
+        # events they would actually create. Raising here appends nothing
+        # and consumes nothing, so the whole batch stays safely retryable.
+        await self._check_quota(distillery, len(net_new))
+
+        # Pass 2: append the net-new events. An append can still resolve
+        # to an existing event (a concurrent writer, or the same source_id
+        # appearing twice within this batch) -- those count as duplicates.
+        to_process: List[Tuple[int, DistilledEvent, Dict[str, Any]]] = []
+        for index, event in net_new:
             try:
                 stored, created = await memory_events.storage.append(
                     user_id=event.user_id,
@@ -625,6 +646,7 @@ class MemoryDistilleryService:
                 raise
             state.task_ref = task
 
+        rejections.sort(key=lambda r: r["index"])
         response = {
             "batch_id": meta["batch_id"],
             "accepted": len(to_process),

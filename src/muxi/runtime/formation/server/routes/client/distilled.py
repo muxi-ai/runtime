@@ -26,7 +26,8 @@ Error semantics (PRD "Authentication & Trust Model"):
   indexed rejection reasons alongside the accepted count.
 """
 
-from typing import Any, Dict, Optional
+import secrets
+from typing import Any, Dict
 
 from fastapi import APIRouter, Request
 from fastapi.responses import JSONResponse
@@ -41,6 +42,7 @@ from .....services.memory.distillery import (
 from .....utils.fastjson import json
 from ....background.request_tracker import RequestStatus
 from ...responses import APIResponse, create_error_response, create_success_response
+from ...utils import distillery_service_or_error
 
 router = APIRouter(tags=["Memory"])
 
@@ -55,22 +57,6 @@ _DISTILLED_STATUS_MAP = {
     RequestStatus.FAILED: "failed",
     RequestStatus.CANCELLED: "failed",
 }
-
-
-def _distillery_service_or_error(request: Request, request_id: Optional[str]):
-    """Resolve the overlord's distillery service, or a formed 503."""
-    formation = request.app.state.formation
-    overlord = getattr(formation, "_overlord", None)
-    service = getattr(overlord, "memory_distillery", None) if overlord else None
-    if service is None or not getattr(service, "enabled", False):
-        response = create_error_response(
-            "SERVICE_UNAVAILABLE",
-            "Memory distillery is not enabled for this formation " "(memory.distillery.enabled)",
-            None,
-            request_id,
-        )
-        return None, JSONResponse(content=response.model_dump(), status_code=503)
-    return service, None
 
 
 @router.post(
@@ -92,7 +78,7 @@ async def ingest_distilled_memories(request: Request) -> JSONResponse:
     """
     request_id = getattr(request.state, "request_id", None)
 
-    service, error_response = _distillery_service_or_error(request, request_id)
+    service, error_response = distillery_service_or_error(request, request_id)
     if error_response:
         return error_response
 
@@ -179,7 +165,7 @@ async def get_distilled_status(request: Request, processing_id: str) -> JSONResp
     formation = request.app.state.formation
     request_id = getattr(request.state, "request_id", None)
 
-    service, error_response = _distillery_service_or_error(request, request_id)
+    service, error_response = distillery_service_or_error(request, request_id)
     if error_response:
         return error_response
 
@@ -198,13 +184,11 @@ async def get_distilled_status(request: Request, processing_id: str) -> JSONResp
     # Ownership check: admin key sees everything; otherwise the caller
     # must present the submitting distillery's id. Uses the same header
     # comparison as the memory routes' admin detection.
-    import secrets as _secrets
-
     api_keys = getattr(formation, "_api_keys", {})
     admin_key = api_keys.get("admin", "")
     provided_admin_key = request.headers.get("x-muxi-admin-key")
     is_admin = bool(
-        provided_admin_key and admin_key and _secrets.compare_digest(provided_admin_key, admin_key)
+        provided_admin_key and admin_key and secrets.compare_digest(provided_admin_key, admin_key)
     )
     distillery_id = (request.headers.get("X-Distillery-ID") or "").strip()
     if not is_admin and state.user_id != f"distillery:{distillery_id}":

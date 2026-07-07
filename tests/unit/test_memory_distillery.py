@@ -748,3 +748,85 @@ class TestEmbeddingModes:
             embedding_model="local/all-MiniLM-L6-v2",
         )
         assert ltm.rows[0]["embedding"] is None  # embedded on receipt
+
+
+# ----------------------------------------------------------------------
+# Quota ordering (net-new gating; idempotent retries never 429)
+# ----------------------------------------------------------------------
+
+
+class TestQuotaOrdering:
+    async def test_all_duplicate_replay_succeeds_at_exhausted_quota(self, memory_events, keypair):
+        overlord = make_overlord(memory_events)
+        service = MemoryDistilleryService(overlord)
+        record = await register(service, keypair, scope={"max_events_per_day": 2})
+
+        first = await accept(
+            service,
+            record,
+            make_batch([fact_event(source_id="s1"), fact_event(source_id="s2")]),
+        )
+        await finish_job(overlord, first["processing_id"])
+        # Quota is now exhausted (2/2 consumed) -- yet the full-batch
+        # retry must succeed: it would create zero events, so it needs
+        # zero headroom (the idempotent-retry guarantee).
+        replay = await accept(
+            service,
+            record,
+            make_batch([fact_event(source_id="s1"), fact_event(source_id="s2")]),
+        )
+        assert replay["accepted"] == 0
+        assert replay["duplicates"] == 2
+        assert replay["processing_id"] is None
+
+    async def test_mixed_batch_needs_quota_only_for_net_new(self, memory_events, keypair):
+        overlord = make_overlord(memory_events)
+        service = MemoryDistilleryService(overlord)
+        record = await register(service, keypair, scope={"max_events_per_day": 3})
+
+        first = await accept(
+            service,
+            record,
+            make_batch([fact_event(source_id="s1"), fact_event(source_id="s2")]),
+        )
+        await finish_job(overlord, first["processing_id"])
+
+        # 1 quota slot left; a 3-event batch with 2 duplicates only needs
+        # headroom for its single net-new event.
+        mixed = await accept(
+            service,
+            record,
+            make_batch(
+                [
+                    fact_event(source_id="s1"),
+                    fact_event(source_id="s2"),
+                    fact_event(source_id="s3"),
+                ]
+            ),
+        )
+        assert mixed["accepted"] == 1
+        assert mixed["duplicates"] == 2
+        await finish_job(overlord, mixed["processing_id"])
+
+        # Quota now exhausted: one more net-new event must 429...
+        with pytest.raises(DistilleryRateLimitError):
+            await accept(service, record, make_batch([fact_event(source_id="s4")]))
+        # ...and the rejected batch consumed nothing: replaying the
+        # already-accepted keys still succeeds.
+        replay = await accept(service, record, make_batch([fact_event(source_id="s3")]))
+        assert replay["duplicates"] == 1
+
+    async def test_rejected_batch_appends_nothing(self, memory_events, keypair):
+        overlord = make_overlord(memory_events)
+        service = MemoryDistilleryService(overlord)
+        record = await register(service, keypair, scope={"max_events_per_day": 1})
+
+        with pytest.raises(DistilleryRateLimitError):
+            await accept(
+                service,
+                record,
+                make_batch([fact_event(source_id="s1"), fact_event(source_id="s2")]),
+            )
+        # The 429 fired before any append: the substrate is untouched and
+        # the full batch remains retryable.
+        assert await memory_events.list_events("alice@acme.com") == []

@@ -779,11 +779,11 @@ MEMORY_CLEAR_FAILED,ErrorEvents,YES,,src/muxi/runtime/formation/memory/persisten
 MEMORY_CLEAR_FAILED,ErrorEvents,YES,,src/muxi/runtime/services/memory/memobase.py,597,observability.observe(
 MEMORY_DELETION_HARD_PURGED,ConversationEvents,YES,,src/muxi/runtime/services/memory/events/service.py,351,observability.observe(
 MEMORY_DELETION_REQUESTED,ConversationEvents,YES,,src/muxi/runtime/services/memory/events/service.py,293,observability.observe(
-MEMORY_DISTILLED_ACCEPTED,ConversationEvents,YES,,src/muxi/runtime/services/memory/distillery/service.py,636,observability.observe(
-MEMORY_DISTILLED_COMPLETED,ConversationEvents,YES,,src/muxi/runtime/services/memory/distillery/service.py,771,observability.observe(
-MEMORY_DISTILLED_FAILED,ConversationEvents,YES,,src/muxi/runtime/services/memory/distillery/service.py,785,observability.observe(
-MEMORY_DISTILLERY_REGISTERED,ConversationEvents,YES,,src/muxi/runtime/formation/server/routes/admin/memory.py,268,observability.observe(
-MEMORY_DISTILLERY_REVOKED,ConversationEvents,YES,,src/muxi/runtime/formation/server/routes/admin/memory.py,347,observability.observe(
+MEMORY_DISTILLED_ACCEPTED,ConversationEvents,YES,,src/muxi/runtime/services/memory/distillery/service.py,658,observability.observe(
+MEMORY_DISTILLED_COMPLETED,ConversationEvents,YES,,src/muxi/runtime/services/memory/distillery/service.py,793,observability.observe(
+MEMORY_DISTILLED_FAILED,ConversationEvents,YES,,src/muxi/runtime/services/memory/distillery/service.py,807,observability.observe(
+MEMORY_DISTILLERY_REGISTERED,ConversationEvents,YES,,src/muxi/runtime/formation/server/routes/admin/memory.py,253,observability.observe(
+MEMORY_DISTILLERY_REVOKED,ConversationEvents,YES,,src/muxi/runtime/formation/server/routes/admin/memory.py,332,observability.observe(
 MEMORY_EVENT_APPENDED,ConversationEvents,YES,,src/muxi/runtime/services/memory/events/service.py,144,observability.observe(
 MEMORY_EVENT_APPEND_FAILED,ConversationEvents,YES,,src/muxi/runtime/services/memory/events/service.py,129,observability.observe(
 MEMORY_EVENT_IDEMPOTENT_SKIP,ConversationEvents,YES,,src/muxi/runtime/services/memory/events/service.py,156,observability.observe(

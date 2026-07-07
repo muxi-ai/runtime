@@ -18,6 +18,7 @@ from ...responses import (
     create_error_response,
     create_success_response,
 )
+from ...utils import distillery_service_or_error
 
 router = APIRouter(tags=["Memory"])
 
@@ -213,22 +214,6 @@ class DistilleryRegistration(BaseModel):
     trust_level: Optional[str] = None
 
 
-def _distillery_service_or_error(request: Request, request_id: Optional[str]):
-    """Resolve the overlord's distillery service, or a formed 503."""
-    formation = request.app.state.formation
-    overlord = getattr(formation, "_overlord", None)
-    service = getattr(overlord, "memory_distillery", None) if overlord else None
-    if service is None or not getattr(service, "enabled", False):
-        response = create_error_response(
-            "SERVICE_UNAVAILABLE",
-            "Memory distillery is not enabled for this formation " "(memory.distillery.enabled)",
-            None,
-            request_id,
-        )
-        return None, JSONResponse(content=response.model_dump(), status_code=503)
-    return service, None
-
-
 @router.post("/memory/distilleries", response_model=APIResponse, operation_id="register_distillery")
 async def register_distillery(
     request: Request, registration: DistilleryRegistration
@@ -244,7 +229,7 @@ async def register_distillery(
     """
     request_id = getattr(request.state, "request_id", None)
 
-    service, error_response = _distillery_service_or_error(request, request_id)
+    service, error_response = distillery_service_or_error(request, request_id)
     if error_response:
         return error_response
 
@@ -290,7 +275,7 @@ async def list_distilleries(request: Request) -> JSONResponse:
     """List this formation's registered distilleries (newest first)."""
     request_id = getattr(request.state, "request_id", None)
 
-    service, error_response = _distillery_service_or_error(request, request_id)
+    service, error_response = distillery_service_or_error(request, request_id)
     if error_response:
         return error_response
 
@@ -326,7 +311,7 @@ async def revoke_distillery(request: Request, distillery_id: str) -> JSONRespons
     """
     request_id = getattr(request.state, "request_id", None)
 
-    service, error_response = _distillery_service_or_error(request, request_id)
+    service, error_response = distillery_service_or_error(request, request_id)
     if error_response:
         return error_response
 
