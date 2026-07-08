@@ -673,6 +673,7 @@ class FormationServer:
             distilled,
             events,
             memory,
+            notifications,
             requests,
             sessions,
             skills,
@@ -697,6 +698,7 @@ class FormationServer:
         # Routers that accept only ClientKey
         client_only_routers = [
             users.router,
+            notifications.router,
             sessions.router,
             skills.router,
             sops.router,

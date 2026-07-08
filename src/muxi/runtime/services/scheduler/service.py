@@ -174,6 +174,10 @@ class SchedulerService:
         # State tracking
         self._main_loop: Optional[asyncio.AbstractEventLoop] = None
         self._active_executions = set()
+        # Periodic tasks registered by other services (e.g. the proactive
+        # heartbeat). Dispatched once per worker cycle; each task applies
+        # its own interval gating inside tick().
+        self._periodic_tasks: List[Any] = []
         self._performance_stats = {
             "cycles_completed": 0,
             "jobs_processed": 0,
@@ -368,6 +372,11 @@ class SchedulerService:
 
         # Execute due jobs (respecting concurrency limits)
         await self._execute_due_jobs(due_jobs)
+
+        # Dispatch registered periodic tasks (e.g. proactive heartbeat) on
+        # the same cadence as job checks. Tasks run on the main event loop
+        # because their downstream I/O (overlord.chat, httpx) is bound to it.
+        self._dispatch_periodic_tasks()
 
         self._last_execution_time = utc_now().isoformat()
 
@@ -721,6 +730,44 @@ class SchedulerService:
             else:
                 # Fallback: create task on the current loop (original behaviour)
                 asyncio.create_task(self._execute_single_job(job))
+
+    def register_periodic_task(self, task: Any) -> None:
+        """
+        Register a periodic task dispatched once per scheduler cycle.
+
+        The task must expose an async ``tick()`` method that applies its own
+        interval gating and never raises. This is the extension point that
+        lets features like the proactive heartbeat reuse the scheduler's
+        worker loop instead of running a second scheduler.
+
+        Args:
+            task: Object with an async ``tick()`` method
+        """
+        self._periodic_tasks.append(task)
+
+    def _dispatch_periodic_tasks(self) -> None:
+        """
+        Dispatch registered periodic tasks to the main event loop.
+
+        Mirrors _execute_due_jobs dispatch: fire-and-forget onto the main
+        loop where the formation's async resources live. Any dispatch error
+        is observed and isolated so a periodic task can never break job
+        processing.
+        """
+        for task in self._periodic_tasks:
+            try:
+                coro = task.tick()
+                if self._main_loop is not None and self._main_loop.is_running():
+                    asyncio.run_coroutine_threadsafe(coro, self._main_loop)
+                else:
+                    asyncio.create_task(coro)
+            except Exception as e:
+                observability.observe(
+                    event_type=observability.ErrorEvents.WARNING,
+                    level=observability.EventLevel.WARNING,
+                    data={"error": str(e), "error_type": type(e).__name__},
+                    description=f"Periodic task dispatch failed: {e}",
+                )
 
     async def _execute_single_job(self, job: Dict[str, Any]):
         """

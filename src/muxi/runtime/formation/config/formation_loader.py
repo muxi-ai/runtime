@@ -652,6 +652,26 @@ class FormationLoader:
                         # List format: treat as enabled sources directly
                         self._resolve_sources_paths(knowledge_config, formation_dir)
 
+                # Resolve the optional soul document path (Proactiveness
+                # Phase 1) with the same security rules as knowledge paths;
+                # fail fast when the file does not exist.
+                if agent.get("soul"):
+                    soul_path = agent["soul"]
+                    if not isinstance(soul_path, str) or not soul_path.strip():
+                        raise ValueError(
+                            f"Agent '{agent.get('id', 'unknown')}' has an invalid 'soul' "
+                            "value: must be a non-empty path relative to the formation "
+                            "directory (e.g. './SOUL.md')"
+                        )
+                    resolved_soul = self._resolve_single_path(soul_path.strip(), formation_dir)
+                    if not os.path.isfile(resolved_soul):
+                        raise ValueError(
+                            f"Soul document not found for agent "
+                            f"'{agent.get('id', 'unknown')}': {soul_path} "
+                            f"(resolved to {resolved_soul})"
+                        )
+                    agent["soul"] = resolved_soul
+
         return config
 
     def _resolve_sources_paths(self, sources: List[Any], formation_dir: str) -> None:

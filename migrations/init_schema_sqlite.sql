@@ -344,6 +344,15 @@ CREATE INDEX IF NOT EXISTS idx_job_audit_job_id ON scheduled_job_audit(job_id);
 CREATE INDEX IF NOT EXISTS idx_job_audit_timestamp ON scheduled_job_audit(timestamp DESC);
 CREATE INDEX IF NOT EXISTS idx_job_audit_user_id ON scheduled_job_audit(user_id);
 
+-- User channel state table (Proactiveness Phase 1)
+CREATE TABLE IF NOT EXISTS user_channel_state (
+    user_id TEXT NOT NULL,
+    formation_id TEXT NOT NULL,
+    state TEXT NOT NULL,
+    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    PRIMARY KEY (user_id, formation_id)
+);
+
 -- =====================================================================
 -- TRIGGERS FOR UPDATED_AT
 -- =====================================================================

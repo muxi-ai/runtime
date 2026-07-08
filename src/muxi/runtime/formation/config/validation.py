@@ -422,6 +422,14 @@ class FormationValidator:
         if "user_credentials" in config:
             self._validate_user_credentials_config(config["user_credentials"])
 
+        # Validate proactive configuration (Proactiveness Phase 1)
+        if "proactive" in config:
+            self._validate_proactive_config(config["proactive"], config)
+
+        # Validate slash commands configuration (Proactiveness Phase 1)
+        if "commands" in config:
+            self._validate_commands_config(config["commands"])
+
     def _validate_artifacts_config(self, artifacts_config: Dict[str, Any]) -> None:
         """Validate artifact memory configuration (Artifact Memory Phase 1)."""
         # Reuse the service-level parser so the validator and the runtime
@@ -430,6 +438,42 @@ class FormationValidator:
 
         try:
             parse_artifacts_config(artifacts_config)
+        except ValueError as e:
+            self.result.add_error(str(e))
+
+    def _validate_proactive_config(
+        self, proactive_config: Dict[str, Any], config: Dict[str, Any]
+    ) -> None:
+        """Validate proactive configuration (Proactiveness Phase 1)."""
+        # Reuse the service-level parser so the validator and the runtime
+        # can never disagree about what a valid proactive block looks like.
+        from ..proactive import parse_proactive_config
+
+        try:
+            parsed = parse_proactive_config(proactive_config)
+        except ValueError as e:
+            self.result.add_error(str(e))
+            return
+
+        # The heartbeat rides the scheduler's worker loop; enabling it
+        # without the scheduler would silently never fire (fail fast here).
+        if parsed and parsed.heartbeat and parsed.heartbeat.enabled:
+            scheduler_config = config.get("scheduler") or {}
+            if not (isinstance(scheduler_config, dict) and scheduler_config.get("enabled", False)):
+                self.result.add_error(
+                    "'proactive.heartbeat' is enabled but the scheduler is not. The "
+                    "heartbeat runs on the scheduler's loop: enable it with "
+                    "'scheduler.enabled: true' (requires persistent memory) or set "
+                    "'proactive.heartbeat.enabled: false'"
+                )
+
+    def _validate_commands_config(self, commands_config: Dict[str, Any]) -> None:
+        """Validate slash commands configuration (Proactiveness Phase 1)."""
+        # Reuse the service-level parser (same rationale as artifacts/proactive)
+        from ..commands import parse_commands_config
+
+        try:
+            parse_commands_config(commands_config)
         except ValueError as e:
             self.result.add_error(str(e))
 
@@ -513,6 +557,16 @@ class FormationValidator:
             # Validate agent-level MCP servers
             if "mcp_servers" in agent_config:
                 self._validate_agent_mcp_servers(agent_config["mcp_servers"], agent_id or i)
+
+            # Validate soul document reference (Proactiveness Phase 1).
+            # Existence is checked by the loader during path resolution.
+            if "soul" in agent_config:
+                soul = agent_config["soul"]
+                if not isinstance(soul, str) or not soul.strip():
+                    self.result.add_error(
+                        f"Agent {agent_id or i} 'soul' must be a non-empty path string "
+                        "relative to the formation directory (e.g. './SOUL.md')"
+                    )
 
     def _validate_model_config(self, model_config: Dict[str, Any], context: str) -> None:
         """Validate model configuration."""

@@ -1218,6 +1218,45 @@ class ConversationEvents(Enum):
     SCHEDULED_JOB_WEBHOOK_RECEIVED = "scheduled.job.webhook.received"
     # When webhook response is received for a scheduled job
 
+    # ===================================================================
+    # PROACTIVE NOTIFICATIONS (Proactiveness Phase 1)
+    # ===================================================================
+    NOTIFICATION_ROUTED = "notification.routed"
+    # When a proactive notification is routed to resolved channel(s)
+
+    NOTIFICATION_DELIVERED = "notification.delivered"
+    # When a proactive notification is delivered to a channel
+
+    NOTIFICATION_FAILED = "notification.failed"
+    # When proactive notification delivery to a channel fails
+
+    USER_CHANNEL_RECORDED = "user.channel.recorded"
+    # When an inbound message records the user's last-used channel
+
+    # ===================================================================
+    # HEARTBEAT (Proactiveness Phase 1)
+    # ===================================================================
+    HEARTBEAT_STARTED = "heartbeat.started"
+    # When a heartbeat run starts for a user
+
+    HEARTBEAT_COMPLETED = "heartbeat.completed"
+    # When a heartbeat run completes (delivered or silent HEARTBEAT_OK)
+
+    HEARTBEAT_SKIPPED = "heartbeat.skipped"
+    # When a heartbeat run is suppressed (outside active hours)
+
+    HEARTBEAT_FAILED = "heartbeat.failed"
+    # When a heartbeat run fails (isolated from interactive chat)
+
+    # ===================================================================
+    # SLASH COMMANDS (Proactiveness Phase 1)
+    # ===================================================================
+    COMMAND_MATCHED = "command.matched"
+    # When a slash command resolves to an SOP or built-in handler
+
+    COMMAND_UNKNOWN = "command.unknown"
+    # When a slash command does not resolve to any known command
+
 
 class ServerEvents(Enum):
     """Server event types for MUXI observability"""

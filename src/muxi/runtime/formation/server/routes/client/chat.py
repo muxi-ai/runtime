@@ -93,6 +93,7 @@ class ChatRequest(BaseModel):
     stream: Optional[bool] = True  # Enable/disable streaming (default: True)
     webhook_url: Optional[str] = None  # Per-request webhook override
     threshold_seconds: Optional[float] = None  # Per-request async threshold override
+    source_channel: Optional[str] = None  # Channel this message arrived on (last tracking)
 
 
 class AudioChatRequest(BaseModel):
@@ -185,6 +186,7 @@ async def chat(
                 stream=False,  # Disable streaming
                 webhook_url=chat_request.webhook_url,
                 threshold_seconds=chat_request.threshold_seconds,
+                source_channel=chat_request.source_channel,
             )
 
             # Return complete response as JSON
@@ -251,6 +253,7 @@ async def chat(
                     stream=True,  # Enable streaming
                     webhook_url=chat_request.webhook_url,
                     threshold_seconds=chat_request.threshold_seconds,
+                    source_channel=chat_request.source_channel,
                 )
             ):
                 yield chunk
