@@ -41,6 +41,12 @@ from .user_channels import UserChannelStore
 
 HEARTBEAT_OK_SENTINEL = "HEARTBEAT_OK"
 
+# Prefix of the runtime-generated heartbeat session ids
+# (``heartbeat_<user>_<request>``). The overlord's persona formatter uses
+# it to recognize heartbeat-originated requests and keep the suppression
+# sentinel intact (see ``Overlord._apply_persona``).
+HEARTBEAT_SESSION_PREFIX = "heartbeat_"
+
 # Bundled default heartbeat SOP (Proactiveness Phase 4): the base prompt
 # when the heartbeat is enabled without a formation-configured `sop:`.
 BUILTIN_HEARTBEAT_SOP_PATH = Path(__file__).parent / "builtin" / "heartbeat.md"
@@ -76,6 +82,17 @@ def load_default_heartbeat_sop() -> str:
             content = ""
         _default_heartbeat_sop = content or DEFAULT_HEARTBEAT_PROMPT
     return _default_heartbeat_sop
+
+
+def _reset_default_sop_cache() -> None:
+    """
+    Clear the cached bundled SOP so the next load re-reads the file.
+
+    Test isolation only: production never needs invalidation (the bundled
+    file is immutable for the life of the process).
+    """
+    global _default_heartbeat_sop
+    _default_heartbeat_sop = None
 
 
 class HeartbeatService:
@@ -192,7 +209,7 @@ class HeartbeatService:
         response = await self.overlord.chat(
             message=prompt,
             user_id=user_id,
-            session_id=f"heartbeat_{user_id}_{request_id}",
+            session_id=f"{HEARTBEAT_SESSION_PREFIX}{user_id}_{request_id}",
             request_id=request_id,
             use_async=False,
             stream=False,

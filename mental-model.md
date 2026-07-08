@@ -3136,14 +3136,25 @@ mentions it is always about the check itself, never a legitimate
 notification.
 
 **Persona sentinel guard (mechanism change #3).**
-`Overlord._apply_persona` returns a bare `HEARTBEAT_OK*` response
-verbatim (guard at the top, before any model access). Without it the
-persona-rephrase LLM pass (which formats EVERY chat response,
-temperature 0.7) would sometimes paraphrase the sentinel away entirely
-("The heartbeat check has been successful.") and no sentinel matching
-downstream can save it. Inert for normal chats: agents only emit the
-sentinel when a heartbeat prompt asks for it. Pinned by
-`tests/unit/test_apply_persona_handles_raw.py`.
+`Overlord._apply_persona` (guard at the top, before any model access)
+passes through verbatim: (a) bare `HEARTBEAT_OK*` responses, for ANY
+chat (agents only emit the sentinel when a heartbeat prompt asks); and
+(b) responses merely CONTAINING the sentinel, but only within
+heartbeat-originated requests -- recognized via the runtime-generated
+session id prefix (`HEARTBEAT_SESSION_PREFIX`, `heartbeat_<user>_<req>`;
+call sites in `_process_sync_chat`/`_execute_async_request` pass
+`session_id` through). (b) covers synthesis layers that wrap the
+sentinel BEFORE persona ("Everything is fine. **HEARTBEAT_OK**"), which
+the bare-prefix guard misses. It is deliberately scoped: a normal
+conversation mentioning HEARTBEAT_OK (a developer asking about the
+feature) still gets persona formatting -- blanket pass-through would be
+content destruction. Without the guard, the persona-rephrase pass
+(formats EVERY chat response, temperature 0.7) sometimes paraphrases
+the sentinel away entirely ("The heartbeat check has been successful.")
+and no downstream matching can recover it. Also added
+`_reset_default_sop_cache()` (heartbeat.py) for test isolation of the
+module-level bundled-SOP cache (autouse fixture in test_heartbeat.py).
+Pinned by `tests/unit/test_apply_persona_handles_raw.py`.
 
 **Soul template & guide:** `contributing/templates/soul.md` (annotated
 starter with the PRD's five sections: Who I Am / My Values / My

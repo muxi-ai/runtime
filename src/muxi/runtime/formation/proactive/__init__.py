@@ -26,6 +26,7 @@ from .config import (
 from .heartbeat import (
     DEFAULT_HEARTBEAT_PROMPT,
     HEARTBEAT_OK_SENTINEL,
+    HEARTBEAT_SESSION_PREFIX,
     HeartbeatService,
     load_default_heartbeat_sop,
 )
@@ -37,6 +38,7 @@ __all__ = [
     "ChannelConfig",
     "DEFAULT_HEARTBEAT_PROMPT",
     "HEARTBEAT_OK_SENTINEL",
+    "HEARTBEAT_SESSION_PREFIX",
     "HeartbeatConfig",
     "HeartbeatService",
     "NotificationRouter",

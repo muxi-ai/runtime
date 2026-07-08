@@ -11,6 +11,7 @@ minimal stub because a real one requires live LLM credentials).
 import json
 from datetime import datetime, timedelta, timezone
 
+import pytest
 from aiohttp import web
 
 from muxi.runtime.formation.background.webhook_manager import WebhookManager
@@ -21,7 +22,19 @@ from muxi.runtime.formation.proactive import (
     load_default_heartbeat_sop,
     parse_proactive_config,
 )
-from muxi.runtime.formation.proactive.heartbeat import BUILTIN_HEARTBEAT_SOP_PATH
+from muxi.runtime.formation.proactive.heartbeat import (
+    BUILTIN_HEARTBEAT_SOP_PATH,
+    _reset_default_sop_cache,
+)
+
+
+@pytest.fixture(autouse=True)
+def _fresh_default_sop_cache():
+    """Isolate the module-level bundled-SOP cache between tests."""
+    _reset_default_sop_cache()
+    yield
+    _reset_default_sop_cache()
+
 
 # Fixed reference times (UTC)
 TUESDAY_NOON = datetime(2026, 7, 7, 12, 0, tzinfo=timezone.utc)
