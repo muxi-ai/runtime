@@ -118,7 +118,13 @@ sandbox. No inner LLM loop, no orchestration, no new execution paths.
   ``failure_kind`` breakdown. Disable via ``skills.disable_builtin``;
   degrades like any scripted skill when no RCE is configured.
 
-### Fixes (#229, #231, #234, #235, #240, #241)
+### Fixes (#229, #231, #234, #235, #240, #241, #249)
+
+- Scheduler due-job queries are scoped to the owning formation:
+  formations sharing one database no longer execute each other's
+  scheduled jobs (``get_active_jobs_batch`` and its pagination count
+  filtered only on ACTIVE status; every other query in the manager was
+  already formation-scoped) (#249).
 
 - The formation MCP server exposes its tools again on FastAPI 0.137+:
   lazy router inclusion left ``app.routes`` holding placeholders instead
