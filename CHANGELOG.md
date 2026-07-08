@@ -2,6 +2,22 @@
 
 ## [unreleased]
 
+### Fixes (#229, #231, #234, #235)
+
+- Scope-column migration now covers ALL ``memories_{dim}`` tables, not
+  just the dimension guessed at startup -- the active dimension is probed
+  lazily on first embed, so the previously-migrated table could differ
+  from the one actually queried, breaking scope-filtered retrieval (#231).
+- The resilient executor's tool-timeout fallback no longer passes a
+  keyword argument ``process_message`` does not accept; the resulting
+  ``TypeError`` was swallowed, so recovery silently failed the task
+  instead of retrying without tools (#234).
+- The ``13_triggers`` e2e runner discovers its tests dynamically instead
+  of a hardcoded list that had drifted from the files on disk (#229).
+- e2e ``CapturingLogger`` fakes implement ``should_emit()``, restoring
+  event capture in the PII-redaction observability tests after the
+  filtered-event pre-check landed (#235).
+
 ### Hierarchical Model Selection (#232)
 
 Model choice now follows the formation hierarchy with lowest-level-wins
