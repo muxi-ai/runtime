@@ -2,6 +2,32 @@
 
 ## [unreleased]
 
+### Hierarchical Model Selection (#232)
+
+Model choice now follows the formation hierarchy with lowest-level-wins
+overrides: formation ``llm.models`` -> agent ``llm_models`` (previously
+validated but never applied -- now wired) -> SOP/trigger/skill frontmatter
+``model:`` -> per-step ``[model:x]`` directives. Authors specify models
+where the knowledge lives; no capability inference.
+
+- ``llm.aliases``: semantic names (``fast``, ``premium``) mapped to
+  ``provider/model``, resolved before cache keying so an alias and its
+  target share one cached model instance.
+- Fail-fast load-time validation of every model reference in ``sops/``,
+  ``triggers/``, and ``skills/`` and of alias targets; a broken alias
+  errors both at its definition and at every usage site.
+- Request-time failure isolation: an unresolvable override falls back to
+  the agent default, and a failing override call retries on the agent's
+  own model -- a model-selection problem never crashes a turn. New
+  ``MODEL_OVERRIDE_APPLIED`` / ``MODEL_OVERRIDE_FAILED`` events carry the
+  override source (``agent``, ``trigger``, ``skill``, ``sop_frontmatter``,
+  ``sop_step``).
+- When the same underlying model appears under several capabilities with
+  different keys/settings, overrides deterministically prefer the ``text``
+  capability's entry, else the first declared.
+- Inert when unconfigured: formations without the new fields behave
+  identically to before (pinned by tests).
+
 ### Trigger Transformers: response formatting + outbound routing (#228)
 
 Trigger results can now reach external platforms (Slack, Telegram, Twilio,
