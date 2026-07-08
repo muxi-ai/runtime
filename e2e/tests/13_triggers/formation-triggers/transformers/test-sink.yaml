@@ -1,0 +1,27 @@
+# E2E test transformer: posts the formatted agent response to a local sink
+# server started by test_13c1_trigger_transformer.py (Slack-style payload).
+name: test-sink
+version: "1.0"
+
+endpoint:
+  url: http://127.0.0.1:18299/postMessage
+  method: POST
+
+auth:
+  type: bearer
+  token: "${{ secrets.SKILL_TEST_GREETING }}"
+
+headers:
+  Content-Type: application/json
+
+body:
+  channel: "${{ context.channel }}"
+  thread_ts: "${{ context.thread_ts }}"
+  text: "${{ response.content }}"
+  user: "${{ request.user_id }}"
+  original: "${{ request.message }}"
+
+content_transform:
+  format: markdown
+  max_length: 500
+  truncation_suffix: "..."

@@ -7,11 +7,13 @@ webhook payload verification.
 """
 
 import asyncio
+import base64
 import hashlib
 import hmac
 import time
 from dataclasses import dataclass, field
 from typing import Any, Dict, List, Optional, Tuple
+from urllib.parse import urlencode
 
 import aiohttp
 
@@ -262,6 +264,162 @@ class WebhookManager:
                 await asyncio.sleep(wait_time)
 
         return False
+
+    async def deliver_raw(
+        self,
+        *,
+        url: str,
+        method: str = "POST",
+        headers: Optional[Dict[str, str]] = None,
+        body: Any = None,
+        basic_auth: Optional[Tuple[str, str]] = None,
+        request_id: str,
+        delivery_type: str = "raw",
+        delivery_name: Optional[str] = None,
+        retries: Optional[int] = None,
+        timeout: Optional[int] = None,
+    ) -> Tuple[bool, Optional[str], int]:
+        """
+        Deliver an arbitrary payload to an arbitrary endpoint with the same
+        retry/backoff machinery as async completion webhooks.
+
+        Used by trigger transformers to post platform-specific payloads
+        (Slack, Telegram, Twilio, ...) built from transformer templates.
+
+        Args:
+            url: Target endpoint URL
+            method: HTTP method (GET/POST/PUT/PATCH/DELETE)
+            headers: HTTP headers (Content-Type controls body encoding:
+                application/x-www-form-urlencoded form-encodes dict bodies,
+                anything else JSON-encodes non-string bodies)
+            body: Payload (dict/list/str/None)
+            basic_auth: Optional (username, password) for HTTP basic auth
+            request_id: Request ID for observability correlation
+            delivery_type: Delivery kind for observability metadata
+            delivery_name: Name of the transformer/route for observability
+            retries: Number of retry attempts (uses default if None)
+            timeout: Request timeout (uses default if None)
+
+        Returns:
+            Tuple of (success, last_error_summary, attempts_made)
+        """
+        max_retries = retries if retries is not None else self.default_retries
+        request_timeout = timeout if timeout is not None else self.default_timeout
+
+        event_data = {
+            "request_id": request_id,
+            "type": delivery_type,
+        }
+        if delivery_name:
+            event_data["name"] = delivery_name
+
+        last_error: Optional[str] = None
+        attempts = 0
+        for attempt in range(max_retries + 1):
+            attempts = attempt + 1
+            try:
+                success, last_error = await self._send_raw(
+                    url=url,
+                    method=method,
+                    headers=headers,
+                    body=body,
+                    basic_auth=basic_auth,
+                    timeout=request_timeout,
+                )
+                if success:
+                    observability.observe(
+                        event_type=observability.ConversationEvents.WEBHOOK_SENT,
+                        level=observability.EventLevel.INFO,
+                        data={**event_data, "attempt": attempts, "max_retries": max_retries + 1},
+                        description=f"{delivery_type.capitalize()} delivery succeeded for request {request_id}"
+                        + (f" on attempt {attempts}" if attempt > 0 else ""),
+                    )
+                    return True, None, attempts
+            except Exception as e:
+                last_error = self._summarize_webhook_error(e)
+
+            if attempt < max_retries:
+                observability.observe(
+                    event_type=observability.ConversationEvents.WEBHOOK_FAILED,
+                    level=observability.EventLevel.WARNING,
+                    data={
+                        **event_data,
+                        "attempt": attempts,
+                        "max_retries": max_retries + 1,
+                        "error": last_error,
+                    },
+                    description=(
+                        f"{delivery_type.capitalize()} delivery attempt "
+                        f"{attempts}/{max_retries + 1} failed, retrying"
+                    ),
+                )
+                wait_time = min(2**attempt, 60)  # Cap at 60 seconds
+                await asyncio.sleep(wait_time)
+
+        observability.observe(
+            event_type=observability.ConversationEvents.WEBHOOK_FAILED,
+            level=observability.EventLevel.ERROR,
+            data={**event_data, "attempts": attempts, "error": last_error},
+            description=(
+                f"{delivery_type.capitalize()} delivery failed permanently "
+                f"after {attempts} attempt(s): {last_error}"
+            ),
+        )
+        return False, last_error, attempts
+
+    async def _send_raw(
+        self,
+        *,
+        url: str,
+        method: str,
+        headers: Optional[Dict[str, str]],
+        body: Any,
+        basic_auth: Optional[Tuple[str, str]],
+        timeout: int,
+    ) -> Tuple[bool, Optional[str]]:
+        """
+        Send a single raw HTTP request. Returns (success, error_summary).
+        """
+        session = await self._get_session()
+
+        request_headers = dict(headers or {})
+        content_type = next(
+            (value for key, value in request_headers.items() if key.lower() == "content-type"),
+            None,
+        )
+
+        data: Optional[bytes] = None
+        if body is not None:
+            if content_type and "application/x-www-form-urlencoded" in content_type.lower():
+                form_body = body if isinstance(body, dict) else {}
+                data = urlencode({key: str(value) for key, value in form_body.items()}).encode(
+                    "utf-8"
+                )
+            elif isinstance(body, str):
+                data = body.encode("utf-8")
+                if content_type is None:
+                    request_headers["Content-Type"] = "text/plain; charset=utf-8"
+            else:
+                data = json.dumps(body).encode("utf-8")
+                if content_type is None:
+                    request_headers["Content-Type"] = "application/json"
+
+        if basic_auth:
+            credentials = base64.b64encode(
+                f"{basic_auth[0]}:{basic_auth[1]}".encode("utf-8")
+            ).decode("ascii")
+            request_headers["Authorization"] = f"Basic {credentials}"
+
+        async with session.request(
+            method,
+            url,
+            data=data,
+            headers=request_headers,
+            timeout=aiohttp.ClientTimeout(total=timeout),
+        ) as response:
+            if 200 <= response.status < 300:
+                return True, None
+            return False, f"HTTP {response.status}"
 
     def _clean_payload_for_serialization(self, payload: MuxiUnifiedResponse) -> Dict[str, Any]:
         """
