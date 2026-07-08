@@ -2,6 +2,73 @@
 
 ## [unreleased]
 
+### Trigger Transformers: response formatting + outbound routing (#228)
+
+Trigger results can now reach external platforms (Slack, Telegram, Twilio,
+any webhook consumer) with zero custom glue code -- the outbound half of the
+triggers-and-transformers design.
+
+- Transformer YAML files (``transformers/<name>.yaml``) with fail-fast
+  validation: template variable substitution over trigger context and
+  response data, HTTP delivery with bearer/basic/header auth, and retry
+  with exponential backoff.
+- Trigger frontmatter integration: ``transformer:`` / ``webhook:``
+  (mutually exclusive) route the response; ``parse:`` extracts inbound
+  fields via JSONPath and passes them through as template context.
+- Failure isolation per the PRD: delivery errors retry, then fall back to
+  the formation's default async webhook with ``transformer_error``
+  metadata -- a broken transformer never loses the trigger result.
+- Hardened rendering from review: markdown-to-HTML link substitution only
+  emits anchors for ``http(s)`` URLs (``javascript:``/``data:`` render as
+  plain text), truncation never exceeds ``max_length`` even with long
+  suffixes, and whitespace-bearing templates keep their whitespace.
+
+### Workflow-level replanning (#227)
+
+When a workflow fails after task-level recovery is exhausted, the runtime
+can now analyze why and ask the decomposer for a fundamentally different
+plan instead of returning the failure. Disabled by default
+(``overlord.workflow.replanning.enabled``).
+
+- ``ReplanningCoordinator``: failure analysis, replan generation through
+  the existing ``TaskDecomposer``, duplicate-plan detection, and
+  per-original-workflow attempt budgets (replans of replans share one
+  budget, default 3).
+- Non-replannable errors (auth, permissions, credentials, configuration,
+  data corruption) never trigger a replan -- a different plan hits the
+  same wall.
+- Replanned executions run within the *remaining* time budget of the
+  original workflow, never a fresh ceiling.
+- Completed work travels into the replan context so the new plan does not
+  redo it; the decomposition prompt stays byte-identical when replanning
+  is disabled.
+- New ``workflow.replanning.{started,completed,failed,skipped}`` events
+  and streaming stages.
+
+### Artifact Memory, Phase 1: capture (#226)
+
+Everything agents produce through ``generate_file`` (local sandbox or RCE)
+is now persisted -- versioned, user-scoped, encrypted, and
+retention-managed. No behavior change for agents; the data accumulates
+silently for the retrieval phase to build on.
+
+- Storage pipeline: gzip, then AES-256-GCM with per-user keys derived
+  (HKDF-SHA256) from an immutable ``formation_instance_id``, local blob
+  store, SHA-256 checksums, metadata row in the new ``artifacts`` table
+  (both backends).
+- Versioning on name match: previous head demoted, ``parent_id`` chain,
+  history blobs retained; version races resolved with keyed locks plus a
+  partial unique index.
+- Retention worker: ``expires_at`` computed at capture from
+  ``artifacts.retention``; hourly sweep soft-deletes expired rows and
+  prunes blobs, following the shared background-loop lifecycle.
+- Capture is a tracked background task off the response path -- every
+  failure is logged and swallowed; the user response is never affected.
+  Secret-interpolated content is never captured.
+- Phase 2 (manifest injection + ``get_artifact*`` retrieval tools) waits
+  on the Knowledge Index layer; S3 storage is rejected loudly at config
+  time rather than silently falling back.
+
 ### Memory Distillery: runtime endpoint (#221)
 
 On-premises distilleries can now push pre-processed memory into a formation
