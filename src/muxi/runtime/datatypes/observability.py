@@ -1269,6 +1269,12 @@ class ConversationEvents(Enum):
     COMMAND_UNKNOWN = "command.unknown"
     # When a slash command does not resolve to any known command
 
+    COMMAND_EXECUTED = "command.executed"
+    # When a built-in slash command handler completes successfully
+
+    COMMAND_FAILED = "command.failed"
+    # When a built-in slash command handler raises (isolated from the turn)
+
 
 class ServerEvents(Enum):
     """Server event types for MUXI observability"""

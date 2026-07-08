@@ -153,6 +153,7 @@ from ..background import RequestTracker, TimeEstimator, WebhookManager
 from ..background.cancellation import RequestCancelledException
 from ..background.request_tracker import RequestStatus
 from ..commands import (
+    CommandResolution,
     available_commands,
     parse_commands_config,
     parse_slash_command,
@@ -5983,6 +5984,109 @@ Agent response: {raw_response}"""
 
         return None
 
+    async def _process_slash_command(
+        self,
+        message: str,
+        user_id: Any,
+        session_id: Optional[str],
+    ) -> Optional[Union[MuxiResponse, CommandResolution]]:
+        """
+        Slash-command interception for the chat path (Proactiveness 1+3).
+
+        Inert unless the formation opts in via a 'commands' block (no block
+        means no interception at all -- messages starting with '/' flow to
+        the LLM unchanged).
+
+        Returns:
+            - None: not command-related; continue the normal chat flow
+            - MuxiResponse: terminal reply (built-in command execution,
+              /setup flow answer, or unknown command) -- no LLM round-trip
+            - CommandResolution: an SOP command; the caller rewrites the
+              chat message and continues the normal flow
+        """
+        if self._commands_config is None or not self._commands_config.enabled:
+            return None
+
+        from ..builtin_commands import (
+            cancel_setup_flow,
+            execute_builtin,
+            handle_setup_answer,
+        )
+
+        parsed_command = parse_slash_command(message)
+        if parsed_command is None:
+            # While a /setup flow is active, plain replies are flow answers
+            # (deterministic; never raises).
+            flow_reply = await handle_setup_answer(
+                self, user_id, session_id, message, self._commands_config
+            )
+            if flow_reply is None:
+                return None
+            return MuxiResponse(
+                role="assistant",
+                content=flow_reply,
+                metadata={
+                    "command": "setup",
+                    "command_type": "builtin",
+                    "command_status": "flow",
+                },
+            )
+
+        sops = self.sop_system.sops if self._ensure_sop_system() else {}
+        resolution = resolve_command(parsed_command, self._commands_config, sops)
+        if resolution is None:
+            known = sorted(available_commands(self._commands_config, sops))
+            observability.observe(
+                event_type=observability.ConversationEvents.COMMAND_UNKNOWN,
+                level=observability.EventLevel.INFO,
+                data={
+                    "command": parsed_command.name,
+                    "user_id": str(user_id),
+                    "available_commands": known,
+                },
+                description=f"Unknown slash command: /{parsed_command.name}",
+            )
+            hint = (
+                " Available commands: " + ", ".join(f"/{name}" for name in known) if known else ""
+            )
+            return MuxiResponse(
+                role="assistant",
+                content=f"Unknown command: /{parsed_command.name}.{hint}",
+                metadata={"command": parsed_command.name, "command_status": "unknown"},
+            )
+
+        # Any resolved command cancels an in-progress /setup flow (the
+        # /setup handler itself starts a fresh one).
+        cancel_setup_flow(self, user_id)
+
+        command_type = "builtin" if resolution.builtin is not None else "sop"
+        observability.observe(
+            event_type=observability.ConversationEvents.COMMAND_MATCHED,
+            level=observability.EventLevel.INFO,
+            data={
+                "command": parsed_command.name,
+                "resolved": resolution.name,
+                "command_type": command_type,
+                "user_id": str(user_id),
+                "has_args": bool(parsed_command.args),
+            },
+            description=f"Slash command /{parsed_command.name} resolved to {command_type} "
+            f"'{resolution.name}'",
+        )
+
+        if resolution.builtin is not None:
+            return await execute_builtin(
+                self,
+                resolution.builtin,
+                parsed_command,
+                self._commands_config,
+                sops,
+                user_id,
+                session_id,
+            )
+
+        return resolution
+
     async def chat(
         self,
         message: str,
@@ -6113,53 +6217,18 @@ Agent response: {raw_response}"""
         if source_channel and self.user_channel_store is not None:
             await self.record_inbound_channel(user_id, source_channel, source_context)
 
-        # Slash commands (Proactiveness Phase 1): only when the formation
-        # opts in via a 'commands' block. Matching commands are rewritten to
-        # their SOP content and continue through the normal chat flow;
-        # unknown commands return immediately without an LLM round-trip.
-        if self._commands_config is not None and self._commands_config.enabled:
-            parsed_command = parse_slash_command(message)
-            if parsed_command is not None:
-                sops = self.sop_system.sops if self._ensure_sop_system() else {}
-                resolution = resolve_command(parsed_command, self._commands_config, sops)
-                if resolution is None:
-                    known = sorted(available_commands(self._commands_config, sops))
-                    observability.observe(
-                        event_type=observability.ConversationEvents.COMMAND_UNKNOWN,
-                        level=observability.EventLevel.INFO,
-                        data={
-                            "command": parsed_command.name,
-                            "user_id": str(user_id),
-                            "available_commands": known,
-                        },
-                        description=f"Unknown slash command: /{parsed_command.name}",
-                    )
-                    hint = (
-                        " Available commands: " + ", ".join(f"/{name}" for name in known)
-                        if known
-                        else ""
-                    )
-                    return MuxiResponse(
-                        role="assistant",
-                        content=f"Unknown command: /{parsed_command.name}.{hint}",
-                        metadata={"command": parsed_command.name, "command_status": "unknown"},
-                    )
-
-                observability.observe(
-                    event_type=observability.ConversationEvents.COMMAND_MATCHED,
-                    level=observability.EventLevel.INFO,
-                    data={
-                        "command": parsed_command.name,
-                        "resolved": resolution.name,
-                        "user_id": str(user_id),
-                        "has_args": bool(parsed_command.args),
-                    },
-                    description=f"Slash command /{parsed_command.name} resolved to SOP "
-                    f"'{resolution.name}'",
-                )
-                message = resolution.message
-                model_override = model_override or resolution.model
-                bypass_workflow_approval = bypass_workflow_approval or resolution.bypass_approval
+        # Slash commands (Proactiveness Phases 1+3): only when the formation
+        # opts in via a 'commands' block. Built-in commands, /setup flow
+        # answers, and unknown commands return immediately without an LLM
+        # round-trip; SOP commands are rewritten and continue through the
+        # normal chat flow.
+        command_result = await self._process_slash_command(message, user_id, session_id)
+        if isinstance(command_result, MuxiResponse):
+            return command_result
+        if command_result is not None:
+            message = command_result.message
+            model_override = model_override or command_result.model
+            bypass_workflow_approval = bypass_workflow_approval or command_result.bypass_approval
 
         # Get webhook URL from formation config if not provided per-request
         if webhook_url is None:
