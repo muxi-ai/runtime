@@ -2187,7 +2187,59 @@ class FormationValidator:
                     "workflow.complexity_threshold must be a number between 1 and 10"
                 )
 
+        # Validate replanning settings (workflow-level recovery)
+        if "replanning" in workflow_config:
+            self._validate_workflow_replanning_config(workflow_config["replanning"])
+
         # Allow any additional workflow configuration fields for extensibility
+
+    def _validate_workflow_replanning_config(self, replanning_config: Any) -> None:
+        """Validate overlord workflow replanning configuration."""
+        if not isinstance(replanning_config, dict):
+            self.result.add_error("workflow.replanning must be a dictionary")
+            return
+
+        if "enabled" in replanning_config:
+            if not isinstance(replanning_config["enabled"], bool):
+                self.result.add_error("workflow.replanning.enabled must be a boolean")
+
+        if "max_attempts" in replanning_config:
+            max_attempts = replanning_config["max_attempts"]
+            if not isinstance(max_attempts, int) or max_attempts < 1 or max_attempts > 10:
+                self.result.add_error(
+                    "workflow.replanning.max_attempts must be an integer between 1 and 10"
+                )
+
+        if "plan_similarity_threshold" in replanning_config:
+            threshold = replanning_config["plan_similarity_threshold"]
+            if not isinstance(threshold, (int, float)) or threshold < 0 or threshold > 1:
+                self.result.add_error(
+                    "workflow.replanning.plan_similarity_threshold must be a number "
+                    "between 0 and 1"
+                )
+
+        if "preserve_successful_outputs" in replanning_config:
+            if not isinstance(replanning_config["preserve_successful_outputs"], bool):
+                self.result.add_error(
+                    "workflow.replanning.preserve_successful_outputs must be a boolean"
+                )
+
+        if "replan_timeout_seconds" in replanning_config:
+            timeout = replanning_config["replan_timeout_seconds"]
+            if not isinstance(timeout, (int, float)) or timeout < 1:
+                self.result.add_error(
+                    "workflow.replanning.replan_timeout_seconds must be a number >= 1"
+                )
+
+        if "non_replannable_error_patterns" in replanning_config:
+            patterns = replanning_config["non_replannable_error_patterns"]
+            if not isinstance(patterns, list) or not all(
+                isinstance(p, str) and p.strip() for p in patterns
+            ):
+                self.result.add_error(
+                    "workflow.replanning.non_replannable_error_patterns must be a "
+                    "list of non-empty strings"
+                )
 
     def _validate_overlord_response_config(self, response_config: Dict[str, Any]) -> None:
         """Validate overlord response configuration."""
