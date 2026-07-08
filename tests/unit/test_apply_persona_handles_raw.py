@@ -75,3 +75,20 @@ def test_persona_prompt_preserves_personal_information_directive() -> None:
     source = inspect.getsource(Overlord._apply_persona)
     assert "specific personal information about the user" in source
     assert "Trust the agent's response" in source
+
+
+def test_persona_passes_heartbeat_ok_through_verbatim() -> None:
+    """A bare HEARTBEAT_OK acknowledgment must skip persona rephrasing.
+
+    Persona rephrasing turns the heartbeat's suppression sentinel into
+    friendly prose ("Everything is functioning normally!") and the
+    heartbeat then delivers protocol chatter instead of staying silent.
+    The guard returns before any model access, so a bare instance works.
+    """
+    import asyncio
+
+    overlord = Overlord.__new__(Overlord)
+
+    for raw in ("HEARTBEAT_OK", "  HEARTBEAT_OK\n", "HEARTBEAT_OK - nothing to report"):
+        result = asyncio.run(overlord._apply_persona(raw, "heartbeat prompt"))
+        assert result == raw, f"sentinel response {raw!r} was not passed through verbatim"

@@ -44,7 +44,20 @@ async def send_notification(request: Request, body: NotificationRequest) -> JSON
     """
     Send a proactive notification to a user via the routing precedence.
 
-    Returns the resolved channels plus which deliveries succeeded/failed.
+    Routing precedence: explicit `channels` in the request > the user's
+    preferred channel > the formation's `proactive.default_channel` >
+    the standard async webhook. Reserved channel names: `last` (the
+    user's most recent inbound channel), `preferred`, `webhook`.
+
+    Returns the resolved channels plus which deliveries succeeded and
+    which failed (failed channel deliveries fall back to the webhook
+    once).
+
+    Status codes:
+    - 200: at least one delivery succeeded
+    - 400: empty message
+    - 502: no delivery succeeded
+    - 503: the formation has no `proactive` block
     """
     formation = request.app.state.formation
     request_id = getattr(request.state, "request_id", None)

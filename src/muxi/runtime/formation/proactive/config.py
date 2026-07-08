@@ -28,6 +28,7 @@ Schema:
           weekends: true                 # false suppresses Saturday/Sunday
         instruction: "..."               # optional extra prompt content
         sop: my-heartbeat                # optional SOP name for the base prompt
+                                         # (absent: bundled default heartbeat SOP)
 """
 
 import re

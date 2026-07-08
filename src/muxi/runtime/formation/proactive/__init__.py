@@ -23,7 +23,12 @@ from .config import (
     ProactiveConfig,
     parse_proactive_config,
 )
-from .heartbeat import DEFAULT_HEARTBEAT_PROMPT, HEARTBEAT_OK_SENTINEL, HeartbeatService
+from .heartbeat import (
+    DEFAULT_HEARTBEAT_PROMPT,
+    HEARTBEAT_OK_SENTINEL,
+    HeartbeatService,
+    load_default_heartbeat_sop,
+)
 from .router import WEBHOOK_CHANNEL, NotificationRouter
 from .user_channels import UserChannelState, UserChannelStore
 
@@ -39,5 +44,6 @@ __all__ = [
     "UserChannelState",
     "UserChannelStore",
     "WEBHOOK_CHANNEL",
+    "load_default_heartbeat_sop",
     "parse_proactive_config",
 ]

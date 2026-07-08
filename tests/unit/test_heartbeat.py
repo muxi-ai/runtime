@@ -18,8 +18,10 @@ from muxi.runtime.formation.proactive import (
     HeartbeatService,
     NotificationRouter,
     UserChannelStore,
+    load_default_heartbeat_sop,
     parse_proactive_config,
 )
+from muxi.runtime.formation.proactive.heartbeat import BUILTIN_HEARTBEAT_SOP_PATH
 
 # Fixed reference times (UTC)
 TUESDAY_NOON = datetime(2026, 7, 7, 12, 0, tzinfo=timezone.utc)
@@ -35,12 +37,19 @@ class FakeSecretsManager:
         return self._secrets.get(name)
 
 
+class StubSopSystem:
+    def __init__(self, sops):
+        self.sops = {name: {"content": content} for name, content in sops.items()}
+
+
 class StubOverlord:
     """Canned-response overlord: heartbeat unit tests must not need an LLM."""
 
-    def __init__(self, reply):
+    def __init__(self, reply, sops=None):
         self.reply = reply
         self.calls = []
+        self._sops = sops or {}
+        self.sop_system = StubSopSystem(self._sops)
 
     async def chat(self, **kwargs):
         self.calls.append(kwargs)
@@ -51,7 +60,7 @@ class StubOverlord:
         return _Response()
 
     def _ensure_sop_system(self):
-        return False
+        return bool(self._sops)
 
 
 class Sink:
@@ -88,7 +97,7 @@ def _write_transformer(formation_dir, name, url):
     )
 
 
-def _heartbeat(tmp_path, raw_proactive, reply="HEARTBEAT_OK", sink_url=None):
+def _heartbeat(tmp_path, raw_proactive, reply="HEARTBEAT_OK", sink_url=None, sops=None):
     """Build a HeartbeatService wired to a stub overlord and a real router."""
     _write_transformer(tmp_path, "t-a", sink_url or "http://127.0.0.1:1/never")
     config = parse_proactive_config(raw_proactive)
@@ -101,7 +110,7 @@ def _heartbeat(tmp_path, raw_proactive, reply="HEARTBEAT_OK", sink_url=None):
         webhook_manager=WebhookManager(default_retries=0, default_timeout=5),
         secrets_manager=FakeSecretsManager(),
     )
-    overlord = StubOverlord(reply)
+    overlord = StubOverlord(reply, sops=sops)
     service = HeartbeatService(
         config=config.heartbeat,
         overlord=overlord,
@@ -216,6 +225,25 @@ class TestSuppression:
         finally:
             await sink.stop()
 
+    async def test_wrapped_heartbeat_ok_is_not_delivered(self, tmp_path):
+        # Agent pipelines (persona formatting, workflow synthesis) wrap the
+        # raw sentinel in prose; a response mentioning HEARTBEAT_OK is
+        # protocol chatter about the check, never a user notification.
+        sink = await Sink().start()
+        try:
+            service, store, overlord = _heartbeat(
+                tmp_path,
+                _proactive(),
+                reply="The check was fine, the agent replied with **HEARTBEAT_OK**.",
+                sink_url=f"http://127.0.0.1:{sink.port}/notify",
+            )
+            await store.record_inbound("ran", "chan-a")
+            notified = await service.run_once()
+            assert notified == []
+            assert sink.requests == []
+        finally:
+            await sink.stop()
+
     async def test_outside_active_hours_skips_llm_entirely(self, tmp_path):
         service, store, overlord = _heartbeat(
             tmp_path,
@@ -305,3 +333,57 @@ class TestSessionScoping:
         assert first["session_id"] != second["session_id"]
         # Session stays correlated with the run's request id
         assert first["session_id"] == f"heartbeat_ran_{first['request_id']}"
+
+
+class TestPromptResolution:
+    """
+    Default-SOP fallback and override precedence (Proactiveness Phase 4):
+    formation `sop:` > bundled default heartbeat SOP > minimal built-in
+    prompt (broken install only); `instruction:` appends in every case.
+    """
+
+    def test_bundled_sop_ships_with_the_runtime(self):
+        assert BUILTIN_HEARTBEAT_SOP_PATH.is_file(), "bundled heartbeat SOP missing from package"
+        content = load_default_heartbeat_sop()
+        assert "## Your Task" in content
+        assert "HEARTBEAT_OK" in content
+
+    def test_no_sop_configured_uses_bundled_default(self, tmp_path):
+        service, _, _ = _heartbeat(tmp_path, _proactive())
+        assert service._build_prompt() == load_default_heartbeat_sop()
+
+    def test_formation_sop_overrides_bundled_default(self, tmp_path):
+        service, _, _ = _heartbeat(
+            tmp_path,
+            _proactive(sop="my-heartbeat"),
+            sops={"my-heartbeat": "CUSTOM HEARTBEAT PROMPT"},
+        )
+        prompt = service._build_prompt()
+        assert prompt == "CUSTOM HEARTBEAT PROMPT"
+        assert "## Your Task" not in prompt
+
+    def test_missing_formation_sop_falls_back_to_bundled_default(self, tmp_path):
+        # `sop:` names an SOP the formation does not define: fall back to
+        # the bundled default instead of an empty or minimal prompt
+        service, _, _ = _heartbeat(
+            tmp_path,
+            _proactive(sop="does-not-exist"),
+            sops={"some-other-sop": "irrelevant"},
+        )
+        assert service._build_prompt() == load_default_heartbeat_sop()
+
+    def test_instruction_appends_to_bundled_default(self, tmp_path):
+        service, _, _ = _heartbeat(tmp_path, _proactive(instruction="Meetings only."))
+        prompt = service._build_prompt()
+        assert prompt.startswith(load_default_heartbeat_sop())
+        assert prompt.endswith("## Additional Instructions\nMeetings only.")
+
+    def test_instruction_appends_to_formation_sop(self, tmp_path):
+        service, _, _ = _heartbeat(
+            tmp_path,
+            _proactive(sop="my-heartbeat", instruction="Meetings only."),
+            sops={"my-heartbeat": "CUSTOM HEARTBEAT PROMPT"},
+        )
+        prompt = service._build_prompt()
+        assert prompt.startswith("CUSTOM HEARTBEAT PROMPT")
+        assert prompt.endswith("## Additional Instructions\nMeetings only.")

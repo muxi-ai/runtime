@@ -2882,6 +2882,18 @@ class Overlord:
         Returns:
             Formatted response with persona applied
         """
+        # Heartbeat protocol guard (Proactiveness Phase 4): a bare
+        # HEARTBEAT_OK acknowledgment must pass through verbatim. Persona
+        # rephrasing would turn the suppression sentinel into friendly
+        # prose ("Everything is functioning normally!") and the heartbeat
+        # would deliver protocol chatter to the user instead of staying
+        # silent. Inert for normal chats: agents only emit the sentinel
+        # when a heartbeat prompt asks for it.
+        from ..proactive import HEARTBEAT_OK_SENTINEL
+
+        if raw_response and raw_response.strip().startswith(HEARTBEAT_OK_SENTINEL):
+            return raw_response
+
         # Use overlord's routing model for persona (faster for simple rephrasing)
         # Falls back to text model if routing_model not available
         if hasattr(self, "routing_model") and self.routing_model:
