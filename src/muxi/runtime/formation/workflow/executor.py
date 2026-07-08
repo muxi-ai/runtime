@@ -1763,7 +1763,9 @@ class WorkflowExecutor:
         model_override = None
         if self.overlord:
             model_ref = task.model
-            source = "sop_step"
+            # Provenance recorded by the decomposer distinguishes a step
+            # [model:x] directive from an inherited SOP frontmatter default
+            source = getattr(task, "model_source", None) or "sop_step"
             if not model_ref:
                 model_ref = self._skill_model_for_task(task)
                 source = "skill"

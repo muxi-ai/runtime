@@ -3153,15 +3153,24 @@ Agent response: {raw_response}"""
             resolved_name = getattr(self, "_model_aliases", {}).get(model_ref, model_ref)
 
             # Reuse api_key/settings from a matching capability config when the
-            # override targets a model the formation already declares
-            base_config = next(
-                (
-                    cfg
-                    for cfg in self._capability_models.values()
-                    if isinstance(cfg, dict) and cfg.get("model") == resolved_name
-                ),
-                None,
-            )
+            # override targets a model the formation already declares. If the
+            # same model is declared under multiple capabilities with different
+            # api_key/settings, the choice is deterministic: prefer the "text"
+            # entry (the general-purpose capability every formation must
+            # declare), otherwise the first declared match (dicts preserve
+            # declaration order) - not dict-iteration luck.
+            text_cfg = self._capability_models.get("text")
+            if isinstance(text_cfg, dict) and text_cfg.get("model") == resolved_name:
+                base_config = text_cfg
+            else:
+                base_config = next(
+                    (
+                        cfg
+                        for cfg in self._capability_models.values()
+                        if isinstance(cfg, dict) and cfg.get("model") == resolved_name
+                    ),
+                    None,
+                )
             model_config = base_config or {"model": resolved_name}
             model = await self._get_or_create_model(model_config, cache_scope="override")
 

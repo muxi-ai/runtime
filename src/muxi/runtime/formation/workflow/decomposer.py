@@ -113,6 +113,7 @@ class TaskDecomposer:
                 for task in workflow.tasks.values():
                     if not task.model:
                         task.model = sop_model
+                        task.model_source = "sop_frontmatter"
 
             # Generate plan preview if user approval required
             if requires_approval:
@@ -1334,6 +1335,7 @@ Would you like me to proceed with this plan?
                     SkillRef(name=s["name"], script=s["script"]) for s in step.get("skills", [])
                 ],
                 model=step.get("model"),
+                model_source="sop_step" if step.get("model") else None,
             )
             task_id_list.append(task_id)
 

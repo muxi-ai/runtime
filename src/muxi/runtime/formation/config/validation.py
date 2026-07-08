@@ -1473,8 +1473,15 @@ class FormationValidator:
                     f"reference, got: {target}"
                 )
 
-        # Retain for cross-referencing model references in SOPs/triggers/skills
-        self._model_aliases = {k: v for k, v in aliases.items() if isinstance(k, str)}
+        # Retain for cross-referencing model references in SOPs/triggers/skills.
+        # Only aliases with valid targets are stored: a broken alias must not
+        # silently satisfy usage-site checks, so SOPs/triggers/skills that
+        # reference it also get their own error pointing at the usage site.
+        self._model_aliases = {
+            k: v
+            for k, v in aliases.items()
+            if isinstance(k, str) and isinstance(v, str) and "/" in v
+        }
 
     def _validate_model_reference(self, model_ref: Any, where: str) -> None:
         """

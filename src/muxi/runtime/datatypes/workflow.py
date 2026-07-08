@@ -121,6 +121,14 @@ class SubTask(BaseModel):
             "the assigned agent's default model."
         ),
     )
+    model_source: Optional[str] = Field(
+        default=None,
+        description=(
+            "Provenance of the model override: 'sop_step' for a [model:x] step "
+            "directive, 'sop_frontmatter' for an SOP-level default. Labels "
+            "MODEL_OVERRIDE_APPLIED events; None when model is unset."
+        ),
+    )
 
     @field_validator("id")
     @classmethod

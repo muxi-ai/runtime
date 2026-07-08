@@ -110,7 +110,9 @@ Analyze the data.
         assert workflow is not None
         tasks = [workflow.tasks[tid] for tid in sorted(workflow.tasks)]
         assert tasks[0].model == "openai/gpt-4o-mini"
+        assert tasks[0].model_source == "sop_step"
         assert tasks[1].model is None
+        assert tasks[1].model_source is None
 
     @pytest.mark.asyncio
     async def test_sop_frontmatter_default_applied_to_steps(self, decomposer):
@@ -137,8 +139,10 @@ do the thing
         tasks = [workflow.tasks[tid] for tid in sorted(workflow.tasks)]
         # Step directive wins over the SOP frontmatter default
         assert tasks[0].model == "openai/gpt-4o-mini"
+        assert tasks[0].model_source == "sop_step"
         # Steps without a directive inherit the frontmatter default
         assert tasks[1].model == "anthropic/claude-haiku-4-5"
+        assert tasks[1].model_source == "sop_frontmatter"
 
     @pytest.mark.asyncio
     async def test_inert_when_unconfigured(self, decomposer):
@@ -231,6 +235,21 @@ class TestResolveModelOverride:
             model = await ov.resolve_model_override("openai/gpt-4o-mini", source="trigger")
         assert model.api_key == "vision-key"
         assert model.settings == {"temperature": 0.1}
+
+    @pytest.mark.asyncio
+    async def test_override_prefers_text_capability_config(self):
+        """When the same model is declared under multiple capabilities with
+        different api_keys, the override deterministically reuses the "text"
+        entry (general-purpose capability), not whichever iterates first."""
+        ov = make_overlord(
+            {
+                "vision": {"model": "openai/gpt-4o", "api_key": "vision-key"},
+                "text": {"model": "openai/gpt-4o", "api_key": "text-key"},
+            }
+        )
+        with patch.object(overlord_module, "LLM", FakeLLM):
+            model = await ov.resolve_model_override("openai/gpt-4o", source="sop_step")
+        assert model.api_key == "text-key"
 
     @pytest.mark.asyncio
     async def test_failure_returns_none(self):
@@ -525,6 +544,35 @@ llm:
         result = FormationValidator().validate(formation_dir)
         assert not result.is_valid
         assert any("collides" in e for e in result.errors)
+
+    def test_invalid_alias_also_fails_at_usage_sites(self, tmp_path):
+        """A broken alias must not silently satisfy usage-site checks: the
+        alias definition AND the SOP referencing it each produce an error."""
+        formation_dir = self._write_formation(
+            tmp_path,
+            llm_extra='  aliases:\n    fast: "gpt-4o-mini"\n',
+        )
+        sops_dir = formation_dir / "sops"
+        sops_dir.mkdir()
+        (sops_dir / "analysis.md").write_text("""---
+type: sop
+name: Analysis
+description: Test SOP
+model: fast
+---
+
+## Steps
+1. **Scan** [agent:researcher]
+   Collect data.
+2. **Analyze** [agent:analyst]
+   Analyze.
+""")
+        result = FormationValidator().validate(formation_dir)
+        assert not result.is_valid
+        # Error 1: the alias definition itself (target lacks provider prefix)
+        assert any("llm.aliases.fast" in e for e in result.errors)
+        # Error 2: the SOP usage site referencing the broken alias
+        assert any("SOP 'analysis.md' frontmatter" in e and "'fast'" in e for e in result.errors)
 
     def test_aliases_must_be_dict(self, tmp_path):
         formation_dir = self._write_formation(
