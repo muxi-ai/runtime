@@ -1,0 +1,18 @@
+# Bundled channel template: Discord (dormant until referenced).
+#
+# Payload format only (Discord webhook 'content' JSON) with NO destination
+# URL: the referencing trigger ('webhook:' frontmatter) or proactive channel
+# ('url:' key) supplies where to deliver -- typically the channel's Discord
+# webhook URL or the developer's bridge in front of it.
+#
+# Discord renders markdown natively, so content passes through unchanged,
+# capped at Discord's 2000-character message limit.
+#
+# Shadow this template by placing transformers/discord.yaml in the formation.
+name: discord
+headers:
+  Content-Type: application/json
+body:
+  content: "${{ response.content }}"
+content_transform:
+  max_length: 2000

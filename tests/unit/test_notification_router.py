@@ -191,10 +191,45 @@ class TestRoutingPrecedence:
         assert await router.resolve_channels("ran") == ["webhook"]
 
 
+def _write_url_less_transformer(formation_dir, name):
+    transformers_dir = formation_dir / "transformers"
+    transformers_dir.mkdir(exist_ok=True)
+    (transformers_dir / f"{name}.yaml").write_text(
+        f"name: {name}\n"
+        f"body:\n"
+        f'  text: "${{{{ response.content }}}}"\n'
+        f'  room: "${{{{ context.room }}}}"\n'
+        f'  user: "${{{{ request.user_id }}}}"\n'
+    )
+
+
 class TestConstruction:
     def test_missing_transformer_fails_fast(self, tmp_path):
         with pytest.raises(ValueError, match="not found"):
             _router(tmp_path, {"channels": {"chan-a": {"transformer": "missing"}}})
+
+    def test_url_less_transformer_without_channel_url_fails_fast(self, tmp_path):
+        # URL resolution is a startup error, not a delivery-time surprise
+        _write_url_less_transformer(tmp_path, "shape-only")
+        with pytest.raises(ValueError, match="no 'endpoint.url'"):
+            _router(tmp_path, {"channels": {"chan-a": {"transformer": "shape-only"}}})
+
+    def test_channel_url_satisfies_url_less_transformer(self, tmp_path):
+        _write_url_less_transformer(tmp_path, "shape-only")
+        router, _ = _router(
+            tmp_path,
+            {"channels": {"chan-a": {"transformer": "shape-only", "url": "https://bridge.test/a"}}},
+        )
+        assert router.config.channels["chan-a"].url == "https://bridge.test/a"
+
+    def test_bundled_template_with_channel_url_constructs(self, tmp_path):
+        # A bundled dormant template (no formation-local file at all)
+        # activates by reference when the channel supplies the URL.
+        router, _ = _router(
+            tmp_path,
+            {"channels": {"slack": {"transformer": "slack", "url": "https://bridge.test/s"}}},
+        )
+        assert router.config.channels["slack"].transformer == "slack"
 
 
 class TestDelivery:
@@ -216,6 +251,61 @@ class TestDelivery:
             assert payload["text"] == "hello there"
             assert payload["room"] == "R42"
             assert payload["user"] == "ran"
+        finally:
+            await sink.stop()
+
+    async def test_channel_url_override_wins_over_transformer_url(self, tmp_path):
+        own = await Sink().start()
+        override = await Sink().start()
+        try:
+            _write_transformer(tmp_path, "t-a", f"http://127.0.0.1:{own.port}/own")
+            router, store = _router(
+                tmp_path,
+                {
+                    "channels": {
+                        "chan-a": {
+                            "transformer": "t-a",
+                            "url": f"http://127.0.0.1:{override.port}/override",
+                        }
+                    }
+                },
+            )
+            await store.set_preferences("ran", preferred_channel="chan-a")
+
+            result = await router.notify(user_id="ran", message="ping")
+
+            assert result["delivered"] == ["chan-a"]
+            assert own.requests == []
+            assert len(override.requests) == 1
+            assert override.requests[0]["path"] == "/override"
+        finally:
+            await own.stop()
+            await override.stop()
+
+    async def test_url_less_transformer_delivers_to_channel_url(self, tmp_path):
+        sink = await Sink().start()
+        try:
+            _write_url_less_transformer(tmp_path, "shape-only")
+            router, store = _router(
+                tmp_path,
+                {
+                    "channels": {
+                        "chan-a": {
+                            "transformer": "shape-only",
+                            "url": f"http://127.0.0.1:{sink.port}/bridge",
+                        }
+                    }
+                },
+            )
+            await store.set_preferences(
+                "ran", preferred_channel="chan-a", channels={"chan-a": {"room": "R7"}}
+            )
+
+            result = await router.notify(user_id="ran", message="composed")
+
+            assert result["delivered"] == ["chan-a"]
+            payload = json.loads(sink.requests[0]["body"])
+            assert payload == {"text": "composed", "room": "R7", "user": "ran"}
         finally:
             await sink.stop()
 

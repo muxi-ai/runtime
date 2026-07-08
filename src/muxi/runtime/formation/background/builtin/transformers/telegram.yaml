@@ -1,0 +1,23 @@
+# Bundled channel template: Telegram (dormant until referenced).
+#
+# Payload format only (Bot API sendMessage JSON) with NO destination URL:
+# the referencing trigger ('webhook:' frontmatter) or proactive channel
+# ('url:' key) supplies where to deliver -- typically the developer's bridge
+# that forwards to https://api.telegram.org/bot<token>/sendMessage.
+#
+# Addressing context (from trigger 'parse:' extraction or user channel state):
+#   context.chat_id  Telegram chat id captured from the inbound message
+#
+# Markdown is stripped (Telegram's default parse mode renders plain text)
+# and messages are capped at Telegram's 4096-character limit.
+#
+# Shadow this template by placing transformers/telegram.yaml in the formation.
+name: telegram
+headers:
+  Content-Type: application/json
+body:
+  chat_id: "${{ context.chat_id }}"
+  text: "${{ response.content }}"
+content_transform:
+  format: text
+  max_length: 4096

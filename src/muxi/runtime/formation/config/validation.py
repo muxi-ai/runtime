@@ -279,6 +279,12 @@ class FormationValidator:
             self._validate_triggers_model_references(dir_path / "triggers")
             self._validate_skills_model_references(dir_path / "skills")
 
+            # Validate transformer URL resolution (fail fast at load time):
+            # a URL-less transformer (e.g. a bundled channel template) must
+            # get its destination from the referencing trigger/channel.
+            self._validate_trigger_transformer_urls(dir_path / "triggers", dir_path)
+            self._validate_proactive_channel_transformers(dir_path, config)
+
         except Exception as e:
             self.result.add_error(f"Error validating modular formation: {str(e)}")
 
@@ -1453,6 +1459,77 @@ class FormationValidator:
                 self._validate_model_reference(
                     metadata["model"], f"Trigger '{md_file.name}' frontmatter"
                 )
+
+    def _validate_trigger_transformer_urls(self, triggers_dir: Path, formation_dir: Path) -> None:
+        """
+        Validate transformer URL resolution for triggers (fail fast at load).
+
+        A trigger that names a transformer must yield a delivery URL: the
+        trigger's 'webhook:' frontmatter first, the transformer's own
+        'endpoint.url' second. Malformed frontmatter and missing transformer
+        files keep their existing request-time (HTTP 400) semantics and are
+        skipped here; only the URL-resolution rule is enforced at load time.
+        """
+        from ..background.transformers import (
+            load_transformer,
+            parse_trigger_frontmatter,
+            resolve_transformer_url,
+        )
+
+        if not triggers_dir.is_dir():
+            return
+
+        for md_file in sorted(triggers_dir.glob("*.md")):
+            try:
+                content = md_file.read_text(encoding="utf-8")
+            except OSError:
+                continue
+            try:
+                meta, _body = parse_trigger_frontmatter(content)
+            except ValueError:
+                # Rejected at request time with a 400 (existing behavior)
+                continue
+            transformer_name = meta.get("transformer")
+            if not transformer_name:
+                continue
+            try:
+                transformer = load_transformer(formation_dir, transformer_name)
+            except ValueError:
+                # Missing/invalid transformer files keep request-time semantics
+                continue
+            try:
+                resolve_transformer_url(transformer, meta.get("webhook"))
+            except ValueError as e:
+                self.result.add_error(f"Trigger '{md_file.name}': {e}")
+
+    def _validate_proactive_channel_transformers(
+        self, formation_dir: Path, config: Dict[str, Any]
+    ) -> None:
+        """
+        Validate proactive channel transformers and URL resolution at load.
+
+        Mirrors the NotificationRouter's startup fail-fast (missing/invalid
+        transformer, or no delivery URL from either the channel 'url:' or the
+        transformer's 'endpoint.url') so misconfigurations surface as
+        validation errors instead of startup exceptions.
+        """
+        from ..background.transformers import load_transformer, resolve_transformer_url
+        from ..proactive import parse_proactive_config
+
+        try:
+            parsed = parse_proactive_config(config.get("proactive"))
+        except ValueError:
+            # Structural problems are reported by _validate_proactive_config
+            return
+        if not parsed or not parsed.channels:
+            return
+
+        for name, channel in parsed.channels.items():
+            try:
+                transformer = load_transformer(formation_dir, channel.transformer)
+                resolve_transformer_url(transformer, channel.url)
+            except ValueError as e:
+                self.result.add_error(f"'proactive.channels.{name}': {e}")
 
     def _validate_skills_model_references(self, skills_dir: Path) -> None:
         """Validate model references in SKILL.md frontmatter."""

@@ -2952,8 +2952,68 @@ management, client-key auth).
 
 **e2e:** area `e2e/tests/23_proactive/` (routing precedence, last-channel
 tracking via trigger, heartbeat active-hours gating, slash commands +
-soul). Heartbeat tests call `heartbeat.run_once(fixed_datetime)` for
-deterministic timing instead of waiting on scheduler cycles.
+soul, channel template composition). Heartbeat tests call
+`heartbeat.run_once(fixed_datetime)` for deterministic timing instead of
+waiting on scheduler cycles.
+
+### Channel Templates (2026-07-08, Phase 2)
+
+**Location:** `formation/background/transformers.py`,
+`formation/background/builtin/transformers/`
+
+Phase 2 of the proactiveness PRD (REVISED): channels ship as dormant
+trigger + transformer template pairs, NOT MCPs. Everything rides the
+existing transformer delivery stack; no platform SDKs, no new delivery
+paths, text-only in v1.
+
+**Transformer/webhook composition.** `transformer:` and `webhook:` in
+trigger frontmatter compose instead of excluding each other: the
+transformer defines the payload format/auth/retry, the trigger's webhook
+URL is the delivery destination. Alone, each keeps its original
+semantics (webhook = raw standard payload; transformer = its own
+`endpoint.url`). `endpoint.url` is now OPTIONAL in transformer YAML
+(`TransformerConfig.url: Optional[str]`; `endpoint:` may be omitted
+entirely). URL resolution order (`resolve_transformer_url`):
+trigger/channel-supplied URL first, transformer's `endpoint.url` second,
+load-time `ValueError` when neither exists. `deliver_via_transformer`
+takes `url_override`; override URLs participate in secret scanning
+(`collect_secret_names(config, *extra)`) so a secret-backed bridge URL
+(`${{ secrets.SLACK_BRIDGE_URL }}`) resolves like any transformer value.
+`proactive.channels` declarations get the same override via a `url:` key
+(literal http(s) or `${{ ... }}` template).
+
+**Fail-fast validation.** FormationValidator gained
+`_validate_trigger_transformer_urls` (trigger names a transformer but
+neither it nor the trigger supplies a URL -> load error; malformed
+frontmatter and missing transformer files keep their request-time 400
+semantics) and `_validate_proactive_channel_transformers` (mirrors the
+NotificationRouter's startup fail-fast: missing transformer or
+unresolvable URL -> validation error). The NotificationRouter also
+resolves URLs eagerly in `__init__`. Request-time failure isolation is
+unchanged (render/delivery errors fall back to the async webhook with
+`transformer_error` metadata).
+
+**Bundled dormant templates.** `background/builtin/transformers/` ships
+`slack.yaml`, `telegram.yaml`, `discord.yaml`, `email.yaml` -- payload
+formats only, NO urls, NO auth; inert until referenced by name (mirrors
+the `skills/builtin/` convention; packaged via setup.py package_data
+`**/*.yaml` + MANIFEST.in). `load_transformer` resolves formation-local
+`transformers/<name>.yaml` first, then the builtin dir, so a
+formation-local file shadows a bundled template of the same name (same
+shadowing rule as built-in skills). Payload shapes: Slack
+chat.postMessage-style (`channel`/`thread_ts`/`text`; absent thread_ts
+is dropped), Telegram sendMessage (`chat_id`/`text`, markdown stripped,
+4096 cap), Discord webhook (`content`, 2000 cap), email constructed
+message object (`from`/`to`/`subject`/`body`/`headers`, dev's webhook
+bridges to SMTP/SES/etc.). The developer owns the bridge: MUXI posts the
+platform-shaped payload to the dev-supplied URL, credentials/last-mile
+delivery are the bridge's job.
+
+**Docs:** `contributing/channel-templates.md` (per-platform setup guides
++ example trigger files). **e2e:**
+`23_proactive/test_23a5_channel_template_composition.py` (bundled slack
+template activated by reference + URL-less local transformer, both
+delivering composed payloads to a trigger-supplied mock bridge).
 
 ---
 

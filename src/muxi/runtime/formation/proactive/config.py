@@ -14,7 +14,8 @@ Schema:
         telegram:
           transformer: telegram-notify   # transformers/telegram-notify.yaml
         slack:
-          transformer: slack-notify
+          transformer: slack            # bundled template (payload only)...
+          url: "${{ secrets.SLACK_BRIDGE_URL }}"  # ...so the channel supplies the URL
       default_channel: telegram          # optional: channel name or "webhook"
       heartbeat:                         # optional
         enabled: true                    # default true when block present
@@ -51,7 +52,11 @@ PREFERRED_TARGET = "preferred"
 RESERVED_TARGETS = {WEBHOOK_TARGET, LAST_TARGET, PREFERRED_TARGET}
 
 _ALLOWED_PROACTIVE_KEYS = {"channels", "default_channel", "heartbeat"}
-_ALLOWED_CHANNEL_KEYS = {"transformer"}
+_ALLOWED_CHANNEL_KEYS = {"transformer", "url"}
+
+# ${{ ... }} placeholder marker: channel URLs may be templates (e.g. a
+# secret-backed Slack incoming-webhook URL) instead of literal http(s) URLs.
+_PLACEHOLDER_MARKER = "${{"
 _ALLOWED_HEARTBEAT_KEYS = {"enabled", "interval", "target", "active_hours", "instruction", "sop"}
 _ALLOWED_ACTIVE_HOURS_KEYS = {"start", "end", "timezone", "weekends"}
 
@@ -60,10 +65,17 @@ DEFAULT_HEARTBEAT_INTERVAL_SECONDS = 30 * 60  # "30m"
 
 @dataclass
 class ChannelConfig:
-    """A notification channel backed by a trigger transformer."""
+    """A notification channel backed by a trigger transformer.
+
+    ``url`` optionally supplies/overrides the delivery destination: it wins
+    over the transformer's own ``endpoint.url``, and is required (at load
+    time) when the transformer defines none (e.g. the bundled payload-only
+    channel templates).
+    """
 
     name: str
     transformer: str
+    url: Optional[str] = None
 
 
 @dataclass
@@ -275,7 +287,17 @@ def parse_proactive_config(raw: Any) -> Optional[ProactiveConfig]:
                 f"'proactive.channels.{name}.transformer' is required and must be a "
                 "transformer name containing only letters, numbers, hyphens, and underscores"
             )
-        channels[name] = ChannelConfig(name=name, transformer=transformer)
+        url = channel_raw.get("url")
+        if url is not None:
+            if not isinstance(url, str) or not url.strip():
+                raise ValueError(f"'proactive.channels.{name}.url' must be a non-empty string")
+            url = url.strip()
+            if _PLACEHOLDER_MARKER not in url and not url.startswith(("http://", "https://")):
+                raise ValueError(
+                    f"'proactive.channels.{name}.url' must be an http(s) URL or a "
+                    "template containing ${{ ... }} placeholders"
+                )
+        channels[name] = ChannelConfig(name=name, transformer=transformer, url=url)
 
     default_channel = raw.get("default_channel")
     if default_channel is not None:

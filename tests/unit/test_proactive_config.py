@@ -52,6 +52,36 @@ class TestChannels:
         with pytest.raises(ValueError, match="unknown 'proactive.channels.telegram' key"):
             parse_proactive_config({"channels": {"telegram": {"transformer": "t", "token": "x"}}})
 
+    def test_channel_url_override_parsed(self):
+        config = parse_proactive_config(
+            {"channels": {"slack": {"transformer": "slack", "url": "https://bridge.test/slack"}}}
+        )
+        assert config.channels["slack"].url == "https://bridge.test/slack"
+
+    def test_channel_url_defaults_to_none(self):
+        config = parse_proactive_config({"channels": {"telegram": {"transformer": "t"}}})
+        assert config.channels["telegram"].url is None
+
+    def test_channel_url_may_be_secret_template(self):
+        config = parse_proactive_config(
+            {
+                "channels": {
+                    "slack": {"transformer": "slack", "url": "${{ secrets.SLACK_BRIDGE_URL }}"}
+                }
+            }
+        )
+        assert config.channels["slack"].url == "${{ secrets.SLACK_BRIDGE_URL }}"
+
+    def test_channel_url_must_be_http_or_template(self):
+        with pytest.raises(ValueError, match="http"):
+            parse_proactive_config(
+                {"channels": {"slack": {"transformer": "slack", "url": "ftp://x.test"}}}
+            )
+
+    def test_empty_channel_url_rejected(self):
+        with pytest.raises(ValueError, match="non-empty"):
+            parse_proactive_config({"channels": {"slack": {"transformer": "slack", "url": "  "}}})
+
 
 class TestDefaultChannel:
     def test_default_channel_must_be_declared(self):

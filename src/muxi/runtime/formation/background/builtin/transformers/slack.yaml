@@ -1,0 +1,20 @@
+# Bundled channel template: Slack (dormant until referenced).
+#
+# Payload format only (chat.postMessage-style JSON) with NO destination URL:
+# the referencing trigger ('webhook:' frontmatter) or proactive channel
+# ('url:' key) supplies where to deliver -- typically the developer's bridge
+# that forwards to Slack (bot process, incoming-webhook proxy, etc.).
+#
+# Addressing context (from trigger 'parse:' extraction or user channel state):
+#   context.channel    Slack channel or DM id (e.g. C0ABC123, D0XYZ789)
+#   context.thread_ts  optional thread timestamp (dropped from the payload
+#                      when absent, so top-level messages stay top-level)
+#
+# Shadow this template by placing transformers/slack.yaml in the formation.
+name: slack
+headers:
+  Content-Type: application/json
+body:
+  channel: "${{ context.channel }}"
+  thread_ts: "${{ context.thread_ts }}"
+  text: "${{ response.content }}"

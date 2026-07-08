@@ -33,6 +33,7 @@ from ..background.transformers import (
     TransformerConfig,
     deliver_via_transformer,
     load_transformer,
+    resolve_transformer_url,
 )
 from .config import LAST_TARGET, PREFERRED_TARGET, WEBHOOK_TARGET, ProactiveConfig
 from .user_channels import UserChannelStore
@@ -74,7 +75,8 @@ class NotificationRouter:
 
         Raises:
             ValueError: If any declared channel references a missing or
-                invalid transformer (fail fast at formation startup)
+                invalid transformer, or the channel/transformer pair yields
+                no delivery URL (fail fast at formation startup)
         """
         self.config = config
         self.formation_id = formation_id
@@ -87,7 +89,13 @@ class NotificationRouter:
         self._transformers: Dict[str, TransformerConfig] = {}
         for name, channel in config.channels.items():
             # Raises ValueError on missing/invalid transformer definitions
-            self._transformers[name] = load_transformer(Path(formation_dir), channel.transformer)
+            transformer = load_transformer(Path(formation_dir), channel.transformer)
+            # URL resolution order: channel 'url:' first, transformer's own
+            # endpoint.url second; no URL from either source is a startup
+            # error (a payload-only template referenced without a destination
+            # must fail here, not at delivery time).
+            resolve_transformer_url(transformer, channel.url)
+            self._transformers[name] = transformer
 
     async def resolve_channels(
         self, user_id: str, channels: Optional[List[str]] = None
@@ -288,6 +296,7 @@ class NotificationRouter:
             webhook_manager=self.webhook_manager,
             secrets_manager=self.secrets_manager,
             transformer=transformer,
+            url_override=self.config.channels[channel].url,
             response_content=message,
             request_user_id=user_id,
             context=context,

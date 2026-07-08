@@ -28,6 +28,25 @@ Transformer YAML (``transformers/slack.yaml``):
       channel: "${{ context.channel }}"
       text: "${{ response.content }}"
 
+``endpoint.url`` is optional: a transformer may define only the payload
+format and let the referencing trigger (``webhook:`` frontmatter) or
+proactive channel (``url:`` key) supply the destination. When both exist,
+the trigger/channel-supplied URL wins. A transformer with no URL anywhere
+is a load-time error (see ``resolve_transformer_url``).
+
+``transformer:`` and ``webhook:`` in trigger frontmatter therefore compose:
+the transformer defines the payload format/auth/retry, the trigger's webhook
+URL is the delivery destination. ``webhook:`` alone still delivers the raw
+standard payload; ``transformer:`` alone delivers to the transformer's own
+``endpoint.url``.
+
+Bundled dormant templates: the runtime ships payload-format-only templates
+(slack, telegram, discord, email) under ``builtin/transformers/`` next to
+this module. ``load_transformer`` resolves formation-local files first, so
+a formation ``transformers/<name>.yaml`` shadows a bundled template of the
+same name (the same rule as built-in skills). Formations that never
+reference a bundled name are completely unaffected.
+
 Template values use the runtime-wide ``${{ ... }}`` syntax (the same syntax
 used by trigger templates and formation secrets interpolation). Available
 variables: ``response.content``, ``response.files``, ``response.metadata.*``,
@@ -66,6 +85,11 @@ _ALLOWED_AUTH_TYPES = {"bearer", "basic", "header"}
 _ALLOWED_FORMATS = {"text", "markdown", "html"}
 
 _ALLOWED_FRONTMATTER_KEYS = {"name", "type", "webhook", "transformer", "parse", "model", "channel"}
+
+# Bundled dormant channel templates shipped with the runtime (payload formats
+# only, no URLs). Formation-local transformers/<name>.yaml shadows a bundled
+# template of the same name.
+BUILTIN_TRANSFORMERS_DIR = Path(__file__).parent / "builtin" / "transformers"
 _ALLOWED_PARSE_KEYS = {"message", "user_id", "context", "files"}
 
 
@@ -90,7 +114,7 @@ def parse_trigger_frontmatter(content: str) -> Tuple[Dict[str, Any], str]:
 
     Raises:
         ValueError: If the frontmatter block is malformed (invalid YAML,
-            non-mapping, unknown keys, or mutually exclusive routing fields)
+            non-mapping, unknown keys, or invalid routing fields)
     """
     if not content.startswith("---"):
         return {}, content
@@ -118,10 +142,12 @@ def parse_trigger_frontmatter(content: str) -> Tuple[Dict[str, Any], str]:
             f"Allowed keys: {sorted(_ALLOWED_FRONTMATTER_KEYS)}"
         )
 
+    # 'webhook' and 'transformer' compose when both are present: the
+    # transformer defines the payload format/auth/retry and the webhook URL
+    # is the delivery destination. Alone, each keeps its original semantics
+    # (webhook = raw standard payload, transformer = its own endpoint.url).
     webhook = meta.get("webhook")
     transformer = meta.get("transformer")
-    if webhook is not None and transformer is not None:
-        raise ValueError("'webhook' and 'transformer' are mutually exclusive")
     if webhook is not None:
         if not isinstance(webhook, str) or not webhook.strip():
             raise ValueError("'webhook' must be a non-empty URL string")
@@ -334,10 +360,15 @@ class ContentTransform:
 
 @dataclass
 class TransformerConfig:
-    """Parsed and validated transformer definition."""
+    """Parsed and validated transformer definition.
+
+    ``url`` is None for payload-format-only transformers (e.g. the bundled
+    channel templates): the referencing trigger/channel must then supply the
+    destination URL (see ``resolve_transformer_url``).
+    """
 
     name: str
-    url: str
+    url: Optional[str] = None
     method: str = "POST"
     version: Optional[str] = None
     auth: Optional[TransformerAuth] = None
@@ -361,17 +392,22 @@ class TransformerConfig:
                 "hyphens, and underscores"
             )
 
+        # 'endpoint' (and 'endpoint.url') is optional: payload-format-only
+        # transformers rely on the referencing trigger/channel for the URL.
         endpoint = raw.get("endpoint")
-        if not isinstance(endpoint, dict):
-            raise ValueError("'endpoint' is required and must be a mapping")
-        url = endpoint.get("url")
-        if not isinstance(url, str) or not url.strip():
-            raise ValueError("'endpoint.url' is required and must be a non-empty string")
-        method = endpoint.get("method", "POST")
-        if not isinstance(method, str) or method.upper() not in _ALLOWED_METHODS:
-            raise ValueError(
-                f"'endpoint.method' must be one of {sorted(_ALLOWED_METHODS)}, got {method!r}"
-            )
+        url = None
+        method = "POST"
+        if endpoint is not None:
+            if not isinstance(endpoint, dict):
+                raise ValueError("'endpoint' must be a mapping")
+            url = endpoint.get("url")
+            if url is not None and (not isinstance(url, str) or not url.strip()):
+                raise ValueError("'endpoint.url' must be a non-empty string when present")
+            method = endpoint.get("method", "POST")
+            if not isinstance(method, str) or method.upper() not in _ALLOWED_METHODS:
+                raise ValueError(
+                    f"'endpoint.method' must be one of {sorted(_ALLOWED_METHODS)}, got {method!r}"
+                )
 
         version = raw.get("version")
         if version is not None and not isinstance(version, str):
@@ -410,18 +446,25 @@ class TransformerConfig:
 
 def load_transformer(formation_dir: Path, name: str) -> TransformerConfig:
     """
-    Load and validate a transformer definition from the formation directory.
+    Load and validate a transformer definition.
+
+    Formation-local files are resolved first; when absent, the bundled
+    dormant templates shipped with the runtime are consulted, so a
+    formation ``transformers/<name>.yaml`` shadows a bundled template of
+    the same name (the same shadowing rule as built-in skills). Bundled
+    templates are inert until referenced by name.
 
     Args:
         formation_dir: Formation root directory
-        name: Transformer name (resolves ``transformers/<name>.yaml``)
+        name: Transformer name (resolves ``transformers/<name>.yaml``,
+            then ``builtin/transformers/<name>.yaml``)
 
     Returns:
         Validated TransformerConfig
 
     Raises:
-        ValueError: If the name is invalid, the file is missing, or the
-            config fails validation
+        ValueError: If the name is invalid, no file exists in either
+            location, or the config fails validation
     """
     if not _NAME_PATTERN.match(name):
         raise ValueError(
@@ -430,22 +473,60 @@ def load_transformer(formation_dir: Path, name: str) -> TransformerConfig:
         )
 
     transformers_dir = Path(formation_dir) / "transformers"
-    for suffix in (".yaml", ".yml"):
-        candidate = transformers_dir / f"{name}{suffix}"
-        if candidate.exists():
-            try:
-                raw = yaml.safe_load(candidate.read_text(encoding="utf-8"))
-            except yaml.YAMLError as e:
-                raise ValueError(f"transformer '{name}' contains invalid YAML: {e}")
-            config = TransformerConfig.from_dict(raw)
-            if config.name != name:
-                raise ValueError(
-                    f"transformer file '{candidate.name}' declares name "
-                    f"{config.name!r}; it must match the filename"
-                )
-            return config
+    for directory in (transformers_dir, BUILTIN_TRANSFORMERS_DIR):
+        for suffix in (".yaml", ".yml"):
+            candidate = directory / f"{name}{suffix}"
+            if candidate.exists():
+                try:
+                    raw = yaml.safe_load(candidate.read_text(encoding="utf-8"))
+                except yaml.YAMLError as e:
+                    raise ValueError(f"transformer '{name}' contains invalid YAML: {e}")
+                config = TransformerConfig.from_dict(raw)
+                if config.name != name:
+                    raise ValueError(
+                        f"transformer file '{candidate.name}' declares name "
+                        f"{config.name!r}; it must match the filename"
+                    )
+                return config
 
-    raise ValueError(f"transformer '{name}' not found in {transformers_dir}")
+    raise ValueError(
+        f"transformer '{name}' not found in {transformers_dir} "
+        "(and no bundled template has that name)"
+    )
+
+
+def resolve_transformer_url(
+    transformer: TransformerConfig, override_url: Optional[str] = None
+) -> str:
+    """
+    Resolve the delivery destination for a transformer.
+
+    Resolution order: the trigger/channel-supplied URL first, then the
+    transformer's own ``endpoint.url``. A transformer with no URL from
+    either source is a configuration error (callers surface this at
+    formation load time so a URL-less template referenced without a
+    destination fails fast, not at delivery time).
+
+    Args:
+        transformer: The loaded transformer config
+        override_url: URL supplied by the referencing trigger (``webhook:``
+            frontmatter) or proactive channel (``url:`` key), if any
+
+    Returns:
+        The URL to deliver to (may still contain ``${{ ... }}`` placeholders)
+
+    Raises:
+        ValueError: If neither the caller nor the transformer supplies a URL
+    """
+    url = override_url or transformer.url
+    if not url:
+        raise ValueError(
+            f"transformer '{transformer.name}' defines no 'endpoint.url' and the "
+            "referencing trigger/channel supplies no destination URL; add "
+            "'endpoint.url' to the transformer, a 'webhook:' to the trigger "
+            "frontmatter, or a 'url:' to the proactive channel declaration"
+        )
+    return url
 
 
 # ---------------------------------------------------------------------------
@@ -523,8 +604,14 @@ def render_template_value(value: Any, variables: Dict[str, Any]) -> Any:
     return value
 
 
-def collect_secret_names(config: TransformerConfig) -> Set[str]:
-    """Collect all ``${{ secrets.* }}`` names referenced by a transformer."""
+def collect_secret_names(config: TransformerConfig, *extra_values: Any) -> Set[str]:
+    """
+    Collect all ``${{ secrets.* }}`` names referenced by a transformer.
+
+    ``extra_values`` allows callers to include additional template strings
+    in the scan (e.g. a trigger/channel-supplied destination URL, which may
+    itself reference a secret such as a Slack incoming-webhook URL).
+    """
     secret_names: Set[str] = set()
 
     def _scan(value: Any) -> None:
@@ -548,6 +635,8 @@ def collect_secret_names(config: TransformerConfig) -> Set[str]:
         _scan(config.auth.username)
         _scan(config.auth.password)
         _scan(config.auth.header_value)
+    for extra in extra_values:
+        _scan(extra)
     return secret_names
 
 
@@ -716,9 +805,14 @@ async def deliver_via_transformer(
     request_id: str,
     formation_id: Optional[str] = None,
     fallback_webhook_url: Optional[str] = None,
+    url_override: Optional[str] = None,
 ) -> bool:
     """
     Format an agent response with a transformer and deliver it.
+
+    ``url_override`` is the trigger/channel-supplied destination URL; it
+    takes precedence over the transformer's own ``endpoint.url`` (the
+    transformer+webhook composition mechanism).
 
     On rendering or delivery failure, the standard MUXI payload is delivered
     to ``fallback_webhook_url`` (the formation's default async webhook) with
@@ -727,11 +821,13 @@ async def deliver_via_transformer(
     Returns:
         True if the transformer endpoint accepted the delivery
     """
-    endpoint_url = transformer.url
+    endpoint_url = url_override or transformer.url
     attempts = 0
     last_error: Optional[str] = None
     try:
-        secrets = await resolve_secrets(collect_secret_names(transformer), secrets_manager)
+        secrets = await resolve_secrets(
+            collect_secret_names(transformer, url_override), secrets_manager
+        )
         content = apply_content_transform(response_content, transformer.content_transform)
         variables = build_transformer_variables(
             response_content=content,
@@ -745,9 +841,11 @@ async def deliver_via_transformer(
             secrets=secrets,
         )
 
-        rendered_url = render_template_string(transformer.url, variables)
+        # Trigger/channel-supplied URL first, transformer endpoint.url second
+        effective_url = resolve_transformer_url(transformer, url_override)
+        rendered_url = render_template_string(effective_url, variables)
         if not isinstance(rendered_url, str) or not rendered_url.strip():
-            raise ValueError("'endpoint.url' rendered to an empty value")
+            raise ValueError("delivery URL rendered to an empty value")
         endpoint_url = rendered_url
 
         headers = {
