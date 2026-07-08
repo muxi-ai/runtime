@@ -11,6 +11,7 @@ The initialization order is critical:
 """
 
 import io
+import re
 import wave
 from pathlib import Path
 from typing import Any, Dict, List, Optional
@@ -1291,6 +1292,47 @@ def _migrate_add_scope_columns(db_manager, table_name: str) -> None:
         pass  # Table may not exist yet on first run; create_tables handles it
 
 
+def _migrate_scope_columns_all_dims(db_manager, active_table: str) -> None:
+    """Apply the scope-column migration to every per-dimension memories table.
+
+    Memories tables are per-embedding-dimension (``memories_384``,
+    ``memories_768``, ``memories_1536``, ...) and the dimension known at
+    startup is only a provisional hint -- the real one is probed lazily on
+    first embed. A database that has seen more than one embedding model
+    also carries tables for inactive dimensions. Migrating only the active
+    table left the others without ``scope_type``/``scope_id``, breaking
+    scope-filtered queries against them, so enumerate every existing
+    ``memories_{dim}`` table and migrate each (idempotent per table).
+    """
+    from sqlalchemy import text
+
+    tables = {active_table}
+    try:
+        with db_manager.engine.connect() as conn:
+            if db_manager.database_type == "postgresql":
+                result = conn.execute(
+                    text(
+                        "SELECT table_name FROM information_schema.tables "
+                        "WHERE table_schema = current_schema() "
+                        "AND table_name LIKE 'memories%'"
+                    )
+                )
+            else:
+                result = conn.execute(
+                    text(
+                        "SELECT name FROM sqlite_master "
+                        "WHERE type = 'table' AND name LIKE 'memories%'"
+                    )
+                )
+            # Strict pattern match so companion tables (e.g. SQLite FTS
+            # mirrors) are never altered.
+            tables.update(name for (name,) in result if re.fullmatch(r"memories_\d+", name))
+    except Exception:
+        pass  # Enumeration is best-effort; still migrate the active table
+    for table_name in sorted(tables):
+        _migrate_add_scope_columns(db_manager, table_name)
+
+
 def _create_all_database_tables(db_manager, embedding_dimension: int = 1536) -> None:
     """
     Create all database tables for the MUXI runtime.
@@ -1362,8 +1404,12 @@ def _create_all_database_tables(db_manager, embedding_dimension: int = 1536) -> 
         for projection_table in ("kg_entities", "kg_relationships", "captains_log", "lessons"):
             _migrate_add_derived_from_event_ids_column(db_manager, projection_table)
         # Migrate: ensure the memory-namespaces scope columns exist on
-        # memories tables created before the scope substrate shipped
-        _migrate_add_scope_columns(db_manager, memories_table)
+        # memories tables created before the scope substrate shipped.
+        # Covers ALL memories_{dim} tables, not just the active dimension's:
+        # the startup dimension is a provisional hint (the real one is
+        # probed lazily) and old databases may carry tables from previous
+        # embedding models.
+        _migrate_scope_columns_all_dims(db_manager, memories_table)
         ensure_memory_table_indexes(db_manager, embedding_dimension)
         table_names = [
             "users",
