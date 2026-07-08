@@ -54,7 +54,16 @@ sandbox. No inner LLM loop, no orchestration, no new execution paths.
   ``failure_kind`` breakdown. Disable via ``skills.disable_builtin``;
   degrades like any scripted skill when no RCE is configured.
 
-### Fixes (#229, #231, #234, #235)
+### Fixes (#229, #231, #234, #235, #240, #241)
+
+- The formation MCP server exposes its tools again on FastAPI 0.137+:
+  lazy router inclusion left ``app.routes`` holding placeholders instead
+  of flattened routes, so the MCP mount found zero routes with an
+  ``operation_id`` and generated an empty tool set. Client tool paths are
+  now collected from the source routers at registration time -- same
+  exposure semantics, no dependence on FastAPI route internals (#241).
+- The artifact-memory e2e fixture uses a repo-relative ``secrets.enc``
+  symlink so it works in fresh worktrees (#240).
 
 - Scope-column migration now covers ALL ``memories_{dim}`` tables, not
   just the dimension guessed at startup -- the active dimension is probed
