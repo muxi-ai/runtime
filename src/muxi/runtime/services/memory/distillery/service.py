@@ -76,8 +76,12 @@ SOURCE_DISTILLERY = "distillery"
 
 # Event types a distillery may ship: the intersection of the PRD's batch
 # vocabulary and the event types the substrate supports today. The PRD also
-# names entity.resolved and artifact.saved -- those event types don't exist
-# in the substrate yet and are rejected per-event until their phases land.
+# names entity.resolved (doesn't exist in the substrate yet) and
+# artifact.saved (exists as an internal metadata-only audit event since
+# Artifact Memory Phase 1, but distilled batches cannot ship it -- there
+# is no blob transport, so a distilled artifact.saved would reference
+# content the runtime never received). Both stay rejected per-event until
+# their phases land.
 DISTILLERY_EVENT_TYPES = (EVENT_FACT_EXTRACTED, EVENT_LOG_ENTRY, EVENT_INTERACTION_TURN)
 
 # Batch-level embedding modes (PRD "Embeddings").

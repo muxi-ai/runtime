@@ -1333,6 +1333,7 @@ class Formation:
                 "knowledge_graph": getattr(self, "_knowledge_graph", None),
                 "captains_log": getattr(self, "_captains_log", None),
                 "memory_events": getattr(self, "_memory_events", None),
+                "artifact_memory": getattr(self, "_artifact_memory", None),
                 "working_memory_config": getattr(self, "_working_memory_config", None),
                 "document_chunk_manager": getattr(self, "_document_chunk_manager", None),
                 "request_tracker": getattr(self, "_request_tracker", None),

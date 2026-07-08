@@ -710,6 +710,18 @@ class ConversationEvents(Enum):
     WORKFLOW_APPROVAL_RECEIVED = "workflow.approval.received"
     # When user responds to workflow approval request
 
+    WORKFLOW_REPLANNING_STARTED = "workflow.replanning.started"
+    # When workflow-level replanning is initiated after a workflow failure
+
+    WORKFLOW_REPLANNING_COMPLETED = "workflow.replanning.completed"
+    # When a replacement workflow plan is generated successfully
+
+    WORKFLOW_REPLANNING_FAILED = "workflow.replanning.failed"
+    # When replanning fails (duplicate plan, timeout, or generation error)
+
+    WORKFLOW_REPLANNING_SKIPPED = "workflow.replanning.skipped"
+    # When replanning is not applicable (budget exhausted, non-replannable errors, timeout ceiling)
+
     # ===================================================================
     # SOP (Standard Operating Procedures) EVENTS
     # ===================================================================
@@ -831,6 +843,19 @@ class ConversationEvents(Enum):
 
     MEMORY_DISTILLERY_REVOKED = "memory.distillery.revoked"
     # When an admin revokes a distillery registration (subsequent batches get 410)
+
+    # Artifact memory operations (Artifact Memory Phase 1)
+    MEMORY_ARTIFACT_CAPTURED = "memory.artifact.captured"
+    # When a produced artifact is persisted into artifact memory
+
+    MEMORY_ARTIFACT_CAPTURE_FAILED = "memory.artifact.capture_failed"
+    # When persisting a produced artifact fails (isolated; response unaffected)
+
+    MEMORY_ARTIFACT_CAPTURE_SKIPPED = "memory.artifact.capture_skipped"
+    # When capture guards skip an artifact (empty or secret-bearing content)
+
+    MEMORY_ARTIFACT_RETENTION_SWEPT = "memory.artifact.retention_swept"
+    # When the retention sweep soft-deletes expired artifacts and prunes blobs
 
     USER_INFO_EXTRACTION_STARTED = "user.info.extraction.started"
     # When background user information extraction task is initiated

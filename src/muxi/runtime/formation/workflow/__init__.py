@@ -29,6 +29,7 @@ from ...datatypes.workflow import (  # Core workflow data structures; Utility fu
 from .analyzer import RequestAnalyzer
 from .decomposer import ApprovalManager, TaskDecomposer
 from .executor import ProgressTracker, WorkflowExecutor
+from .replanning import ReplanAttempt, ReplanningCoordinator, ReplanningError
 from .workflow_manager import WorkflowManager
 from .workflow_metrics import WorkflowMetrics
 
@@ -53,6 +54,9 @@ __all__ = [
     # Core classes
     "ApprovalManager",
     "ProgressTracker",
+    "ReplanAttempt",
+    "ReplanningCoordinator",
+    "ReplanningError",
     "RequestAnalyzer",
     "TaskDecomposer",
     "WorkflowExecutor",

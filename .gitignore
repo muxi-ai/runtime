@@ -110,6 +110,8 @@ pids
 *.sqlite
 *.sqlite3
 *.db
+# Artifact memory blob stores created by e2e formations
+e2e/tests/**/artifacts/
 # Virtual Environment
 # Environment variables
 # IDE specific files
