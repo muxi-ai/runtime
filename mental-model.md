@@ -314,6 +314,33 @@ Main entry point for all user interactions. Handles both simple agent routing an
 **Important:**  
 The overlord maintains a consistent persona across all agents, so users experience a unified interface even when multiple agents are involved.
 
+#### Workflow-Level Replanning (2026-07-08)
+
+When a whole workflow FAILS (not just a task), the executor can generate a fundamentally
+different plan instead of returning the failure. Off by default; enable via
+`overlord.workflow.replanning.enabled: true`.
+
+- `ReplanningCoordinator` (`formation/workflow/replanning.py`) decides `should_replan()`
+  (budget, failed tasks, non-replannable error patterns like auth/permission/config) and
+  `generate_replan()` (re-enters `TaskDecomposer.decompose_request()` with a `replan` context:
+  failed tasks, successful task results, blocked capabilities, constraints).
+- `WorkflowExecutor.execute_workflow()` dispatches: no coordinator/disabled -> the exact
+  pre-existing path; enabled -> `_execute_workflow_with_replanning()` loop. Replanned
+  executions run within the remaining `max_timeout_seconds` budget of the original workflow.
+- Duplicate protection: Jaccard similarity over normalized task signatures; plans at or above
+  `plan_similarity_threshold` (default 0.7) raise `ReplanningError`.
+- GBAC: replanning re-enters the decomposer inside the same request context, so the
+  permissions ContextVar filtering applies unchanged -- replans never widen access.
+- Task-level repair in `agents/agent.py` (`replan_attempted`) is untouched and runs first;
+  workflow replanning only fires after the workflow as a whole fails.
+- Events: `workflow.replanning.{started,completed,failed,skipped}`; streaming stage
+  `replanning` (`replan_started` / `replan_ready` / `replan_exhausted`).
+- Knobs (`overlord.workflow.replanning`): `enabled`, `max_attempts` (default 3),
+  `plan_similarity_threshold`, `preserve_successful_outputs`, `replan_timeout_seconds`.
+- Gotcha: agent exceptions raised inside `process_message` are swallowed into TaskResult
+  payloads (task still DONE); the hard task-failure paths are timeouts, selection errors,
+  and phase/workflow timeouts -- those are what make a workflow FAIL and trigger replanning.
+
 #### `audiochat(files: List[Dict], user_id: str, ...) -> MuxiResponse`
 
 **Path:** `overlord.py:5084+`

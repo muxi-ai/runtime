@@ -190,6 +190,7 @@ from ..workflow.config import (
     ComplexityConfig,
     ErrorRecoveryStrategy,
     ObservabilityConfig,
+    ReplanningConfig,
     ResourceConfig,
     RetryConfig,
     RoutingConfig,
@@ -199,6 +200,7 @@ from ..workflow.config import (
     WorkflowConfig,
     WorkflowConfigManager,
 )
+from ..workflow.replanning import ReplanningCoordinator
 from ..workflow.resilient_executor import ResilientWorkflowExecutor
 from ..workflow.synthesis import AdvancedResponseSynthesizer, ResponseQualityAssessor
 from .a2a_coordinator import A2ACoordinator
@@ -817,6 +819,10 @@ class Overlord:
             mcp_service=self.mcp_service,
             skill_manager=getattr(self, "skill_manager", None),
         )
+
+        # Wire workflow-level replanning now that the decomposer exists
+        # (no-op unless overlord.workflow.replanning.enabled is true)
+        self._sync_replanning_coordinator()
 
         # Initialize agent tracking for delayed external registration
         self.pending_external_registrations = set()
@@ -3151,6 +3157,14 @@ Agent response: {raw_response}"""
                     max_delay=retry_data.get("max_delay", 60.0),
                 )
 
+                # Parse replanning configuration (workflow-level recovery).
+                # All knobs -- including non_replannable_error_patterns -- are
+                # parsed and validated by the model; malformed values raise
+                # loudly at load time.
+                replanning_config = ReplanningConfig.from_formation_data(
+                    workflow_config_data.get("replanning", {})
+                )
+
                 # Parse timeout configuration
                 timeout_data = workflow_config_data.get("timeouts", {})
                 timeout_config = TimeoutConfig(
@@ -3207,11 +3221,13 @@ Agent response: {raw_response}"""
                     ),
                     retry_config=retry_config,
                     timeout=timeout_config,
+                    replanning=replanning_config,
                 )
 
                 # Update the workflow executor with new config
                 if hasattr(self, "workflow_executor"):
                     self.workflow_executor.config = self.workflow_config
+                    self._sync_replanning_coordinator()
                 if hasattr(self, "workflow_config_manager"):
                     self.workflow_config_manager.base_config = self.workflow_config
                 # Update the request analyzer with new config
@@ -3262,6 +3278,48 @@ Agent response: {raw_response}"""
                 description="Failed to initialize overlord routing model",
             )
             raise RuntimeError("Failed to initialize routing model from overlord.llm config") from e
+
+    def _sync_replanning_coordinator(self) -> None:
+        """Wire (or unwire) the workflow-level ReplanningCoordinator.
+
+        Called whenever its inputs change: after the TaskDecomposer is
+        created and after the workflow config is (re)parsed. The executor's
+        coordinator stays None unless overlord.workflow.replanning.enabled
+        is true AND a decomposer exists, preserving the default execution
+        path byte-for-byte.
+        """
+        executor = getattr(self, "workflow_executor", None)
+        if executor is None:
+            return
+
+        decomposer = getattr(self, "task_decomposer", None)
+        replanning_config = getattr(executor.config, "replanning", None)
+
+        if replanning_config is None or not replanning_config.enabled or decomposer is None:
+            executor.replanning_coordinator = None
+            return
+
+        coordinator = getattr(executor, "replanning_coordinator", None)
+        if coordinator is not None and coordinator.decomposer is decomposer:
+            # Keep replan history; just refresh the config
+            coordinator.config = replanning_config
+        else:
+            executor.replanning_coordinator = ReplanningCoordinator(
+                decomposer=decomposer, config=replanning_config
+            )
+
+        observability.observe(
+            event_type=observability.SystemEvents.SERVICE_STARTED,
+            level=observability.EventLevel.INFO,
+            data={
+                "service": "workflow_replanning",
+                "max_attempts": replanning_config.max_attempts,
+                "preserve_successful_outputs": replanning_config.preserve_successful_outputs,
+            },
+            description=(
+                "Workflow replanning enabled " f"(max_attempts={replanning_config.max_attempts})"
+            ),
+        )
 
     async def _initialize_extraction_model(self):
         """Initialize the extraction model as an LLM object if needed."""

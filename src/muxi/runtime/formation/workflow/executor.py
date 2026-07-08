@@ -1,5 +1,6 @@
 import asyncio
 import re
+import time
 from collections import defaultdict
 from datetime import datetime, timedelta
 from pathlib import Path
@@ -101,6 +102,11 @@ class WorkflowExecutor:
 
         # Round-robin routing index
         self._rr_index: int = 0
+
+        # Optional workflow-level replanning coordinator (wired by the
+        # overlord only when overlord.workflow.replanning.enabled is true).
+        # When None, execute_workflow() behaves exactly as before.
+        self.replanning_coordinator = None
 
     async def _workflow_timeout_monitor(self, workflow_id: str):
         """Monitor workflow timeout"""
@@ -211,8 +217,36 @@ class WorkflowExecutor:
         Returns:
             Updated workflow with execution results
         """
+        coordinator = self.replanning_coordinator
+        if coordinator is None or not coordinator.enabled:
+            return await self._execute_workflow_with_timeout(workflow, context)
+        return await self._execute_workflow_with_replanning(workflow, coordinator, context)
+
+    async def _execute_workflow_with_timeout(
+        self,
+        workflow: Workflow,
+        context: Optional[Dict[str, Any]] = None,
+        max_timeout_override: Optional[float] = None,
+    ) -> Workflow:
+        """
+        Execute a workflow wrapped in the configured hard max timeout.
+
+        Args:
+            workflow: Workflow to execute
+            context: Optional execution context
+            max_timeout_override: Optional lower ceiling (in seconds) used by
+                replanning to keep the whole replan chain within the original
+                workflow's timeout budget. Never raises the configured ceiling.
+
+        Returns:
+            Updated workflow with execution results
+        """
         # Wrap entire execution with hard max timeout if configured
         max_timeout = self.config.timeout_config.max_timeout_seconds
+        if max_timeout_override is not None and (
+            max_timeout is None or max_timeout_override < max_timeout
+        ):
+            max_timeout = max_timeout_override
         if max_timeout:
             try:
                 return await asyncio.wait_for(
@@ -260,6 +294,173 @@ class WorkflowExecutor:
         else:
             # No hard timeout configured, execute normally
             return await self._execute_workflow_internal(workflow, context)
+
+    async def _execute_workflow_with_replanning(
+        self, workflow: Workflow, coordinator, context: Optional[Dict[str, Any]] = None
+    ) -> Workflow:
+        """
+        Execute a workflow, replanning on failure when the coordinator allows.
+
+        Task-level recovery (retries, alternate agents, fallbacks) runs first
+        inside the normal execution path; replanning only fires after the
+        workflow as a whole has failed. The loop is bounded by the
+        coordinator's replan budget and by the workflow's own timeout ceiling:
+        every replanned execution runs within the time budget remaining from
+        the original workflow's max timeout.
+
+        Args:
+            workflow: Workflow to execute
+            coordinator: Enabled ReplanningCoordinator
+            context: Optional execution context
+
+        Returns:
+            The final workflow (original or last replanned attempt)
+        """
+        # Import at method level to avoid circular imports
+        from .replanning import ReplanningError
+
+        overall_start = time.monotonic()
+        result = await self._execute_workflow_with_timeout(workflow, context)
+
+        while _status_eq(result.status, WorkflowStatus.FAILED):
+            should_replan, reason = coordinator.should_replan(result, context or {})
+            if not should_replan:
+                observability.observe(
+                    event_type=observability.ConversationEvents.WORKFLOW_REPLANNING_SKIPPED,
+                    level=observability.EventLevel.DEBUG,
+                    data={"workflow_id": result.id, "reason": reason},
+                    description=f"Replanning skipped for workflow {result.id}: {reason}",
+                )
+                break
+
+            # Respect the original workflow's timeout ceiling across the whole
+            # replan chain: never start a replan we have no budget to execute.
+            # Budgets are anchored to the original workflow's wall-clock start;
+            # this pre-generation check only gates replan generation -- the
+            # executing budget is recomputed after generation, which consumes
+            # wall time itself (up to replan_timeout_seconds).
+            max_timeout = self.config.timeout_config.max_timeout_seconds
+            if max_timeout:
+                remaining_budget = max_timeout - (time.monotonic() - overall_start)
+                if remaining_budget <= coordinator.config.replan_timeout_seconds:
+                    observability.observe(
+                        event_type=observability.ConversationEvents.WORKFLOW_REPLANNING_SKIPPED,
+                        level=observability.EventLevel.DEBUG,
+                        data={
+                            "workflow_id": result.id,
+                            "reason": "workflow timeout ceiling reached",
+                            "remaining_seconds": remaining_budget,
+                        },
+                        description=(
+                            f"Replanning skipped for workflow {result.id}: "
+                            "workflow timeout ceiling reached"
+                        ),
+                    )
+                    break
+
+            attempt_number = coordinator.attempts_for(result.id) + 1
+            observability.observe(
+                event_type=observability.ConversationEvents.WORKFLOW_REPLANNING_STARTED,
+                level=observability.EventLevel.INFO,
+                data={
+                    "workflow_id": result.id,
+                    "original_workflow_id": coordinator.root_id(result.id),
+                    "attempt": attempt_number,
+                    "max_attempts": coordinator.config.max_attempts,
+                    "reason": reason,
+                },
+                description=(
+                    f"Replanning workflow {result.id} "
+                    f"(attempt {attempt_number}/{coordinator.config.max_attempts}): {reason}"
+                ),
+            )
+            streaming.stream(
+                "replanning",
+                "My initial approach didn't work. Let me try a different strategy...",
+                stage="replan_started",
+                original_workflow_id=coordinator.root_id(result.id),
+                attempt=attempt_number,
+            )
+
+            try:
+                new_workflow = await coordinator.generate_replan(result, context or {})
+            except ReplanningError as e:
+                observability.observe(
+                    event_type=observability.ConversationEvents.WORKFLOW_REPLANNING_FAILED,
+                    level=observability.EventLevel.WARNING,
+                    data={
+                        "workflow_id": result.id,
+                        "attempt": attempt_number,
+                        "error": str(e),
+                    },
+                    description=f"Replanning failed for workflow {result.id}: {e}",
+                )
+                streaming.stream(
+                    "replanning",
+                    "I couldn't find a viable alternative approach.",
+                    stage="replan_exhausted",
+                    attempts=attempt_number,
+                )
+                break
+
+            observability.observe(
+                event_type=observability.ConversationEvents.WORKFLOW_REPLANNING_COMPLETED,
+                level=observability.EventLevel.INFO,
+                data={
+                    "original_workflow_id": coordinator.root_id(new_workflow.id),
+                    "failed_workflow_id": result.id,
+                    "new_workflow_id": new_workflow.id,
+                    "attempt": attempt_number,
+                    "task_count": len(new_workflow.tasks),
+                },
+                description=(
+                    f"Replanned workflow {result.id} -> {new_workflow.id} "
+                    f"with {len(new_workflow.tasks)} tasks"
+                ),
+            )
+            streaming.stream(
+                "replanning",
+                "Found an alternative approach. Proceeding with the new plan...",
+                stage="replan_ready",
+                new_workflow_id=new_workflow.id,
+                task_count=len(new_workflow.tasks),
+            )
+
+            # Recompute the executing budget NOW: replan generation consumed
+            # wall time too, and across chained replans stale budgets would
+            # compound past the original ceiling. If the ceiling is already
+            # spent, abort the chain with the timeout outcome instead of
+            # dispatching an execution we have no budget for.
+            remaining_budget = None
+            if max_timeout:
+                remaining_budget = max_timeout - (time.monotonic() - overall_start)
+                if remaining_budget <= 0:
+                    observability.observe(
+                        event_type=observability.ConversationEvents.WORKFLOW_REPLANNING_FAILED,
+                        level=observability.EventLevel.WARNING,
+                        data={
+                            "workflow_id": result.id,
+                            "new_workflow_id": new_workflow.id,
+                            "attempt": attempt_number,
+                            "error": "workflow timeout ceiling reached after replan generation",
+                            "remaining_seconds": remaining_budget,
+                        },
+                        description=(
+                            f"Replan {new_workflow.id} not executed: workflow timeout "
+                            "ceiling reached after replan generation"
+                        ),
+                    )
+                    elapsed = time.monotonic() - overall_start
+                    raise WorkflowTimeoutError(
+                        f"Workflow exceeded maximum duration of {max_timeout}s during "
+                        f"replanning (ran for {elapsed:.1f}s)"
+                    )
+
+            result = await self._execute_workflow_with_timeout(
+                new_workflow, context, max_timeout_override=remaining_budget
+            )
+
+        return result
 
     async def _execute_workflow_internal(
         self, workflow: Workflow, context: Optional[Dict[str, Any]] = None
