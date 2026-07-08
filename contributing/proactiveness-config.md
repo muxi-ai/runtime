@@ -1,10 +1,10 @@
 # Proactiveness Configuration Reference
 
-Formation config reference for the three proactiveness surfaces:
-`proactive:` (notification channels + heartbeat), `commands:` (slash
-commands), and the agent-level `soul:` field.
+Formation config reference for the two proactiveness surfaces:
+`proactive:` (notification channels + heartbeat) and `commands:` (slash
+commands).
 
-All three are optional and inert: a formation without them behaves
+Both are optional and inert: a formation without them behaves
 exactly as before. Parsing is fail-fast -- any structural problem is a
 descriptive load-time error, never a silent default.
 
@@ -131,24 +131,15 @@ backing service gets a friendly "not configured" reply):
 | `/preferences` | `/preferences [timezone <tz>\|channel <name>]` | User channel store |
 | `/reset` | `/reset` | Buffer memory (current session only) |
 
-## Agent `soul:`
+## Soul document (overlord-level)
 
-Optional path to a soul document -- values, philosophy, and
-relationship dynamics beyond functional persona instructions. See
-[soul-documents.md](soul-documents.md) for the template and writing
-guide.
-
-```yaml
-agents:
-  - id: my-assistant
-    soul: ./SOUL.md
-```
-
-The path must be relative and resolve inside the formation directory
-(same confinement rules as knowledge paths), and the file must exist at
-load time. The content is prepended verbatim to the agent's system
-message. Distinct from the overlord-level soul (`SOUL.md` /
-`overlord.soul`), which feeds the overlord's default persona.
+Soul is an overlord-only concept: a `SOUL.md` (or `soul.md`) file next
+to `formation.yaml` is auto-discovered at load time and feeds the
+overlord's default persona (precedence: `SOUL.md` > `soul.md` > inline
+`overlord.soul` > built-in default). Individual agents are single-file
+contained -- an agent's character lives entirely in its
+`system_message`. See [soul-documents.md](soul-documents.md) for the
+template and writing guide.
 
 ## API surface
 

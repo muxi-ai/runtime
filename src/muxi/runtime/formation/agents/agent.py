@@ -81,7 +81,6 @@ class Agent:
         a2a_internal: bool = True,
         a2a_external: bool = True,
         knowledge_config: Optional[Dict[str, Any]] = None,
-        soul: Optional[str] = None,
     ):
         """
         Initialize the agent with a model, overlord, and optional parameters.
@@ -105,9 +104,6 @@ class Agent:
                 communication. Default True.
             knowledge_config: Optional configuration for agent domain knowledge.
                 Contains sources and settings for the agent's knowledge base.
-            soul: Optional soul document content (values, philosophy,
-                relationship dynamics). Prepended to the system message so
-                identity precedes functional instructions.
         """
         self.model = model
         self.overlord = overlord
@@ -125,12 +121,6 @@ class Agent:
             "You are a helpful assistant that responds accurately to user queries. "
             "Provide detailed, factual responses and be transparent about uncertainty."
         )
-
-        # Soul document (Proactiveness Phase 1): identity/values content is
-        # prepended so it frames the functional persona instructions.
-        self.soul = soul.strip() if isinstance(soul, str) and soul.strip() else None
-        if self.soul:
-            self.system_message = f"{self.soul}\n\n{self.system_message}"
 
         # Set up A2A configuration (single source of truth)
         self.a2a_internal = a2a_internal

@@ -1,8 +1,9 @@
 # Soul Documents
 
-A soul document gives an agent values, philosophy, and relationship
+A soul document gives the overlord values, philosophy, and relationship
 dynamics beyond functional persona instructions. The persona answers
-"what does this agent do?"; the soul answers "who is this agent?".
+"what does this assistant do?"; the soul answers "who is this
+assistant?".
 
 | Aspect | Persona / system message | Soul |
 |---|---|---|
@@ -10,26 +11,23 @@ dynamics beyond functional persona instructions. The persona answers
 | Typical content | "Help users with X, Y, Z" | "I value honesty over politeness" |
 | Required | Yes | No (optional enhancement) |
 
+Soul is an **overlord-only** concept -- it shapes the formation's
+default persona, the voice users talk to. Individual agents are
+single-file contained: an agent's character lives entirely in its
+`system_message`.
+
 ## Wiring it up
 
-```yaml
-agents:
-  - id: my-assistant
-    soul: ./SOUL.md
-```
+Place a `SOUL.md` (or `soul.md`) file next to `formation.yaml`. It is
+auto-discovered at formation load time -- no config key needed.
 
-Rules (enforced at formation load time):
+Precedence: `SOUL.md` > `soul.md` > inline `overlord.soul` > built-in
+default.
 
-- The path must be **relative** and resolve **inside the formation
-  directory** (same confinement as knowledge paths).
-- The file must **exist** -- a missing soul document is a load error,
-  not a silent skip.
-- The content is prepended **verbatim** to the agent's system message.
+- The content is used **verbatim** as the overlord's default persona.
   There is no templating; what you write is what the model sees.
-
-This agent-level `soul:` is distinct from the overlord-level soul
-(`SOUL.md` in the formation root / `overlord.soul`), which feeds the
-overlord's default persona. An agent soul shapes one agent.
+- The inline `overlord.soul` config key still works, but a soul file
+  next to the formation always wins.
 
 ## Starter template
 
@@ -43,7 +41,7 @@ sent to the model too):
   which side to pick when principles collide
 - **My Boundaries** -- behavioral commitments held even when pushed
 - **Our Relationship** -- the working dynamic: peer, advisor, executor
-- **What I Remember** -- how the agent should think about continuity
+- **What I Remember** -- how the assistant should think about continuity
 
 ## Writing guidance
 
@@ -51,7 +49,7 @@ sent to the model too):
   harder than "the assistant should challenge the user".
 - **Trade-offs, not virtues.** "Honesty over sycophancy" instructs;
   "be honest" decorates.
-- **Short.** The soul rides on every request of that agent. A page is
-  plenty; a paragraph per section is better.
+- **Short.** The soul rides on every request the overlord handles. A
+  page is plenty; a paragraph per section is better.
 - **No capabilities.** Tool lists, output formats, and task procedures
   belong in the persona/system message or SOPs, not the soul.

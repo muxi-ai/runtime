@@ -34,8 +34,8 @@ suppression-robustness fixes found by the first live heartbeat e2e.
   heartbeat-originated sessions so normal chats mentioning
   ``HEARTBEAT_OK`` are untouched.
 - Soul document template + guide (``contributing/soul-documents.md``,
-  ``contributing/templates/soul.md``), a full config reference for
-  ``proactive:`` / ``commands:`` / agent ``soul:``
+  ``contributing/templates/soul.md``) for the overlord soul, a full
+  config reference for ``proactive:`` / ``commands:``
   (``contributing/proactiveness-config.md``), and enriched OpenAPI docs
   for the notifications and user-channels endpoints.
 
@@ -86,8 +86,8 @@ and the post-back URL.
 ### Proactiveness, Phase 1: foundation (#238)
 
 Formations can now initiate contact instead of only responding. The
-``proactive:`` block wires notification routing, heartbeats, soul
-documents, and slash commands -- all inert when unconfigured.
+``proactive:`` block wires notification routing, heartbeats, and slash
+commands -- all inert when unconfigured.
 
 - **Channels are transformers**: a channel is a named reference to a
   trigger transformer, so outbound delivery reuses the existing template
@@ -106,8 +106,12 @@ documents, and slash commands -- all inert when unconfigured.
   timezone, overnight ranges, weekend flags), ``HEARTBEAT_OK``
   suppression, fresh session per run, and full failure isolation with
   new heartbeat events.
-- **Soul documents**: an agent-level ``soul:`` path, resolved with the
-  knowledge-path security rules and prepended to the system message.
+- **Soul documents**: soul stays an overlord-level concept -- a
+  ``SOUL.md``/``soul.md`` next to ``formation.yaml`` is auto-discovered
+  as the overlord's default persona (precedence: ``SOUL.md`` >
+  ``soul.md`` > inline ``overlord.soul`` > built-in default). Agents are
+  single-file contained: an agent's character lives in its
+  ``system_message``.
 - **Slash commands**: opt-in ``commands:`` block mapping ``/command`` to
   SOPs via explicit invocation (no LLM round-trip for unknown commands);
   the built-in command registry lands in a later phase.

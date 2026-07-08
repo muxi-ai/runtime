@@ -1,6 +1,6 @@
 schema: "1.0.0"
 id: formation-proactive-test
-description: Test formation for proactiveness phase 1 (notification routing, last-channel tracking, heartbeat, soul, slash commands)
+description: Test formation for proactiveness phase 1 (notification routing, last-channel tracking, heartbeat, overlord soul, slash commands)
 
 llm:
   api_keys:
@@ -16,7 +16,6 @@ agents:
     system_message: |
       You are a test assistant. Follow instructions exactly and keep
       responses under 30 words.
-    soul: ./SOUL.md
     default: true
 
 overlord:

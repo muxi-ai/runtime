@@ -2870,7 +2870,7 @@ class TelemetryService:
 **Location:** `formation/proactive/`, `formation/commands.py`
 
 Phase 1 of the proactiveness PRD: mechanisms only (routing, tracking,
-heartbeat hooks, soul loading, command parsing). Channel MCPs, built-in
+heartbeat hooks, command parsing). Channel MCPs, built-in
 commands, and the default heartbeat SOP are later phases. Everything is
 inert when unconfigured: formations without `proactive:`/`commands:`
 blocks behave identically to before (pinned by unit tests).
@@ -2931,11 +2931,12 @@ heartbeat failures can never break interactive chat. Config-time rule:
 `proactive.heartbeat.enabled` requires `scheduler.enabled: true` (which
 requires persistent memory).
 
-**Soul documents:** agent-level `soul: ./SOUL.md` resolves at load time
-with the knowledge-path security rules (relative-only, confined to the
-formation dir, must exist) and is prepended to the agent system message
-in `Agent.__init__`. Distinct from the pre-existing overlord-level soul
-(`SOUL.md`/`overlord.soul` -> `_default_persona`).
+**Soul documents:** overlord-only. `SOUL.md`/`soul.md` next to
+`formation.yaml` is auto-discovered and feeds `_default_persona`
+(precedence: `SOUL.md` > `soul.md` > inline `overlord.soul` > built-in
+default). There is no agent-level `soul:` field -- agents are
+single-file contained; an agent's character lives in its
+`system_message`.
 
 **Slash commands** (`formation/commands.py`): opt-in via `commands:`.
 `parse_slash_command` accepts `/name args` (name charset
@@ -2955,7 +2956,7 @@ management, client-key auth).
 
 **e2e:** area `e2e/tests/23_proactive/` (routing precedence, last-channel
 tracking via trigger, heartbeat active-hours gating, slash commands +
-soul, channel template composition). Heartbeat tests call
+overlord SOUL.md, channel template composition). Heartbeat tests call
 `heartbeat.run_once(fixed_datetime)` for deterministic timing instead of
 waiting on scheduler cycles.
 
@@ -3160,14 +3161,15 @@ Pinned by `tests/unit/test_apply_persona_handles_raw.py`.
 starter with the PRD's five sections: Who I Am / My Values / My
 Boundaries / Our Relationship / What I Remember; HTML guidance comments
 authors delete) + `contributing/soul-documents.md` (wiring rules,
-persona-vs-soul distinction, writing guidance). No loading mechanism --
-souls are formation-author content referenced via `agent.soul`.
+persona-vs-soul distinction, writing guidance). Souls are overlord-only:
+a `SOUL.md`/`soul.md` next to `formation.yaml` is auto-discovered as the
+overlord's default persona.
 
 **Docs:** `contributing/proactiveness-config.md` -- full schema
 reference for `proactive:` (channels/default_channel/heartbeat incl.
 default-SOP behavior), `commands:` (aliases, `builtin:` disable map,
-SOP shadowing, resolution order, the eight built-ins), agent `soul:`,
-plus the client API surface (`POST /v1/notifications`,
+SOP shadowing, resolution order, the eight built-ins), the overlord
+soul document, plus the client API surface (`POST /v1/notifications`,
 `GET/PUT /v1/users/{id}/channels`, `X-Muxi-Client-Key` auth). The
 routes' OpenAPI docstrings gained routing-precedence and status-code
 detail (that IS the repo's API docs convention; no new docs system).

@@ -2,9 +2,9 @@
 Unit tests for load-time validation of the proactiveness formation blocks.
 
 Pins that the FormationValidator rejects malformed 'proactive'/'commands'
-blocks, enforces the heartbeat-requires-scheduler cross-check, validates
-the agent 'soul' field, and that formations WITHOUT any of these blocks
-validate exactly as before (inert-when-unconfigured).
+blocks, enforces the heartbeat-requires-scheduler cross-check, and that
+formations WITHOUT any of these blocks validate exactly as before
+(inert-when-unconfigured).
 """
 
 from muxi.runtime.formation.config.validation import FormationValidator
@@ -223,26 +223,3 @@ class TestProactiveChannelUrlValidation:
         validator = FormationValidator()
         validator._validate_proactive_channel_transformers(tmp_path, {})
         assert validator.result.errors == []
-
-
-class TestAgentSoulField:
-    def test_valid_soul_path_accepted(self):
-        validator = FormationValidator()
-        validator._validate_agents(
-            [{"id": "main", "name": "Main", "description": "d", "soul": "./SOUL.md"}]
-        )
-        assert not _errors_mentioning(validator, "soul")
-
-    def test_empty_soul_rejected(self):
-        validator = FormationValidator()
-        validator._validate_agents(
-            [{"id": "main", "name": "Main", "description": "d", "soul": "  "}]
-        )
-        assert _errors_mentioning(validator, "soul")
-
-    def test_non_string_soul_rejected(self):
-        validator = FormationValidator()
-        validator._validate_agents(
-            [{"id": "main", "name": "Main", "description": "d", "soul": ["SOUL.md"]}]
-        )
-        assert _errors_mentioning(validator, "soul")

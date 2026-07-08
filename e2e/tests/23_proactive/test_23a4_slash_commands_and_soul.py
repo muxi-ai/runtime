@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-Test 23A4: Slash commands (SOPs as commands) and soul document loading
+Test 23A4: Slash commands (SOPs as commands) and overlord soul loading
 
 Verifies against a live formation:
 1. /ping resolves to the sops/ping.md SOP and the agent executes its
@@ -8,7 +8,9 @@ Verifies against a live formation:
 2. /hb (alias) resolves to the heartbeat-e2e SOP via commands.aliases
 3. An unknown command returns immediately with a helpful message and
    the available command list (no LLM round-trip)
-4. The agent's soul document (SOUL.md) was prepended to its system message
+4. The SOUL.md next to formation.yaml is auto-discovered and becomes
+   the overlord's default persona (SOUL.md > soul.md > inline
+   overlord.soul > built-in default)
 """
 
 import asyncio
@@ -26,7 +28,7 @@ def _content(response):
 
 
 async def main():
-    print("MUXI Runtime - Test 23A4: Slash Commands and Soul")
+    print("MUXI Runtime - Test 23A4: Slash Commands and Overlord Soul")
     print("=" * 60)
 
     formation_path = Path(__file__).parent / "formation-proactive"
@@ -80,22 +82,26 @@ async def main():
         assert "/ping" in unknown_reply, f"Available commands not listed: {unknown_reply}"
         print("Unknown command returned the available command list")
 
-        # 4. Soul document injection
-        agent = overlord.agents.get("assistant") or next(iter(overlord.agents.values()))
-        assert agent.soul, "Agent soul document not loaded"
-        assert agent.system_message.startswith(
+        # 4. Overlord soul auto-discovery (SOUL.md next to formation.yaml)
+        persona = overlord._default_persona
+        assert persona, "Overlord default persona not loaded"
+        assert persona.startswith(
             "# Soul"
-        ), f"Soul not prepended to system message: {agent.system_message[:80]}"
-        assert "Determinism over creativity" in agent.system_message
-        print("\nSoul document prepended to the agent system message")
+        ), f"SOUL.md not auto-discovered as the overlord persona: {persona[:80]}"
+        assert "Determinism over creativity" in persona
+        # SOUL.md wins over the built-in default, and agents stay
+        # single-file contained: no soul content in the agent's system message
+        agent = overlord.agents.get("assistant") or next(iter(overlord.agents.values()))
+        assert "Determinism over creativity" not in agent.system_message
+        print("\nSOUL.md auto-discovered as the overlord default persona")
 
         print("\n" + "=" * 40)
         print("\n### Test Result:")
-        print("  SUCCESS: Slash commands and soul document work end-to-end")
+        print("  SUCCESS: Slash commands and overlord soul work end-to-end")
         print("  - /ping executed its SOP content")
         print("  - commands.aliases mapped /hb to the heartbeat SOP")
         print("  - Unknown commands short-circuit with available commands")
-        print("  - SOUL.md content frames the agent system message")
+        print("  - SOUL.md next to formation.yaml feeds the overlord persona")
         print("\n" + "=" * 40)
         print("\n### Chat transcript:")
         print("\nUser: /ping")
