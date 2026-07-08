@@ -1564,11 +1564,17 @@ class Agent:
                 from ...services.gbac import enforcement as gbac_enforcement
 
                 agent_registries = getattr(mcp_service, "agent_tool_registry", None) or {}
+                # An empty _shared catalog means everything was filtered out
+                # on purpose; only fall back when the key is absent entirely.
+                _shared = agent_registries.get("_shared")
                 available_tools = gbac_enforcement.effective_tool_registry(
                     self.agent_id,
                     available_tools,
-                    catalogs=agent_registries.get("_shared")
-                    or getattr(mcp_service, "tool_registry", None),
+                    catalogs=(
+                        _shared
+                        if _shared is not None
+                        else getattr(mcp_service, "tool_registry", None)
+                    ),
                 )
 
                 # Tool isolation now working with shared + agent-specific tools

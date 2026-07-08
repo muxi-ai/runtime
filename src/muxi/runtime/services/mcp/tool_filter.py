@@ -284,8 +284,8 @@ def apply_filter(
 
         kept = [
             t
-            for t in kept
-            if (allowed is None or _tool_name(t) in allowed) and _tool_name(t) not in denied
+            for t, name in zip(kept, names)
+            if (allowed is None or name in allowed) and name not in denied
         ]
 
     all_patterns: List[str] = []
