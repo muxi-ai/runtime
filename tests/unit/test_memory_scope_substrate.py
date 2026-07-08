@@ -230,6 +230,15 @@ async def test_legacy_db_migrates_additively_and_search_is_unchanged(db_path):
         assert {r["text"] for r in results} == set(seeded) | {"dogs bark"}
 
 
+class _FakeDBManager:
+    """Minimal stand-in for DatabaseManager as read by the scope migrations."""
+
+    database_type = "sqlite"
+
+    def __init__(self, engine):
+        self.engine = engine
+
+
 def test_migrate_add_scope_columns_is_additive_and_idempotent(tmp_path):
     """The runtime migration used by _create_all_database_tables adds the
     columns to an old-schema table and is a no-op when re-run."""
@@ -256,12 +265,6 @@ def test_migrate_add_scope_columns_is_additive_and_idempotent(tmp_path):
         )
         conn.commit()
 
-    class _FakeDBManager:
-        database_type = "sqlite"
-
-        def __init__(self, engine):
-            self.engine = engine
-
     db_manager = _FakeDBManager(engine)
     _migrate_add_scope_columns(db_manager, "memories_384")
     # Idempotent: a second run must not raise or duplicate columns.
@@ -280,3 +283,44 @@ def test_migrate_add_scope_columns_is_additive_and_idempotent(tmp_path):
 
     # Missing table: swallowed (create_tables owns first-run creation).
     _migrate_add_scope_columns(db_manager, "memories_9999")
+
+
+def test_migrate_scope_columns_covers_all_dimension_tables(tmp_path):
+    """A database carrying memories tables from other embedding dimensions
+    (e.g. after switching embedding models) gets scope columns on ALL of
+    them, not just the active dimension's -- and companion tables that
+    merely share the prefix are left alone."""
+    from sqlalchemy import create_engine, text
+
+    from muxi.runtime.formation.initialization import _migrate_scope_columns_all_dims
+
+    db_file = tmp_path / "runtime.db"
+    engine = create_engine(f"sqlite:///{db_file}")
+    old_schema = (
+        "id TEXT PRIMARY KEY, user_id INTEGER NOT NULL, "
+        "collection TEXT NOT NULL, text TEXT NOT NULL, "
+        "embedding BLOB NOT NULL, metadata TEXT"
+    )
+    with engine.connect() as conn:
+        # Two old-schema dimension tables (embedding model was switched)
+        # plus a companion table that matches the prefix but not the
+        # memories_{dim} pattern.
+        conn.execute(text(f"CREATE TABLE memories_384 ({old_schema})"))
+        conn.execute(text(f"CREATE TABLE memories_768 ({old_schema})"))
+        conn.execute(text("CREATE TABLE memories_384_fts (id TEXT PRIMARY KEY)"))
+        conn.commit()
+
+    db_manager = _FakeDBManager(engine)
+    # Active table is a third dimension that doesn't exist yet -- its
+    # migration is swallowed (create_tables owns first-run creation).
+    _migrate_scope_columns_all_dims(db_manager, "memories_1536")
+
+    with engine.connect() as conn:
+        for table in ("memories_384", "memories_768"):
+            columns = [row[1] for row in conn.execute(text(f"PRAGMA table_info({table})"))]
+            assert "scope_type" in columns, table
+            assert "scope_id" in columns, table
+        # The companion table was not altered.
+        fts_columns = [row[1] for row in conn.execute(text("PRAGMA table_info(memories_384_fts)"))]
+        assert "scope_type" not in fts_columns
+        assert "scope_id" not in fts_columns
