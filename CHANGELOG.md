@@ -2,6 +2,29 @@
 
 ## [unreleased]
 
+### Proactiveness, Phase 2: channel templates (#243)
+
+Platform channels ship as declarative content, not MCPs. A channel is a
+trigger + transformer pair: the developer points their bot at
+``POST /server/triggers/{id}``, and the trigger names the payload format
+and the post-back URL.
+
+- ``transformer:`` and ``webhook:`` in trigger frontmatter now compose --
+  the transformer supplies payload format, auth, and retry; the trigger's
+  webhook URL is the delivery destination. ``endpoint.url`` is optional
+  in transformer YAML; resolution is trigger/channel URL first, then the
+  transformer's own, with a load-time error when neither exists.
+  ``proactive.channels.<name>.url`` gets the same override, including
+  ``${{ secrets.* }}``-backed bridge URLs.
+- Bundled dormant templates for ``slack``, ``telegram``, ``discord``,
+  and ``email`` -- real platform payload shapes, no URLs, inert until
+  referenced, shadowed by formation-local ``transformers/`` files (same
+  rule as built-in skills). Email emits a constructed message object
+  (from/to/subject/body/headers) to the developer's bridge webhook;
+  SMTP/SES wiring stays developer territory.
+- Per-platform setup guides and example triggers in
+  ``contributing/channel-templates.md``.
+
 ### Proactiveness, Phase 1: foundation (#238)
 
 Formations can now initiate contact instead of only responding. The
