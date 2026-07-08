@@ -821,7 +821,8 @@ async def deliver_via_transformer(
     Returns:
         True if the transformer endpoint accepted the delivery
     """
-    endpoint_url = url_override or transformer.url
+    # Pre-render fallback value for failure paths; may be None until resolved
+    endpoint_url: Optional[str] = url_override or transformer.url
     attempts = 0
     last_error: Optional[str] = None
     try:
