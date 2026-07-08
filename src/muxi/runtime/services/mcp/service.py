@@ -441,7 +441,7 @@ class MCPService:
             original_credentials: Original credentials with user placeholders (if any)
             agent_id: Optional agent ID for agent-specific MCP servers
             parameters: Optional default parameters injected into every tool call
-            tool_filter: Optional whitelist/blacklist filter applied to the
+            tool_filter: Optional allow/deny filter applied to the
                 upstream tool catalog at registration time. When the filter
                 yields zero tools, the server is **not** registered (no
                 ``server_configs`` entry, no agent-visible tool registry
@@ -581,7 +581,7 @@ class MCPService:
           operators can audit exactly which upstream tools each glob
           expanded to. This is the **only** signal that protects against
           silent scope expansion when an upstream adds a new tool that
-          newly matches a whitelist.
+          newly matches an allow rule.
         * ``mcp.tool_filter.unknown_tool`` (warning, **once per unknown
           pattern**) — surfaces typos with ``difflib`` "did you mean?"
           suggestions for literal patterns. Glob patterns that match
@@ -1166,7 +1166,7 @@ class MCPService:
                 try:
                     upstream_tools = await handler.list_tools(server_name)
 
-                    # Apply optional whitelist/blacklist filter declared in the
+                    # Apply optional allow/deny filter declared in the
                     # MCP `.afs` ``tools`` block. Inactive spec → passthrough.
                     tools, filter_report = apply_filter(
                         upstream_tools, tool_filter or ToolFilterSpec()
@@ -1187,7 +1187,7 @@ class MCPService:
                         # Audit-trail events (applied + unknown-pattern
                         # suggestions) still fire so operators can diagnose
                         # WHY the filter ended up empty (typo? overly tight
-                        # whitelist?). The "[ INFO ] tool filter resolved..."
+                        # allow list?). The "[ INFO ] tool filter resolved..."
                         # init-line print is suppressed inside the helper
                         # when registered_tool_count == 0 so stdout doesn't
                         # show INFO immediately followed by WARN for the

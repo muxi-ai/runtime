@@ -2368,19 +2368,29 @@ class Overlord:
                 if "parameters" in server_config and isinstance(server_config["parameters"], dict):
                     registration_params["parameters"] = server_config["parameters"]
 
-                # Translate optional tools.{whitelist|blacklist} into a
+                # Translate optional tools.{allow|deny} into a
                 # ToolFilterSpec — same semantics as the formation-level
                 # registration path in formation.py. Without this, a
                 # per-agent re-registration would silently restore the
                 # full upstream catalog and bloat the planning prompt
                 # back to its unfiltered size.
-                tools_block = server_config.get("tools")
-                if isinstance(tools_block, dict):
-                    from ...services.mcp.tool_filter import ToolFilterSpec
+                #
+                # A ``{id, tools}`` attachment reference carries its
+                # override under ``_tools_override`` (set by the loader);
+                # it chains AFTER the referenced server's own ``tools``
+                # block, so the attachment selects from the already-pruned
+                # catalog and cannot resurrect registry-excluded tools.
+                from ...services.mcp.tool_filter import ToolFilterSpec
 
-                    spec = ToolFilterSpec.from_config(tools_block)
-                    if spec.is_active:
-                        registration_params["tool_filter"] = spec
+                tools_block = server_config.get("tools")
+                override_block = server_config.get("_tools_override")
+                spec = ToolFilterSpec.from_config(
+                    tools_block if isinstance(tools_block, dict) else None
+                )
+                if isinstance(override_block, dict):
+                    spec = ToolFilterSpec.from_config(override_block, base=spec)
+                if spec.is_active:
+                    registration_params["tool_filter"] = spec
 
                 # Register the MCP server with process-level timeout
                 # This may raise MCPConnectionError if connection fails

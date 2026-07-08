@@ -1,0 +1,58 @@
+schema: "1.0.0"
+id: api-test-tools-vocab
+description: "Formation exercising the allow/deny tools vocabulary across the override cascade"
+
+llm:
+  api_keys:
+    openai: "${{ secrets.OPENAI_API_KEY }}"
+  models:
+    - text: "openai/gpt-4o-mini"
+    - embedding: "openai/text-embedding-3-small"
+
+runtime:
+  built_in_mcps: false
+
+memory:
+  buffer:
+    size: 100
+    vector_search: false
+
+mcp:
+  servers:
+    - id: records-mcp
+      description: "Records tools (stub catalog for filter tests)"
+      type: command
+      command: python
+      args: ["tests/19_api/formation-api-tools-vocab/records_server.py"]
+      timeout_seconds: 60
+      # Canonical allow/deny, both together (relaxed mutex): allow keeps the
+      # non-destructive verbs plus delete_records, deny then subtracts it --
+      # deny wins on overlap. drop_database never enters the catalog.
+      tools:
+        allow: ["get_*", "list_*", "search_records", "create_record", "delete_records"]
+        deny: ["delete_records"]
+
+agents:
+  - id: assistant
+    name: "Tools Vocabulary Test Assistant"
+    description: "A helpful assistant for testing tool filter vocabulary"
+    system_message: "You are a helpful assistant. Be concise and direct."
+    mcp_servers:
+      # Reference-with-override form: attaches the formation-declared server
+      # and narrows it further with the alias spelling (blacklist == deny).
+      - id: records-mcp
+        tools:
+          blacklist: ["create_record"]
+
+server:
+  enabled: true
+  port: 8271
+  auth: required  # groups/ requires the auth gate (2026-07-07 ruling)
+  api_keys:
+    admin_key: test-admin-key-123
+    client_key: test-client-key-456
+
+logging:
+  system:
+    level: "error"
+    destination: "stdout"

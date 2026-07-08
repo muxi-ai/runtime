@@ -1,4 +1,4 @@
-"""Unit tests for MCP tool filtering (whitelist / blacklist).
+"""Unit tests for MCP tool filtering (allow / deny, whitelist / blacklist aliases).
 
 Three layers of coverage:
 
@@ -70,8 +70,9 @@ def _make_validator() -> Any:
         def __init__(self) -> None:
             self.result = ValidationResult()
 
-        # Bind the unbound method straight onto the harness.
+        # Bind the unbound methods straight onto the harness.
         _validate_mcp_tools_block = FormationValidator._validate_mcp_tools_block
+        _validate_tools_pattern_list = FormationValidator._validate_tools_pattern_list
 
     return _V()
 
@@ -99,7 +100,7 @@ def test_whitelist_literal_only(github_like_catalog: List[Dict[str, Any]]) -> No
     kept, report = apply_filter(github_like_catalog, spec)
     assert [t["name"] for t in kept] == ["get_branch", "create_issue"]  # upstream order preserved
     assert report is not None
-    assert report.mode == "whitelist"
+    assert report.mode == "allow"
     assert report.registered_tool_count == 2
     assert report.upstream_tool_count == len(github_like_catalog)
 
@@ -112,7 +113,7 @@ def test_blacklist_literal_only(github_like_catalog: List[Dict[str, Any]]) -> No
     assert "delete_repo" not in names
     assert "delete_branch" in names  # still here; only delete_repo was named
     assert len(names) == len(github_like_catalog) - 1
-    assert report is not None and report.mode == "blacklist"
+    assert report is not None and report.mode == "deny"
 
 
 def test_whitelist_glob_star(github_like_catalog: List[Dict[str, Any]]) -> None:
@@ -280,15 +281,16 @@ def test_spec_from_empty_dict_returns_inactive() -> None:
     assert spec.is_active is False
 
 
-def test_spec_from_both_keys_present_falls_back_to_inactive() -> None:
-    """Both keys → no filter at runtime (the loader rejects this earlier).
+def test_spec_from_both_keys_is_active_allow_then_deny() -> None:
+    """Both keys together are valid: allow applies first, deny subtracts.
 
-    The runtime tolerates this so a malformed config doesn't crash
-    registration; the formation loader's
-    ``_validate_mcp_tools_block`` is the canonical fail-fast site.
+    This is the relaxed mutex — a superset of the old one-of-them rule,
+    matching the group-level GBAC ``ToolRules`` semantics.
     """
     spec = ToolFilterSpec.from_config({"whitelist": ["a"], "blacklist": ["b"]})
-    assert spec.is_active is False
+    assert spec.is_active is True
+    assert spec.allow == ("a",)
+    assert spec.deny == ("b",)
 
 
 def test_spec_from_empty_list_returns_inactive() -> None:
@@ -303,7 +305,7 @@ def test_spec_strips_non_string_entries() -> None:
     """
     spec = ToolFilterSpec.from_config({"whitelist": ["valid", 42, None, "also_valid"]})
     assert spec.is_active is True
-    assert spec.patterns == ("valid", "also_valid")
+    assert spec.allow == ("valid", "also_valid")
 
 
 # ---------------------------------------------------------------------------
@@ -311,15 +313,37 @@ def test_spec_strips_non_string_entries() -> None:
 # ---------------------------------------------------------------------------
 
 
-def test_validation_rejects_whitelist_and_blacklist_both_set() -> None:
-    """Mutex rule fires at load time with a clear, actionable message."""
+def test_validation_accepts_whitelist_and_blacklist_together() -> None:
+    """Relaxed mutex: both rules in one block are valid (deny after allow)."""
     v = _make_validator()
     v._validate_mcp_tools_block({"whitelist": ["list_*"], "blacklist": ["delete_*"]}, "demo-mcp")
+    assert v.result.errors == []
+    assert v.result.warnings == []
+
+
+def test_validation_rejects_canonical_key_plus_its_alias() -> None:
+    """``allow`` + ``whitelist`` (or ``deny`` + ``blacklist``) is ambiguous."""
+    v = _make_validator()
+    v._validate_mcp_tools_block({"allow": ["a"], "whitelist": ["b"]}, "demo-mcp")
     assert v.result.errors
     msg = v.result.errors[-1]
     assert "demo-mcp" in msg
-    assert "whitelist" in msg and "blacklist" in msg
-    assert "not both" in msg
+    assert "allow" in msg and "whitelist" in msg
+
+    v = _make_validator()
+    v._validate_mcp_tools_block({"deny": ["a"], "blacklist": ["b"]}, "demo-mcp")
+    assert v.result.errors
+    msg = v.result.errors[-1]
+    assert "deny" in msg and "blacklist" in msg
+
+
+def test_validation_rejects_unknown_tools_key() -> None:
+    """Typos like ``alow`` fail fast instead of silently not filtering."""
+    v = _make_validator()
+    v._validate_mcp_tools_block({"alow": ["list_*"]}, "demo-mcp")
+    assert v.result.errors
+    msg = v.result.errors[-1]
+    assert "alow" in msg and "unknown key" in msg
 
 
 def test_validation_rejects_neither_whitelist_nor_blacklist() -> None:
@@ -332,15 +356,26 @@ def test_validation_rejects_neither_whitelist_nor_blacklist() -> None:
     v._validate_mcp_tools_block({}, "demo-mcp")
     assert v.result.errors
     msg = v.result.errors[-1]
-    assert "whitelist" in msg and "blacklist" in msg
+    assert "'allow'" in msg and "'deny'" in msg
 
 
-def test_validation_rejects_non_list_patterns() -> None:
-    """``whitelist`` / ``blacklist`` must be a list."""
+def test_validation_accepts_single_string_pattern_shorthand() -> None:
+    """A bare string is accepted (matches group-level ``deny: "*"`` idiom)."""
     v = _make_validator()
     v._validate_mcp_tools_block({"whitelist": "list_*"}, "demo-mcp")
+    assert v.result.errors == []
+
+    v = _make_validator()
+    v._validate_mcp_tools_block({"deny": "*"}, "demo-mcp")
+    assert v.result.errors == []
+
+
+def test_validation_rejects_non_string_non_list_patterns() -> None:
+    """A mapping (or other type) where patterns belong is a load-time error."""
+    v = _make_validator()
+    v._validate_mcp_tools_block({"whitelist": {"x": 1}}, "demo-mcp")
     assert v.result.errors
-    assert "must be a list" in v.result.errors[-1]
+    assert "string pattern or a list" in v.result.errors[-1]
 
 
 def test_validation_rejects_non_string_pattern_entry() -> None:
