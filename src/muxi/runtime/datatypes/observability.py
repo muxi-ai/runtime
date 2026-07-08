@@ -976,6 +976,10 @@ class ConversationEvents(Enum):
     # actual provider call) — this marks the resilience-layer
     # transition. Mirrors MCP_TRANSPORT_FALLBACK_SUCCESS.
 
+    MODEL_OVERRIDE_APPLIED = "model.override.applied"
+    # When a hierarchical model override (agent/SOP/trigger/skill/step level)
+    # is resolved and applied for a request or workflow task
+
     MODEL_STREAMING_STARTED = "model.streaming.started"
     # When LLM streaming response begins
 
@@ -1321,6 +1325,10 @@ class ErrorEvents(Enum):
     # ===================================================================
     CONFIGURATION_ERROR = "error.configuration.error"
     # When system configuration is invalid or missing
+
+    MODEL_OVERRIDE_FAILED = "error.model.override.failed"
+    # When a hierarchical model override cannot be resolved at request time;
+    # execution degrades to the next level up the hierarchy (never fatal)
 
     ENVIRONMENT_ERROR = "error.environment.error"
     # When required environment variables are missing or invalid

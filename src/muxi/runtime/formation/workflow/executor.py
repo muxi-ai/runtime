@@ -1638,6 +1638,24 @@ class WorkflowExecutor:
 
         return False
 
+    def _skill_model_for_task(self, task: SubTask) -> Optional[str]:
+        """
+        Return the first skill-level model override for a task, if any.
+
+        Skills referenced by the task ([skill:name] directives) may declare a
+        ``model:`` in their SKILL.md frontmatter. Step-level [model:x] and SOP
+        frontmatter take precedence over this (handled by the caller).
+        """
+        skill_manager = getattr(self.overlord, "skill_manager", None) if self.overlord else None
+        if not skill_manager or not task.required_skills:
+            return None
+        for ref in task.required_skills:
+            metadata = skill_manager.skills.get(ref.name)
+            model_ref = getattr(metadata, "model", None) if metadata else None
+            if model_ref:
+                return model_ref
+        return None
+
     async def _execute_task_with_agent(
         self, task: SubTask, agent: Agent, context: Dict[str, Any]
     ) -> TaskResult:
@@ -1738,6 +1756,26 @@ class WorkflowExecutor:
             skill_run_summaries=skill_run_summaries,
         )
 
+        # Hierarchical model selection (lowest level wins):
+        # step [model:x] / SOP frontmatter (task.model) > skill frontmatter >
+        # request-level override (e.g. trigger frontmatter) > agent default.
+        # Resolution failures degrade to the agent's own model - never fatal.
+        model_override = None
+        if self.overlord:
+            model_ref = task.model
+            source = "sop_step"
+            if not model_ref:
+                model_ref = self._skill_model_for_task(task)
+                source = "skill"
+            if not model_ref and request_id:
+                get_override = getattr(self.overlord, "get_request_model_override", None)
+                model_ref = get_override(request_id) if get_override else None
+                source = "request"
+            if model_ref:
+                model_override = await self.overlord.resolve_model_override(
+                    model_ref, source=source, task_id=task.id
+                )
+
         try:
             # Execute with agent
             response = await agent.process_message(
@@ -1745,6 +1783,7 @@ class WorkflowExecutor:
                 user_id=context.get("user_id", 0),
                 session_id=session_id,
                 request_id=request_id,
+                model_override=model_override,
             )
 
             # Extract content from muxi.runtimeResponse

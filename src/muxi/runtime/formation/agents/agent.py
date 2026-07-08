@@ -1242,6 +1242,39 @@ class Agent:
         extracted = "\n".join(captured_lines).strip()
         return extracted or user_message
 
+    async def _call_active_model(self, active_model: LLM, method: str, *args, **kwargs):
+        """
+        Invoke an LLM method on the active model with override degradation.
+
+        When ``active_model`` is a hierarchical override (not the agent's own
+        model) and the call fails, log the failure and retry once with the
+        agent's default model - a model-selection problem must never crash the
+        chat turn. Calls on the agent's own model propagate errors unchanged.
+        """
+        if active_model is self.model:
+            return await getattr(self.model, method)(*args, **kwargs)
+
+        try:
+            return await getattr(active_model, method)(*args, **kwargs)
+        except Exception as e:
+            observability.observe(
+                event_type=observability.ErrorEvents.MODEL_OVERRIDE_FAILED,
+                level=observability.EventLevel.WARNING,
+                data={
+                    "agent_id": self.agent_id,
+                    "override_model": getattr(active_model, "model", None),
+                    "fallback_model": getattr(self.model, "model", None),
+                    "method": method,
+                    "error": str(e),
+                    "error_type": type(e).__name__,
+                },
+                description=(
+                    f"Override model '{getattr(active_model, 'model', None)}' failed for "
+                    f"agent {self.agent_id}; degrading to the agent's default model"
+                ),
+            )
+            return await getattr(self.model, method)(*args, **kwargs)
+
     async def process_message(
         self,
         message: Union[str, MuxiResponse],
@@ -1250,6 +1283,7 @@ class Agent:
         request_id: Optional[str] = None,
         is_a2a_task: bool = False,
         clean_chat_context: Optional[Dict[str, Any]] = None,
+        model_override: Optional[LLM] = None,
     ) -> MuxiResponse:
         """
         Process a message from the overlord and generate a response.
@@ -1277,11 +1311,23 @@ class Agent:
                 ``self._messages`` is rebuilt from this bundle so the
                 LLM call uses a proper chat-API-shape transcript
                 instead of the accumulated marker-formatted blobs.
+            model_override: Optional LLM instance to use for this call instead
+                of the agent's default model (hierarchical model selection:
+                trigger/SOP/skill/step overrides resolved by the caller). If
+                the override model fails at call time, the agent degrades to
+                its default model rather than failing the turn.
 
         Returns:
             The agent's response as an MuxiResponse, possibly including tool call results
             or clarification requests in metadata.
         """
+        # Effective model for this call: hierarchical override (trigger/SOP/
+        # skill/step, resolved upstream) or the agent's own model. All
+        # response-generating LLM calls in this method go through
+        # ``_call_active_model`` so an override failure degrades to the
+        # agent default instead of failing the chat turn.
+        active_model = model_override or self.model
+
         # Convert string message to MuxiResponse if needed
         if isinstance(message, str):
             user_message = message
@@ -1326,7 +1372,8 @@ class Agent:
                 "message_length": len(user_message),
                 "has_tools": tool_count > 0,
                 "tool_count": tool_count,
-                "model_used": self.model if hasattr(self, "model") and self.model else None,
+                "model_used": getattr(active_model, "model", None) or active_model,
+                "model_overridden": model_override is not None,
             },
             description=f"Agent {self.agent_id} ({self.name}) starting message processing",
         )
@@ -2432,7 +2479,9 @@ class Agent:
                                 {"role": "user", "content": user_for_response},
                             ]
 
-                        response_obj = await self.model.chat(simple_messages)
+                        response_obj = await self._call_active_model(
+                            active_model, "chat", simple_messages
+                        )
                         response_text = (
                             response_obj.content
                             if hasattr(response_obj, "content")
@@ -2784,8 +2833,11 @@ class Agent:
                 else:
                     llm_messages = self._messages
 
-                raw_response = await self.model.chat_with_tools(
-                    cast(List[Dict[str, str]], llm_messages), tools=tools
+                raw_response = await self._call_active_model(
+                    active_model,
+                    "chat_with_tools",
+                    cast(List[Dict[str, str]], llm_messages),
+                    tools=tools,
                 )
             except Exception as e:
                 # Log error and fallback to no tools
@@ -2832,7 +2884,9 @@ class Agent:
                     # Check for cancellation before LLM call
                     await self._check_cancellation(request_id)
                     # Normal chat without tools
-                    raw_response = await self.model.chat(cast(List[Dict[str, str]], self._messages))
+                    raw_response = await self._call_active_model(
+                        active_model, "chat", cast(List[Dict[str, str]], self._messages)
+                    )
             else:
                 # Either workflow task or A2A attempts exhausted - respond normally
                 if not is_workflow_task and self._a2a_attempt_count >= self._max_a2a_attempts:
@@ -2848,7 +2902,9 @@ class Agent:
                     )
                 # Check for cancellation before LLM call
                 await self._check_cancellation(request_id)
-                raw_response = await self.model.chat(cast(List[Dict[str, str]], self._messages))
+                raw_response = await self._call_active_model(
+                    active_model, "chat", cast(List[Dict[str, str]], self._messages)
+                )
 
         # Extract the actual content string from the response
         if isinstance(raw_response, str):
@@ -3256,8 +3312,11 @@ class Agent:
                     )
 
                 # Get next response from model
-                next_response = await self.model.chat_with_tools(
-                    cast(List[Dict[str, str]], self._messages), tools=tools if tools else None
+                next_response = await self._call_active_model(
+                    active_model,
+                    "chat_with_tools",
+                    cast(List[Dict[str, str]], self._messages),
+                    tools=tools if tools else None,
                 )
 
                 # Extract content from response
@@ -3298,8 +3357,11 @@ class Agent:
                             ),
                         }
                     )
-                    reconsider_response = await self.model.chat_with_tools(
-                        cast(List[Dict[str, str]], self._messages), tools=tools if tools else None
+                    reconsider_response = await self._call_active_model(
+                        active_model,
+                        "chat_with_tools",
+                        cast(List[Dict[str, str]], self._messages),
+                        tools=tools if tools else None,
                     )
 
                     # Update with reconsidered response

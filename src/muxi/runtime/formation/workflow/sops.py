@@ -244,6 +244,9 @@ class SOPSystem:
                         "synthesis": metadata.get(
                             "synthesis", True
                         ),  # Default to True (run synthesis)
+                        "model": metadata.get(
+                            "model"
+                        ),  # Optional default model for all steps in this SOP
                         "content": content,  # Full markdown content for decomposer
                         "raw_content": md_file.read_text(),  # Original content with frontmatter
                         "steps": metadata.get(

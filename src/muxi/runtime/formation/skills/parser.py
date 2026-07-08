@@ -23,6 +23,7 @@ class SkillMetadata:
     allowed_tools: List[str] = field(default_factory=list)
     required_secrets: List[str] = field(default_factory=list)
     execution_context: Dict[str, Any] = field(default_factory=dict)
+    model: Optional[str] = None  # Optional model override (alias or provider/model)
 
 
 @dataclass
@@ -117,6 +118,16 @@ def parse_skill_md(path: Path) -> tuple[SkillMetadata, str, list]:
         warnings.append(f"Skill '{name}' has non-mapping execution_context; ignoring invalid value")
         execution_context = {}
 
+    # Optional model override (hierarchical model selection). Lenient: a
+    # non-string value is ignored with a warning rather than failing the load.
+    model_raw = fm.get("model")
+    model = None
+    if model_raw is not None:
+        if isinstance(model_raw, str) and model_raw.strip():
+            model = model_raw.strip()
+        else:
+            warnings.append(f"Skill '{name}' has invalid 'model' value; ignoring")
+
     required_secrets = scan_secret_refs(path.parent)
 
     metadata = SkillMetadata(
@@ -130,6 +141,7 @@ def parse_skill_md(path: Path) -> tuple[SkillMetadata, str, list]:
         allowed_tools=allowed_tools,
         required_secrets=required_secrets,
         execution_context=execution_context,
+        model=model,
     )
 
     return metadata, body, warnings

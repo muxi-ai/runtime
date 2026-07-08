@@ -1,0 +1,7 @@
+id: default-agent
+name: Default Agent
+role: general
+description: "Agent using the formation default model"
+system_message: "You are a concise test agent. Answer in one short sentence."
+specialties:
+  - "General questions"

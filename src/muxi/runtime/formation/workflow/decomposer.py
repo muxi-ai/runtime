@@ -105,6 +105,15 @@ class TaskDecomposer:
                     # Fall back to heuristic decomposition
                     workflow = self._heuristic_decompose_request(workflow_id, request, analysis)
 
+            # Apply the SOP-level default model (frontmatter ``model:``) to any
+            # task without a step-level [model:x] override. Lowest level wins:
+            # step directive > SOP frontmatter > agent/formation defaults.
+            sop_model = context.get("sop_model") if context else None
+            if sop_model:
+                for task in workflow.tasks.values():
+                    if not task.model:
+                        task.model = sop_model
+
             # Generate plan preview if user approval required
             if requires_approval:
                 workflow.requires_approval = True
@@ -1239,6 +1248,7 @@ Would you like me to proceed with this plan?
     _SOP_AGENT_RE = re.compile(r"\[agent:([^\]]+)\]", re.IGNORECASE)
     _SOP_MCP_RE = re.compile(r"\[mcp:([^\]]+)\]", re.IGNORECASE)
     _SOP_SKILL_RE = re.compile(r"\[skill:([^\]]+)\]", re.IGNORECASE)
+    _SOP_MODEL_RE = re.compile(r"\[model:([^\]]+)\]", re.IGNORECASE)
     _SOP_PARALLEL_RE = re.compile(r"\[parallel\]", re.IGNORECASE)
     _SOP_DIRECTIVE_RE = re.compile(r"\[[^\]]+\]")
     # Numbered list item: "N. rest of line"
@@ -1323,6 +1333,7 @@ Would you like me to proceed with this plan?
                 required_skills=[
                     SkillRef(name=s["name"], script=s["script"]) for s in step.get("skills", [])
                 ],
+                model=step.get("model"),
             )
             task_id_list.append(task_id)
 
@@ -1395,6 +1406,10 @@ Would you like me to proceed with this plan?
             agent_m = self._SOP_AGENT_RE.search(title_raw) or self._SOP_AGENT_RE.search(body)
             assigned_agent = agent_m.group(1).strip() if agent_m else None
 
+            # Model: [model:x] step-level override (title line first, then body)
+            model_m = self._SOP_MODEL_RE.search(title_raw) or self._SOP_MODEL_RE.search(body)
+            step_model = model_m.group(1).strip() if model_m else None
+
             # MCP tools: server name before '/' (deduplicated)
             mcp_tools = list(
                 {m2.group(1).split("/")[0].strip() for m2 in self._SOP_MCP_RE.finditer(body)}
@@ -1432,6 +1447,7 @@ Would you like me to proceed with this plan?
                     "mcp_tools": mcp_tools,
                     "skills": skills,
                     "is_parallel": is_parallel,
+                    "model": step_model,
                 }
             )
 
@@ -1471,6 +1487,8 @@ Would you like me to proceed with this plan?
 
             agent_m = self._SOP_AGENT_RE.search(combined)
             assigned_agent = agent_m.group(1).strip() if agent_m else None
+            model_m = self._SOP_MODEL_RE.search(combined)
+            step_model = model_m.group(1).strip() if model_m else None
             mcp_tools = list(
                 {m2.group(1).split("/")[0].strip() for m2 in self._SOP_MCP_RE.finditer(body)}
             )
@@ -1504,6 +1522,7 @@ Would you like me to proceed with this plan?
                     "mcp_tools": mcp_tools,
                     "skills": skills,
                     "is_parallel": is_parallel,
+                    "model": step_model,
                 }
             )
 
