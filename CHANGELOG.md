@@ -2,6 +2,23 @@
 
 ## [unreleased]
 
+### Unified tools vocabulary + attachment overrides (#251)
+
+Completes the GBAC tool-override cascade design.
+
+- ``allow`` / ``deny`` is now the canonical vocabulary for ``tools:``
+  blocks at every level -- registry (``mcp.servers[].tools``) and agent
+  attachments included; ``whitelist`` / ``blacklist`` remain accepted
+  aliases. The strict either-or rule is relaxed to both-permitted with
+  deny-applied-after-allow (a superset of previous behavior).
+- Agent attachments to formation-declared MCP servers can now carry a
+  ``tools:`` override (string reference or ``{id, tools}`` mapping),
+  filling in level two of the four-level cascade: formation catalog,
+  agent attachment, group per-server, group per-agent -- most specific
+  wins.
+- An intentionally emptied shared catalog is respected as empty instead
+  of silently falling back to the unfiltered registry.
+
 ### Proactiveness, Phase 4: default heartbeat SOP + docs (#247)
 
 The closing slice of the proactiveness epic -- content, docs, and two
