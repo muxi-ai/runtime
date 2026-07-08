@@ -1,14 +1,15 @@
 # =============================================================================
 # FRONTMATTER
 # =============================================================================
-# Title:        MCP Tool Filter - Whitelist/Blacklist registration-time filter
+# Title:        MCP Tool Filter - Allow/Deny registration-time filter
 # Description:  Pure filter applied between upstream tools/list response and
 #               agent-visible tool registry insertion at MCP service
 #               registration time.
 # Role:         Lets a formation scope an upstream MCP catalog to a subset
 #               (e.g. read-only tools, no destructive ops, single product
-#               surface of a multi-product MCP) via two new optional keys
-#               in MCP `.afs` files: ``tools.whitelist`` / ``tools.blacklist``.
+#               surface of a multi-product MCP) via the optional ``tools``
+#               block in MCP `.afs` files: ``tools.allow`` / ``tools.deny``
+#               (``whitelist`` / ``blacklist`` accepted as aliases).
 # Usage:        Constructed from the ``tools`` block of an MCP `.afs`
 #               config dict by ``ToolFilterSpec.from_config()``. Called by
 #               ``MCPService._connect_single_transport`` between
@@ -24,14 +25,21 @@
 #   ``[abc]``   one character from a set (rarely useful; supported)
 #   ``[!abc]``  one character NOT in set (rarely useful; supported)
 #
+# Filter semantics mirror the group-level GBAC ``ToolRules`` (deny after
+# allow): ``allow`` alone keeps only matching tools, ``deny`` alone keeps
+# everything except matching tools, both together apply allow first and
+# then subtract deny. A spec may also chain onto a ``base`` spec — the
+# base is applied first, so an agent-attachment override can never
+# resurrect tools pruned by the formation-level catalog bound.
+#
 # The module is **pure**: it does not log, does not call observe(), does not
 # raise on configuration mistakes that callers may want to surface
 # differently (empty set, unknown patterns). The caller decides what to
 # do with each FilterReport finding.
 #
-# Validation that *must* fail-fast (whitelist+blacklist mutex, non-string
-# entries) lives in ``formation/config/validation.py`` so the formation
-# loader aborts before the runtime ever sees a malformed block.
+# Validation that *must* fail-fast (alias conflicts, non-string entries,
+# unknown keys) lives in ``formation/config/validation.py`` so the
+# formation loader aborts before the runtime ever sees a malformed block.
 # =============================================================================
 
 from __future__ import annotations
@@ -45,61 +53,111 @@ from typing import Any, Dict, List, Optional, Sequence, Tuple
 _MAX_SUGGESTIONS = 3
 
 
+def _normalise_patterns(value: Any) -> Optional[Tuple[str, ...]]:
+    """Normalise a pattern declaration into a non-empty tuple, or None.
+
+    Accepts a single string (the group-level ``deny: "*"`` shorthand) or
+    a list of strings. Non-string and blank entries are dropped — those
+    are load-time validation errors caught upstream; here we tolerate
+    them so unit tests can exercise the filter in isolation.
+    """
+    if isinstance(value, str):
+        return (value,) if value.strip() else None
+    if isinstance(value, list):
+        patterns = tuple(p for p in value if isinstance(p, str) and p.strip())
+        return patterns or None
+    return None
+
+
 @dataclass(frozen=True)
 class ToolFilterSpec:
     """Resolved filter declared in an MCP `.afs` ``tools`` block.
 
-    Exactly one of ``whitelist`` / ``blacklist`` is non-None when the
-    filter is active. Both being None (or the spec being absent
-    entirely) means "no filter" — the caller should pass the upstream
-    catalog through unchanged.
+    ``allow`` / ``deny`` are each either None (key not declared) or a
+    non-empty tuple of fnmatch patterns. Both may be set together —
+    semantics follow the group-level GBAC ``ToolRules``: allow first,
+    then subtract deny. Both being None (and no active ``base``) means
+    "no filter" — the caller should pass the upstream catalog through
+    unchanged.
+
+    ``base`` optionally chains another spec that is applied *before*
+    this one. The agent-attachment override cascade uses this: the
+    formation-level catalog bound is the base, so the override selects
+    from the already-pruned catalog and can never resurrect tools the
+    registry level removed.
 
     Construction goes through :meth:`from_config` so the dict shape from
     the loader can be validated and normalised in one place.
     """
 
-    mode: Optional[str] = None  # "whitelist" | "blacklist" | None
-    patterns: Tuple[str, ...] = ()
+    allow: Optional[Tuple[str, ...]] = None
+    deny: Optional[Tuple[str, ...]] = None
+    base: Optional["ToolFilterSpec"] = None
 
     @property
     def is_active(self) -> bool:
-        """True iff this spec actually filters anything."""
-        return self.mode is not None and len(self.patterns) > 0
+        """True iff this spec (or its base chain) actually filters anything."""
+        if self.allow is not None or self.deny is not None:
+            return True
+        return self.base is not None and self.base.is_active
+
+    @property
+    def mode(self) -> Optional[str]:
+        """Human-readable label for this spec's own rules (ignores base)."""
+        if self.allow is not None and self.deny is not None:
+            return "allow+deny"
+        if self.allow is not None:
+            return "allow"
+        if self.deny is not None:
+            return "deny"
+        return None
+
+    def stages(self) -> List["ToolFilterSpec"]:
+        """Flatten the base chain into application order (base first)."""
+        chain: List["ToolFilterSpec"] = []
+        if self.base is not None:
+            chain.extend(self.base.stages())
+        if self.allow is not None or self.deny is not None:
+            chain.append(self)
+        return chain
 
     @classmethod
-    def from_config(cls, tools_block: Optional[Dict[str, Any]]) -> "ToolFilterSpec":
+    def from_config(
+        cls,
+        tools_block: Optional[Dict[str, Any]],
+        base: Optional["ToolFilterSpec"] = None,
+    ) -> "ToolFilterSpec":
         """Build a spec from a parsed MCP-config ``tools`` block.
 
         ``tools_block`` is whatever lives under the ``tools`` key in the
-        MCP `.afs` file (or ``None`` if absent). Mutex and type errors
-        are not raised here — the formation loader's validation layer
-        is the canonical fail-fast site for those. This method tolerates
+        MCP `.afs` file (or ``None`` if absent). Canonical keys are
+        ``allow`` / ``deny``; ``whitelist`` / ``blacklist`` are accepted
+        as aliases (canonical spelling wins if both appear — a conflict
+        the formation loader's validation layer rejects fail-fast).
+        Type errors are not raised here either — this method tolerates
         them so unit tests can exercise the filter in isolation, and
         defaults to "no filter" on anything malformed.
+
+        ``base`` optionally chains a spec applied before this one; an
+        inactive base is dropped.
         """
+        base = base if base is not None and base.is_active else None
+
         if not tools_block or not isinstance(tools_block, dict):
-            return cls()
+            return cls(base=base)
 
-        whitelist = tools_block.get("whitelist")
-        blacklist = tools_block.get("blacklist")
+        allow_raw = tools_block.get("allow")
+        if allow_raw is None:
+            allow_raw = tools_block.get("whitelist")
+        deny_raw = tools_block.get("deny")
+        if deny_raw is None:
+            deny_raw = tools_block.get("blacklist")
 
-        # Mutex is a load-time error caught upstream; if we somehow get
-        # both at runtime, prefer "no filter" rather than make a silent
-        # choice between them.
-        if whitelist is not None and blacklist is not None:
-            return cls()
-
-        if isinstance(whitelist, list) and len(whitelist) > 0:
-            patterns = tuple(p for p in whitelist if isinstance(p, str))
-            if patterns:
-                return cls(mode="whitelist", patterns=patterns)
-
-        if isinstance(blacklist, list) and len(blacklist) > 0:
-            patterns = tuple(p for p in blacklist if isinstance(p, str))
-            if patterns:
-                return cls(mode="blacklist", patterns=patterns)
-
-        return cls()
+        return cls(
+            allow=_normalise_patterns(allow_raw),
+            deny=_normalise_patterns(deny_raw),
+            base=base,
+        )
 
 
 @dataclass
@@ -108,12 +166,15 @@ class FilterReport:
 
     Carries everything observability + init-time logging need:
 
-    * ``mode`` / ``patterns`` — what the spec asked for.
+    * ``mode`` / ``patterns`` — what the spec asked for. ``mode`` is
+      ``"allow"``, ``"deny"`` or ``"allow+deny"`` for a single-stage
+      spec; chained stages join with `` > `` in application order.
     * ``upstream_tool_count`` / ``registered_tool_count`` — sizes
       before / after.
-    * ``pattern_resolutions`` — for each pattern, the list of upstream
-      tool names it matched (in their original upstream order). Empty
-      list means the pattern matched nothing.
+    * ``pattern_resolutions`` — for each pattern, the list of tool
+      names it matched (in their original upstream order) within the
+      universe its stage saw. Empty list means the pattern matched
+      nothing.
     * ``unknown_patterns`` — patterns that produced zero matches, with
       ``difflib`` suggestions. Empty list when every pattern matched
       at least one tool.
@@ -163,17 +224,23 @@ def apply_filter(
 
     Behaviour:
 
-    * Inactive spec (no whitelist or blacklist declared) → ``upstream_tools``
-      passes through unchanged, ``report`` is ``None`` (the caller skips
-      the "filter applied" observability event entirely).
-    * Whitelist mode → keep tools whose ``name`` matches **at least one**
+    * Inactive spec (no allow or deny declared anywhere in the chain) →
+      ``upstream_tools`` passes through unchanged, ``report`` is ``None``
+      (the caller skips the "filter applied" observability event
+      entirely).
+    * ``allow`` → keep tools whose ``name`` matches **at least one**
       pattern.
-    * Blacklist mode → keep tools whose ``name`` matches **none** of the
-      patterns.
+    * ``deny`` → drop tools whose ``name`` matches **any** pattern.
+    * Both in one stage → allow first, then subtract deny (deny wins on
+      overlap). Deny patterns resolve against the stage's *input*
+      universe, not the post-allow set, so a deny that overlaps the
+      allowed set is never misreported as unknown.
+    * Chained stages (``spec.base``) apply base-first; each stage's
+      patterns resolve against the previous stage's output.
 
-    Tool order is preserved relative to the upstream sequence in both
-    modes — handy for deterministic test assertions and for the planning
-    prompt (which renders tools in registration order).
+    Tool order is preserved relative to the upstream sequence — handy
+    for deterministic test assertions and for the planning prompt
+    (which renders tools in registration order).
 
     The returned :class:`FilterReport` always carries one entry per
     pattern in :attr:`FilterReport.pattern_resolutions`. Patterns that
@@ -183,40 +250,52 @@ def apply_filter(
     if not spec.is_active:
         return list(upstream_tools), None
 
-    upstream_names = [n for n in (_tool_name(t) for t in upstream_tools) if n is not None]
+    # Nameless / malformed tools (``_tool_name(t) is None``) are dropped
+    # whenever a filter is active, in allow and deny directions alike.
+    # Since the filter cannot reason about a tool with no usable name,
+    # the conservative decision is the same in either direction: drop it.
+    kept = [t for t in upstream_tools if _tool_name(t) is not None]
 
-    # Per-pattern resolution table — name order preserved.
     resolutions: List[Tuple[str, List[str]]] = []
-    matched_set: set[str] = set()
-    for pattern in spec.patterns:
-        matches = [n for n in upstream_names if fnmatchcase(n, pattern)]
-        resolutions.append((pattern, matches))
-        matched_set.update(matches)
+    unknown: List[Tuple[str, List[str]]] = []
+    stages = spec.stages()
 
-    # Nameless / malformed tools (``_tool_name(t) is None``) are dropped in
-    # **both** modes. Without the explicit ``is not None`` guard, blacklist
-    # mode would silently let nameless tools through (``None not in
-    # matched_set`` is always True) — an asymmetry with whitelist mode
-    # where ``None in matched_set`` is always False. Since the filter
-    # cannot reason about a tool with no usable name, the conservative
-    # decision is the same in either direction: drop it.
-    if spec.mode == "whitelist":
-        kept = [t for t in upstream_tools if (n := _tool_name(t)) is not None and n in matched_set]
-    elif spec.mode == "blacklist":
+    for stage in stages:
+        names = [_tool_name(t) for t in kept]
+
+        allowed: Optional[set] = None
+        if stage.allow is not None:
+            allowed = set()
+            for pattern in stage.allow:
+                matches = [n for n in names if fnmatchcase(n, pattern)]
+                resolutions.append((pattern, matches))
+                if not matches:
+                    unknown.append((pattern, _suggestions_for(pattern, names)))
+                allowed.update(matches)
+
+        denied: set = set()
+        if stage.deny is not None:
+            for pattern in stage.deny:
+                matches = [n for n in names if fnmatchcase(n, pattern)]
+                resolutions.append((pattern, matches))
+                if not matches:
+                    unknown.append((pattern, _suggestions_for(pattern, names)))
+                denied.update(matches)
+
         kept = [
-            t for t in upstream_tools if (n := _tool_name(t)) is not None and n not in matched_set
+            t
+            for t in kept
+            if (allowed is None or _tool_name(t) in allowed) and _tool_name(t) not in denied
         ]
-    else:
-        # is_active implies mode is set; this branch is defensive only.
-        return list(upstream_tools), None
 
-    unknown: List[Tuple[str, List[str]]] = [
-        (p, _suggestions_for(p, upstream_names)) for p, matches in resolutions if not matches
-    ]
+    all_patterns: List[str] = []
+    for stage in stages:
+        all_patterns.extend(stage.allow or ())
+        all_patterns.extend(stage.deny or ())
 
     report = FilterReport(
-        mode=spec.mode,
-        patterns=spec.patterns,
+        mode=" > ".join(stage.mode or "" for stage in stages),
+        patterns=tuple(all_patterns),
         upstream_tool_count=len(upstream_tools),
         registered_tool_count=len(kept),
         pattern_resolutions=resolutions,

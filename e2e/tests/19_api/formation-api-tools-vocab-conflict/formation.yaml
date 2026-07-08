@@ -1,0 +1,39 @@
+schema: "1.0.0"
+id: api-test-tools-vocab-conflict
+description: "Invalid formation: a tools block declaring both 'allow' and its alias 'whitelist'"
+
+llm:
+  api_keys:
+    openai: "${{ secrets.OPENAI_API_KEY }}"
+  models:
+    - text: "openai/gpt-4o-mini"
+
+runtime:
+  built_in_mcps: false
+
+memory:
+  buffer:
+    size: 100
+    vector_search: false
+
+mcp:
+  servers:
+    - id: records-mcp
+      description: "Records tools (never registered -- load must fail)"
+      type: command
+      command: python
+      args: ["tests/19_api/formation-api-tools-vocab/records_server.py"]
+      tools:
+        allow: ["get_*"]
+        whitelist: ["list_*"]  # canonical + alias in one block: load-time error
+
+agents:
+  - id: assistant
+    name: "Conflict Test Assistant"
+    description: "Never starts"
+    system_message: "You are a helpful assistant."
+
+logging:
+  system:
+    level: "error"
+    destination: "stdout"

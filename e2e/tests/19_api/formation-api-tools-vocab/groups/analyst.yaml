@@ -1,0 +1,11 @@
+name: "Records Analyst"
+description: "Analysts get the read path plus record creation"
+agents:
+  - assistant:
+      records-mcp:
+        tools:
+          # Group allow expands against the post-registry catalog: it
+          # supersedes the attachment override (create_record comes back)
+          # but cannot resurrect registry-pruned tools (drop_database and
+          # delete_records stay out).
+          allow: ["get_records", "create_record", "drop_database", "delete_records"]

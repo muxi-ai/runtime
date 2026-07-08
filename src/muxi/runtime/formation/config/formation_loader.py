@@ -53,6 +53,22 @@ from typing import Any, Dict, List, Optional
 from .loader import ConfigLoader
 
 
+def _mcp_reference_id(item: Any) -> Optional[str]:
+    """Return the referenced server id for a ``{id, tools}`` attachment entry.
+
+    An agent ``mcp_servers`` dict entry whose keys are a subset of
+    ``{id, tools}`` is a reference to a declared server (with an optional
+    agent-level tools override), not an inline definition — inline
+    definitions carry at least ``description`` and ``type``. Returns None
+    for anything else.
+    """
+    if isinstance(item, dict) and set(item) <= {"id", "tools"}:
+        ref = item.get("id")
+        if isinstance(ref, str) and ref.strip():
+            return ref
+    return None
+
+
 class FormationLoader:
     """
     Unified loader for both flattened and modular formation configurations.
@@ -544,13 +560,15 @@ class FormationLoader:
             if isinstance(server, dict) and "id" in server:
                 formation_mcps[server["id"]] = server
 
-        # Collect all agent string refs that are NOT in formation-level MCPs
+        # Collect all agent references (string or {id, tools} form) that are
+        # NOT in formation-level MCPs
         needs_directory_lookup = False
         for agent in config["agents"]:
             if not isinstance(agent, dict):
                 continue
             for item in agent.get("mcp_servers") or []:
-                if isinstance(item, str) and item not in formation_mcps:
+                ref = item if isinstance(item, str) else _mcp_reference_id(item)
+                if isinstance(ref, str) and ref not in formation_mcps:
                     needs_directory_lookup = True
                     break
             if needs_directory_lookup:
@@ -575,25 +593,45 @@ class FormationLoader:
 
             resolved = []
             for item in agent_mcps:
+                ref_id: Optional[str] = None
+                tools_override = None
                 if isinstance(item, str):
-                    if item in formation_mcps:
-                        resolved.append(formation_mcps[item].copy())
-                    elif item in directory_mcps:
-                        mcp_config = directory_mcps[item].copy()
+                    ref_id = item
+                elif isinstance(item, dict) and set(item) <= {"id", "tools"}:
+                    # Reference-with-override form: {id: <declared server>,
+                    # tools: {...}} — resolves like a string reference, then
+                    # carries the tools block as an agent-level override
+                    # chained after the referenced server's own filter.
+                    ref_id = item.get("id")
+                    if not isinstance(ref_id, str) or not ref_id.strip():
+                        agent_id = agent.get("id", "unknown")
+                        raise ValueError(
+                            f"Agent '{agent_id}' mcp_servers: reference entry must "
+                            f"include a non-empty string 'id', got {item!r}"
+                        )
+                    tools_override = item.get("tools")
+
+                if ref_id is not None:
+                    if ref_id in formation_mcps:
+                        mcp_config = formation_mcps[ref_id].copy()
+                    elif ref_id in directory_mcps:
+                        mcp_config = directory_mcps[ref_id].copy()
                         mcp_config.pop("_source_file", None)
                         mcp_config.pop("_raw_secrets", None)
                         mcp_config.pop("_raw_placeholders", None)
-                        resolved.append(mcp_config)
                     else:
                         agent_id = agent.get("id", "unknown")
                         available = sorted(
                             set(list(formation_mcps.keys()) + list(directory_mcps.keys()))
                         )
                         raise ValueError(
-                            f"Agent '{agent_id}' references MCP server '{item}' "
+                            f"Agent '{agent_id}' references MCP server '{ref_id}' "
                             f"but it was not found in formation mcp.servers or "
                             f"mcp/ directory. Available: {available}"
                         )
+                    if tools_override is not None:
+                        mcp_config["_tools_override"] = tools_override
+                    resolved.append(mcp_config)
                 elif isinstance(item, dict):
                     resolved.append(item)
                 else:

@@ -694,19 +694,26 @@ class FormationValidator:
         if "auth" in server_config:
             self._validate_mcp_auth_config(server_config["auth"], server_id or index)
 
-        # Validate optional tools.{whitelist|blacklist} filter block
+        # Validate optional tools.{allow|deny} filter block
         if "tools" in server_config:
-            self._validate_mcp_tools_block(server_config["tools"], server_id or index)
+            self._validate_mcp_tools_block(
+                server_config["tools"], f"MCP server {server_id or index}"
+            )
 
-    def _validate_mcp_tools_block(
-        self, tools_block: Any, server_identifier: Union[str, int]
-    ) -> None:
+    def _validate_mcp_tools_block(self, tools_block: Any, subject: str) -> None:
         """Validate the optional ``tools`` filter block on an MCP server.
 
         Schema:
-        ``tools.whitelist`` and ``tools.blacklist`` are mutually exclusive
-        lists of fnmatch-style string patterns. Either both absent
-        (no filter, back-compat) or exactly one present.
+        ``tools.allow`` and ``tools.deny`` are fnmatch-style string
+        patterns (a single string or a list). ``whitelist`` / ``blacklist``
+        are accepted as aliases of ``allow`` / ``deny``. At least one of
+        the two roles must be present; both together are valid and apply
+        allow first, then subtract deny — the same semantics as the
+        group-level GBAC ``tools`` blocks. Declaring a canonical key and
+        its alias in the same block is an error.
+
+        ``subject`` prefixes every message, e.g. ``"MCP server github"``
+        or ``"Agent researcher MCP server github"``.
 
         Errors raised here block formation startup. Empty-list and
         zero-match cases are *runtime* concerns surfaced via
@@ -716,34 +723,54 @@ class FormationValidator:
         """
         if not isinstance(tools_block, dict):
             self.result.add_error(
-                f"MCP server {server_identifier} 'tools' must be a mapping with "
-                "'whitelist' or 'blacklist' (not both)"
+                f"{subject} 'tools' must be a mapping with 'allow' and/or 'deny' "
+                "('whitelist'/'blacklist' are accepted aliases)"
             )
             return
 
-        whitelist_present = "whitelist" in tools_block
-        blacklist_present = "blacklist" in tools_block
-
-        if whitelist_present and blacklist_present:
+        known_keys = {"allow", "deny", "whitelist", "blacklist"}
+        unknown_keys = sorted(str(k) for k in tools_block if k not in known_keys)
+        if unknown_keys:
             self.result.add_error(
-                f"MCP server {server_identifier} 'tools' must declare either "
-                "'whitelist' or 'blacklist', not both"
+                f"{subject} 'tools' has unknown key(s) {unknown_keys}; only "
+                "'allow' and 'deny' ('whitelist'/'blacklist' aliases) are supported"
             )
             return
 
-        if not whitelist_present and not blacklist_present:
+        alias_conflict = False
+        for canonical, alias in (("allow", "whitelist"), ("deny", "blacklist")):
+            if canonical in tools_block and alias in tools_block:
+                self.result.add_error(
+                    f"{subject} 'tools' declares both '{canonical}' and its alias "
+                    f"'{alias}' — use one spelling per rule"
+                )
+                alias_conflict = True
+        if alias_conflict:
+            return
+
+        allow_key = next((k for k in ("allow", "whitelist") if k in tools_block), None)
+        deny_key = next((k for k in ("deny", "blacklist") if k in tools_block), None)
+
+        if allow_key is None and deny_key is None:
             self.result.add_error(
-                f"MCP server {server_identifier} 'tools' block must contain "
-                "'whitelist' or 'blacklist' (got neither)"
+                f"{subject} 'tools' block must contain 'allow' and/or 'deny' " "(got neither)"
             )
             return
 
-        mode = "whitelist" if whitelist_present else "blacklist"
-        patterns = tools_block[mode]
+        for key in (allow_key, deny_key):
+            if key is not None:
+                self._validate_tools_pattern_list(tools_block[key], subject, key)
+
+    def _validate_tools_pattern_list(self, patterns: Any, subject: str, key: str) -> None:
+        """Validate one ``allow``/``deny`` (or alias) pattern declaration."""
+        if isinstance(patterns, str):
+            if not patterns.strip():
+                self.result.add_error(f"{subject} 'tools.{key}' must be a non-empty pattern")
+            return
 
         if not isinstance(patterns, list):
             self.result.add_error(
-                f"MCP server {server_identifier} 'tools.{mode}' must be a list "
+                f"{subject} 'tools.{key}' must be a string pattern or a list "
                 "of fnmatch-style string patterns"
             )
             return
@@ -753,8 +780,8 @@ class FormationValidator:
             # warning since the operator clearly intended *something* by
             # adding the empty key.
             self.result.add_warning(
-                f"MCP server {server_identifier} 'tools.{mode}' is an empty "
-                "list — no filter will be applied (remove the block to silence "
+                f"{subject} 'tools.{key}' is an empty "
+                "list — no filter will be applied (remove the key to silence "
                 "this warning)"
             )
             return
@@ -762,13 +789,12 @@ class FormationValidator:
         for i, pattern in enumerate(patterns):
             if not isinstance(pattern, str):
                 self.result.add_error(
-                    f"MCP server {server_identifier} 'tools.{mode}[{i}]' must be a "
+                    f"{subject} 'tools.{key}[{i}]' must be a "
                     f"string, got {type(pattern).__name__}"
                 )
             elif not pattern.strip():
                 self.result.add_error(
-                    f"MCP server {server_identifier} 'tools.{mode}[{i}]' must be "
-                    "a non-empty pattern"
+                    f"{subject} 'tools.{key}[{i}]' must be " "a non-empty pattern"
                 )
 
     def _validate_mcp_metadata_fields(
@@ -1140,6 +1166,29 @@ class FormationValidator:
                 )
                 continue
 
+            if set(server_config) <= {"id", "tools"}:
+                # Reference-with-override form: {id: <declared server>, tools: {...}}.
+                # The id resolves against formation mcp.servers / mcp/ directory
+                # files in the loader, same as a plain string reference.
+                ref_id = server_config.get("id")
+                if not isinstance(ref_id, str) or not ref_id.strip():
+                    self.result.add_error(
+                        f"Agent {agent_identifier} MCP server {i} reference must "
+                        "include a non-empty string 'id'"
+                    )
+                    continue
+                if ref_id in server_ids:
+                    self.result.add_error(
+                        f"Agent {agent_identifier} has duplicate MCP server id: {ref_id}"
+                    )
+                server_ids.add(ref_id)
+                if "tools" in server_config:
+                    self._validate_mcp_tools_block(
+                        server_config["tools"],
+                        f"Agent {agent_identifier} MCP server {ref_id}",
+                    )
+                continue
+
             # Check required fields for agent-level MCP servers
             required_fields = ["id", "description", "type"]
             for field in required_fields:
@@ -1251,6 +1300,13 @@ class FormationValidator:
         if "auth" in server_config:
             self._validate_mcp_auth_config(
                 server_config["auth"], f"Agent {agent_identifier} MCP server {server_identifier}"
+            )
+
+        # Validate optional tools.{allow|deny} filter block on inline definitions
+        if "tools" in server_config:
+            self._validate_mcp_tools_block(
+                server_config["tools"],
+                f"Agent {agent_identifier} MCP server {server_identifier}",
             )
 
     def _validate_agents_directory(self, agents_dir: Path) -> None:

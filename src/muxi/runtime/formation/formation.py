@@ -2584,9 +2584,10 @@ class Formation:
                 if "parameters" in server_config and isinstance(server_config["parameters"], dict):
                     registration_params["parameters"] = server_config["parameters"]
 
-                # Translate optional tools.{whitelist|blacklist} from the MCP
-                # `.afs` file into a ToolFilterSpec applied at registration
-                # time. Mutex / type validation already ran in
+                # Translate optional tools.{allow|deny} (whitelist/blacklist
+                # accepted as aliases) from the MCP `.afs` file into a
+                # ToolFilterSpec applied at registration time. Alias / type
+                # validation already ran in
                 # ConfigValidator._validate_mcp_tools_block; we trust the
                 # block here. Inactive spec → passthrough (back-compat).
                 tools_block = server_config.get("tools")
