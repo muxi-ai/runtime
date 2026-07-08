@@ -250,6 +250,7 @@ async def test_compute_skill_emits_requested_and_completed_events():
         ("error", "Traceback (most recent call last):\nZeroDivisionError", "runtime_error"),
         ("timeout", "Execution exceeded timeout", "timeout"),
         ("error", "ImportPolicyViolation: import not allowed: socket", "import_violation"),
+        ("error", "SyntaxValidationError: invalid syntax (main.py, line 1)", "syntax_error"),
         ("error", "PathValidationError: path traversal is not allowed", "path_violation"),
     ],
 )

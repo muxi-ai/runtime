@@ -13,6 +13,7 @@ Usage:
 Exit code mirrors the executed file's exit code. Errors detected before
 execution are reported on stderr with a machine-readable prefix:
     PathValidationError: ...
+    SyntaxValidationError: ...
     ImportPolicyViolation: ...
 """
 
@@ -141,29 +142,51 @@ def transform_trailing_expression(tree: ast.Module) -> str:
     return ast.unparse(tree)
 
 
+def _attribute_root_name(node: ast.AST) -> str:
+    """Walk an attribute chain (e.g. eval.__call__.__call__) to its root Name id."""
+    while isinstance(node, ast.Attribute):
+        node = node.value
+    return node.id if isinstance(node, ast.Name) else ""
+
+
 def validate_code(code: str) -> tuple:
-    """AST-validate imports and dangerous builtins. Returns (ok, error, tree)."""
+    """AST-validate syntax, imports, and dangerous builtins.
+
+    Returns (ok, prefixed error message, tree). Error messages carry a
+    machine-readable prefix so the agent can tell syntax problems apart
+    from policy violations.
+    """
     try:
         tree = ast.parse(code)
     except SyntaxError as e:
-        return False, f"Syntax error: {e}", None
+        return False, f"SyntaxValidationError: {e}", None
 
     for node in ast.walk(tree):
         if isinstance(node, ast.Import):
             for alias in node.names:
                 mod = alias.name.split(".")[0]
                 if mod not in ALLOWED_IMPORTS:
-                    return False, f"import not allowed: {alias.name}", None
+                    return False, f"ImportPolicyViolation: import not allowed: {alias.name}", None
         elif isinstance(node, ast.ImportFrom):
             if node.module:
                 mod = node.module.split(".")[0]
                 if mod not in ALLOWED_IMPORTS:
-                    return False, f"import not allowed: {node.module}", None
+                    return False, f"ImportPolicyViolation: import not allowed: {node.module}", None
         elif isinstance(node, ast.Call):
             if isinstance(node.func, ast.Name) and node.func.id in DANGEROUS_FUNCS:
-                return False, f"function not allowed: {node.func.id}", None
-            elif isinstance(node.func, ast.Attribute) and node.func.attr in DANGEROUS_FUNCS:
-                return False, f"attribute not allowed: {node.func.attr}", None
+                return False, f"ImportPolicyViolation: function not allowed: {node.func.id}", None
+            elif isinstance(node.func, ast.Attribute):
+                if node.func.attr in DANGEROUS_FUNCS:
+                    return (
+                        False,
+                        f"ImportPolicyViolation: attribute not allowed: {node.func.attr}",
+                        None,
+                    )
+                # Catch dangerous builtins invoked through attribute chains,
+                # e.g. eval.__call__(...) or exec.__call__.__call__(...)
+                root = _attribute_root_name(node.func)
+                if root in DANGEROUS_FUNCS:
+                    return False, f"ImportPolicyViolation: function not allowed: {root}", None
 
     return True, None, tree
 
@@ -185,7 +208,7 @@ def main():
 
     valid, error, tree = validate_code(code)
     if not valid:
-        print(f"ImportPolicyViolation: {error}", file=sys.stderr)
+        print(error, file=sys.stderr)
         sys.exit(2)
 
     # REPL semantics: a trailing bare expression is echoed to stdout

@@ -54,8 +54,10 @@ The result contains `status`, `exit_code`, `stdout`, `stderr`, and
 On failure (`status` is not `success`), inspect `stderr`:
 
 - A Python traceback means your code ran and raised. Fix the code and retry.
-- `ImportPolicyViolation:` means you used a disallowed import. Rewrite with
-  allowed imports only.
+- `SyntaxValidationError:` means the file failed to parse. Fix the syntax
+  and retry; the imports are not the problem.
+- `ImportPolicyViolation:` means you used a disallowed import or builtin.
+  Rewrite with allowed imports only.
 - `PathValidationError:` means the file path was rejected. Use a plain
   relative filename such as `main.py`.
 

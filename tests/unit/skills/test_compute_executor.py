@@ -125,12 +125,26 @@ class TestComputeExecutorImportPolicy:
         assert "ImportPolicyViolation" in result.stderr
         assert "eval" in result.stderr
 
-    def test_syntax_error_rejected(self, workdir):
-        (workdir / "main.py").write_text("def broken(:\n")
+    def test_dangerous_builtin_via_dunder_call_rejected(self, workdir):
+        (workdir / "main.py").write_text("eval.__call__('1+1')\n")
         result = run_executor(workdir, "main.py")
         assert result.returncode == 2
         assert "ImportPolicyViolation" in result.stderr
-        assert "Syntax error" in result.stderr
+        assert "eval" in result.stderr
+
+    def test_dangerous_builtin_via_nested_attribute_chain_rejected(self, workdir):
+        (workdir / "main.py").write_text("exec.__call__.__call__('x = 1')\n")
+        result = run_executor(workdir, "main.py")
+        assert result.returncode == 2
+        assert "ImportPolicyViolation" in result.stderr
+        assert "exec" in result.stderr
+
+    def test_syntax_error_rejected_with_distinct_prefix(self, workdir):
+        (workdir / "main.py").write_text("def broken(:\n")
+        result = run_executor(workdir, "main.py")
+        assert result.returncode == 2
+        assert "SyntaxValidationError" in result.stderr
+        assert "ImportPolicyViolation" not in result.stderr
 
 
 class TestComputeExecutorPathValidation:

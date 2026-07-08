@@ -181,6 +181,8 @@ def _compute_failure_kind(response: Dict[str, Any]) -> str:
     stderr = response.get("stderr", "") or ""
     if "ImportPolicyViolation:" in stderr:
         return "import_violation"
+    if "SyntaxValidationError:" in stderr:
+        return "syntax_error"
     if "PathValidationError:" in stderr:
         return "path_violation"
     return "runtime_error"
