@@ -209,6 +209,9 @@ def initialize_llm_config(formation) -> None:
     formation._global_llm_settings = llm_config.get("settings", {})
     formation._global_api_keys = llm_config.get("api_keys", {})
 
+    # Semantic model aliases (llm.aliases) for hierarchical model selection
+    formation._model_aliases = llm_config.get("aliases", {}) or {}
+
     # Register API keys globally with OneLLM so all providers (embeddings, chat, etc.)
     # can authenticate without needing explicit api_key on every LLM() instantiation
     if formation._global_api_keys:

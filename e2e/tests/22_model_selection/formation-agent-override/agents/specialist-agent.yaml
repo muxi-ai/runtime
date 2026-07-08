@@ -1,0 +1,9 @@
+id: specialist-agent
+name: Specialist Agent
+role: general
+description: "Agent with an agent-level model override (llm_models)"
+system_message: "You are a concise test agent. Answer in one short sentence."
+llm_models:
+  - text: "openai/gpt-4.1-mini"
+specialties:
+  - "Specialist analysis"

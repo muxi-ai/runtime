@@ -249,6 +249,7 @@ class ChatOrchestrator:
         files: Optional[List[Dict[str, Any]]] = None,
         bypass_workflow_approval: bool = False,
         is_scheduled_execution: bool = False,
+        model_override: Optional[str] = None,
     ) -> Union[str, Dict[str, Any], AsyncGenerator[str, None], MuxiResponse]:
         """
         Enhanced chat with async support for long-running agentic tasks and file attachments.
@@ -349,6 +350,12 @@ class ChatOrchestrator:
         else:
             # Generate new request ID for new conversations
             request_id = f"req_{generate_nanoid()}"
+
+        # Register a request-level model override (hierarchical model
+        # selection, e.g. trigger frontmatter ``model:``). Consumed when the
+        # request reaches agent execution; lower levels (SOP/step/skill) win.
+        if model_override:
+            self.overlord.register_request_model_override(request_id, model_override)
 
         timestamp = time.time()
 

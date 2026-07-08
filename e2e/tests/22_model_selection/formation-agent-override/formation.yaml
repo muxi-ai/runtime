@@ -1,0 +1,28 @@
+schema: "1.0.0"
+id: model-selection-agent-override
+description: "Formation for testing agent-level llm_models overrides"
+
+llm:
+  api_keys:
+    openai: "${{ secrets.OPENAI_API_KEY }}"
+  models:
+    - text: "openai/gpt-4o-mini"
+  aliases:
+    premium: "openai/gpt-4.1-mini"
+
+runtime:
+  built_in_mcps: false
+
+memory:
+  buffer:
+    size: 10
+    vector_search: false
+
+agents:
+  - default-agent
+  - specialist-agent
+
+logging:
+  system:
+    level: "error"
+    destination: "stdout"

@@ -329,6 +329,9 @@ async def execute_trigger(
                 detail=f"Invalid transformer for trigger '{trigger_name}': {str(e)}",
             )
     webhook_override: Optional[str] = trigger_meta.get("webhook")
+    # Trigger-level model override (hierarchical model selection). Applies to
+    # the chat turn unless an SOP/step/skill level specifies its own model.
+    trigger_model: Optional[str] = trigger_meta.get("model")
 
     # Extract platform request values (message/user_id/context) per parse spec
     try:
@@ -431,6 +434,7 @@ async def execute_trigger(
                         bypass_workflow_approval=True,
                         use_async=False,
                         stream=False,
+                        model_override=trigger_model,
                     )
                 elif webhook_override is not None:
                     # Webhook routing: force async so the standard MUXI
@@ -443,6 +447,7 @@ async def execute_trigger(
                         bypass_workflow_approval=True,
                         use_async=True,
                         webhook_url=webhook_override,
+                        model_override=trigger_model,
                     )
                 else:
                     # Default routing: unchanged trigger behavior
@@ -454,6 +459,7 @@ async def execute_trigger(
                         session_id=trigger_request.session_id,
                         request_id=request_id,
                         bypass_workflow_approval=True,
+                        model_override=trigger_model,
                     )
 
                 observability.observe(
@@ -512,6 +518,7 @@ async def execute_trigger(
                 bypass_workflow_approval=True,
                 stream=False,
                 webhook_url=webhook_override,
+                model_override=trigger_model,
             )
 
             # Extract content from response (handles async generators, MuxiResponse, strings, etc.)

@@ -86,6 +86,7 @@ import signal
 import sys
 import threading
 import time
+from collections import OrderedDict
 from contextlib import contextmanager, suppress
 from datetime import datetime
 from pathlib import Path
@@ -871,6 +872,12 @@ class Overlord:
         self._model_cache: Dict[str, LLM] = {}
         self._capability_models: Dict[str, str] = {}
 
+        # Semantic model aliases (llm.aliases) and per-request model overrides
+        # (hierarchical model selection: trigger frontmatter -> chat request).
+        # The override registry is bounded; entries are evicted FIFO.
+        self._model_aliases: Dict[str, str] = {}
+        self._request_model_overrides: "OrderedDict[str, str]" = OrderedDict()
+
         # Load overlord soul (intelligence concerns)
         self._load_soul()
 
@@ -1162,6 +1169,7 @@ class Overlord:
 
             self._global_llm_settings = llm_config.get("settings", {})
             self._global_api_keys = llm_config.get("api_keys", {})
+            self._model_aliases = llm_config.get("aliases", {}) or {}
 
         # Initialize the routing model (async) - now that LLM config is ready
         await self._initialize_routing_model()
@@ -1994,10 +2002,36 @@ class Overlord:
         Returns:
             Agent: Configured agent instance
         """
+        # Agent-level model overrides (llm_models) use the same shape as the
+        # formation's llm.models list: [{capability: model, api_key, settings}].
+        # Parsed here so the agent's primary model and later capability lookups
+        # (get_model_for_capability with agent_id) both honor the override.
+        agent_models: Dict[str, Dict[str, Any]] = {}
+        for model_config in agent_config.get("llm_models") or []:
+            if not isinstance(model_config, dict):
+                continue
+            for capability, model_name in model_config.items():
+                if capability in ("api_key", "settings"):
+                    continue
+                agent_models[capability] = {
+                    "model": model_name,
+                    "api_key": model_config.get("api_key"),
+                    "settings": model_config.get("settings", {}),
+                }
+
         # Get or create LLM model for the agent
         try:
-            # Try to use overlord's model creation (it should be initialized by now)
-            model = await self.get_model_for_capability("text")
+            if "text" in agent_models:
+                # Agent-level override: create the agent's primary model from
+                # its own config (cache-scoped per agent so settings/API keys
+                # never bleed across agents)
+                agent_ref = agent_config.get("id") or agent_config.get("name") or "unknown"
+                model = await self._get_or_create_model(
+                    agent_models["text"], cache_scope=f"{agent_ref}:text"
+                )
+            else:
+                # Try to use overlord's model creation (it should be initialized by now)
+                model = await self.get_model_for_capability("text")
         except Exception as e:
             # Configuration error - text capability must be properly configured
             observability.observe(
@@ -2027,6 +2061,10 @@ class Overlord:
             system_message=agent_config.get("system_message"),
             knowledge_config=agent_config.get("knowledge"),
         )
+
+        # Expose agent-level model overrides so get_model_for_capability's
+        # agent-override branch resolves non-text capabilities too
+        agent.models = agent_models
 
         # Set agent routing metadata from config
         routing_metadata = self._build_agent_routing_metadata(
@@ -3017,8 +3055,29 @@ Agent response: {raw_response}"""
         if not model_config:
             raise ValueError(f"No model found for capability: {capability}")
 
-        # Extract model configuration
+        return await self._get_or_create_model(
+            model_config, cache_scope=f"{agent_id or 'default'}:{capability}"
+        )
+
+    async def _get_or_create_model(self, model_config: Dict[str, Any], cache_scope: str) -> LLM:
+        """
+        Create (or fetch from cache) an LLM instance for a model configuration.
+
+        Shared by capability-based resolution and hierarchical model overrides
+        so both paths use identical settings merging, API key resolution,
+        secrets interpolation, and cache keying.
+
+        Args:
+            model_config: Dict with "model" plus optional "api_key"/"settings"
+            cache_scope: Cache key prefix (e.g. "default:text" or "override")
+
+        Returns:
+            LLM instance for the configuration
+        """
+        # Extract model configuration, resolving semantic aliases first so an
+        # alias and its target share one cache entry
         model_name = model_config["model"]
+        model_name = getattr(self, "_model_aliases", {}).get(model_name, model_name)
         api_key = model_config.get("api_key")
         model_settings = model_config.get("settings", {})
 
@@ -3031,7 +3090,7 @@ Agent response: {raw_response}"""
         settings_digest = hashlib.sha256(
             json.dumps(final_settings, sort_keys=True, default=str).encode("utf-8")
         ).hexdigest()[:12]
-        cache_key = f"{agent_id or 'default'}:{capability}:{model_name}:{settings_digest}"
+        cache_key = f"{cache_scope}:{model_name}:{settings_digest}"
 
         # Return cached model if available
         if cache_key in self._model_cache:
@@ -3066,6 +3125,106 @@ Agent response: {raw_response}"""
         self._model_cache[cache_key] = model
 
         return model
+
+    async def resolve_model_override(
+        self, model_ref: str, source: str = "", task_id: Optional[str] = None
+    ) -> Optional[LLM]:
+        """
+        Resolve a hierarchical model override reference to an LLM instance.
+
+        Used for SOP frontmatter / step directives, trigger frontmatter, and
+        skill-level model overrides. The reference is either a semantic alias
+        defined in ``llm.aliases`` or a fully qualified "provider/model"
+        string. Resolution failures never propagate: the caller falls back to
+        the next level up the hierarchy (agent, then formation default).
+
+        Args:
+            model_ref: Alias or "provider/model" reference
+            source: Hierarchy level requesting the override (for observability)
+            task_id: Optional workflow task id (for observability)
+
+        Returns:
+            LLM instance, or None when the reference cannot be resolved
+        """
+        try:
+            if not isinstance(model_ref, str) or not model_ref.strip():
+                raise ValueError(f"Invalid model reference: {model_ref!r}")
+            model_ref = model_ref.strip()
+            resolved_name = getattr(self, "_model_aliases", {}).get(model_ref, model_ref)
+
+            # Reuse api_key/settings from a matching capability config when the
+            # override targets a model the formation already declares. If the
+            # same model is declared under multiple capabilities with different
+            # api_key/settings, the choice is deterministic: prefer the "text"
+            # entry (the general-purpose capability every formation must
+            # declare), otherwise the first declared match (dicts preserve
+            # declaration order) - not dict-iteration luck.
+            text_cfg = self._capability_models.get("text")
+            if isinstance(text_cfg, dict) and text_cfg.get("model") == resolved_name:
+                base_config = text_cfg
+            else:
+                base_config = next(
+                    (
+                        cfg
+                        for cfg in self._capability_models.values()
+                        if isinstance(cfg, dict) and cfg.get("model") == resolved_name
+                    ),
+                    None,
+                )
+            model_config = base_config or {"model": resolved_name}
+            model = await self._get_or_create_model(model_config, cache_scope="override")
+
+            observability.observe(
+                event_type=observability.ConversationEvents.MODEL_OVERRIDE_APPLIED,
+                level=observability.EventLevel.INFO,
+                data={
+                    "model_ref": model_ref,
+                    "resolved_model": resolved_name,
+                    "source": source,
+                    "task_id": task_id,
+                },
+                description=f"Model override applied ({source}): {model_ref} -> {resolved_name}",
+            )
+            return model
+        except Exception as e:
+            observability.observe(
+                event_type=observability.ErrorEvents.MODEL_OVERRIDE_FAILED,
+                level=observability.EventLevel.WARNING,
+                data={
+                    "model_ref": str(model_ref),
+                    "source": source,
+                    "task_id": task_id,
+                    "error": str(e),
+                    "error_type": type(e).__name__,
+                },
+                description=(
+                    f"Model override '{model_ref}' ({source}) could not be resolved; "
+                    "falling back to the next level in the model hierarchy"
+                ),
+            )
+            return None
+
+    def register_request_model_override(self, request_id: str, model_ref: str) -> None:
+        """
+        Register a request-scoped model override (e.g. from trigger frontmatter).
+
+        The override applies to LLM calls made while processing the request
+        unless a lower level (SOP frontmatter, skill, or step directive)
+        specifies its own model. The registry is bounded FIFO so abandoned
+        entries cannot accumulate.
+        """
+        if not request_id or not model_ref:
+            return
+        registry = self._request_model_overrides
+        registry[request_id] = model_ref
+        while len(registry) > 256:
+            registry.popitem(last=False)
+
+    def get_request_model_override(self, request_id: Optional[str]) -> Optional[str]:
+        """Return the model override registered for a request, if any."""
+        if not request_id:
+            return None
+        return self._request_model_overrides.get(request_id)
 
     async def _initialize_routing_model(self):
         """Initialize the model used for agent routing decisions."""
@@ -5690,6 +5849,9 @@ Agent response: {raw_response}"""
         files: Optional[List[Dict[str, Any]]] = None,  # Optional file attachments
         bypass_workflow_approval: bool = False,  # Skip workflow approval (useful for triggers/automation)
         is_scheduled_execution: bool = False,  # True when invoked by scheduler firing a job
+        model_override: Optional[
+            str
+        ] = None,  # Request-level model override (alias or provider/model)
     ) -> Union[str, Dict[str, Any], AsyncGenerator[str, None]]:
         """
         Enhanced chat with async support for long-running agentic tasks and file attachments.
@@ -5834,6 +5996,7 @@ Agent response: {raw_response}"""
             files=files,
             bypass_workflow_approval=bypass_workflow_approval,
             is_scheduled_execution=is_scheduled_execution,
+            model_override=model_override,
         )
 
     async def audiochat(
@@ -8216,6 +8379,13 @@ Agent response: {raw_response}"""
                 await self.request_tracker.clear_cancelled(request_id)
                 raise RequestCancelledException(request_id)
 
+            # Resolve any request-level model override (e.g. trigger frontmatter).
+            # Resolution failures degrade to the agent's own model - never fatal.
+            override_model = None
+            override_ref = self.get_request_model_override(request_id)
+            if override_ref:
+                override_model = await self.resolve_model_override(override_ref, source="request")
+
             # Process the message using the agent
             result = await agent.process_message(
                 message,
@@ -8223,6 +8393,7 @@ Agent response: {raw_response}"""
                 session_id=session_id,
                 request_id=request_id,
                 clean_chat_context=clean_chat_context,
+                model_override=override_model,
             )
 
             # NOTE: Assistant response buffer storage is handled by
@@ -8770,6 +8941,7 @@ Agent response: {raw_response}"""
                         "available_agents": list(self.agents.keys()),
                         "sop_mode": mode,
                         "sop_id": relevant_sop["id"],
+                        "sop_model": relevant_sop.get("model"),
                     },
                     analysis=analysis,
                     requires_approval=needs_approval if not bypass_approval else False,

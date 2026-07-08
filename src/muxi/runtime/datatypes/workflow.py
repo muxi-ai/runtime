@@ -113,6 +113,22 @@ class SubTask(BaseModel):
         default_factory=list,
         description="Skills to activate (and optionally run) for this task",
     )
+    model: Optional[str] = Field(
+        default=None,
+        description=(
+            "Model override for this task (from a [model:x] step directive or "
+            "SOP frontmatter). Alias or provider/model reference; None uses "
+            "the assigned agent's default model."
+        ),
+    )
+    model_source: Optional[str] = Field(
+        default=None,
+        description=(
+            "Provenance of the model override: 'sop_step' for a [model:x] step "
+            "directive, 'sop_frontmatter' for an SOP-level default. Labels "
+            "MODEL_OVERRIDE_APPLIED events; None when model is unset."
+        ),
+    )
 
     @field_validator("id")
     @classmethod

@@ -1,0 +1,36 @@
+schema: "1.0.0"
+id: model-selection-sop-override
+description: "Formation for testing SOP frontmatter and step-level model overrides"
+
+llm:
+  api_keys:
+    openai: "${{ secrets.OPENAI_API_KEY }}"
+  models:
+    - text: "openai/gpt-4o-mini"
+  aliases:
+    premium: "openai/gpt-4.1-mini"
+
+runtime:
+  built_in_mcps: false
+
+memory:
+  buffer:
+    size: 10
+    vector_search: false
+
+agents:
+  - default-agent
+
+workflow:
+  auto_decomposition: true
+  complexity_threshold: 1.0
+  plan_approval_threshold: 10
+
+overlord:
+  clarification:
+    style: "brief"
+
+logging:
+  system:
+    level: "error"
+    destination: "stdout"

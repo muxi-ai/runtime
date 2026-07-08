@@ -138,8 +138,20 @@ class FormationValidator:
     REQUIRED_MCP_SERVER_FIELDS = ["schema", "id", "description", "type"]
     REQUIRED_A2A_SERVICE_FIELDS = ["schema", "id", "name", "description", "url"]
 
+    # Known model capabilities (also used to reject alias/capability collisions)
+    KNOWN_MODEL_CAPABILITIES = {
+        "text",
+        "vision",
+        "audio",
+        "video",
+        "documents",
+        "embedding",
+        "streaming",
+    }
+
     def __init__(self):
         self.result = ValidationResult()
+        self._model_aliases: Dict[str, Any] = {}
 
     def validate(
         self, formation_path: Union[str, Path], secrets_manager: Optional[Any] = None
@@ -155,6 +167,7 @@ class FormationValidator:
             ValidationResult: Comprehensive validation results
         """
         self.result = ValidationResult()
+        self._model_aliases = {}
         formation_path = Path(formation_path)
 
         try:
@@ -259,6 +272,12 @@ class FormationValidator:
             self._validate_mcp_directory(dir_path / "mcp")
             self._validate_a2a_directory(dir_path / "a2a")
             self._validate_knowledge_directory(dir_path / "knowledge")
+
+            # Validate hierarchical model references (fail fast at load time).
+            # Runs after _validate_formation_structure so llm.aliases is known.
+            self._validate_sops_model_references(dir_path / "sops")
+            self._validate_triggers_model_references(dir_path / "triggers")
+            self._validate_skills_model_references(dir_path / "skills")
 
         except Exception as e:
             self.result.add_error(f"Error validating modular formation: {str(e)}")
@@ -1317,6 +1336,96 @@ class FormationValidator:
         if not knowledge_files:
             self.result.add_warning("No knowledge files found in knowledge/ directory")
 
+    # Matches [model:x] step directives in SOP markdown content
+    _MODEL_DIRECTIVE_PATTERN = re.compile(r"\[model:([^\]]+)\]", re.IGNORECASE)
+
+    def _validate_sops_model_references(self, sops_dir: Path) -> None:
+        """Validate model references in SOP frontmatter and [model:x] directives."""
+        if not sops_dir.is_dir():
+            return
+
+        for md_file in sorted(sops_dir.rglob("*.md")):
+            try:
+                content = md_file.read_text(encoding="utf-8")
+            except OSError:
+                continue
+
+            metadata = {}
+            if content.startswith("---"):
+                parts = content.split("---", 2)
+                if len(parts) >= 3:
+                    try:
+                        metadata = yaml.safe_load(parts[1]) or {}
+                    except yaml.YAMLError:
+                        # Malformed frontmatter is reported by the SOP loader;
+                        # only model references are validated here
+                        continue
+
+            if not isinstance(metadata, dict) or metadata.get("type") != "sop":
+                continue
+
+            if metadata.get("model") is not None:
+                self._validate_model_reference(
+                    metadata["model"], f"SOP '{md_file.name}' frontmatter"
+                )
+
+            for match in self._MODEL_DIRECTIVE_PATTERN.finditer(content):
+                self._validate_model_reference(
+                    match.group(1).strip(), f"SOP '{md_file.name}' step directive"
+                )
+
+    def _validate_triggers_model_references(self, triggers_dir: Path) -> None:
+        """Validate model references in trigger frontmatter."""
+        if not triggers_dir.is_dir():
+            return
+
+        for md_file in sorted(triggers_dir.glob("*.md")):
+            try:
+                content = md_file.read_text(encoding="utf-8")
+            except OSError:
+                continue
+            if not content.startswith("---"):
+                continue
+            parts = content.split("---", 2)
+            if len(parts) < 3:
+                continue
+            try:
+                metadata = yaml.safe_load(parts[1]) or {}
+            except yaml.YAMLError:
+                # Malformed frontmatter is rejected at request time with a 400;
+                # only model references are validated here
+                continue
+            if isinstance(metadata, dict) and metadata.get("model") is not None:
+                self._validate_model_reference(
+                    metadata["model"], f"Trigger '{md_file.name}' frontmatter"
+                )
+
+    def _validate_skills_model_references(self, skills_dir: Path) -> None:
+        """Validate model references in SKILL.md frontmatter."""
+        if not skills_dir.is_dir():
+            return
+
+        for skill_md in sorted(skills_dir.glob("*/SKILL.md")):
+            try:
+                content = skill_md.read_text(encoding="utf-8")
+            except OSError:
+                continue
+            if not content.startswith("---"):
+                continue
+            end = content.find("---", 3)
+            if end == -1:
+                continue
+            try:
+                metadata = yaml.safe_load(content[3:end]) or {}
+            except yaml.YAMLError:
+                # Malformed frontmatter is reported by the skill loader
+                continue
+            if isinstance(metadata, dict) and metadata.get("model") is not None:
+                self._validate_model_reference(
+                    metadata["model"],
+                    f"Skill '{skill_md.parent.name}' SKILL.md frontmatter",
+                )
+
     def _validate_llm_config(self, llm_config: Dict[str, Any]) -> None:
         """Validate LLM configuration according to SCHEMA_GUIDE.md."""
         if not isinstance(llm_config, dict):
@@ -1336,6 +1445,62 @@ class FormationValidator:
         # Validate models
         if "models" in llm_config:
             self._validate_llm_models(llm_config["models"])
+
+        # Validate semantic model aliases (hierarchical model selection)
+        if "aliases" in llm_config:
+            self._validate_llm_aliases(llm_config["aliases"])
+
+    def _validate_llm_aliases(self, aliases: Any) -> None:
+        """Validate llm.aliases: semantic names mapped to provider/model strings."""
+        if not isinstance(aliases, dict):
+            self.result.add_error("llm.aliases must be a dictionary")
+            return
+
+        for alias, target in aliases.items():
+            if not isinstance(alias, str) or not alias.strip():
+                self.result.add_error("llm.aliases keys must be non-empty strings")
+                continue
+            if alias in self.KNOWN_MODEL_CAPABILITIES:
+                self.result.add_error(
+                    f"llm.aliases key '{alias}' collides with a model capability name"
+                )
+            if not isinstance(target, str) or not target.strip():
+                self.result.add_error(f"llm.aliases.{alias} must be a non-empty string")
+                continue
+            if "/" not in target:
+                self.result.add_error(
+                    f"llm.aliases.{alias} must be a fully qualified 'provider/model' "
+                    f"reference, got: {target}"
+                )
+
+        # Retain for cross-referencing model references in SOPs/triggers/skills.
+        # Only aliases with valid targets are stored: a broken alias must not
+        # silently satisfy usage-site checks, so SOPs/triggers/skills that
+        # reference it also get their own error pointing at the usage site.
+        self._model_aliases = {
+            k: v
+            for k, v in aliases.items()
+            if isinstance(k, str) and isinstance(v, str) and "/" in v
+        }
+
+    def _validate_model_reference(self, model_ref: Any, where: str) -> None:
+        """
+        Validate a hierarchical model override reference (fail fast at load).
+
+        A valid reference is either a semantic alias defined in ``llm.aliases``
+        or a fully qualified "provider/model" string.
+        """
+        if not isinstance(model_ref, str) or not model_ref.strip():
+            self.result.add_error(f"{where}: model must be a non-empty string")
+            return
+        model_ref = model_ref.strip()
+        if model_ref in self._model_aliases:
+            return
+        if "/" not in model_ref:
+            self.result.add_error(
+                f"{where}: model '{model_ref}' is neither a defined alias in llm.aliases "
+                "nor a fully qualified 'provider/model' reference"
+            )
 
     def _validate_llm_global_settings(self, settings: Dict[str, Any]) -> None:
         """Validate LLM global settings."""

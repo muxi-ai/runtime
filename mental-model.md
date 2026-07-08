@@ -1445,6 +1445,91 @@ if "text" not in formation._capability_models:
     raise ConfigurationValidationError("Missing required LLM capability 'text'")
 ```
 
+### Hierarchical Model Selection (2026-07-08)
+
+Model overrides can be declared at multiple levels of the formation hierarchy.
+**Lowest level wins** — the author closest to the work picks the model
+("knowledge at the source"; no capability inference):
+
+```
+Formation defaults (llm.models)          # level 0 (base)
+    ↓
+Agent override (agents/*.yaml llm_models)  # level 1
+    ↓
+SOP frontmatter / trigger frontmatter /    # level 2
+skill SKILL.md frontmatter (model: ...)
+    ↓
+Step directive ([model:x] in an SOP step)  # level 3 (wins)
+```
+
+**Config surfaces:**
+```yaml
+# formation.yaml — semantic aliases (optional)
+llm:
+  models:
+    - text: "openai/gpt-4o-mini"
+  aliases:
+    fast: "openai/gpt-4o-mini"
+    premium: "openai/gpt-4.1-mini"
+
+# agents/analyst.yaml — same list shape as llm.models
+llm_models:
+  - text: "openai/gpt-4.1-mini"
+```
+```markdown
+# sops/deep-research.md — frontmatter default + per-step directive
+---
+type: sop
+model: premium          # default for all steps
+---
+## Steps
+1. **Quick scan** [agent:researcher] [model:fast]   # step override
+2. **Deep analysis** [agent:analyst]                 # inherits 'premium'
+
+# triggers/alert.md / skills/x/SKILL.md — frontmatter `model:` works the same
+```
+
+**How it flows:**
+- `sops.py` parses the frontmatter `model` into the SOP dict; the decomposer's
+  deterministic template parser extracts `[model:x]` per step
+  (`_SOP_MODEL_RE`) and stores it on `SubTask.model`; the SOP frontmatter
+  default fills tasks without a step directive (`decompose_request`).
+- Trigger frontmatter `model:` is registered per request via
+  `overlord.register_request_model_override(request_id, ref)` (bounded FIFO,
+  256 entries) and consumed at agent-execution time.
+- Skill `model:` (SKILL.md frontmatter, `SkillMetadata.model`) applies to
+  workflow tasks that reference the skill via `[skill:name]` — step/SOP
+  levels beat it.
+- The executor resolves the winning reference through
+  `overlord.resolve_model_override(ref, source, task_id)` and passes the LLM
+  to `agent.process_message(model_override=...)`; the agent's
+  `_call_active_model` uses it for all response-generating calls.
+
+**Model references** are either a defined alias or a fully qualified
+`provider/model` string — validated **fail-fast at load time**
+(`config/validation.py`: `_validate_llm_aliases`,
+`_validate_sops_model_references`, `_validate_triggers_model_references`,
+`_validate_skills_model_references`).
+
+**Failure isolation (request time):** a resolution or call failure never
+crashes the turn. `resolve_model_override` returns `None` on failure (caller
+keeps the agent default); `agent._call_active_model` retries a failed
+override call on the agent's own model. Both paths emit
+`ErrorEvents.MODEL_OVERRIDE_FAILED`; successful resolution emits
+`ConversationEvents.MODEL_OVERRIDE_APPLIED` with
+`{model_ref, resolved_model, source, task_id}`.
+
+**Cache discipline:** all instances go through
+`overlord._get_or_create_model(config, cache_scope)` — the same settings
+digest keying as capability resolution (see `test_overlord_model_cache_settings.py`).
+Scopes: `default:{capability}`, `{agent_id}:{capability}`, `override`.
+Aliases resolve before keying, so `fast` and its target share one entry.
+
+**Inert when unconfigured:** no aliases, no `model` frontmatter, no
+directives → `SubTask.model` stays `None`, no override lookups fire, and
+behavior is identical to before (pinned by
+`tests/unit/test_model_hierarchy.py`; e2e area `22_model_selection`).
+
 ### LLM Cache
 
 **OneLLM caching** (semantic + exact match):

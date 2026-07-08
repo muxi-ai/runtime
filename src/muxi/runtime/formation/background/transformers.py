@@ -65,7 +65,7 @@ _ALLOWED_METHODS = {"GET", "POST", "PUT", "PATCH", "DELETE"}
 _ALLOWED_AUTH_TYPES = {"bearer", "basic", "header"}
 _ALLOWED_FORMATS = {"text", "markdown", "html"}
 
-_ALLOWED_FRONTMATTER_KEYS = {"name", "type", "webhook", "transformer", "parse"}
+_ALLOWED_FRONTMATTER_KEYS = {"name", "type", "webhook", "transformer", "parse", "model"}
 _ALLOWED_PARSE_KEYS = {"message", "user_id", "context", "files"}
 
 
@@ -137,6 +137,11 @@ def parse_trigger_frontmatter(content: str) -> Tuple[Dict[str, Any], str]:
     parse_spec = meta.get("parse")
     if parse_spec is not None:
         _validate_parse_spec(parse_spec)
+
+    model = meta.get("model")
+    if model is not None:
+        if not isinstance(model, str) or not model.strip():
+            raise ValueError("'model' must be a non-empty string (alias or provider/model)")
 
     return meta, content[body_start:]
 
