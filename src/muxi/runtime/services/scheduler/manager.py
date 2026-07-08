@@ -1010,7 +1010,11 @@ class JobManager:
             with self.db_manager.get_session() as session:
                 count = (
                     session.query(func.count(ScheduledJob.id))
-                    .filter(ScheduledJob.status == "ACTIVE")
+                    .join(User, ScheduledJob.user_id == User.id)
+                    .filter(
+                        ScheduledJob.status == "ACTIVE",
+                        User.formation_id == self.formation_id,
+                    )
                     .scalar()
                 )
                 return count or 0
@@ -1043,7 +1047,10 @@ class JobManager:
                 jobs = (
                     session.query(ScheduledJob)
                     .join(User, ScheduledJob.user_id == User.id)
-                    .filter(ScheduledJob.status == "ACTIVE")
+                    .filter(
+                        ScheduledJob.status == "ACTIVE",
+                        User.formation_id == self.formation_id,
+                    )
                     .order_by(ScheduledJob.created_at)
                     .offset(offset)
                     .limit(limit)

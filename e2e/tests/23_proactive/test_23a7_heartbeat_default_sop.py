@@ -96,18 +96,16 @@ async def main():
         print("No `sop:` configured: bundled default SOP drives the heartbeat")
 
         # Hermetic setup: clear persisted channel state left by earlier
-        # runs so known_users() is exactly the user seeded below, and
-        # cancel stale ACTIVE scheduler jobs left in the shared e2e
-        # database by other areas (the due-job query is not formation
-        # scoped, so leftovers would fire mid-test and pollute the run).
+        # runs so known_users() is exactly the user seeded below. Scheduler
+        # jobs left by other areas in the shared e2e database no longer
+        # need cleanup here: the due-job queries are formation scoped.
         store = overlord.user_channel_store
         if store._async_session_maker is not None:
-            from sqlalchemy import delete, update  # noqa: E402
+            from sqlalchemy import delete  # noqa: E402
 
             from muxi.runtime.formation.proactive.user_channels import (  # noqa: E402
                 UserChannelState,
             )
-            from muxi.runtime.services.scheduler.models import ScheduledJob  # noqa: E402
 
             async with store._async_session_maker() as session:
                 await session.execute(
@@ -115,15 +113,10 @@ async def main():
                         UserChannelState.formation_id == store.formation_id
                     )
                 )
-                await session.execute(
-                    update(ScheduledJob)
-                    .where(ScheduledJob.status == "ACTIVE")
-                    .values(status="CANCELLED")
-                )
                 await session.commit()
         store._states.clear()
         store._loaded.clear()
-        print("Cleared persisted channel state and stale jobs for a hermetic run")
+        print("Cleared persisted channel state for a hermetic run")
 
         # Fresh user id per run: channel state and per-user memory persist
         # in the shared e2e database, and stale memories from earlier runs
