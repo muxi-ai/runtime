@@ -2939,9 +2939,11 @@ in `Agent.__init__`. Distinct from the pre-existing overlord-level soul
 **Slash commands** (`formation/commands.py`): opt-in via `commands:`.
 `parse_slash_command` accepts `/name args` (name charset
 `[a-zA-Z0-9_-]+`; `/usr/bin/env` or bare `/` are normal messages).
-Resolution order: `BUILTIN_COMMANDS` registry (empty extension point for
-Phase 3) then formation SOPs by name after alias expansion. A match is
-rewritten to `Execute the "<name>" SOP.` so the request analyzer's
+Resolution order (changed in Phase 3): alias expansion, then formation
+SOPs by name, then the `BUILTIN_COMMANDS` registry -- a formation SOP
+shadows a built-in of the same name (formation-author overrides win; the
+PRD sketch checked built-ins first, deliberately deviated). An SOP match
+is rewritten to `Execute the "<name>" SOP.` so the request analyzer's
 explicit-SOP path invokes exactly that SOP (inlining SOP content is a
 trap: semantic SOP search can match a *different* SOP). Unknown commands
 short-circuit with the available command list, no LLM round-trip.
@@ -3014,6 +3016,83 @@ delivery are the bridge's job.
 `23_proactive/test_23a5_channel_template_composition.py` (bundled slack
 template activated by reference + URL-less local transformer, both
 delivering composed payloads to a trigger-supplied mock bridge).
+
+### Built-in Commands (2026-07-08, Phase 3)
+
+**Location:** `formation/builtin_commands.py` (handlers),
+`formation/commands.py` (registry + resolution),
+`Overlord._process_slash_command` (chat-path interception).
+
+Phase 3 of the proactiveness PRD: eight built-in slash commands --
+/setup, /help, /jobs, /identity, /channels, /preferences, /status,
+/reset. ALL are deterministic (no LLM round-trip anywhere, including
+/setup): they read/write existing services and return a plain-text
+`MuxiResponse` directly from the chat path, like Phase 1's
+unknown-command short-circuit. Text-only output (v1).
+
+**Activation rule:** built-ins are available whenever the commands
+feature is enabled (any `commands:` block with `enabled` not false). No
+block = no interception at all (pinned by unit test). Two author
+controls: `commands.builtin: {reset: false}` hides a specific built-in
+(unknown names fail validation fast), and a formation SOP named like a
+built-in shadows it entirely.
+
+**What each command is backed by** (mechanisms; a formation that lacks
+the backing service gets a friendly "not configured" reply instead):
+
+- `/help`: `available_commands()` -- built-ins (minus disabled/shadowed)
+  + formation SOPs + aliases, with usage lines from the registry.
+- `/status`: formation id + UserChannelStore state + declared channels +
+  heartbeat on/off + per-user job counts from the scheduler.
+- `/jobs [pause|resume|cancel|logs <id>]`: SchedulerService. Ownership
+  is enforced by membership in `list_user_jobs(caller)` -- ids belonging
+  to other users read as "not found". `<id>` is a job id or the 1-based
+  index from the listing (listing order is created_at desc, stable).
+  `logs` reads the job audit trail via `job_manager`.
+- `/identity [link|unlink <identifier> [type]]`: `user_identifiers`
+  table via `db_manager.get_async_session()`. Only the caller's rows;
+  refuses to unlink the identity currently in use; an identifier linked
+  to another user is rejected (unique constraint is the backstop).
+  Single-user formations reply that identities do not apply.
+- `/channels [default|test <name>]`: declared `proactive.channels` +
+  UserChannelStore (`preferred_channel`); `test` routes a fixed message
+  through NotificationRouter with the explicit channel.
+- `/preferences [timezone <tz>|channel <name>]`: UserChannelStore only.
+  DELIBERATE deviation from the PRD: style/working-hours are NOT stored
+  because nothing in the runtime consumes them yet (no dead config);
+  timezone is real (heartbeat `timezone: user`).
+- `/reset`: `buffer_memory.remove_by_metadata({user_id, session_id},
+  namespace="buffer")` -- clears the current session's history only.
+- `/setup`: deterministic multi-step flow, NOT an LLM conversation.
+  Steps derive from formation config (channel step only when channels
+  are declared, then timezone). Flow state is in-memory per user
+  (`overlord._setup_flows`, created lazily; 10-minute expiry); while a
+  flow is active, plain (non-command) replies are intercepted by
+  `_process_slash_command` and answered deterministically
+  ('skip'/'cancel' honored, invalid answers re-ask without advancing).
+  Any other resolved command cancels the flow; unknown commands (typos)
+  leave it intact. Answers write through UserChannelStore immediately,
+  so an abandoned flow keeps what was already answered.
+
+**Registry shape:** `BUILTIN_COMMANDS: Dict[str, BuiltinCommand]`
+(name/description/usage/async handler taking `BuiltinCommandContext`).
+`commands.py` loads `builtin_commands.py` lazily (`_load_builtins`) so
+the parser module stays import-light; handlers must not import the
+overlord (one-way dependency).
+
+**Failure isolation:** `execute_builtin` wraps every handler; an
+exception becomes a friendly reply + `COMMAND_FAILED` event (enum:
+`command.executed` / `command.failed` added to ConversationEvents),
+never a crashed turn. The /setup answer path has the same guarantee
+(broken flow cancels itself).
+
+**Tests:** `tests/unit/test_builtin_commands.py` (per-command happy path
++ no-backing-service edges, shadowing/disable through the real
+`Overlord._process_slash_command` gate on a `__new__` stub, /identity
+against in-memory SQLite, /setup flow incl. expiry and isolation);
+e2e `23_proactive/test_23a6_builtin_commands.py` (all eight against the
+live formation + real Postgres scheduler job; fresh user id per run
+because channel/identity state persists).
 
 ---
 

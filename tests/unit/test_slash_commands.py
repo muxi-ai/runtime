@@ -91,6 +91,18 @@ class TestConfigParsing:
         with pytest.raises(ValueError, match="invalid alias target"):
             parse_commands_config({"aliases": {"ok": "bad target"}})
 
+    def test_builtin_disable_map(self):
+        config = parse_commands_config({"builtin": {"reset": False, "jobs": True}})
+        assert config.builtin == {"reset": False, "jobs": True}
+
+    def test_builtin_unknown_name_fails_fast(self):
+        with pytest.raises(ValueError, match="unknown built-in command"):
+            parse_commands_config({"builtin": {"not-a-builtin": False}})
+
+    def test_builtin_non_bool_fails_fast(self):
+        with pytest.raises(ValueError, match="must be a boolean"):
+            parse_commands_config({"builtin": {"reset": "no"}})
+
 
 SOPS = {
     "weekly-report": {
@@ -135,19 +147,31 @@ class TestResolution:
         config = CommandsConfig()
         assert resolve_command(parse_slash_command("/weekly-report"), config, None) is None
 
-    def test_builtin_registry_takes_precedence(self):
-        def fake_builtin(command):
-            from muxi.runtime.formation.commands import CommandResolution
+    def test_builtin_resolves_with_descriptor(self):
+        resolution = resolve_command(parse_slash_command("/help"), CommandsConfig(), SOPS)
+        assert resolution.builtin is BUILTIN_COMMANDS["help"]
+        assert resolution.name == "help"
+        assert resolution.message == ""
 
-            return CommandResolution(name="weekly-report", message="builtin ran")
+    def test_formation_sop_shadows_builtin(self):
+        # Formation-author overrides win: an SOP named like a built-in
+        # shadows it (deliberate deviation from the PRD's builtin-first
+        # sketch, documented in commands.py).
+        sops = {"help": {"content": "Custom help.", "description": "Formation help"}}
+        resolution = resolve_command(parse_slash_command("/help"), CommandsConfig(), sops)
+        assert resolution.builtin is None
+        assert resolution.message == 'Execute the "help" SOP.'
 
-        BUILTIN_COMMANDS["weekly-report"] = fake_builtin
-        try:
-            config = CommandsConfig()
-            resolution = resolve_command(parse_slash_command("/weekly-report"), config, SOPS)
-            assert resolution.message == "builtin ran"
-        finally:
-            del BUILTIN_COMMANDS["weekly-report"]
+    def test_disabled_builtin_is_invisible(self):
+        config = CommandsConfig(builtin={"reset": False})
+        assert resolve_command(parse_slash_command("/reset"), config, SOPS) is None
+        # Other builtins stay enabled by default
+        assert resolve_command(parse_slash_command("/help"), config, SOPS) is not None
+
+    def test_alias_to_builtin(self):
+        config = CommandsConfig(aliases={"tasks": "jobs"})
+        resolution = resolve_command(parse_slash_command("/tasks list"), config, SOPS)
+        assert resolution.builtin is BUILTIN_COMMANDS["jobs"]
 
 
 class TestAvailableCommands:
@@ -159,3 +183,15 @@ class TestAvailableCommands:
         assert "client-kickoff" in commands
         # Aliases to unknown targets are not advertised
         assert "dangling" not in commands
+
+    def test_lists_builtins_unless_disabled(self):
+        commands = available_commands(CommandsConfig(), SOPS)
+        for name in ("setup", "help", "status", "jobs", "identity", "channels", "preferences"):
+            assert name in commands
+        disabled = available_commands(CommandsConfig(builtin={"jobs": False}), SOPS)
+        assert "jobs" not in disabled
+
+    def test_sop_description_wins_over_builtin(self):
+        sops = {"help": {"content": "x", "description": "Formation help"}}
+        commands = available_commands(CommandsConfig(), sops)
+        assert commands["help"] == "Formation help"
