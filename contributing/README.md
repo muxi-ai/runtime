@@ -140,6 +140,7 @@ runtime/
 | [prompt-management.md](prompt-management.md) | Centralized prompt loader system |
 | [id-conventions.md](id-conventions.md) | ID format conventions (prefixes, nanoid) |
 | [type-safety-guide.md](type-safety-guide.md) | TypedDict conventions |
+| [channel-templates.md](channel-templates.md) | Slack/Telegram/Discord/email channel templates and transformer/webhook composition |
 
 ## Key Concepts for Contributors
 

@@ -23,6 +23,7 @@ from ....background.transformers import (
     extract_parse_values,
     load_transformer,
     parse_trigger_frontmatter,
+    resolve_transformer_url,
 )
 from ...responses import (
     APIResponse,
@@ -318,17 +319,24 @@ async def execute_trigger(
             detail=f"Invalid frontmatter in trigger '{trigger_name}': {str(e)}",
         )
 
-    # Fail fast on malformed/missing transformer config before any LLM work
+    # Fail fast on malformed/missing transformer config before any LLM work.
+    # 'transformer' + 'webhook' compose: the transformer defines the payload
+    # format/auth/retry, the trigger's webhook URL is the delivery destination
+    # (it wins over the transformer's own endpoint.url).
+    webhook_override: Optional[str] = trigger_meta.get("webhook")
     transformer_config: Optional[TransformerConfig] = None
     if trigger_meta.get("transformer"):
         try:
             transformer_config = load_transformer(formation_dir, trigger_meta["transformer"])
+            # URL-less transformer with no trigger-supplied destination:
+            # formation validation already rejects this at load time, but
+            # guard here too so directly-loaded formations fail before LLM work
+            resolve_transformer_url(transformer_config, webhook_override)
         except ValueError as e:
             raise HTTPException(
                 status_code=400,
                 detail=f"Invalid transformer for trigger '{trigger_name}': {str(e)}",
             )
-    webhook_override: Optional[str] = trigger_meta.get("webhook")
     # Trigger-level model override (hierarchical model selection). Applies to
     # the chat turn unless an SOP/step/skill level specifies its own model.
     trigger_model: Optional[str] = trigger_meta.get("model")
@@ -395,6 +403,7 @@ async def execute_trigger(
                 webhook_manager=overlord.webhook_manager,
                 secrets_manager=formation.secrets_manager,
                 transformer=transformer_config,
+                url_override=webhook_override,
                 response_content=response_content,
                 response=response,
                 request_message=parsed_request.get("message"),
@@ -521,6 +530,8 @@ async def execute_trigger(
             # Use overlord's chat method (non-streaming for triggers)
             # Bypass workflow approval for triggers (automated execution)
             # Explicitly disable streaming to get actual content, not a generator
+            # When a transformer is present the webhook URL is its delivery
+            # destination (composition), not a raw standard-payload webhook.
             response = await overlord.chat(
                 rendered_message,
                 user_id=chat_user_id,
@@ -528,7 +539,7 @@ async def execute_trigger(
                 request_id=request_id,
                 bypass_workflow_approval=True,
                 stream=False,
-                webhook_url=webhook_override,
+                webhook_url=webhook_override if transformer_config is None else None,
                 model_override=trigger_model,
                 source_channel=source_channel,
                 source_context=parsed_request.get("context"),

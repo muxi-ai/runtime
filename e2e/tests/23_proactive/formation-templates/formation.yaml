@@ -1,0 +1,42 @@
+schema: "1.0.0"
+id: formation-templates-test
+description: Test formation for proactiveness phase 2 (channel templates, transformer/webhook composition)
+
+llm:
+  api_keys:
+    openai: "${{ secrets.OPENAI_API_KEY }}"
+  models:
+    - text: "openai/gpt-4o-mini"
+
+agents:
+  - id: assistant
+    name: Assistant
+    description: Simple assistant for channel template testing
+    system_message: |
+      You are a test assistant. Follow instructions exactly and keep
+      responses under 30 words.
+    default: true
+
+overlord:
+  workflow:
+    auto_decomposition: true
+    complexity_threshold: 9.0  # Direct responses for trivial deterministic prompts
+    plan_approval_threshold: 10
+  response:
+    streaming: false
+    widgets: false
+
+server:
+  host: 0.0.0.0
+  port: 18233
+  access_log: false
+  api_keys:
+    admin_key: "testing-api-key"
+    client_key: "testing-api-key"
+
+logging:
+  system:
+    level: "error"
+    destination: "stdout"
+  conversation:
+    enabled: false

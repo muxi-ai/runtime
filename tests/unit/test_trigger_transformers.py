@@ -13,6 +13,7 @@ import pytest
 from aiohttp import web
 
 from muxi.runtime.formation.background.transformers import (
+    BUILTIN_TRANSFORMERS_DIR,
     ContentTransform,
     TransformerConfig,
     apply_content_transform,
@@ -27,6 +28,7 @@ from muxi.runtime.formation.background.transformers import (
     render_template_string,
     render_template_value,
     resolve_secrets,
+    resolve_transformer_url,
 )
 from muxi.runtime.formation.background.webhook_manager import WebhookManager
 
@@ -82,10 +84,24 @@ class TestParseTriggerFrontmatter:
         assert meta["webhook"] == "https://example.com/hook"
         assert body == "body"
 
-    def test_webhook_and_transformer_are_mutually_exclusive(self):
+    def test_webhook_and_transformer_compose(self):
+        # Phase 2 composition: transformer defines the payload format, the
+        # trigger's webhook URL is the delivery destination.
         content = "---\nwebhook: https://x.test/h\ntransformer: slack\n---\nbody"
-        with pytest.raises(ValueError, match="mutually exclusive"):
-            parse_trigger_frontmatter(content)
+        meta, body = parse_trigger_frontmatter(content)
+        assert meta["webhook"] == "https://x.test/h"
+        assert meta["transformer"] == "slack"
+        assert body == "body"
+
+    def test_webhook_only_semantics_unchanged(self):
+        meta, _body = parse_trigger_frontmatter("---\nwebhook: https://x.test/h\n---\nbody")
+        assert meta["webhook"] == "https://x.test/h"
+        assert "transformer" not in meta
+
+    def test_transformer_only_semantics_unchanged(self):
+        meta, _body = parse_trigger_frontmatter("---\ntransformer: slack\n---\nbody")
+        assert meta["transformer"] == "slack"
+        assert "webhook" not in meta
 
     def test_malformed_yaml_fails_fast(self):
         content = "---\ntransformer: [unclosed\n---\nbody"
@@ -192,9 +208,21 @@ class TestTransformerConfigValidation:
         with pytest.raises(ValueError, match="'name'"):
             TransformerConfig.from_dict({"endpoint": {"url": "https://x.test"}})
 
-    def test_missing_endpoint_rejected(self):
+    def test_missing_endpoint_yields_url_less_transformer(self):
+        # Payload-format-only transformers (bundled channel templates) have
+        # no endpoint at all: the referencing trigger/channel supplies the URL.
+        config = TransformerConfig.from_dict({"name": "t", "body": {"text": "x"}})
+        assert config.url is None
+        assert config.method == "POST"
+
+    def test_endpoint_without_url_is_valid(self):
+        config = TransformerConfig.from_dict({"name": "t", "endpoint": {"method": "PUT"}})
+        assert config.url is None
+        assert config.method == "PUT"
+
+    def test_non_mapping_endpoint_rejected(self):
         with pytest.raises(ValueError, match="'endpoint'"):
-            TransformerConfig.from_dict({"name": "t"})
+            TransformerConfig.from_dict({"name": "t", "endpoint": "https://x.test"})
 
     def test_empty_url_rejected(self):
         with pytest.raises(ValueError, match="'endpoint.url'"):
@@ -305,6 +333,64 @@ class TestLoadTransformer:
         (transformers_dir / "bad.yaml").write_text("name: [unclosed\n")
         with pytest.raises(ValueError, match="invalid YAML"):
             load_transformer(tmp_path, "bad")
+
+
+class TestBundledTemplates:
+    """Bundled dormant channel templates (Phase 2)."""
+
+    BUNDLED = ["slack", "telegram", "discord", "email"]
+
+    def test_bundled_templates_exist(self):
+        assert BUILTIN_TRANSFORMERS_DIR.is_dir()
+        names = sorted(p.stem for p in BUILTIN_TRANSFORMERS_DIR.glob("*.yaml"))
+        assert names == sorted(self.BUNDLED)
+
+    @pytest.mark.parametrize("name", BUNDLED)
+    def test_bundled_template_loads_without_url(self, tmp_path, name):
+        # Loads via the builtin fallback from a formation with no transformers
+        # directory at all; payload format only, no destination URL.
+        config = load_transformer(tmp_path, name)
+        assert config.name == name
+        assert config.url is None
+        assert config.method == "POST"
+        assert config.body, f"bundled template '{name}' must define a body"
+
+    def test_formation_local_file_shadows_bundled_template(self, tmp_path):
+        transformers_dir = tmp_path / "transformers"
+        transformers_dir.mkdir()
+        (transformers_dir / "slack.yaml").write_text(
+            "name: slack\nendpoint:\n  url: https://my-bridge.test/slack\n"
+            'body:\n  text: "${{ response.content }}"\n'
+        )
+        config = load_transformer(tmp_path, "slack")
+        assert config.url == "https://my-bridge.test/slack"
+
+    def test_unknown_name_still_fails_fast(self, tmp_path):
+        # Inert-when-unreferenced pin: names matching neither a formation
+        # file nor a bundled template error exactly as before.
+        with pytest.raises(ValueError, match="not found"):
+            load_transformer(tmp_path, "matrix")
+
+
+class TestResolveTransformerUrl:
+    def test_override_wins_over_transformer_url(self):
+        transformer = TransformerConfig.from_dict(
+            {"name": "t", "endpoint": {"url": "https://own.test"}}
+        )
+        assert resolve_transformer_url(transformer, "https://override.test") == (
+            "https://override.test"
+        )
+
+    def test_transformer_url_used_without_override(self):
+        transformer = TransformerConfig.from_dict(
+            {"name": "t", "endpoint": {"url": "https://own.test"}}
+        )
+        assert resolve_transformer_url(transformer, None) == "https://own.test"
+
+    def test_no_url_anywhere_fails_fast(self):
+        transformer = TransformerConfig.from_dict({"name": "t"})
+        with pytest.raises(ValueError, match="no 'endpoint.url'"):
+            resolve_transformer_url(transformer, None)
 
 
 # ---------------------------------------------------------------------------
@@ -655,6 +741,115 @@ class TestTransformerDelivery:
             await manager.close()
             await sink.stop()
             await fallback.stop()
+
+    async def test_url_override_wins_over_transformer_endpoint(self):
+        own = await Sink().start()
+        override = await Sink().start()
+        manager = WebhookManager(default_retries=0, default_timeout=5)
+        try:
+            transformer = _make_transformer(
+                f"http://127.0.0.1:{own.port}/own",
+                body={"text": "${{ response.content }}"},
+            )
+            success = await deliver_via_transformer(
+                webhook_manager=manager,
+                secrets_manager=None,
+                transformer=transformer,
+                url_override=f"http://127.0.0.1:{override.port}/override",
+                response_content="hi",
+                request_id="req_test_override_1",
+            )
+            assert success is True
+            assert own.requests == [], "transformer endpoint must not be contacted"
+            assert len(override.requests) == 1
+            assert override.requests[0]["path"] == "/override"
+        finally:
+            await manager.close()
+            await own.stop()
+            await override.stop()
+
+    async def test_url_less_transformer_delivers_to_override(self):
+        # The transformer+webhook composition: payload format from the
+        # transformer, destination from the trigger/channel.
+        sink = await Sink().start()
+        manager = WebhookManager(default_retries=0, default_timeout=5)
+        try:
+            transformer = TransformerConfig.from_dict(
+                {
+                    "name": "slack-shape",
+                    "headers": {"Content-Type": "application/json"},
+                    "body": {
+                        "channel": "${{ context.channel }}",
+                        "text": "${{ response.content }}",
+                    },
+                }
+            )
+            success = await deliver_via_transformer(
+                webhook_manager=manager,
+                secrets_manager=None,
+                transformer=transformer,
+                url_override=f"http://127.0.0.1:{sink.port}/bridge",
+                response_content="composed",
+                context={"channel": "C1"},
+                request_id="req_test_override_2",
+            )
+            assert success is True
+            import json
+
+            payload = json.loads(sink.requests[0]["body"])
+            assert payload == {"channel": "C1", "text": "composed"}
+        finally:
+            await manager.close()
+            await sink.stop()
+
+    async def test_url_less_transformer_without_override_falls_back(self):
+        fallback = await Sink().start()
+        manager = WebhookManager(default_retries=0, default_timeout=5)
+        try:
+            transformer = TransformerConfig.from_dict(
+                {"name": "no-url", "body": {"text": "${{ response.content }}"}}
+            )
+            success = await deliver_via_transformer(
+                webhook_manager=manager,
+                secrets_manager=None,
+                transformer=transformer,
+                response_content="orphan",
+                request_id="req_test_override_3",
+                fallback_webhook_url=f"http://127.0.0.1:{fallback.port}/default",
+            )
+            assert success is False
+            import json
+
+            payload = json.loads(fallback.requests[0]["body"])
+            assert "no 'endpoint.url'" in payload["transformer_error"]["last_error"]
+        finally:
+            await manager.close()
+            await fallback.stop()
+
+    async def test_secret_backed_override_url_resolves(self):
+        # A channel 'url:' may be a secret-backed template (e.g. a Slack
+        # incoming-webhook URL); the override participates in secret scanning.
+        sink = await Sink().start()
+        manager = WebhookManager(default_retries=0, default_timeout=5)
+        try:
+            transformer = TransformerConfig.from_dict(
+                {"name": "shape", "body": {"text": "${{ response.content }}"}}
+            )
+            success = await deliver_via_transformer(
+                webhook_manager=manager,
+                secrets_manager=FakeSecretsManager(
+                    {"BRIDGE_URL": f"http://127.0.0.1:{sink.port}/secret-bridge"}
+                ),
+                transformer=transformer,
+                url_override="${{ secrets.BRIDGE_URL }}",
+                response_content="hi",
+                request_id="req_test_override_4",
+            )
+            assert success is True
+            assert sink.requests[0]["path"] == "/secret-bridge"
+        finally:
+            await manager.close()
+            await sink.stop()
 
     async def test_header_auth_and_custom_method(self):
         sink = await Sink().start()

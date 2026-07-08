@@ -15,6 +15,9 @@ recursive-include src/muxi/formation/prompts *.md *.txt
 # Include all MCP built-in server definitions
 recursive-include src/muxi/services/mcp/built_in *.yaml *.yml
 
+# Include bundled channel transformer templates (dormant until referenced)
+recursive-include src/muxi/runtime/formation/background/builtin *.yaml *.yml
+
 # Include all document processing assets
 recursive-include src/muxi/formation/documents *.md *.txt
 

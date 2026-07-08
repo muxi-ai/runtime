@@ -1,0 +1,9 @@
+# E2E test transformer: payload format only (no endpoint.url). The
+# referencing trigger supplies the destination via 'webhook:' frontmatter.
+name: custom-format
+headers:
+  Content-Type: application/json
+body:
+  room: "${{ context.room }}"
+  sender: "${{ request.user_id }}"
+  reply: "${{ response.content }}"

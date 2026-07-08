@@ -1,0 +1,25 @@
+# Bundled channel template: Email (dormant until referenced).
+#
+# Payload format only (constructed message object) with NO destination URL:
+# the referencing trigger ('webhook:' frontmatter) or proactive channel
+# ('url:' key) supplies the developer's webhook, which bridges the message
+# to SMTP/SES/Mailgun/etc. MUXI provides the mechanism only.
+#
+# Addressing context (from trigger 'parse:' extraction or user channel state):
+#   context.address  recipient email address
+#   context.from     optional sender identity (dropped when absent)
+#   context.subject  optional subject line (dropped when absent; the bridge
+#                    should apply its own default)
+#
+# Shadow this template by placing transformers/email.yaml in the formation.
+name: email
+headers:
+  Content-Type: application/json
+body:
+  from: "${{ context.from }}"
+  to: "${{ context.address }}"
+  subject: "${{ context.subject }}"
+  body: "${{ response.content }}"
+  headers:
+    X-Muxi-Agent: "${{ agent.name }}"
+    X-Muxi-Timestamp: "${{ timestamp }}"
