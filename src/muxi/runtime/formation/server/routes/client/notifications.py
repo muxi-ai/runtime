@@ -70,8 +70,14 @@ async def send_notification(request: Request, body: NotificationRequest) -> JSON
         )
         return JSONResponse(content=response.model_dump(), status_code=400)
 
+    # Single-user formations track all state under user "0" (same
+    # normalization as the overlord chat path)
+    user_id = body.user_id
+    if not getattr(overlord, "is_multi_user", True):
+        user_id = "0"
+
     result = await notification_router.notify(
-        user_id=body.user_id,
+        user_id=user_id,
         message=body.message,
         channels=body.channels,
         request_id=request_id,

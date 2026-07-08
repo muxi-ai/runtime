@@ -173,9 +173,14 @@ def resolve_command(
     if sop is None:
         return None
 
-    message = sop.get("content") or ""
+    # Rewrite to an explicit SOP invocation rather than inlining the SOP
+    # content: the chat pipeline's request analyzer resolves explicit SOP
+    # requests directly (bypassing semantic SOP search), so the named SOP
+    # is the one that executes -- inlined content could semantically match
+    # a different SOP.
+    message = f'Execute the "{name}" SOP.'
     if command.args:
-        message = f"{message}\n\n## Command Arguments\n{command.args}"
+        message = f"{message}\n\nCommand arguments:\n{command.args}"
 
     return CommandResolution(
         name=name,

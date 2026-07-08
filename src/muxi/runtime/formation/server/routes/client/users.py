@@ -64,6 +64,13 @@ def _get_channel_store(request: Request):
     return store, overlord
 
 
+def _effective_channel_user(overlord, user_id: str) -> str:
+    """Single-user formations track all channel state under user '0'."""
+    if overlord is not None and not getattr(overlord, "is_multi_user", True):
+        return "0"
+    return user_id
+
+
 @router.get(
     "/users/{user_id}/channels",
     response_model=APIResponse,
@@ -78,7 +85,7 @@ async def get_user_channels(request: Request, user_id: str) -> JSONResponse:
     declare a 'proactive' block.
     """
     request_id = getattr(request.state, "request_id", None)
-    store, _ = _get_channel_store(request)
+    store, overlord = _get_channel_store(request)
     if store is None:
         response = create_error_response(
             "SERVICE_UNAVAILABLE",
@@ -89,6 +96,7 @@ async def get_user_channels(request: Request, user_id: str) -> JSONResponse:
         )
         return JSONResponse(content=response.model_dump(), status_code=503)
 
+    user_id = _effective_channel_user(overlord, user_id)
     state = await store.get_state(user_id)
     data = {"user_id": store.normalize_user_id(user_id), **state}
     response = create_success_response(
@@ -155,6 +163,7 @@ async def update_user_channels(
             )
             return JSONResponse(content=response.model_dump(), status_code=400)
 
+    user_id = _effective_channel_user(overlord, user_id)
     state = await store.set_preferences(
         user_id,
         preferred_channel=body.preferred_channel,

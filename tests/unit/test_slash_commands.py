@@ -104,21 +104,23 @@ SOPS = {
 
 
 class TestResolution:
-    def test_sop_command_resolves(self):
+    def test_sop_command_resolves_to_explicit_invocation(self):
         config = CommandsConfig()
         resolution = resolve_command(parse_slash_command("/weekly-report"), config, SOPS)
         assert resolution.name == "weekly-report"
-        assert resolution.message == "Generate the weekly report."
+        # Explicit SOP invocation (resolved by the request analyzer's
+        # explicit-SOP path), not inlined SOP content
+        assert resolution.message == 'Execute the "weekly-report" SOP.'
         assert resolution.model == "openai/gpt-4o-mini"
         assert resolution.bypass_approval is True
 
-    def test_args_appended_to_sop_message(self):
+    def test_args_appended_to_invocation(self):
         config = CommandsConfig()
         resolution = resolve_command(
             parse_slash_command("/weekly-report include churn"), config, SOPS
         )
-        assert resolution.message.startswith("Generate the weekly report.")
-        assert "## Command Arguments\ninclude churn" in resolution.message
+        assert resolution.message.startswith('Execute the "weekly-report" SOP.')
+        assert "Command arguments:\ninclude churn" in resolution.message
 
     def test_alias_expansion(self):
         config = CommandsConfig(aliases={"tasks": "weekly-report"})

@@ -2865,6 +2865,95 @@ class TelemetryService:
         }
 ```
 
+### Proactiveness Foundation (2026-07-08, Phase 1)
+
+**Location:** `formation/proactive/`, `formation/commands.py`
+
+Phase 1 of the proactiveness PRD: mechanisms only (routing, tracking,
+heartbeat hooks, soul loading, command parsing). Channel MCPs, built-in
+commands, and the default heartbeat SOP are later phases. Everything is
+inert when unconfigured: formations without `proactive:`/`commands:`
+blocks behave identically to before (pinned by unit tests).
+
+**Notification channels = trigger transformers.** The `proactive:` block
+declares channels that map to `transformers/<name>.yaml` files; delivery
+reuses `deliver_via_transformer` end to end (templates, auth,
+retry/backoff). There is no separate notification delivery stack.
+
+```yaml
+proactive:
+  channels:
+    telegram: { transformer: telegram-notify }
+  default_channel: telegram        # or "webhook"
+  heartbeat:
+    enabled: true
+    interval: "30m"                # 45s / 30m / 2h, optional "every " prefix
+    target: last                   # last | preferred | webhook | <channel>
+    active_hours: { start: "09:00", end: "18:00", timezone: UTC, weekends: true }
+    sop: my-heartbeat              # base prompt from formation SOP
+    instruction: "extra guidance"  # appended to the prompt
+commands:
+  enabled: true
+  aliases: { tasks: weekly-report }
+```
+
+**Routing precedence** (`proactive/router.py` NotificationRouter):
+explicit channel(s) > user preferred > formation `default_channel` >
+webhook (standard payload to `async.webhook_url`). Reserved targets:
+`last` (user's most recent inbound channel), `preferred`, `webhook`.
+Multi-channel arrays fan out; failed channel deliveries fall back to the
+webhook once (not per channel). All transformers load eagerly at startup
+(fail fast on missing files).
+
+**User channel state** (`proactive/user_channels.py` UserChannelStore):
+per-user `preferred_channel`, per-channel addressing context (rendered
+as `context.*` in the channel transformer), `last_channel`, `timezone`.
+Memory-authoritative with write-through to the `user_channel_state`
+table when persistent memory exists. Single-user formations track
+everything under user "0" (same normalization as chat).
+
+**Source tracking:** `overlord.chat(source_channel=..., source_context=...)`
+records the last channel; the chat API accepts `source_channel`, and
+trigger frontmatter gained a `channel:` key (parse context is captured
+as the channel's addressing context). Recording never raises.
+
+**Heartbeat** (`proactive/heartbeat.py`): NOT a second scheduler.
+`SchedulerService.register_periodic_task(task)` dispatches `task.tick()`
+once per worker cycle onto the main event loop (same dispatch as job
+execution). The heartbeat gates itself: interval first, then per-user
+active hours (fixed tz or `timezone: user`; overnight windows wrap;
+`weekends: false` skips Sat/Sun), then runs `overlord.chat` per known
+user (session `heartbeat_<user>`) and suppresses responses starting with
+`HEARTBEAT_OK`. Every layer catches + observes (HEARTBEAT_* events);
+heartbeat failures can never break interactive chat. Config-time rule:
+`proactive.heartbeat.enabled` requires `scheduler.enabled: true` (which
+requires persistent memory).
+
+**Soul documents:** agent-level `soul: ./SOUL.md` resolves at load time
+with the knowledge-path security rules (relative-only, confined to the
+formation dir, must exist) and is prepended to the agent system message
+in `Agent.__init__`. Distinct from the pre-existing overlord-level soul
+(`SOUL.md`/`overlord.soul` -> `_default_persona`).
+
+**Slash commands** (`formation/commands.py`): opt-in via `commands:`.
+`parse_slash_command` accepts `/name args` (name charset
+`[a-zA-Z0-9_-]+`; `/usr/bin/env` or bare `/` are normal messages).
+Resolution order: `BUILTIN_COMMANDS` registry (empty extension point for
+Phase 3) then formation SOPs by name after alias expansion. A match is
+rewritten to `Execute the "<name>" SOP.` so the request analyzer's
+explicit-SOP path invokes exactly that SOP (inlining SOP content is a
+trap: semantic SOP search can match a *different* SOP). Unknown commands
+short-circuit with the available command list, no LLM round-trip.
+
+**API surface:** `POST /v1/notifications` (route + deliver, 503 when
+unconfigured), `GET/PUT /v1/users/{id}/channels` (preference/addressing
+management, client-key auth).
+
+**e2e:** area `e2e/tests/23_proactive/` (routing precedence, last-channel
+tracking via trigger, heartbeat active-hours gating, slash commands +
+soul). Heartbeat tests call `heartbeat.run_once(fixed_datetime)` for
+deterministic timing instead of waiting on scheduler cycles.
+
 ---
 
 ## 9. Testing Infrastructure
