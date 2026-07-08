@@ -119,6 +119,11 @@ class FormationServer:
         self._active_connections_lock = threading.Lock()
         self._shutdown_timeout = 30.0
 
+        # Client route paths (with explicit operation_id) exposed as MCP
+        # tools; populated by _register_client_routes, consumed by
+        # _mount_mcp_server
+        self._mcp_tool_paths: set = set()
+
         # Server metrics
         self._start_time = time.time()
         self._request_count = 0
@@ -546,17 +551,15 @@ class FormationServer:
             # Client routes have explicit operation_id; admin/health routes don't.
             # Build include patterns dynamically so new client endpoints are
             # picked up automatically without maintaining a hardcoded allowlist.
+            # Paths come from _register_client_routes rather than app.routes:
+            # FastAPI 0.137+ includes routers lazily, so app.routes holds
+            # _IncludedRouter placeholders without operation_id or path.
             client_patterns = set()
-            for route in app.routes:
-                op_id = getattr(route, "operation_id", None)
-                if not op_id:
-                    continue
-                path = getattr(route, "path", "")
-                if path:
-                    escaped = re.escape(path)
-                    # Convert \{param\} back to .* for path parameters
-                    pattern = re.sub(r"\\{[^}]+\\}", ".*", escaped)
-                    client_patterns.add(f".*{pattern}$")
+            for path in self._mcp_tool_paths:
+                escaped = re.escape(path)
+                # Convert \{param\} back to .* for path parameters
+                pattern = re.sub(r"\\{[^}]+\\}", ".*", escaped)
+                client_patterns.add(f".*{pattern}$")
 
             route_maps = [RouteMap(pattern=p, mcp_type=MCPType.TOOL) for p in client_patterns]
             route_maps.append(RouteMap(pattern=r".*", mcp_type=MCPType.EXCLUDE))
@@ -729,6 +732,14 @@ class FormationServer:
 
         for router in dual_auth_routers:
             app.include_router(router, prefix="/v1", dependencies=[Depends(dual_auth)])
+
+        # Record routes with explicit operation_id for MCP tool exposure.
+        # Collected from the source routers because app.routes no longer
+        # flattens included routers (FastAPI 0.137+ lazy inclusion).
+        for router in (*user_gated_routers, *client_only_routers, *dual_auth_routers):
+            for route in router.routes:
+                if getattr(route, "operation_id", None) and getattr(route, "path", ""):
+                    self._mcp_tool_paths.add(f"/v1{route.path}")
 
     async def start(self, block: bool = True, install_signal_handlers: bool = True) -> None:
         """
