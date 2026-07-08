@@ -2,6 +2,26 @@
 
 ## [unreleased]
 
+### Proactiveness, Phase 4: default heartbeat SOP + docs (#247)
+
+The closing slice of the proactiveness epic -- content, docs, and two
+suppression-robustness fixes found by the first live heartbeat e2e.
+
+- Bundled default heartbeat SOP: heartbeats enabled without a
+  ``sop:``/``instruction:`` fall back to a shipped SOP (check due jobs
+  and recent context, reach out only when warranted, otherwise
+  ``HEARTBEAT_OK``); formation config overrides it.
+- Suppression hardened: the sentinel is detected anywhere in a heartbeat
+  response (synthesis layers wrap it), and persona formatting passes
+  sentinel-bearing responses through verbatim -- scoped to
+  heartbeat-originated sessions so normal chats mentioning
+  ``HEARTBEAT_OK`` are untouched.
+- Soul document template + guide (``contributing/soul-documents.md``,
+  ``contributing/templates/soul.md``), a full config reference for
+  ``proactive:`` / ``commands:`` / agent ``soul:``
+  (``contributing/proactiveness-config.md``), and enriched OpenAPI docs
+  for the notifications and user-channels endpoints.
+
 ### Proactiveness, Phase 3: built-in commands (#245)
 
 Eight built-in slash commands land in the registry Phase 1 left open --
