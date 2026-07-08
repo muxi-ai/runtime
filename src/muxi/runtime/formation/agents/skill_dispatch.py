@@ -88,6 +88,7 @@ async def run_skill_command(
     rce: Any,
     skill_name: str,
     command: str,
+    input_files: Optional[Dict[str, str]] = None,
 ) -> Dict[str, Any]:
     """Execute a skill command via RCE without streaming/observability coupling.
 
@@ -102,7 +103,13 @@ async def run_skill_command(
     await rce.ensure_cached(skill_name, metadata.base_dir, content_hash)
 
     skill_env = await skill_manager.resolve_skill_env(skill_name)
-    result = await rce.run_skill(skill_name, command, timeout=60, env=skill_env or None)
+    result = await rce.run_skill(
+        skill_name,
+        command,
+        input_files=input_files or None,
+        timeout=60,
+        env=skill_env or None,
+    )
 
     response: Dict[str, Any] = {
         "status": result.status,
@@ -126,6 +133,95 @@ async def run_skill_command(
     return response
 
 
+def _coerce_input_files(raw: Any) -> Optional[Dict[str, str]]:
+    """Normalise the run_skill input_files parameter to a str->str map."""
+    if not isinstance(raw, dict) or not raw:
+        return None
+    return {
+        str(name): content if isinstance(content, str) else str(content)
+        for name, content in raw.items()
+    }
+
+
+_COMPUTE_SKILL_NAME = "compute"
+_COMPUTE_EVENT_OUTPUT_LIMIT = 16384
+_COMPUTE_EXECUTOR = "scripts/run_python.py"
+
+
+def _normalize_compute_parameters(
+    command: str,
+    input_files: Optional[Dict[str, str]],
+) -> tuple:
+    """Recover malformed compute invocations instead of failing them opaquely.
+
+    LLM planners sometimes put raw Python in ``command`` (the only sanctioned
+    compute command is the bundled executor). Move such code into input_files
+    and invoke the executor; likewise, point an argument-less executor command
+    at the first provided Python input file.
+    """
+    stripped = command.strip()
+    if _COMPUTE_EXECUTOR in stripped:
+        if stripped.endswith(_COMPUTE_EXECUTOR) and input_files:
+            main = next((n for n in input_files if n.endswith(".py")), None)
+            if main:
+                return f"{stripped} {main}", input_files
+        return command, input_files
+    if input_files:
+        main = next((n for n in input_files if n.endswith(".py")), None)
+        if main:
+            return f"python3 {_COMPUTE_EXECUTOR} {main}", input_files
+        return command, input_files
+    return f"python3 {_COMPUTE_EXECUTOR} main.py", {"main.py": command}
+
+
+def _compute_failure_kind(response: Dict[str, Any]) -> str:
+    """Classify a failed compute execution for COMPUTATION_FAILED events."""
+    if response.get("status") == "timeout":
+        return "timeout"
+    stderr = response.get("stderr", "") or ""
+    if "ImportPolicyViolation:" in stderr:
+        return "import_violation"
+    if "PathValidationError:" in stderr:
+        return "path_violation"
+    return "runtime_error"
+
+
+def _observe_compute_result(
+    agent_id: str,
+    response: Dict[str, Any],
+    input_files: Optional[Dict[str, str]],
+) -> None:
+    """Emit COMPUTATION_COMPLETED/COMPUTATION_FAILED for a compute skill run."""
+    code = "\n".join((input_files or {}).values())
+    if response.get("status") == "success":
+        observability.observe(
+            event_type=observability.ConversationEvents.COMPUTATION_COMPLETED,
+            level=observability.EventLevel.INFO,
+            data={
+                "agent_id": agent_id,
+                "code": code,
+                "stdout": (response.get("stdout", "") or "")[:_COMPUTE_EVENT_OUTPUT_LIMIT],
+                "execution_time_ms": response.get("duration_ms"),
+                "artifact_count": len(response.get("artifacts", [])),
+            },
+            description=f"Computation completed for agent '{agent_id}'",
+        )
+    else:
+        failure_kind = _compute_failure_kind(response)
+        observability.observe(
+            event_type=observability.ConversationEvents.COMPUTATION_FAILED,
+            level=observability.EventLevel.WARNING,
+            data={
+                "agent_id": agent_id,
+                "code": code,
+                "stderr": (response.get("stderr", "") or "")[:_COMPUTE_EVENT_OUTPUT_LIMIT],
+                "failure_kind": failure_kind,
+                "exit_code": response.get("exit_code"),
+            },
+            description=f"Computation failed for agent '{agent_id}' ({failure_kind})",
+        )
+
+
 async def handle_run_skill(
     agent_id: str,
     parameters: Dict[str, Any],
@@ -134,8 +230,12 @@ async def handle_run_skill(
     """Handle the run_skill tool call via RCE."""
     skill_name = parameters.get("skill_name", "")
     command = parameters.get("command", "")
+    input_files = _coerce_input_files(parameters.get("input_files"))
     manager = overlord.skill_manager
     rce = overlord.rce_client
+    is_compute = skill_name == _COMPUTE_SKILL_NAME
+    if is_compute:
+        command, input_files = _normalize_compute_parameters(command, input_files)
 
     try:
         streaming.stream(
@@ -148,7 +248,24 @@ async def handle_run_skill(
             skip_rephrase=True,
         )
 
-        response = await run_skill_command(manager, rce, skill_name, command)
+        if is_compute:
+            observability.observe(
+                event_type=observability.ConversationEvents.COMPUTATION_REQUESTED,
+                level=observability.EventLevel.INFO,
+                data={
+                    "agent_id": agent_id,
+                    "file_names": sorted(input_files) if input_files else [],
+                    "code_size_bytes": sum(len(c.encode()) for c in (input_files or {}).values()),
+                },
+                description=f"Computation requested by agent '{agent_id}'",
+            )
+
+        response = await run_skill_command(
+            manager, rce, skill_name, command, input_files=input_files
+        )
+
+        if is_compute:
+            _observe_compute_result(agent_id, response, input_files)
 
         observability.observe(
             event_type=observability.ConversationEvents.AGENT_MESSAGE_PROCESSING,
@@ -168,6 +285,18 @@ async def handle_run_skill(
         return response
 
     except Exception as e:
+        if is_compute:
+            observability.observe(
+                event_type=observability.ConversationEvents.COMPUTATION_FAILED,
+                level=observability.EventLevel.WARNING,
+                data={
+                    "agent_id": agent_id,
+                    "code": "\n".join((input_files or {}).values()),
+                    "stderr": str(e),
+                    "failure_kind": "service_error",
+                },
+                description=f"Computation failed for agent '{agent_id}' (service_error)",
+            )
         observability.observe(
             event_type=observability.ErrorEvents.SERVICE_UNAVAILABLE,
             level=observability.EventLevel.ERROR,

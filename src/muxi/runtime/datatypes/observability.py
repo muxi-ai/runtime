@@ -922,6 +922,18 @@ class ConversationEvents(Enum):
     # When agent creates execution plan
 
     # ===================================================================
+    # COMPUTE SKILL (code as a reasoning primitive)
+    # ===================================================================
+    COMPUTATION_REQUESTED = "computation.requested"
+    # When an agent invokes the compute skill executor (run_python)
+
+    COMPUTATION_COMPLETED = "computation.completed"
+    # When a compute skill execution returns successfully (exit_code == 0)
+
+    COMPUTATION_FAILED = "computation.failed"
+    # When a compute skill execution fails (runtime error, timeout, or policy violation)
+
+    # ===================================================================
     # PROMPT FORMATION & ENHANCEMENT
     # ===================================================================
     PROMPT_FORMATION_ENHANCEMENT_STARTED = "prompt.formation.enhancement.started"

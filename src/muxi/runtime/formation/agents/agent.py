@@ -5975,8 +5975,17 @@ class Agent:
                     planning_prompt += (
                         "\nSkills with scripts can be executed using the run_skill tool. "
                         "Use activate_skill first to load instructions, then run_skill "
-                        "to execute the script (e.g., command: 'python3 scripts/run.py').\n"
+                        "to execute the script. The command parameter must invoke one of "
+                        "the skill's scripts; raw code in command WILL BE REJECTED. "
+                        "Deliver code or data files via the input_files parameter.\n"
                     )
+                    if "compute" in available_skill_names:
+                        planning_prompt += (
+                            "Example run_skill parameters for the compute skill: "
+                            '{"skill_name": "compute", "command": '
+                            '"python3 scripts/run_python.py main.py", "input_files": '
+                            '{"main.py": "<complete python source>"}}\n'
+                        )
                 planning_prompt += "\n"
 
         from ..prompts.loader import PromptLoader
