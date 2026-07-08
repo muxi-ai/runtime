@@ -230,6 +230,15 @@ async def test_legacy_db_migrates_additively_and_search_is_unchanged(db_path):
         assert {r["text"] for r in results} == set(seeded) | {"dogs bark"}
 
 
+class _FakeDBManager:
+    """Minimal stand-in for DatabaseManager as read by the scope migrations."""
+
+    database_type = "sqlite"
+
+    def __init__(self, engine):
+        self.engine = engine
+
+
 def test_migrate_add_scope_columns_is_additive_and_idempotent(tmp_path):
     """The runtime migration used by _create_all_database_tables adds the
     columns to an old-schema table and is a no-op when re-run."""
@@ -255,12 +264,6 @@ def test_migrate_add_scope_columns_is_additive_and_idempotent(tmp_path):
             )
         )
         conn.commit()
-
-    class _FakeDBManager:
-        database_type = "sqlite"
-
-        def __init__(self, engine):
-            self.engine = engine
 
     db_manager = _FakeDBManager(engine)
     _migrate_add_scope_columns(db_manager, "memories_384")
@@ -306,12 +309,6 @@ def test_migrate_scope_columns_covers_all_dimension_tables(tmp_path):
         conn.execute(text(f"CREATE TABLE memories_768 ({old_schema})"))
         conn.execute(text("CREATE TABLE memories_384_fts (id TEXT PRIMARY KEY)"))
         conn.commit()
-
-    class _FakeDBManager:
-        database_type = "sqlite"
-
-        def __init__(self, engine):
-            self.engine = engine
 
     db_manager = _FakeDBManager(engine)
     # Active table is a third dimension that doesn't exist yet -- its
