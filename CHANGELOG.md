@@ -2,6 +2,58 @@
 
 ## [unreleased]
 
+### Proactiveness, Phase 1: foundation (#238)
+
+Formations can now initiate contact instead of only responding. The
+``proactive:`` block wires notification routing, heartbeats, soul
+documents, and slash commands -- all inert when unconfigured.
+
+- **Channels are transformers**: a channel is a named reference to a
+  trigger transformer, so outbound delivery reuses the existing template
+  substitution, auth, and retry machinery with a single webhook fallback
+  when every channel fails.
+- **Routing precedence**: explicit channel(s) over user preference over
+  formation default over webhook, with reserved ``last`` / ``preferred``
+  / ``webhook`` targets and multi-channel arrays. Per-user channel state
+  (preferred channel, addressing context, last channel, timezone) is
+  kept in memory with write-through persistence and exposed via
+  ``POST /v1/notifications`` and ``GET/PUT /v1/users/{id}/channels``.
+- **Source tracking**: inbound chat and triggers record which channel a
+  user last spoke on, so "reply where they are" works.
+- **Heartbeat**: rides the existing scheduler through a new periodic-task
+  extension point -- interval gating, active hours (fixed or user
+  timezone, overnight ranges, weekend flags), ``HEARTBEAT_OK``
+  suppression, fresh session per run, and full failure isolation with
+  new heartbeat events.
+- **Soul documents**: an agent-level ``soul:`` path, resolved with the
+  knowledge-path security rules and prepended to the system message.
+- **Slash commands**: opt-in ``commands:`` block mapping ``/command`` to
+  SOPs via explicit invocation (no LLM round-trip for unknown commands);
+  the built-in command registry lands in a later phase.
+- Phases 2-5 (channel MCPs, built-in ``/setup``-style commands, extra
+  channels) are deliberately out of scope for this PR.
+
+### Bundled compute skill (#237)
+
+A built-in code-as-reasoning skill: the agent writes a self-contained
+Python file and a bundled executor runs it inside the existing Skill RCE
+sandbox. No inner LLM loop, no orchestration, no new execution paths.
+
+- ``SKILL.md`` teaches activation, the write-file/print-answer contract,
+  and the allowed-imports policy (json, math, datetime, re, statistics,
+  csv, pandas, numpy inlined); four worked reference examples ship with
+  the skill.
+- Executor hardening: path-traversal and symlink rejection, AST
+  import/builtin policy that follows attribute chains (``eval.__call__``
+  is caught), and distinct machine-readable error prefixes so agents fix
+  syntax errors as syntax and import violations as imports.
+- ``run_skill`` gained ``input_files`` pass-through (the RCE server has
+  no shell, so code cannot ride in ``command``), plus a compute-only
+  recovery shim for planner models that put raw Python in ``command``.
+- New ``computation.{requested,completed,failed}`` events with a
+  ``failure_kind`` breakdown. Disable via ``skills.disable_builtin``;
+  degrades like any scripted skill when no RCE is configured.
+
 ### Fixes (#229, #231, #234, #235)
 
 - Scope-column migration now covers ALL ``memories_{dim}`` tables, not
