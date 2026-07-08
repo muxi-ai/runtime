@@ -267,7 +267,20 @@ class SkillManager:
                             "type": "string",
                             "description": (
                                 "Shell command to run (e.g., 'python3 scripts/run.py input.csv'). "
-                                "Paths are relative to the skill root directory."
+                                "Paths are relative to the skill root directory. Must be an "
+                                "executable command, NEVER raw code; deliver code or data via "
+                                "input_files instead."
+                            ),
+                        },
+                        "input_files": {
+                            "type": "object",
+                            "additionalProperties": {"type": "string"},
+                            "description": (
+                                "Optional map of relative filename to text content. Files are "
+                                "written into the working directory before the command runs. "
+                                "Use this to deliver code or data the command operates on "
+                                "(e.g., command 'python3 scripts/run_python.py main.py' with "
+                                "input_files {'main.py': '<python source>'})."
                             ),
                         },
                     },

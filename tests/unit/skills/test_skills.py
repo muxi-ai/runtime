@@ -400,6 +400,88 @@ class TestBuiltinSkills:
         manager.load_builtin_skills()
         assert manager.has_scripts("generative-ui") is False
 
+    def test_compute_builtin_loaded(self):
+        manager = SkillManager()
+        loaded = manager.load_builtin_skills()
+        assert "compute" in loaded
+        assert "compute" in manager.skills
+        assert "compute" in manager.public_skills
+        assert "compute" in manager._builtin_skills
+
+    def test_compute_builtin_metadata(self):
+        manager = SkillManager()
+        manager.load_builtin_skills()
+        skill = manager.skills["compute"]
+        assert skill.name == "compute"
+        assert "python" in skill.description.lower()
+        assert "value, not an artifact" in skill.description.lower()
+        assert skill.allowed_tools == ["run_skill"]
+        assert skill.base_dir.is_dir()
+
+    def test_compute_builtin_activation(self):
+        manager = SkillManager()
+        manager.load_builtin_skills()
+        content = manager.activate("compute", "session-1")
+        assert "skill_content" in content
+        assert "run_skill" in content
+        assert "scripts/run_python.py" in content
+        assert "input_files" in content
+        # Common allowed imports are inlined for fast lookup
+        for module in ("json", "math", "datetime", "statistics", "pandas", "numpy"):
+            assert module in content
+
+    def test_compute_builtin_has_scripts(self):
+        manager = SkillManager()
+        manager.load_builtin_skills()
+        assert manager.has_scripts("compute") is True
+
+    def test_compute_builtin_reference_examples(self):
+        manager = SkillManager()
+        manager.load_builtin_skills()
+        resources = manager._get_resources("compute")
+        assert "scripts/run_python.py" in resources
+        for example in (
+            "references/arithmetic.md",
+            "references/date-math.md",
+            "references/regex-parsing.md",
+            "references/data-aggregation.md",
+        ):
+            assert example in resources
+
+    def test_compute_builtin_in_run_skill_tool(self):
+        manager = SkillManager()
+        manager.load_builtin_skills()
+        tool = manager.build_run_skill_tool("agent-1")
+        assert tool is not None
+        enum = tool["function"]["parameters"]["properties"]["skill_name"]["enum"]
+        assert "compute" in enum
+        assert "file-generation" not in enum  # still excluded (uses generate_file)
+
+    def test_compute_builtin_disable(self):
+        manager = SkillManager()
+        loaded = manager.load_builtin_skills(disabled=["compute"])
+        assert "compute" not in loaded
+        assert "compute" not in manager.skills
+        catalog = manager.build_catalog_xml("agent-1")
+        assert "compute" not in (catalog or "")
+
+    def test_compute_builtin_catalog(self):
+        manager = SkillManager()
+        manager.load_builtin_skills()
+        catalog = manager.build_catalog_xml("agent-1")
+        assert catalog is not None
+        assert "compute" in catalog
+
+    def test_run_skill_tool_exposes_input_files(self):
+        manager = SkillManager()
+        manager.load_builtin_skills()
+        tool = manager.build_run_skill_tool("agent-1")
+        props = tool["function"]["parameters"]["properties"]
+        assert "input_files" in props
+        assert props["input_files"]["type"] == "object"
+        # input_files is optional: required stays skill_name + command
+        assert tool["function"]["parameters"]["required"] == ["skill_name", "command"]
+
     def test_manager_no_skills_dir(self):
         manager = SkillManager()
         assert manager.skills_dir is None
