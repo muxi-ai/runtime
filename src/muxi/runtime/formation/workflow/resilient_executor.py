@@ -314,10 +314,11 @@ class ResilientWorkflowExecutor(WorkflowExecutor):
                     )
 
                     try:
-                        # Execute without tools
+                        # Execute without tools. The no-tools context is already
+                        # threaded into the prompt via _create_task_prompt above;
+                        # Agent.process_message does not accept a context kwarg.
                         response = await agent.process_message(
                             fallback_prompt,
-                            context=no_tool_context,
                             user_id=context.get("user_id"),
                             session_id=context.get("session_id"),
                         )
