@@ -332,6 +332,11 @@ async def execute_trigger(
     # Trigger-level model override (hierarchical model selection). Applies to
     # the chat turn unless an SOP/step/skill level specifies its own model.
     trigger_model: Optional[str] = trigger_meta.get("model")
+    # Conversation source tracking (Proactiveness Phase 1): a trigger can
+    # declare which channel its inbound messages arrive on so proactive
+    # notifications can route back to "last". No-op without a 'proactive'
+    # formation block.
+    source_channel: Optional[str] = trigger_meta.get("channel")
 
     # Extract platform request values (message/user_id/context) per parse spec
     try:
@@ -435,6 +440,8 @@ async def execute_trigger(
                         use_async=False,
                         stream=False,
                         model_override=trigger_model,
+                        source_channel=source_channel,
+                        source_context=parsed_request.get("context"),
                     )
                 elif webhook_override is not None:
                     # Webhook routing: force async so the standard MUXI
@@ -448,6 +455,8 @@ async def execute_trigger(
                         use_async=True,
                         webhook_url=webhook_override,
                         model_override=trigger_model,
+                        source_channel=source_channel,
+                        source_context=parsed_request.get("context"),
                     )
                 else:
                     # Default routing: unchanged trigger behavior
@@ -460,6 +469,8 @@ async def execute_trigger(
                         request_id=request_id,
                         bypass_workflow_approval=True,
                         model_override=trigger_model,
+                        source_channel=source_channel,
+                        source_context=parsed_request.get("context"),
                     )
 
                 observability.observe(
@@ -519,6 +530,8 @@ async def execute_trigger(
                 stream=False,
                 webhook_url=webhook_override,
                 model_override=trigger_model,
+                source_channel=source_channel,
+                source_context=parsed_request.get("context"),
             )
 
             # Extract content from response (handles async generators, MuxiResponse, strings, etc.)

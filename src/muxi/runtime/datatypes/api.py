@@ -106,6 +106,13 @@ class APIEventType(str, Enum):
     USER_IDENTIFIER_DELETED = "user.identifier.deleted"
     USER_RESOLVED = "user.resolved"
 
+    # User channel preference events (Proactiveness Phase 1)
+    USER_CHANNELS_RETRIEVED = "user.channels.retrieved"
+    USER_CHANNELS_UPDATED = "user.channels.updated"
+
+    # Proactive notification events (Proactiveness Phase 1)
+    NOTIFICATION_SENT = "notification.sent"
+
     # Request status events
     REQUEST_STATUS_RETRIEVED = "request.status.retrieved"
     REQUEST_LIST_RETRIEVED = "request.list.retrieved"
@@ -216,6 +223,12 @@ class APIObjectType(str, Enum):
     USER = "user"
     USER_IDENTIFIER = "user_identifier"
     USER_IDENTIFIER_LIST = "user_identifier_list"
+
+    # User channel preference objects (Proactiveness Phase 1)
+    USER_CHANNELS = "user_channels"
+
+    # Proactive notification objects (Proactiveness Phase 1)
+    NOTIFICATION = "notification"
 
     # Credential objects
     CREDENTIAL = "credential"

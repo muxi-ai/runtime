@@ -1,0 +1,87 @@
+schema: "1.0.0"
+id: formation-proactive-test
+description: Test formation for proactiveness phase 1 (notification routing, last-channel tracking, heartbeat, soul, slash commands)
+
+llm:
+  api_keys:
+    openai: "${{ secrets.OPENAI_API_KEY }}"
+  models:
+    - text: "openai/gpt-4o-mini"
+    - embedding: "openai/text-embedding-3-small"
+
+agents:
+  - id: assistant
+    name: Assistant
+    description: Simple assistant for proactiveness testing
+    system_message: |
+      You are a test assistant. Follow instructions exactly and keep
+      responses under 30 words.
+    soul: ./SOUL.md
+    default: true
+
+overlord:
+  extraction_model: "openai/gpt-4o-mini"
+  workflow:
+    auto_decomposition: true
+    complexity_threshold: 9.0  # Direct responses for trivial deterministic prompts
+    plan_approval_threshold: 10
+  response:
+    streaming: false
+    widgets: false
+
+server:
+  host: 0.0.0.0
+  port: 18231
+  access_log: false
+  api_keys:
+    admin_key: "testing-api-key"
+    client_key: "testing-api-key"
+
+memory:
+  working:
+    max_memory_mb: 1
+    vector_dimension: 1536
+    mode: "local"
+  buffer:
+    size: 50
+    multiplier: 10
+    vector_search: false
+  persistent:
+    connection_string: "${{ secrets.POSTGRES_URI }}"
+    embedding_model: "openai/text-embedding-3-small"
+
+scheduler:
+  enabled: true
+  timezone: "UTC"
+  check_interval_minutes: 1
+  max_concurrent_jobs: 5
+
+proactive:
+  channels:
+    chan-a:
+      transformer: sink-a
+    chan-b:
+      transformer: sink-b
+  default_channel: chan-a
+  heartbeat:
+    enabled: true
+    interval: "2h"
+    target: last
+    active_hours:
+      start: "09:00"
+      end: "18:00"
+      timezone: "UTC"
+      weekends: true
+    sop: heartbeat-e2e
+
+commands:
+  enabled: true
+  aliases:
+    hb: heartbeat-e2e
+
+logging:
+  system:
+    level: "error"
+    destination: "stdout"
+  conversation:
+    enabled: false

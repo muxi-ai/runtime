@@ -152,6 +152,12 @@ from ..agents import Agent
 from ..background import RequestTracker, TimeEstimator, WebhookManager
 from ..background.cancellation import RequestCancelledException
 from ..background.request_tracker import RequestStatus
+from ..commands import (
+    available_commands,
+    parse_commands_config,
+    parse_slash_command,
+    resolve_command,
+)
 from ..credentials import CredentialHandler, CredentialResolver
 from ..documents.experience import (
     DocumentAcknowledgmentGenerator,
@@ -445,6 +451,18 @@ class Overlord:
         # Initialize input validator with formation limits
         input_limits = InputLimits.from_config(self.formation_config)
         self.input_validator = InputValidator(input_limits)
+
+        # Proactiveness foundation config (both blocks are optional; absent
+        # blocks parse to None and every related hook is a no-op)
+        from ..proactive import parse_proactive_config
+
+        self._commands_config = parse_commands_config(self.formation_config.get("commands"))
+        self._proactive_config = parse_proactive_config(self.formation_config.get("proactive"))
+        # Proactive services are created in _async_startup after the
+        # scheduler starts; None means proactive routing is not configured.
+        self.user_channel_store = None
+        self.notification_router = None
+        self.heartbeat_service = None
 
         # Initialize credential resolver if database is configured
         self.credential_resolver = None
@@ -1524,6 +1542,11 @@ class Overlord:
             self.scheduler_service = await SchedulerService.get_instance(self)
             await self.scheduler_service.start()
 
+        # Initialize proactive services (notification routing + heartbeat)
+        # after the scheduler so the heartbeat can register with its loop.
+        # No-op for formations without a 'proactive' block.
+        self._initialize_proactive_services()
+
         # Start the knowledge graph periodic extraction loop now that the
         # extraction/default model is resolved. The getter is evaluated per
         # run so the loop always uses the current capability model.
@@ -1554,6 +1577,111 @@ class Overlord:
         self._populate_formation_capabilities()
 
         #  SystemEvents.STARTED (overlord)
+
+    def _initialize_proactive_services(self) -> None:
+        """
+        Create the proactive foundation services (Proactiveness Phase 1).
+
+        Creates the user channel store and notification router when the
+        formation declares a 'proactive' block, and registers the heartbeat
+        with the scheduler's worker loop when enabled. Formations without
+        the block are completely unaffected (all services stay None).
+
+        Raises:
+            ValueError: If a declared channel references a missing
+                transformer, or the heartbeat is enabled without the
+                scheduler (fail fast at startup)
+        """
+        if self._proactive_config is None:
+            return
+
+        from ..proactive import HeartbeatService, NotificationRouter, UserChannelStore
+
+        formation_dir = (
+            self._configured_services.get("formation_path") if self._configured_services else None
+        )
+        if not formation_dir:
+            raise ValueError(
+                "'proactive' is configured but the formation path is not available; "
+                "cannot resolve channel transformers"
+            )
+
+        # Persist channel state through the formation database when
+        # available; degrade gracefully to memory-only otherwise.
+        async_session_maker = None
+        db_manager = getattr(self, "db_manager", None)
+        if db_manager is not None and getattr(db_manager, "AsyncSession", None):
+            async_session_maker = db_manager.AsyncSession
+
+        self.user_channel_store = UserChannelStore(
+            formation_id=self.formation_id,
+            async_session_maker=async_session_maker,
+        )
+
+        default_agent_name = None
+        agents = self.formation_config.get("agents") or []
+        if agents and isinstance(agents[0], dict):
+            default_agent_name = agents[0].get("name") or agents[0].get("id")
+
+        self.notification_router = NotificationRouter(
+            config=self._proactive_config,
+            formation_dir=formation_dir,
+            formation_id=self.formation_id,
+            channel_store=self.user_channel_store,
+            webhook_manager=self.webhook_manager,
+            secrets_manager=self.secrets_manager,
+            async_webhook_url=getattr(self, "async_webhook_url", None),
+            agent_name=default_agent_name,
+        )
+
+        from ...datatypes.observability import InitEventFormatter
+
+        heartbeat_config = self._proactive_config.heartbeat
+        if heartbeat_config and heartbeat_config.enabled:
+            if not self.scheduler_service:
+                raise ValueError(
+                    "'proactive.heartbeat' is enabled but the scheduler is not running. "
+                    "Enable it with 'scheduler.enabled: true' (requires "
+                    "'memory.persistent.connection_string') or disable the heartbeat."
+                )
+            self.heartbeat_service = HeartbeatService(
+                config=heartbeat_config,
+                overlord=self,
+                router=self.notification_router,
+                channel_store=self.user_channel_store,
+            )
+            self.scheduler_service.register_periodic_task(self.heartbeat_service)
+
+        print(
+            InitEventFormatter.format_ok(
+                "Proactive services initialized",
+                f"{len(self._proactive_config.channels)} channel(s), "
+                f"heartbeat {'on' if self.heartbeat_service else 'off'}",
+            )
+        )
+
+    async def record_inbound_channel(
+        self,
+        user_id: Any,
+        channel: str,
+        context: Optional[Dict[str, Any]] = None,
+    ) -> None:
+        """
+        Record the channel an inbound message arrived on (last-channel
+        tracking). No-op when proactive routing is not configured; never
+        raises (channel tracking must not break chat).
+
+        Args:
+            user_id: External user id (normalized like the chat path)
+            channel: Channel name the message arrived on
+            context: Optional addressing context captured from the inbound
+                payload (e.g. chat id parsed by a trigger's parse spec)
+        """
+        if self.user_channel_store is None or not channel:
+            return
+        if not self.is_multi_user:
+            user_id = "0"
+        await self.user_channel_store.record_inbound(user_id, channel, context)
 
     def _populate_formation_capabilities(self) -> None:
         """Populate formation capabilities after all services are loaded"""
@@ -2052,6 +2180,25 @@ class Overlord:
                 f"LLM text capability configuration is mandatory for agent creation. Error: {str(e)}"
             )
 
+        # Load the optional soul document (Proactiveness Phase 1). The path
+        # was resolved and confined to the formation directory at load time;
+        # a missing or unreadable file fails agent creation (fail fast).
+        soul_content = None
+        soul_path = agent_config.get("soul")
+        if soul_path:
+            try:
+                soul_content = Path(soul_path).read_text(encoding="utf-8")
+            except OSError as e:
+                raise ValueError(
+                    f"Failed to read soul document for agent "
+                    f"{agent_config.get('id', 'unknown')} at {soul_path}: {e}"
+                )
+            if not soul_content.strip():
+                raise ValueError(
+                    f"Soul document for agent {agent_config.get('id', 'unknown')} "
+                    f"is empty: {soul_path}"
+                )
+
         # Create agent instance
         agent = Agent(
             model=model,
@@ -2060,6 +2207,7 @@ class Overlord:
             name=agent_config.get("name"),
             system_message=agent_config.get("system_message"),
             knowledge_config=agent_config.get("knowledge"),
+            soul=soul_content,
         )
 
         # Expose agent-level model overrides so get_model_for_capability's
@@ -5852,6 +6000,10 @@ Agent response: {raw_response}"""
         model_override: Optional[
             str
         ] = None,  # Request-level model override (alias or provider/model)
+        source_channel: Optional[str] = None,  # Channel the message arrived on (last tracking)
+        source_context: Optional[
+            Dict[str, Any]
+        ] = None,  # Addressing context captured from the inbound payload
     ) -> Union[str, Dict[str, Any], AsyncGenerator[str, None]]:
         """
         Enhanced chat with async support for long-running agentic tasks and file attachments.
@@ -5953,6 +6105,61 @@ Agent response: {raw_response}"""
         elif user_id is not None:
             # Normalize user_id - lowercase and strip whitespace
             user_id = str(user_id).lower().strip()
+
+        # Conversation source tracking (Proactiveness Phase 1): remember the
+        # channel this message arrived on so proactive notifications can
+        # "reply where they are". No-op without a 'proactive' block; never
+        # raises (record_inbound isolates its own failures).
+        if source_channel and self.user_channel_store is not None:
+            await self.record_inbound_channel(user_id, source_channel, source_context)
+
+        # Slash commands (Proactiveness Phase 1): only when the formation
+        # opts in via a 'commands' block. Matching commands are rewritten to
+        # their SOP content and continue through the normal chat flow;
+        # unknown commands return immediately without an LLM round-trip.
+        if self._commands_config is not None and self._commands_config.enabled:
+            parsed_command = parse_slash_command(message)
+            if parsed_command is not None:
+                sops = self.sop_system.sops if self._ensure_sop_system() else {}
+                resolution = resolve_command(parsed_command, self._commands_config, sops)
+                if resolution is None:
+                    known = sorted(available_commands(self._commands_config, sops))
+                    observability.observe(
+                        event_type=observability.ConversationEvents.COMMAND_UNKNOWN,
+                        level=observability.EventLevel.INFO,
+                        data={
+                            "command": parsed_command.name,
+                            "user_id": str(user_id),
+                            "available_commands": known,
+                        },
+                        description=f"Unknown slash command: /{parsed_command.name}",
+                    )
+                    hint = (
+                        " Available commands: " + ", ".join(f"/{name}" for name in known)
+                        if known
+                        else ""
+                    )
+                    return MuxiResponse(
+                        role="assistant",
+                        content=f"Unknown command: /{parsed_command.name}.{hint}",
+                        metadata={"command": parsed_command.name, "command_status": "unknown"},
+                    )
+
+                observability.observe(
+                    event_type=observability.ConversationEvents.COMMAND_MATCHED,
+                    level=observability.EventLevel.INFO,
+                    data={
+                        "command": parsed_command.name,
+                        "resolved": resolution.name,
+                        "user_id": str(user_id),
+                        "has_args": bool(parsed_command.args),
+                    },
+                    description=f"Slash command /{parsed_command.name} resolved to SOP "
+                    f"'{resolution.name}'",
+                )
+                message = resolution.message
+                model_override = model_override or resolution.model
+                bypass_workflow_approval = bypass_workflow_approval or resolution.bypass_approval
 
         # Get webhook URL from formation config if not provided per-request
         if webhook_url is None:

@@ -6,7 +6,7 @@ requiring client API key authentication.
 """
 
 from datetime import timezone
-from typing import Any, List, Optional
+from typing import Any, Dict, List, Optional
 
 from fastapi import APIRouter, Request
 from fastapi.responses import JSONResponse
@@ -35,6 +35,149 @@ class AssociateIdentifiersRequest(BaseModel):
         ...,
         description="List of identifiers (strings, [id, type] arrays, or {identifier, type} objects)",
     )
+
+
+class UpdateChannelsRequest(BaseModel):
+    """Request model for updating a user's notification channel preferences."""
+
+    preferred_channel: Optional[str] = Field(
+        None,
+        description="Preferred notification channel (declared channel name, "
+        "'webhook', or empty string to clear)",
+    )
+    channels: Optional[Dict[str, Dict[str, Any]]] = Field(
+        None,
+        description="Per-channel addressing context merged into existing state "
+        "(e.g. {'telegram': {'chat_id': '123'}}); an empty mapping removes a channel",
+    )
+    timezone: Optional[str] = Field(
+        None,
+        description="IANA timezone for the user (empty string to clear)",
+    )
+
+
+def _get_channel_store(request: Request):
+    """Return (channel_store, overlord) or (None, overlord) when unconfigured."""
+    formation = request.app.state.formation
+    overlord = getattr(formation, "_overlord", None)
+    store = getattr(overlord, "user_channel_store", None) if overlord else None
+    return store, overlord
+
+
+def _effective_channel_user(overlord, user_id: str) -> str:
+    """Single-user formations track all channel state under user '0'."""
+    if overlord is not None and not getattr(overlord, "is_multi_user", True):
+        return "0"
+    return user_id
+
+
+@router.get(
+    "/users/{user_id}/channels",
+    response_model=APIResponse,
+    operation_id="get_user_channels",
+)
+async def get_user_channels(request: Request, user_id: str) -> JSONResponse:
+    """
+    Get a user's notification channel state (Proactiveness Phase 1).
+
+    Returns the preferred channel, per-channel addressing context, the
+    last-used channel, and the user's timezone. Requires the formation to
+    declare a 'proactive' block.
+    """
+    request_id = getattr(request.state, "request_id", None)
+    store, overlord = _get_channel_store(request)
+    if store is None:
+        response = create_error_response(
+            "SERVICE_UNAVAILABLE",
+            "Proactive notifications are not configured for this formation "
+            "(missing 'proactive' block)",
+            None,
+            request_id,
+        )
+        return JSONResponse(content=response.model_dump(), status_code=503)
+
+    user_id = _effective_channel_user(overlord, user_id)
+    state = await store.get_state(user_id)
+    data = {"user_id": store.normalize_user_id(user_id), **state}
+    response = create_success_response(
+        APIObjectType.USER_CHANNELS,
+        APIEventType.USER_CHANNELS_RETRIEVED,
+        data,
+        request_id,
+    )
+    return JSONResponse(content=response.model_dump(), status_code=200)
+
+
+@router.put(
+    "/users/{user_id}/channels",
+    response_model=APIResponse,
+    operation_id="update_user_channels",
+)
+async def update_user_channels(
+    request: Request, user_id: str, body: UpdateChannelsRequest
+) -> JSONResponse:
+    """
+    Update a user's notification channel preferences (Proactiveness Phase 1).
+
+    Only provided fields change. Channel addressing contexts are merged per
+    channel; pass an empty mapping for a channel to remove it. Requires the
+    formation to declare a 'proactive' block.
+    """
+    request_id = getattr(request.state, "request_id", None)
+    store, overlord = _get_channel_store(request)
+    if store is None:
+        response = create_error_response(
+            "SERVICE_UNAVAILABLE",
+            "Proactive notifications are not configured for this formation "
+            "(missing 'proactive' block)",
+            None,
+            request_id,
+        )
+        return JSONResponse(content=response.model_dump(), status_code=503)
+
+    # Preferred channel must be a declared channel or 'webhook'
+    proactive_config = getattr(overlord, "_proactive_config", None)
+    if body.preferred_channel:
+        declared = set(proactive_config.channels) if proactive_config else set()
+        if body.preferred_channel != "webhook" and body.preferred_channel not in declared:
+            response = create_error_response(
+                "INVALID_REQUEST",
+                f"Unknown channel {body.preferred_channel!r}. Declared channels: "
+                f"{sorted(declared)} (or 'webhook')",
+                None,
+                request_id,
+            )
+            return JSONResponse(content=response.model_dump(), status_code=400)
+
+    if body.timezone:
+        import pytz
+
+        try:
+            pytz.timezone(body.timezone)
+        except pytz.exceptions.UnknownTimeZoneError:
+            response = create_error_response(
+                "INVALID_REQUEST",
+                f"Unknown timezone {body.timezone!r} (use an IANA name like 'Europe/London')",
+                None,
+                request_id,
+            )
+            return JSONResponse(content=response.model_dump(), status_code=400)
+
+    user_id = _effective_channel_user(overlord, user_id)
+    state = await store.set_preferences(
+        user_id,
+        preferred_channel=body.preferred_channel,
+        channels=body.channels,
+        timezone=body.timezone,
+    )
+    data = {"user_id": store.normalize_user_id(user_id), **state}
+    response = create_success_response(
+        APIObjectType.USER_CHANNELS,
+        APIEventType.USER_CHANNELS_UPDATED,
+        data,
+        request_id,
+    )
+    return JSONResponse(content=response.model_dump(), status_code=200)
 
 
 @router.get(
