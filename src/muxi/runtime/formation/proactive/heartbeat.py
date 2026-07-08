@@ -12,19 +12,23 @@ check per known user:
       -> for each known user:
            -> within active hours?   no -> HEARTBEAT_SKIPPED (silent)
            -> overlord.chat(heartbeat prompt)
-           -> response starts with HEARTBEAT_OK? yes -> silent
+           -> response mentions HEARTBEAT_OK? yes -> silent
            -> otherwise route to the configured target channel
               (default: the user's last-used channel)
 
 Failure isolation: every layer catches and observes; a heartbeat failure
 can never break interactive chat.
 
-The runtime ships only the minimal wake-up prompt (mechanism). What the
-heartbeat should actually check is formation-author territory via the
-``sop`` and ``instruction`` config fields (policy).
+Prompt resolution: a formation-configured ``sop:`` wins; otherwise the
+bundled default heartbeat SOP (``builtin/heartbeat.md``, shipped as
+content next to this module, same convention as the bundled channel
+templates) drives the check. ``instruction:`` is appended either way.
+The formation-author fields stay policy; the bundled SOP is just a
+sensible default policy that ships with the mechanism.
 """
 
 from datetime import datetime, timezone
+from pathlib import Path
 from typing import Any, List, Optional
 
 import pytz
@@ -37,6 +41,18 @@ from .user_channels import UserChannelStore
 
 HEARTBEAT_OK_SENTINEL = "HEARTBEAT_OK"
 
+# Prefix of the runtime-generated heartbeat session ids
+# (``heartbeat_<user>_<request>``). The overlord's persona formatter uses
+# it to recognize heartbeat-originated requests and keep the suppression
+# sentinel intact (see ``Overlord._apply_persona``).
+HEARTBEAT_SESSION_PREFIX = "heartbeat_"
+
+# Bundled default heartbeat SOP (Proactiveness Phase 4): the base prompt
+# when the heartbeat is enabled without a formation-configured `sop:`.
+BUILTIN_HEARTBEAT_SOP_PATH = Path(__file__).parent / "builtin" / "heartbeat.md"
+
+# Last-resort minimal prompt, used only if the bundled SOP file cannot be
+# read (broken install). The heartbeat must never fire with an empty prompt.
 DEFAULT_HEARTBEAT_PROMPT = (
     "You have been woken by a periodic heartbeat check. Review the user's "
     "context and determine whether anything genuinely needs their attention "
@@ -46,6 +62,37 @@ DEFAULT_HEARTBEAT_PROMPT = (
     "- Be concise: this is a quick check-in, not a report\n"
     f"- If nothing needs attention, respond with exactly: {HEARTBEAT_OK_SENTINEL}"
 )
+
+_default_heartbeat_sop: Optional[str] = None
+
+
+def load_default_heartbeat_sop() -> str:
+    """
+    Load the bundled default heartbeat SOP (cached after the first read).
+
+    Falls back to the minimal built-in prompt if the packaged file is
+    missing or unreadable, so a broken install degrades to Phase 1
+    behavior instead of an empty heartbeat prompt.
+    """
+    global _default_heartbeat_sop
+    if _default_heartbeat_sop is None:
+        try:
+            content = BUILTIN_HEARTBEAT_SOP_PATH.read_text(encoding="utf-8").strip()
+        except OSError:
+            content = ""
+        _default_heartbeat_sop = content or DEFAULT_HEARTBEAT_PROMPT
+    return _default_heartbeat_sop
+
+
+def _reset_default_sop_cache() -> None:
+    """
+    Clear the cached bundled SOP so the next load re-reads the file.
+
+    Test isolation only: production never needs invalidation (the bundled
+    file is immutable for the life of the process).
+    """
+    global _default_heartbeat_sop
+    _default_heartbeat_sop = None
 
 
 class HeartbeatService:
@@ -162,7 +209,7 @@ class HeartbeatService:
         response = await self.overlord.chat(
             message=prompt,
             user_id=user_id,
-            session_id=f"heartbeat_{user_id}_{request_id}",
+            session_id=f"{HEARTBEAT_SESSION_PREFIX}{user_id}_{request_id}",
             request_id=request_id,
             use_async=False,
             stream=False,
@@ -171,7 +218,7 @@ class HeartbeatService:
         )
         content = self._extract_content(response)
 
-        if content.strip().startswith(HEARTBEAT_OK_SENTINEL):
+        if self._is_heartbeat_ok(content):
             observability.observe(
                 event_type=observability.ConversationEvents.HEARTBEAT_COMPLETED,
                 level=observability.EventLevel.INFO,
@@ -235,10 +282,11 @@ class HeartbeatService:
 
     def _build_prompt(self) -> str:
         """
-        Assemble the heartbeat prompt: SOP content (when configured) or the
-        built-in minimal prompt, plus the formation's extra instruction.
+        Assemble the heartbeat prompt: formation SOP content (when
+        configured and loadable) or the bundled default heartbeat SOP,
+        plus the formation's extra instruction.
         """
-        base = DEFAULT_HEARTBEAT_PROMPT
+        base = load_default_heartbeat_sop()
         if self.config.sop:
             sop_content = self._load_sop_content(self.config.sop)
             if sop_content:
@@ -263,6 +311,21 @@ class HeartbeatService:
                 description=f"Heartbeat SOP '{sop_name}' could not be loaded: {e}",
             )
         return None
+
+    @staticmethod
+    def _is_heartbeat_ok(content: str) -> bool:
+        """
+        Whether a heartbeat response is an all-clear acknowledgment.
+
+        The sentinel is matched anywhere in the response, not only as a
+        prefix: agent pipelines (persona formatting, workflow synthesis)
+        routinely wrap the agent's raw sentinel in prose ("Everything is
+        fine, the check replied with **HEARTBEAT_OK**"). The sentinel
+        exists only inside the heartbeat prompt, so a response that
+        mentions it is protocol chatter about the check itself -- never a
+        legitimate user notification -- and must stay silent.
+        """
+        return HEARTBEAT_OK_SENTINEL in content
 
     @staticmethod
     def _extract_content(response: Any) -> str:

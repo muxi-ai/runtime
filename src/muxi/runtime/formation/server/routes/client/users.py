@@ -80,9 +80,14 @@ async def get_user_channels(request: Request, user_id: str) -> JSONResponse:
     """
     Get a user's notification channel state (Proactiveness Phase 1).
 
-    Returns the preferred channel, per-channel addressing context, the
-    last-used channel, and the user's timezone. Requires the formation to
-    declare a 'proactive' block.
+    Returns the preferred channel, per-channel addressing context (the
+    values rendered as `context.*` in channel transformers), the
+    last-used channel, and the user's timezone. Single-user formations
+    track all channel state under user "0" regardless of the id given.
+
+    Status codes:
+    - 200: channel state returned (empty state for unknown users)
+    - 503: the formation has no 'proactive' block
     """
     request_id = getattr(request.state, "request_id", None)
     store, overlord = _get_channel_store(request)
@@ -119,9 +124,16 @@ async def update_user_channels(
     """
     Update a user's notification channel preferences (Proactiveness Phase 1).
 
-    Only provided fields change. Channel addressing contexts are merged per
-    channel; pass an empty mapping for a channel to remove it. Requires the
-    formation to declare a 'proactive' block.
+    Only provided fields change. Channel addressing contexts are merged
+    per channel; pass an empty mapping for a channel to remove it. The
+    preferred channel must be a declared `proactive.channels` name or
+    'webhook' (empty string clears it); the timezone must be an IANA
+    name (empty string clears it). Returns the full updated state.
+
+    Status codes:
+    - 200: state updated and returned
+    - 400: unknown channel or timezone
+    - 503: the formation has no 'proactive' block
     """
     request_id = getattr(request.state, "request_id", None)
     store, overlord = _get_channel_store(request)

@@ -75,3 +75,82 @@ def test_persona_prompt_preserves_personal_information_directive() -> None:
     source = inspect.getsource(Overlord._apply_persona)
     assert "specific personal information about the user" in source
     assert "Trust the agent's response" in source
+
+
+def test_persona_passes_heartbeat_ok_through_verbatim() -> None:
+    """A bare HEARTBEAT_OK acknowledgment must skip persona rephrasing.
+
+    Persona rephrasing turns the heartbeat's suppression sentinel into
+    friendly prose ("Everything is functioning normally!") and the
+    heartbeat then delivers protocol chatter instead of staying silent.
+    The guard returns before any model access, so a bare instance works.
+    """
+    import asyncio
+
+    overlord = Overlord.__new__(Overlord)
+
+    for raw in ("HEARTBEAT_OK", "  HEARTBEAT_OK\n", "HEARTBEAT_OK - nothing to report"):
+        result = asyncio.run(overlord._apply_persona(raw, "heartbeat prompt"))
+        assert result == raw, f"sentinel response {raw!r} was not passed through verbatim"
+
+
+class _FakeLLM:
+    """Persona model stub: any call returns a fixed rephrased reply."""
+
+    async def chat(self, messages, **kwargs):
+        class _Response:
+            content = "REPHRASED BY PERSONA"
+
+        return _Response()
+
+
+def test_wrapped_sentinel_in_heartbeat_session_passes_verbatim() -> None:
+    """A synthesis-wrapped sentinel survives persona within a heartbeat run.
+
+    Synthesis layers that run BEFORE persona can wrap the agent's raw
+    HEARTBEAT_OK in prose ("Everything is fine. **HEARTBEAT_OK**"). The
+    bare-prefix guard misses that, the persona LLM then rephrases the
+    sentinel away, and downstream suppression (which matches the sentinel
+    anywhere) sees nothing. Within heartbeat-originated requests
+    (runtime-generated "heartbeat_*" session ids) any response containing
+    the sentinel must pass through verbatim. The guard returns before any
+    model access, so a bare instance works.
+    """
+    import asyncio
+
+    overlord = Overlord.__new__(Overlord)
+
+    wrapped = "Everything is fine. The check replied with **HEARTBEAT_OK**."
+    result = asyncio.run(
+        overlord._apply_persona(wrapped, "heartbeat prompt", session_id="heartbeat_ran_req_1")
+    )
+    assert result == wrapped
+
+
+def test_normal_chat_mentioning_sentinel_still_gets_persona() -> None:
+    """A normal conversation that mentions HEARTBEAT_OK is NOT hijacked.
+
+    The wrapped-sentinel pass-through is deliberately scoped to heartbeat
+    sessions: a developer asking about the heartbeat feature can
+    legitimately produce a response mentioning HEARTBEAT_OK mid-prose,
+    and destroying or freezing that content would be a real bug. Outside
+    heartbeat sessions the persona formatting must run as usual.
+    """
+    import asyncio
+
+    overlord = Overlord.__new__(Overlord)
+    overlord.routing_model = _FakeLLM()
+    overlord._default_persona = "You are a helpful assistant."
+    # The post-LLM cancellation check reads this attribute; with no request
+    # context set it never dereferences it.
+    overlord.request_tracker = None
+
+    mentioning = "The heartbeat suppresses any reply that contains HEARTBEAT_OK internally."
+    for session_id in (None, "sess_abc123"):
+        result = asyncio.run(
+            overlord._apply_persona(mentioning, "how does the heartbeat work?", session_id)
+        )
+        assert result == "REPHRASED BY PERSONA", (
+            f"normal chat (session_id={session_id!r}) mentioning the sentinel "
+            "should still be persona-formatted"
+        )

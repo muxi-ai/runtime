@@ -1,0 +1,11 @@
+# E2E test transformer: channel "chan-a" posts to the local sink's /a path.
+name: sink-a
+endpoint:
+  url: http://127.0.0.1:18242/a
+  method: POST
+headers:
+  Content-Type: application/json
+body:
+  text: "${{ response.content }}"
+  room: "${{ context.room }}"
+  user: "${{ request.user_id }}"

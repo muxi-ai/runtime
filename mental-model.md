@@ -2924,8 +2924,9 @@ execution). The heartbeat gates itself: interval first, then per-user
 active hours (fixed tz or `timezone: user`; overnight windows wrap;
 `weekends: false` skips Sat/Sun), then runs `overlord.chat` per known
 user (fresh session `heartbeat_<user>_<request_id>` per run, so history
-never accumulates across ticks) and suppresses responses starting with
-`HEARTBEAT_OK`. Every layer catches + observes (HEARTBEAT_* events);
+never accumulates across ticks) and suppresses responses mentioning
+`HEARTBEAT_OK` (anywhere, not just as a prefix -- hardened in Phase 4;
+see below). Every layer catches + observes (HEARTBEAT_* events);
 heartbeat failures can never break interactive chat. Config-time rule:
 `proactive.heartbeat.enabled` requires `scheduler.enabled: true` (which
 requires persistent memory).
@@ -3093,6 +3094,91 @@ against in-memory SQLite, /setup flow incl. expiry and isolation);
 e2e `23_proactive/test_23a6_builtin_commands.py` (all eight against the
 live formation + real Postgres scheduler job; fresh user id per run
 because channel/identity state persists).
+
+### Heartbeat Default SOP & Docs (2026-07-08, Phase 4)
+
+**Location:** `formation/proactive/builtin/heartbeat.md`,
+`formation/proactive/heartbeat.py`, `contributing/`
+
+Phase 4 of the proactiveness PRD (polish): content + docs, plus three
+tiny mechanism changes (default-SOP fallback, suppression hardening,
+persona sentinel guard).
+
+**Default heartbeat SOP.** The runtime bundles a default heartbeat SOP
+as content (`proactive/builtin/heartbeat.md`, packaged like the bundled
+channel templates; MANIFEST.in + package_data `**/*.md`). Prompt
+resolution in `HeartbeatService._build_prompt`: formation `sop:` (when
+configured AND loadable) > bundled default SOP
+(`load_default_heartbeat_sop()`, module-cached) > minimal
+`DEFAULT_HEARTBEAT_PROMPT` string (broken-install fallback only);
+`instruction:` appends under `## Additional Instructions` in every
+case. Config validation never required `sop`/`instruction`, so nothing
+was relaxed -- enabling the heartbeat with no `sop:` now means "use the
+bundled SOP" instead of the minimal wake-up prompt. The SOP follows the
+PRD sketch (Your Task / What to Check / Guidelines / Don't) as static
+markdown -- no templating, no `checks:` config key (that stayed
+unshipped). The SOP wording deliberately avoids the request analyzer's
+heuristic hot words ("report", "research", "plan"...) and phrases the
+check as one imperative step: the heuristic can't parse negation, so
+"this is not a report" scores like "report" (8) and trips workflow
+decomposition. Inert behavior unchanged: no heartbeat config = no
+heartbeat.
+
+**Suppression hardened (mechanism change #2).**
+`HeartbeatService._is_heartbeat_ok` matches the sentinel ANYWHERE in
+the response, not only as a prefix. Found via e2e: even when the agent
+replies with the raw sentinel, persona formatting / workflow synthesis
+layers nondeterministically wrap it in prose ("Everything is
+functioning normally with a response of **HEARTBEAT_OK**"), so
+`startswith` leaked protocol chatter to users roughly half the time.
+The sentinel exists only inside the heartbeat prompt; a response that
+mentions it is always about the check itself, never a legitimate
+notification.
+
+**Persona sentinel guard (mechanism change #3).**
+`Overlord._apply_persona` (guard at the top, before any model access)
+passes through verbatim: (a) bare `HEARTBEAT_OK*` responses, for ANY
+chat (agents only emit the sentinel when a heartbeat prompt asks); and
+(b) responses merely CONTAINING the sentinel, but only within
+heartbeat-originated requests -- recognized via the runtime-generated
+session id prefix (`HEARTBEAT_SESSION_PREFIX`, `heartbeat_<user>_<req>`;
+call sites in `_process_sync_chat`/`_execute_async_request` pass
+`session_id` through). (b) covers synthesis layers that wrap the
+sentinel BEFORE persona ("Everything is fine. **HEARTBEAT_OK**"), which
+the bare-prefix guard misses. It is deliberately scoped: a normal
+conversation mentioning HEARTBEAT_OK (a developer asking about the
+feature) still gets persona formatting -- blanket pass-through would be
+content destruction. Without the guard, the persona-rephrase pass
+(formats EVERY chat response, temperature 0.7) sometimes paraphrases
+the sentinel away entirely ("The heartbeat check has been successful.")
+and no downstream matching can recover it. Also added
+`_reset_default_sop_cache()` (heartbeat.py) for test isolation of the
+module-level bundled-SOP cache (autouse fixture in test_heartbeat.py).
+Pinned by `tests/unit/test_apply_persona_handles_raw.py`.
+
+**Soul template & guide:** `contributing/templates/soul.md` (annotated
+starter with the PRD's five sections: Who I Am / My Values / My
+Boundaries / Our Relationship / What I Remember; HTML guidance comments
+authors delete) + `contributing/soul-documents.md` (wiring rules,
+persona-vs-soul distinction, writing guidance). No loading mechanism --
+souls are formation-author content referenced via `agent.soul`.
+
+**Docs:** `contributing/proactiveness-config.md` -- full schema
+reference for `proactive:` (channels/default_channel/heartbeat incl.
+default-SOP behavior), `commands:` (aliases, `builtin:` disable map,
+SOP shadowing, resolution order, the eight built-ins), agent `soul:`,
+plus the client API surface (`POST /v1/notifications`,
+`GET/PUT /v1/users/{id}/channels`, `X-Muxi-Client-Key` auth). The
+routes' OpenAPI docstrings gained routing-precedence and status-code
+detail (that IS the repo's API docs convention; no new docs system).
+
+**Tests:** `tests/unit/test_heartbeat.py::TestPromptResolution`
+(bundled file ships, default fallback, formation-SOP override,
+missing-SOP fallback, instruction append to both bases); e2e
+`23_proactive/test_23a7_heartbeat_default_sop.py` (override precedence
+against the live formation, then clears `config.sop` and runs a real
+heartbeat under the bundled SOP -- agent replies HEARTBEAT_OK,
+suppression keeps the channel silent).
 
 ---
 

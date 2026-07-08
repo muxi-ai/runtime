@@ -141,6 +141,8 @@ runtime/
 | [id-conventions.md](id-conventions.md) | ID format conventions (prefixes, nanoid) |
 | [type-safety-guide.md](type-safety-guide.md) | TypedDict conventions |
 | [channel-templates.md](channel-templates.md) | Slack/Telegram/Discord/email channel templates and transformer/webhook composition |
+| [proactiveness-config.md](proactiveness-config.md) | Formation config reference: `proactive:`, `commands:`, agent `soul:` |
+| [soul-documents.md](soul-documents.md) | Soul document guide and starter template |
 
 ## Key Concepts for Contributors
 

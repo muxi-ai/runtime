@@ -2871,17 +2871,51 @@ class Overlord:
         except Exception:
             return ""
 
-    async def _apply_persona(self, raw_response: Optional[str], user_message: str) -> str:
+    async def _apply_persona(
+        self,
+        raw_response: Optional[str],
+        user_message: str,
+        session_id: Optional[str] = None,
+    ) -> str:
         """
         Apply the overlord persona to format a response.
 
         Args:
             raw_response: The agent's response, or None for non-actionable messages
             user_message: The original user message for context
+            session_id: The request's session id, when the call site has it
+                (used to recognize heartbeat-originated requests)
 
         Returns:
             Formatted response with persona applied
         """
+        # Heartbeat protocol guard (Proactiveness Phase 4): heartbeat
+        # acknowledgments must survive persona formatting. Rephrasing
+        # turns the suppression sentinel into friendly prose ("Everything
+        # is functioning normally!") and the heartbeat then delivers
+        # protocol chatter to the user instead of staying silent.
+        from ..proactive import HEARTBEAT_OK_SENTINEL, HEARTBEAT_SESSION_PREFIX
+
+        if raw_response:
+            # A bare sentinel reply passes through verbatim for ANY chat:
+            # agents only emit it when a heartbeat prompt asks for it.
+            if raw_response.strip().startswith(HEARTBEAT_OK_SENTINEL):
+                return raw_response
+            # Within a heartbeat-originated request (runtime-generated
+            # session ids "heartbeat_<user>_<request>"), a synthesis layer
+            # may already have wrapped the sentinel in prose; pass that
+            # through verbatim too -- downstream suppression matches the
+            # sentinel anywhere. Deliberately scoped to heartbeat sessions:
+            # a normal conversation that merely mentions HEARTBEAT_OK
+            # (e.g. a developer asking about the heartbeat feature) must
+            # still get persona formatting, not content destruction.
+            if (
+                session_id
+                and session_id.startswith(HEARTBEAT_SESSION_PREFIX)
+                and HEARTBEAT_OK_SENTINEL in raw_response
+            ):
+                return raw_response
+
         # Use overlord's routing model for persona (faster for simple rephrasing)
         # Falls back to text model if routing_model not available
         if hasattr(self, "routing_model") and self.routing_model:
@@ -6698,7 +6732,7 @@ Agent response: {raw_response}"""
                 ):
                     # This is a scheduled job - handle failure through scheduler
                     formatted_error = await self._apply_persona(
-                        f"An error occurred: {str(e)}", message
+                        f"An error occurred: {str(e)}", message, session_id=session_id
                     )
                     handled = await self.scheduler_service.complete_job_from_webhook(
                         session_id, success=False, result=None, error=formatted_error
@@ -6730,7 +6764,9 @@ Agent response: {raw_response}"""
             webhook_url = await self._get_webhook_url_for_request(request_id)
             if webhook_url:
                 # Apply persona to format the error message
-                formatted_error = await self._apply_persona(f"An error occurred: {str(e)}", message)
+                formatted_error = await self._apply_persona(
+                    f"An error occurred: {str(e)}", message, session_id=session_id
+                )
 
                 await self.webhook_manager.deliver_completion(
                     webhook_url=webhook_url,
@@ -8930,7 +8966,9 @@ Agent response: {raw_response}"""
         if result and hasattr(result, "content"):
             if isinstance(result.content, str):
                 # Simple string content - apply persona directly
-                formatted_content = await self._apply_persona(result.content, message)
+                formatted_content = await self._apply_persona(
+                    result.content, message, session_id=session_id
+                )
                 result.content = formatted_content
             elif isinstance(result.content, dict):
                 # Dictionary content (e.g., from tool execution) - extract and format
@@ -8978,7 +9016,9 @@ Agent response: {raw_response}"""
                         extracted_text = json_lib.dumps(result.content, indent=2)
 
                 # Apply persona to the extracted text
-                formatted_content = await self._apply_persona(extracted_text, message)
+                formatted_content = await self._apply_persona(
+                    extracted_text, message, session_id=session_id
+                )
                 result.content = formatted_content
 
         # Apply response format wrapping (for JSON format) and HTML fixing
