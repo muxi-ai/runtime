@@ -324,9 +324,9 @@ CLEANUP,SystemEvents,YES,,src/muxi/runtime/formation/server/server.py,931,observ
 CLEANUP,SystemEvents,YES,,src/muxi/runtime/formation/server/server.py,947,observability.observe(
 CLEANUP,SystemEvents,YES,,src/muxi/runtime/utils/run_formation.py,208,observability.observe(
 CLEANUP,SystemEvents,YES,,src/muxi/runtime/utils/run_formation.py,373,observability.observe(
-COMMAND_EXECUTED,ConversationEvents,YES,,src/muxi/runtime/formation/builtin_commands.py,818,observability.observe(
-COMMAND_FAILED,ConversationEvents,YES,,src/muxi/runtime/formation/builtin_commands.py,723,observability.observe(
-COMMAND_FAILED,ConversationEvents,YES,,src/muxi/runtime/formation/builtin_commands.py,839,observability.observe(
+COMMAND_EXECUTED,ConversationEvents,YES,,src/muxi/runtime/formation/builtin_commands.py,833,observability.observe(
+COMMAND_FAILED,ConversationEvents,YES,,src/muxi/runtime/formation/builtin_commands.py,738,observability.observe(
+COMMAND_FAILED,ConversationEvents,YES,,src/muxi/runtime/formation/builtin_commands.py,854,observability.observe(
 COMMAND_MATCHED,ConversationEvents,YES,,src/muxi/runtime/formation/overlord/overlord.py,6063,observability.observe(
 COMMAND_UNKNOWN,ConversationEvents,YES,,src/muxi/runtime/formation/overlord/overlord.py,6039,observability.observe(
 COMPUTATION_COMPLETED,ConversationEvents,YES,,src/muxi/runtime/formation/agents/skill_dispatch.py,199,observability.observe(

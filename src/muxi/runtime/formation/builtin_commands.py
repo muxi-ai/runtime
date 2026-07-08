@@ -120,8 +120,7 @@ def _db_manager(ctx: BuiltinCommandContext) -> Any:
 
 
 _NO_CHANNELS_MESSAGE = (
-    "This formation has no notification channels configured "
-    "(no 'proactive' block), so there is nothing to manage here."
+    "This formation has no notification channels configured, " "so there is nothing to manage here."
 )
 
 
@@ -399,8 +398,12 @@ async def _identity_link(
     identifier = identifier.strip().lower()
     if not identifier or len(identifier) > _MAX_IDENTIFIER_LENGTH:
         return f"Invalid identifier: must be 1-{_MAX_IDENTIFIER_LENGTH} characters with no spaces."
-    if identifier_type is not None and len(identifier_type) > _MAX_IDENTIFIER_TYPE_LENGTH:
-        return f"Invalid identifier type: must be at most {_MAX_IDENTIFIER_TYPE_LENGTH} characters."
+    if identifier_type is not None:
+        # Normalize like the identifier itself so "Telegram" and "telegram"
+        # render as one label in /identity listings.
+        identifier_type = identifier_type.strip().lower()
+        if not identifier_type or len(identifier_type) > _MAX_IDENTIFIER_TYPE_LENGTH:
+            return f"Invalid identifier type: must be 1-{_MAX_IDENTIFIER_TYPE_LENGTH} characters."
     if identifier == user:
         return f"{identifier} is the identity you are already using."
 
@@ -500,6 +503,10 @@ async def _cmd_channels(ctx: BuiltinCommandContext) -> str:
 
     user = _channel_user(ctx)
     declared = _declared_channels(ctx)
+    if not declared:
+        # A 'proactive' block with zero declared channels: nothing here can
+        # be listed, defaulted, or tested.
+        return _NO_CHANNELS_MESSAGE
     tokens = ctx.args.split()
     action = tokens[0].lower() if tokens else "list"
 
@@ -713,8 +720,10 @@ async def handle_setup_answer(
     if flow is None:
         return None
     if time.time() - flow.updated_at > SETUP_FLOW_TIMEOUT_SECONDS:
+        # Tell the user instead of silently dropping the flow: without this
+        # the pending answer would fall through to the LLM unexplained.
         flows.pop(user, None)
-        return None
+        return "Setup session expired after 10 minutes of inactivity. " "Run /setup to start again."
 
     try:
         return await _advance_setup_flow(ctx, flows, flow, message)

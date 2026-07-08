@@ -386,6 +386,17 @@ class TestChannels:
         response = await run_command(overlord, "/channels")
         assert "no notification channels" in response.content
 
+    async def test_proactive_block_with_zero_channels_is_friendly(self):
+        # A 'proactive' block can exist with no declared channels: the store
+        # is live but there is nothing to list, default, or test.
+        overlord = make_overlord()
+        overlord._proactive_config = parse_proactive_config({"channels": {}})
+        assert overlord.user_channel_store is not None
+        for command in ("/channels", "/channels default chan-a", "/channels test chan-a"):
+            response = await run_command(overlord, command)
+            assert "no notification channels" in response.content, command
+            assert "Commands:" not in response.content, command
+
     async def test_listing_marks_default_and_last(self):
         overlord = make_overlord()
         await overlord.user_channel_store.set_preferences("0", preferred_channel="chan-b")
@@ -566,6 +577,17 @@ class TestIdentity:
         response = await run_command(overlord, "/identity", user_id="ran@example.com")
         assert "u12345" not in response.content
 
+    async def test_link_normalizes_mixed_case_type(self):
+        db_manager = await _make_db_manager()
+        overlord = make_overlord(multi_user=True, db_manager=db_manager)
+        response = await run_command(
+            overlord, "/identity link tg-1 Telegram", user_id="ran@example.com"
+        )
+        assert "Linked tg-1 (telegram)" in response.content
+        response = await run_command(overlord, "/identity", user_id="ran@example.com")
+        assert "tg-1 (telegram)" in response.content
+        assert "Telegram" not in response.content
+
     async def test_link_conflict_with_other_user(self):
         db_manager = await _make_db_manager()
         overlord = make_overlord(multi_user=True, db_manager=db_manager)
@@ -662,12 +684,17 @@ class TestSetupFlow:
         assert overlord._setup_flows == {}
         assert await run_command(overlord, "chan-a") is None
 
-    async def test_expired_flow_is_dropped(self):
+    async def test_expired_flow_replies_with_expiry_message(self):
         overlord = make_overlord()
         await run_command(overlord, "/setup")
         overlord._setup_flows["0"].updated_at -= 10_000
-        assert await run_command(overlord, "chan-a") is None
+        response = await run_command(overlord, "chan-a")
+        # The pending answer must NOT fall through to the LLM unexplained
+        assert response is not None
+        assert "Setup session expired" in response.content
         assert overlord._setup_flows == {}
+        # Subsequent plain messages flow through normally again
+        assert await run_command(overlord, "chan-a") is None
 
     async def test_flow_error_is_isolated(self):
         overlord = make_overlord()
