@@ -4,14 +4,9 @@ Run all trigger system E2E tests.
 
 Test Suite 13: Trigger System
 - 13A: Basic functionality tests
-  - 13A1: List triggers
-  - 13A2: Execute simple trigger (sync)
-  - 13A3: Execute nested trigger (async)
-  - 13A4: Execute GitHub issue trigger
 - 13B: Error handling tests
-  - 13B1: Missing trigger template
-  - 13B2: Missing required data
-  - 13B3: Invalid formation ID
+
+Tests are discovered dynamically from test_13*.py files in this directory.
 """
 
 import subprocess
@@ -65,29 +60,15 @@ def main():
     print("="*70)
     
     test_dir = Path(__file__).parent
-    
-    # Define test order
-    tests = [
-        # Basic functionality
-        "test_13a1_list_triggers.py",
-        "test_13a2_execute_simple_trigger.py",
-        "test_13a3_execute_nested_trigger.py",
-        "test_13a4_execute_github_trigger.py",
-        # Error handling
-        "test_13b1_error_missing_template.py",
-        "test_13b2_error_missing_data.py",
-        "test_13b3_error_invalid_formation.py",
-    ]
-    
+
+    # Discover tests dynamically (sorted for deterministic order)
+    test_files = sorted(test_dir.glob("test_13*.py"))
+
+    print(f"\nFound {len(test_files)} test files")
+
     results: List[Tuple[str, bool, str]] = []
-    
-    for test_file_name in tests:
-        test_file = test_dir / test_file_name
-        if not test_file.exists():
-            print(f"⚠️  Test file not found: {test_file_name}")
-            results.append((test_file_name, False, "Test file not found"))
-            continue
-        
+
+    for test_file in test_files:
         test_name, success, output = run_test(test_file)
         results.append((test_name, success, output))
         
