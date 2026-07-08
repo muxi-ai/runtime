@@ -560,6 +560,14 @@ class Overlord:
             configured_services.get("memory_events") if configured_services else None
         )
 
+        # Artifact memory (Artifact Memory Phase 1) - initialized by the
+        # Formation alongside persistent memory; None when disabled or when
+        # no persistent storage is configured. Captures produced artifacts
+        # in the background after responses are delivered.
+        self.artifact_memory = (
+            configured_services.get("artifact_memory") if configured_services else None
+        )
+
         # Configure extraction settings (intelligence concerns)
         self.auto_extract_user_info = auto_extract_user_info
 
@@ -1528,6 +1536,11 @@ class Overlord:
         # Start the memory event substrate's retention hard-purge loop.
         if getattr(self, "memory_events", None):
             self.memory_events.start()
+
+        # Start the artifact memory retention sweep loop (Artifact Memory
+        # Phase 1). No-op for formations without a retention duration.
+        if getattr(self, "artifact_memory", None):
+            self.artifact_memory.start()
 
         # Populate formation capabilities after all services are loaded
         self._populate_formation_capabilities()
@@ -4213,6 +4226,18 @@ Agent response: {raw_response}"""
                     level=observability.EventLevel.WARNING,
                     data={"error": str(e), "service": "memory_events"},
                     description=f"Error stopping memory event service: {e}",
+                )
+
+        # Stop the artifact memory retention sweep loop if running
+        if getattr(self, "artifact_memory", None):
+            try:
+                await self.artifact_memory.stop()
+            except Exception as e:
+                observability.observe(
+                    event_type=observability.ErrorEvents.INTERNAL_ERROR,
+                    level=observability.EventLevel.WARNING,
+                    data={"error": str(e), "service": "artifact_memory"},
+                    description=f"Error stopping artifact memory service: {e}",
                 )
 
         observability.observe(
@@ -8558,6 +8583,21 @@ Agent response: {raw_response}"""
         }
         if result and hasattr(result, "artifacts") and result.artifacts:
             completed_kwargs["artifacts"] = [a.model_dump(mode="json") for a in result.artifacts]
+
+            # Artifact Memory Phase 1: persist the produced artifacts in the
+            # background after the response is delivered (PRD 1.1 -- capture
+            # is async and non-blocking). Failures are isolated inside the
+            # service and never affect the user response.
+            if getattr(self, "artifact_memory", None):
+                self._create_tracked_task(
+                    self.artifact_memory.capture_response_artifacts(
+                        list(result.artifacts),
+                        user_id=user_id,
+                        agent_id=agent_name,
+                        conversation_id=session_id,
+                    ),
+                    name="artifact_memory_capture",
+                )
         streaming.stream("completed", final_content, **completed_kwargs)
 
         # Note: We don't disable streaming here - let the client/test handle cleanup

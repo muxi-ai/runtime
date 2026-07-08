@@ -78,6 +78,12 @@ EVENT_MEMORY_INGESTED = "memory.ingested"
 # filters can find and reprocess exactly the filtered set later.
 EVENT_INGESTION_FILTERED = "ingestion.filtered"
 
+# One artifact captured into artifact memory (Artifact Memory Phase 1).
+# Metadata-only audit event: the blob lives in artifact storage and is
+# not replayable from the log, so this event has no projector -- the
+# artifacts table is the system of record, not a projection.
+EVENT_ARTIFACT_SAVED = "artifact.saved"
+
 # Versioned payload schemas. "required" keys must be present; keys outside
 # required + optional are rejected -- schema evolution happens by adding a
 # new version, never by silently widening an existing one.
@@ -134,10 +140,32 @@ EVENT_SCHEMAS: Dict[str, Dict[int, Dict[str, tuple]]] = {
             "optional": ("reason",),
         }
     },
+    EVENT_ARTIFACT_SAVED: {
+        1: {
+            # artifact_id is the artifacts table public_id; the rest is
+            # capture metadata (the blob itself never enters the log).
+            "required": ("artifact_id", "name", "version", "content_type"),
+            "optional": (
+                "category",
+                "size_bytes",
+                "checksum_sha256",
+                "storage_ref",
+                "tags",
+            ),
+        }
+    },
 }
 
 # Payload keys that must be lists when present (shape checks beyond presence).
-_LIST_KEYS = {"entities", "relationships", "decisions", "projects", "sources", "target_event_ids"}
+_LIST_KEYS = {
+    "entities",
+    "relationships",
+    "decisions",
+    "projects",
+    "sources",
+    "tags",
+    "target_event_ids",
+}
 
 # Decay rates declared at write time (PRD "Decay Model"). Query-time decay
 # weighting is a later phase; the substrate records the declaration so old
@@ -156,6 +184,7 @@ SOURCE_PERIODIC = "periodic"  # the knowledge graph's periodic deep pass
 SOURCE_CAPTAINS_LOG = "captains_log"  # digest-derived writes (entries, lessons, graph facts)
 SOURCE_TOOL = "tool"  # the record_lesson agent tool
 SOURCE_USER_EDIT = "user_edit"  # user-initiated corrections/deletions
+SOURCE_ARTIFACT_MEMORY = "artifact_memory"  # artifact capture audit events
 
 # Scope shape recorded for forward compatibility with memory namespaces.
 from ..base import SCOPE_TYPE_USER  # noqa: E402 -- canonical scope constants
