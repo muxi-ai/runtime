@@ -476,9 +476,11 @@ def render_template_string(template: str, variables: Dict[str, Any]) -> Any:
     Otherwise placeholders are substituted as strings, with None rendered
     as an empty string.
     """
-    whole = _PLACEHOLDER_PATTERN.fullmatch(template.strip())
-    if whole:
-        return _resolve_variable(whole.group(1), variables)
+    stripped = template.strip()
+    if template == stripped:
+        whole = _PLACEHOLDER_PATTERN.fullmatch(stripped)
+        if whole:
+            return _resolve_variable(whole.group(1), variables)
 
     def _substitute(match: "re.Match[str]") -> str:
         resolved = _resolve_variable(match.group(1), variables)
@@ -589,7 +591,14 @@ def _markdown_to_html(content: str) -> str:
     html = _MD_INLINE_CODE.sub(r"<code>\1</code>", html)
     html = _MD_BOLD.sub(lambda m: f"<strong>{m.group(1) or m.group(2)}</strong>", html)
     html = _MD_ITALIC.sub(lambda m: f"<em>{m.group(1) or m.group(2)}</em>", html)
-    html = _MD_LINK.sub(r'<a href="\2">\1</a>', html)
+
+    def _link(m: "re.Match[str]") -> str:
+        href = m.group(2)
+        if href.lower().startswith(("http://", "https://")):
+            return f'<a href="{href}">{m.group(1)}</a>'
+        return m.group(1)
+
+    html = _MD_LINK.sub(_link, html)
     paragraphs = [p.strip().replace("\n", "<br/>") for p in html.split("\n\n") if p.strip()]
     return "".join(f"<p>{p}</p>" for p in paragraphs)
 
@@ -615,7 +624,7 @@ def apply_content_transform(content: str, transform: Optional[ContentTransform])
     if transform.max_length is not None and len(result) > transform.max_length:
         suffix = transform.truncation_suffix
         cut = max(transform.max_length - len(suffix), 0)
-        result = result[:cut] + suffix[: transform.max_length]
+        result = result[:cut] + suffix[: transform.max_length - cut]
 
     return result
 

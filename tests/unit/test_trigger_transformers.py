@@ -420,11 +420,39 @@ class TestContentTransform:
         result = apply_content_transform("**bold** & <script>", transform)
         assert result == "<p><strong>bold</strong> &amp; &lt;script&gt;</p>"
 
+    def test_html_format_renders_http_links(self):
+        transform = ContentTransform.from_dict({"format": "html"})
+        result = apply_content_transform("see [docs](https://docs.test/page)", transform)
+        assert result == '<p>see <a href="https://docs.test/page">docs</a></p>'
+
+    def test_html_format_drops_unsafe_link_schemes(self):
+        transform = ContentTransform.from_dict({"format": "html"})
+        result = apply_content_transform("[x](javascript:alert(1))", transform)
+        # The link regex stops at the first ")", so the closing paren of the
+        # payload survives as literal text; the anchor itself must not render.
+        assert result == "<p>x)</p>"
+        assert "<a" not in result
+        assert "javascript" not in result
+
+    def test_html_format_drops_data_uri_links(self):
+        transform = ContentTransform.from_dict({"format": "html"})
+        result = apply_content_transform("[x](data:text/html;base64,PHNjcmlwdD4=)", transform)
+        assert result == "<p>x</p>"
+        assert "<a" not in result
+
     def test_truncation_never_exceeds_max_length(self):
         transform = ContentTransform.from_dict({"max_length": 10, "truncation_suffix": "..."})
         result = apply_content_transform("a" * 50, transform)
         assert result == "a" * 7 + "..."
         assert len(result) == 10
+
+    def test_truncation_with_long_suffix_never_exceeds_max_length(self):
+        transform = ContentTransform.from_dict(
+            {"max_length": 5, "truncation_suffix": "[truncated]"}
+        )
+        result = apply_content_transform("a" * 50, transform)
+        assert len(result) == 5
+        assert result == "[trun"
 
     def test_truncation_not_applied_when_short(self):
         transform = ContentTransform.from_dict({"max_length": 160})

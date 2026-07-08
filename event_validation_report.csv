@@ -1238,7 +1238,7 @@ WARNING,ErrorEvents,YES,,src/muxi/runtime/services/scheduler/service.py,574,obse
 WARNING,ErrorEvents,YES,,src/muxi/runtime/services/scheduler/service.py,631,observability.observe(
 WARNING,ErrorEvents,YES,,src/muxi/runtime/utils/error_classifier.py,43,observability.observe(
 WEBHOOK_DELIVERY_STARTED,ConversationEvents,YES,,src/muxi/runtime/formation/overlord/overlord.py,6176,observability.observe(
-WEBHOOK_FAILED,ConversationEvents,YES,,src/muxi/runtime/formation/background/transformers.py,770,observability.observe(
+WEBHOOK_FAILED,ConversationEvents,YES,,src/muxi/runtime/formation/background/transformers.py,779,observability.observe(
 WEBHOOK_FAILED,ConversationEvents,YES,,src/muxi/runtime/formation/background/webhook_manager.py,207,observability.observe(
 WEBHOOK_FAILED,ConversationEvents,YES,,src/muxi/runtime/formation/background/webhook_manager.py,218,observability.observe(
 WEBHOOK_FAILED,ConversationEvents,YES,,src/muxi/runtime/formation/background/webhook_manager.py,232,observability.observe(
