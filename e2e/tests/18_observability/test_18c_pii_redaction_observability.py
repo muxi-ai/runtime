@@ -50,6 +50,10 @@ class CapturingLogger:
         self._events = []
         self._lock = threading.Lock()
 
+    def should_emit(self, event_type, level):
+        """Pre-check observe() calls before redaction/emission; capture everything."""
+        return True
+
     def emit_event(
         self,
         event_type=None,
