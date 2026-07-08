@@ -107,6 +107,12 @@ class NotificationRouter:
             users with no preference).
         """
         state = await self.channel_store.get_state(user_id)
+        return self._resolve_channels_from_state(state, channels)
+
+    def _resolve_channels_from_state(
+        self, state: Dict[str, Any], channels: Optional[List[str]] = None
+    ) -> List[str]:
+        """Resolve channels against an already-fetched user state snapshot."""
         resolved: List[str] = []
 
         requested = channels if channels else [PREFERRED_TARGET]
@@ -182,8 +188,10 @@ class NotificationRouter:
         """
         user_id = self.channel_store.normalize_user_id(user_id)
         request_id = request_id or generate_request_id()
-        resolved = await self.resolve_channels(user_id, channels)
+        # One state fetch per notification: routing and per-channel
+        # addressing both resolve against the same snapshot.
         state = await self.channel_store.get_state(user_id)
+        resolved = self._resolve_channels_from_state(state, channels)
 
         observability.observe(
             event_type=observability.ConversationEvents.NOTIFICATION_ROUTED,

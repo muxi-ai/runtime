@@ -153,10 +153,16 @@ class HeartbeatService:
         )
 
         prompt = self._build_prompt()
+        # Fresh session per heartbeat run: a fixed session id would
+        # accumulate conversation history (and session-scoped buffer
+        # memory) without bound across ticks. Heartbeat context comes
+        # from the SOP/instruction plus the user's memory, not from
+        # prior tick chatter; the request id keeps the session
+        # correlated with this run's observability events.
         response = await self.overlord.chat(
             message=prompt,
             user_id=user_id,
-            session_id=f"heartbeat_{user_id}",
+            session_id=f"heartbeat_{user_id}_{request_id}",
             request_id=request_id,
             use_async=False,
             stream=False,

@@ -2923,7 +2923,8 @@ once per worker cycle onto the main event loop (same dispatch as job
 execution). The heartbeat gates itself: interval first, then per-user
 active hours (fixed tz or `timezone: user`; overnight windows wrap;
 `weekends: false` skips Sat/Sun), then runs `overlord.chat` per known
-user (session `heartbeat_<user>`) and suppresses responses starting with
+user (fresh session `heartbeat_<user>_<request_id>` per run, so history
+never accumulates across ticks) and suppresses responses starting with
 `HEARTBEAT_OK`. Every layer catches + observes (HEARTBEAT_* events);
 heartbeat failures can never break interactive chat. Config-time rule:
 `proactive.heartbeat.enabled` requires `scheduler.enabled: true` (which

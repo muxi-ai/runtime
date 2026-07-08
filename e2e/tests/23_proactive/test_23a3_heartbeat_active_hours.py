@@ -70,6 +70,29 @@ async def main():
         heartbeat = overlord.heartbeat_service
         assert heartbeat is not None, "Heartbeat service not initialized"
 
+        # Hermetic setup: channel state persists in the shared e2e database
+        # across runs (by design), so earlier area-23 tests leave users
+        # behind. Clear this formation's rows so known_users() is exactly
+        # the user this test seeds.
+        store = overlord.user_channel_store
+        if store._async_session_maker is not None:
+            from sqlalchemy import delete  # noqa: E402
+
+            from muxi.runtime.formation.proactive.user_channels import (  # noqa: E402
+                UserChannelState,
+            )
+
+            async with store._async_session_maker() as session:
+                await session.execute(
+                    delete(UserChannelState).where(
+                        UserChannelState.formation_id == store.formation_id
+                    )
+                )
+                await session.commit()
+        store._states.clear()
+        store._loaded.clear()
+        print("Cleared persisted channel state for a hermetic run")
+
         # 1. Heartbeat rides the existing scheduler loop
         assert overlord.scheduler_service is not None, "Scheduler not running"
         assert (

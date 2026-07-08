@@ -108,8 +108,9 @@ class UserChannelStore:
     async def get_state(self, user_id: str) -> Dict[str, Any]:
         """Return a copy of the user's channel state (empty defaults if unset)."""
         user_id = self.normalize_user_id(user_id)
-        state = await self._get_or_load(user_id)
-        return copy.deepcopy(state.to_dict())
+        async with self._lock:
+            state = await self._get_or_load(user_id)
+            return copy.deepcopy(state.to_dict())
 
     async def known_users(self) -> List[str]:
         """
@@ -210,7 +211,15 @@ class UserChannelStore:
             )
 
     async def _get_or_load(self, user_id: str) -> _ChannelState:
-        """Return the in-memory state, loading from the database on first access."""
+        """
+        Return the in-memory state, loading from the database on first access.
+
+        Callers MUST hold ``self._lock``: the DB load awaits, and without the
+        lock a concurrent first-access load could overwrite in-memory state
+        that another caller just modified and persisted (losing e.g. a fresh
+        ``last_channel``). Load-if-absent is enforced with a re-check after
+        the await as a second line of defense.
+        """
         if user_id in self._states:
             return self._states[user_id]
 
@@ -223,6 +232,12 @@ class UserChannelStore:
                         state = _ChannelState.from_dict(json.loads(row.state))
             except Exception as e:
                 self._observe_persistence_warning("load", e)
+
+        # Never clobber an entry created while the load awaited: the
+        # in-memory state is authoritative for the process lifetime.
+        if user_id in self._states:
+            return self._states[user_id]
+
         self._loaded.add(user_id)
         self._states[user_id] = state
         return state

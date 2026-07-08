@@ -242,8 +242,8 @@ class TestDelivery:
             assert notified == ["ran"]
             payload = json.loads(sink.requests[0]["body"])
             assert payload["text"] == "Your 2pm meeting conflicts with the standup."
-            # The heartbeat conversation is scoped per user
-            assert overlord.calls[0]["session_id"] == "heartbeat_ran"
+            # The heartbeat conversation is user-scoped and fresh per run
+            assert overlord.calls[0]["session_id"].startswith("heartbeat_ran_")
             assert overlord.calls[0]["is_scheduled_execution"] is True
         finally:
             await sink.stop()
@@ -283,3 +283,25 @@ class TestDelivery:
             assert notified == ["bob"]
         finally:
             await sink.stop()
+
+
+class TestSessionScoping:
+    async def test_each_run_uses_a_fresh_session(self, tmp_path):
+        """
+        Fixed per-user session ids would accumulate conversation history
+        (and session-scoped buffer memory) without bound across ticks:
+        every run must get a fresh, user-scoped, request-correlated session.
+        """
+        service, store, overlord = _heartbeat(tmp_path, _proactive())
+        await store.record_inbound("ran", "chan-a")
+
+        await service.run_once()
+        await service.run_once()
+
+        assert len(overlord.calls) == 2
+        first, second = overlord.calls
+        assert first["session_id"].startswith("heartbeat_ran_")
+        assert second["session_id"].startswith("heartbeat_ran_")
+        assert first["session_id"] != second["session_id"]
+        # Session stays correlated with the run's request id
+        assert first["session_id"] == f"heartbeat_ran_{first['request_id']}"

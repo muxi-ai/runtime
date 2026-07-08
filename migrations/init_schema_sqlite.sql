@@ -420,6 +420,14 @@ BEGIN
     UPDATE credentials SET updated_at = CURRENT_TIMESTAMP WHERE id = NEW.id;
 END;
 
+CREATE TRIGGER IF NOT EXISTS trigger_update_user_channel_state_updated_at
+AFTER UPDATE ON user_channel_state
+FOR EACH ROW
+BEGIN
+    UPDATE user_channel_state SET updated_at = CURRENT_TIMESTAMP
+    WHERE user_id = NEW.user_id AND formation_id = NEW.formation_id;
+END;
+
 -- =====================================================================
 -- NOTES
 -- =====================================================================

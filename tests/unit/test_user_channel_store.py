@@ -113,3 +113,79 @@ class TestNormalizationAndEnumeration:
         await store.record_inbound("alice", "telegram")
         await store.set_preferences("bob", preferred_channel=None)
         assert await store.known_users() == ["alice", "bob"]
+
+
+class SlowEmptyDb:
+    """
+    Minimal async-session factory simulating a slow database with no rows.
+
+    Each ``get`` yields control (sleeps) before returning None, which is
+    exactly the window where an unlocked first-access load used to clobber
+    in-memory state written by a concurrent, lock-holding mutation.
+    """
+
+    def __init__(self, delay=0.05):
+        self.delay = delay
+        self.added = []
+
+    def __call__(self):
+        return self
+
+    async def __aenter__(self):
+        return self
+
+    async def __aexit__(self, *args):
+        return False
+
+    async def get(self, model, key):
+        import asyncio
+
+        await asyncio.sleep(self.delay)
+        return None
+
+    def add(self, row):
+        self.added.append(row)
+
+    async def commit(self):
+        return None
+
+
+class TestFirstAccessConcurrency:
+    async def test_concurrent_get_state_does_not_clobber_recorded_channel(self):
+        """
+        Interleave record_inbound and get_state on a user's FIRST access.
+
+        record_inbound acquires the lock and starts its (slow) DB load;
+        get_state arrives mid-load. Without the shared lock and
+        load-if-absent semantics, get_state's own slow load finished last
+        and overwrote the in-memory entry with empty state, silently
+        dropping the just-recorded last_channel.
+        """
+        import asyncio
+
+        store = UserChannelStore(formation_id="test-formation", async_session_maker=SlowEmptyDb())
+
+        writer = asyncio.create_task(store.record_inbound("ran", "telegram", {"chat_id": "1"}))
+        await asyncio.sleep(0.01)  # writer holds the lock, mid DB load
+        reader = asyncio.create_task(store.get_state("ran"))
+        await asyncio.gather(writer, reader)
+
+        state = await store.get_state("ran")
+        assert state["last_channel"] == "telegram"
+        assert state["channels"]["telegram"] == {"chat_id": "1"}
+
+    async def test_concurrent_readers_and_writer_settle_consistently(self):
+        """A burst of first-access readers never erases a concurrent write."""
+        import asyncio
+
+        store = UserChannelStore(formation_id="test-formation", async_session_maker=SlowEmptyDb())
+
+        tasks = [asyncio.create_task(store.get_state("ran")) for _ in range(5)]
+        tasks.append(asyncio.create_task(store.record_inbound("ran", "slack", {"channel": "C1"})))
+        tasks.append(asyncio.create_task(store.set_preferences("ran", preferred_channel="slack")))
+        await asyncio.gather(*tasks)
+
+        state = await store.get_state("ran")
+        assert state["last_channel"] == "slack"
+        assert state["preferred_channel"] == "slack"
+        assert state["channels"]["slack"] == {"channel": "C1"}
