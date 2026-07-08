@@ -43,10 +43,11 @@ import base64
 import mimetypes
 import re
 import uuid
+from contextlib import asynccontextmanager
 from dataclasses import dataclass
 from datetime import datetime, timedelta
 from pathlib import Path
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List, Optional, Tuple
 
 from ....utils.datetime_utils import utc_now_naive
 from ....utils.id_generator import get_default_nanoid
@@ -204,6 +205,12 @@ class ArtifactMemoryService:
         self._instance_id: Optional[str] = None
         self._sweep_task: Optional[asyncio.Task] = None
 
+        # In-process serialization of version-chain writes (see
+        # _chain_lock). Both maps are pruned when the last waiter for a
+        # key releases, so they never outgrow the in-flight capture set.
+        self._chain_locks: Dict[Tuple[str, str], asyncio.Lock] = {}
+        self._chain_lock_waiters: Dict[Tuple[str, str], int] = {}
+
     @property
     def enabled(self) -> bool:
         """Whether artifact capture is active for this formation."""
@@ -306,21 +313,25 @@ class ArtifactMemoryService:
         self.blob_store.write(storage_ref, blob)
 
         try:
-            row = await self.storage.save_artifact(
-                user_id=user_id,
-                public_id=public_id,
-                name=name,
-                content_type=content_type,
-                category=getattr(artifact, "type", None),
-                summary=self._build_summary(name, content_type, len(raw), agent_id),
-                storage_ref=storage_ref,
-                size_bytes=len(raw),
-                compressed_bytes=compressed_bytes,
-                checksum_sha256=blob_checksum(blob),
-                agent_id=agent_id,
-                conversation_id=conversation_id,
-                expires_at=self._compute_expiry(),
-            )
+            # Same-chain captures are serialized in-process so concurrent
+            # background tasks cannot both extend from the same head; the
+            # partial unique chain-head index backstops other processes.
+            async with self._chain_lock(user_id, name):
+                row = await self.storage.save_artifact(
+                    user_id=user_id,
+                    public_id=public_id,
+                    name=name,
+                    content_type=content_type,
+                    category=getattr(artifact, "type", None),
+                    summary=self._build_summary(name, content_type, len(raw), agent_id),
+                    storage_ref=storage_ref,
+                    size_bytes=len(raw),
+                    compressed_bytes=compressed_bytes,
+                    checksum_sha256=blob_checksum(blob),
+                    agent_id=agent_id,
+                    conversation_id=conversation_id,
+                    expires_at=self._compute_expiry(),
+                )
         except Exception:
             # Compensating cleanup: without a metadata row the blob is
             # unlocatable (random public_id) and invisible to the retention
@@ -364,6 +375,38 @@ class ArtifactMemoryService:
             description=f"Captured artifact {name!r} v{row['version']} into artifact memory",
         )
         return row
+
+    @asynccontextmanager
+    async def _chain_lock(self, user_id: str, name: str):
+        """
+        Serialize version-chain writes for one (user, name) within this
+        process.
+
+        Two concurrent background captures of the same name would both
+        read the current chain head before either commits, producing two
+        live "latest" rows; this lock removes the in-process race at its
+        source (the DB's chain-head unique index covers other processes).
+
+        Keyed per (user, name) rather than per user so one response's
+        multi-artifact batch and unrelated users' captures never serialize
+        against each other -- the bookkeeping is a dozen lines and the
+        maps are pruned when the last waiter for a key releases, so they
+        never outgrow the in-flight capture set. formation_id is constant
+        per service instance and is not part of the key.
+        """
+        key = (user_id, name)
+        lock = self._chain_locks.setdefault(key, asyncio.Lock())
+        self._chain_lock_waiters[key] = self._chain_lock_waiters.get(key, 0) + 1
+        try:
+            async with lock:
+                yield
+        finally:
+            remaining = self._chain_lock_waiters[key] - 1
+            if remaining:
+                self._chain_lock_waiters[key] = remaining
+            else:
+                del self._chain_lock_waiters[key]
+                self._chain_locks.pop(key, None)
 
     def _skip(self, user_id: str, name: str, reason: str) -> None:
         """Log one skipped artifact and return None for the capture path."""

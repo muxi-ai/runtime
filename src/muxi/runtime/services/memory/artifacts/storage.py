@@ -16,7 +16,11 @@
 # latest live artifact extends the version chain -- the previous head is
 # demoted (is_latest = False) and the new row points back at it through
 # ``parent_id`` with ``version = previous + 1``, all in one transaction.
-# Previous versions' blobs are retained for history.
+# Previous versions' blobs are retained for history. Chain integrity is
+# race-proof at two layers: the service serializes same-chain writers
+# in-process, and the ``idx_artifacts_chain_head`` partial unique index
+# backstops multi-process deployments (a lost race rolls back and the
+# insert is retried once against the re-read head).
 #
 # Retention (PRD 1.5): ``expires_at`` is computed at capture time by the
 # service; ``mark_expired`` soft-deletes every live row past its expiry --
@@ -29,6 +33,7 @@ from datetime import datetime
 from typing import Any, Dict, List, Optional
 
 from sqlalchemy import select
+from sqlalchemy.exc import IntegrityError
 
 from ....utils.datetime_utils import utc_now_naive
 from .models import Artifact, SystemConfig
@@ -104,10 +109,56 @@ class ArtifactMemoryStorage:
         """
         Insert one artifact row, extending the version chain on name match.
 
+        The read-head/insert transaction can lose a chain-head race to
+        another *process* (the service's per-chain lock already serializes
+        in-process writers): both transactions read the same head, and the
+        loser's insert violates ``idx_artifacts_chain_head``. On that
+        IntegrityError the transaction is rolled back and re-run once
+        against the re-read head; a second loss propagates to the
+        failure-isolated capture path.
+
         Returns the inserted row as a dict (version/parent_id reflect the
         chain position).
         """
-        user_id = str(user_id)
+        fields = {
+            "user_id": str(user_id),
+            "public_id": public_id,
+            "name": name,
+            "content_type": content_type,
+            "summary": summary,
+            "storage_ref": storage_ref,
+            "size_bytes": size_bytes,
+            "compressed_bytes": compressed_bytes,
+            "checksum_sha256": checksum_sha256,
+            "category": category,
+            "tags": tags,
+            "agent_id": agent_id,
+            "conversation_id": conversation_id,
+            "expires_at": expires_at,
+        }
+        try:
+            return await self._insert_version(**fields)
+        except IntegrityError:
+            return await self._insert_version(**fields)
+
+    async def _insert_version(
+        self,
+        user_id: str,
+        public_id: str,
+        name: str,
+        content_type: str,
+        summary: str,
+        storage_ref: str,
+        size_bytes: int,
+        compressed_bytes: int,
+        checksum_sha256: str,
+        category: Optional[str],
+        tags: Optional[List[str]],
+        agent_id: Optional[str],
+        conversation_id: Optional[str],
+        expires_at: Optional[datetime],
+    ) -> Dict[str, Any]:
+        """One read-head -> demote -> insert transaction (see save_artifact)."""
         async with self.db_manager.get_async_session() as session:
             stmt = (
                 select(Artifact)
@@ -127,6 +178,11 @@ class ArtifactMemoryStorage:
                 previous.is_latest = False
                 version = previous.version + 1
                 parent_id = previous.id
+                # The demotion must hit the database before the new head
+                # is inserted or the chain-head unique index rejects the
+                # insert; flush explicitly instead of relying on the unit
+                # of work's statement ordering.
+                await session.flush()
 
             artifact = Artifact(
                 public_id=public_id,

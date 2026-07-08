@@ -10,6 +10,7 @@ same suite against a live PostgreSQL.
 
 from __future__ import annotations
 
+import asyncio
 import base64
 import gzip
 import os
@@ -30,6 +31,7 @@ from muxi.runtime.services.memory.events.models import (
 )
 from muxi.runtime.services.memory.events.service import MemoryEventService
 from muxi.runtime.utils.datetime_utils import utc_now_naive
+from muxi.runtime.utils.id_generator import get_default_nanoid
 
 FORMATION_ID = "artifact-test-formation"
 POSTGRES_DSN = os.environ.get("MUXI_TEST_POSTGRES_DSN")
@@ -306,6 +308,124 @@ class TestVersioning:
         other = await service.capture_response_artifacts([text_artifact()], user_id="u2")
         assert other[0]["version"] == 1
         assert other[0]["parent_id"] is None
+
+
+class TestChainConcurrency:
+    """Version-chain writes are race-proof at both layers."""
+
+    async def test_concurrent_captures_extend_chain_sequentially(self, db_manager, store_dir):
+        # N concurrent background captures of the same name must end with
+        # exactly one live head and strictly sequential versions -- the
+        # per-chain lock serializes the read-version/insert section.
+        service = make_service(db_manager, store_dir)
+        results = await asyncio.gather(
+            *(
+                service.capture_response_artifacts(
+                    [text_artifact(content=f"body {i}")], user_id="u1"
+                )
+                for i in range(5)
+            )
+        )
+        assert all(len(captured) == 1 for captured in results)
+
+        rows = await service.list_artifacts("u1", latest_only=False)
+        assert sorted(row["version"] for row in rows) == [1, 2, 3, 4, 5]
+        heads = [row for row in rows if row["is_latest"]]
+        assert len(heads) == 1
+        assert heads[0]["version"] == 5
+        # The parent chain is intact: v(n) points at v(n-1).
+        by_version = {row["version"]: row for row in rows}
+        for version in range(2, 6):
+            assert by_version[version]["parent_id"] == by_version[version - 1]["id"]
+
+    async def test_different_names_do_not_serialize(self, db_manager, store_dir):
+        # Holding one chain's lock must not block captures of other names
+        # (the lock map is keyed per (user, name), not per user).
+        service = make_service(db_manager, store_dir)
+        async with service._chain_lock("u1", "notes.md"):
+            captured = await asyncio.wait_for(
+                service.capture_response_artifacts(
+                    [text_artifact("other.md", "unblocked")], user_id="u1"
+                ),
+                timeout=5,
+            )
+        assert len(captured) == 1
+
+    async def test_same_name_waits_for_the_chain_lock(self, db_manager, store_dir):
+        service = make_service(db_manager, store_dir)
+        async with service._chain_lock("u1", "notes.md"):
+            task = asyncio.create_task(
+                service.capture_response_artifacts([text_artifact()], user_id="u1")
+            )
+            await asyncio.sleep(0.2)
+            assert not task.done()  # blocked on the held chain lock
+        captured = await asyncio.wait_for(task, timeout=5)
+        assert len(captured) == 1
+
+    async def test_chain_lock_maps_are_pruned(self, db_manager, store_dir):
+        service = make_service(db_manager, store_dir)
+        await asyncio.gather(
+            *(
+                service.capture_response_artifacts(
+                    [text_artifact(content=f"body {i}")], user_id="u1"
+                )
+                for i in range(3)
+            )
+        )
+        assert service._chain_locks == {}
+        assert service._chain_lock_waiters == {}
+
+    async def test_lost_multiprocess_race_retries_once(self, db_manager, store_dir):
+        # Deterministically reproduce the multi-process race the DB index
+        # backstops: between this writer's head-read and insert, a
+        # competing process commits a new head, and the loser's stale
+        # write (version=1, is_latest=True against an empty chain) hits
+        # the real chain-head unique index. All database work and the
+        # IntegrityError are real; only the interleaving is orchestrated.
+        service = make_service(db_manager, store_dir)
+        storage = service.storage
+        real_insert = storage._insert_version
+        state = {"raced": False}
+
+        async def racing_insert(**fields):
+            if not state["raced"]:
+                state["raced"] = True
+                # The competing process wins the race for the chain head.
+                competitor = dict(fields, public_id=get_default_nanoid())
+                competitor["storage_ref"] = fields["storage_ref"] + ".rival"
+                await real_insert(**competitor)
+                # Replay this writer's stale computation: it read "no
+                # head" before the competitor committed, so it inserts
+                # version=1 as latest -- rejected by the database.
+                async with db_manager.get_async_session() as session:
+                    session.add(
+                        Artifact(
+                            user_id=fields["user_id"],
+                            formation_id=FORMATION_ID,
+                            name=fields["name"],
+                            content_type=fields["content_type"],
+                            summary="stale write from the losing racer",
+                            storage_ref=fields["storage_ref"],
+                            size_bytes=1,
+                            compressed_bytes=1,
+                            checksum_sha256="0" * 64,
+                            version=1,
+                            is_latest=True,
+                        )
+                    )
+                    await session.flush()
+                raise AssertionError("the stale insert must violate the chain-head index")
+            return await real_insert(**fields)
+
+        storage._insert_version = racing_insert
+        captured = await service.capture_response_artifacts([text_artifact()], user_id="u1")
+
+        # The retry re-read the winner's head and extended the chain.
+        assert len(captured) == 1
+        assert captured[0]["version"] == 2
+        rows = await service.list_artifacts("u1", latest_only=False)
+        assert sorted(row["version"] for row in rows) == [1, 2]
+        assert sum(row["is_latest"] for row in rows) == 1
 
 
 class TestUserIsolation:

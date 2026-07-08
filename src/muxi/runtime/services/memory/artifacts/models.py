@@ -95,6 +95,29 @@ class Artifact(Base, AsyncModelMixin):
     deleted_at = Column(DateTime, nullable=True)
 
     __table_args__ = (
+        # Chain-head integrity: at most one live latest version per
+        # (formation, user, name). This is the multi-process backstop for
+        # the version chain -- the service serializes same-chain writes
+        # in-process, but two runtime processes can both read the current
+        # head before either commits; the loser hits this index and the
+        # storage layer retries against the re-read head. A partial
+        # unique index is required here (uniqueness over the
+        # is_latest=TRUE subset cannot be expressed as a plain composite
+        # index because demoted versions repeat the key), and both
+        # backends support the WHERE clause -- following the
+        # idx_memory_events_idempotency precedent rather than the plain
+        # composite conversions the namespaces work applied to
+        # non-unique indexes. Soft-deleted heads are excluded so a swept
+        # name can be captured fresh.
+        Index(
+            "idx_artifacts_chain_head",
+            "formation_id",
+            "user_id",
+            "name",
+            unique=True,
+            postgresql_where=text("is_latest AND deleted_at IS NULL"),
+            sqlite_where=text("is_latest AND deleted_at IS NULL"),
+        ),
         Index("idx_artifacts_user", "formation_id", "user_id"),
         Index("idx_artifacts_user_latest", "formation_id", "user_id", "is_latest"),
         Index("idx_artifacts_user_name", "formation_id", "user_id", "name"),

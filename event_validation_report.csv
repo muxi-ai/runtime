@@ -601,7 +601,7 @@ INTERNAL_ERROR,ErrorEvents,YES,,src/muxi/runtime/services/llm/llm.py,667,observa
 INTERNAL_ERROR,ErrorEvents,YES,,src/muxi/runtime/services/llm/llm.py,693,observability.observe(
 INTERNAL_ERROR,ErrorEvents,YES,,src/muxi/runtime/services/llm/llm.py,1363,observability.observe(
 INTERNAL_ERROR,ErrorEvents,YES,,src/muxi/runtime/services/mcp/handler.py,952,observability.observe(
-INTERNAL_ERROR,ErrorEvents,YES,,src/muxi/runtime/services/memory/artifacts/service.py,519,observability.observe(
+INTERNAL_ERROR,ErrorEvents,YES,,src/muxi/runtime/services/memory/artifacts/service.py,585,observability.observe(
 INTERNAL_ERROR,ErrorEvents,YES,,src/muxi/runtime/services/memory/events/service.py,340,observability.observe(
 INTERNAL_ERROR,ErrorEvents,YES,,src/muxi/runtime/services/memory/working.py,1095,observability.observe(
 INTERNAL_ERROR,ErrorEvents,YES,,src/muxi/runtime/services/memory/working.py,1321,observability.observe(
@@ -759,11 +759,11 @@ MCP_TRANSPORT_DETECTION_FAILED,SystemEvents,YES,,src/muxi/runtime/services/mcp/s
 MCP_TRANSPORT_FAILED,SystemEvents,YES,,src/muxi/runtime/services/mcp/service.py,1061,observability.observe(
 MCP_TRANSPORT_FAILED,SystemEvents,YES,,src/muxi/runtime/services/mcp/transports/factory.py,174,observability.observe(
 MCP_TRANSPORT_FALLBACK_SUCCESS,SystemEvents,YES,,src/muxi/runtime/services/mcp/transports/factory.py,198,observability.observe(
-MEMORY_ARTIFACT_CAPTURED,ConversationEvents,YES,,src/muxi/runtime/services/memory/artifacts/service.py,351,observability.observe(
-MEMORY_ARTIFACT_CAPTURE_FAILED,ConversationEvents,YES,,src/muxi/runtime/services/memory/artifacts/service.py,262,observability.observe(
-MEMORY_ARTIFACT_CAPTURE_FAILED,ConversationEvents,YES,,src/muxi/runtime/services/memory/artifacts/service.py,332,observability.observe(
-MEMORY_ARTIFACT_CAPTURE_SKIPPED,ConversationEvents,YES,,src/muxi/runtime/services/memory/artifacts/service.py,370,observability.observe(
-MEMORY_ARTIFACT_RETENTION_SWEPT,ConversationEvents,YES,,src/muxi/runtime/services/memory/artifacts/service.py,546,observability.observe(
+MEMORY_ARTIFACT_CAPTURED,ConversationEvents,YES,,src/muxi/runtime/services/memory/artifacts/service.py,362,observability.observe(
+MEMORY_ARTIFACT_CAPTURE_FAILED,ConversationEvents,YES,,src/muxi/runtime/services/memory/artifacts/service.py,269,observability.observe(
+MEMORY_ARTIFACT_CAPTURE_FAILED,ConversationEvents,YES,,src/muxi/runtime/services/memory/artifacts/service.py,343,observability.observe(
+MEMORY_ARTIFACT_CAPTURE_SKIPPED,ConversationEvents,YES,,src/muxi/runtime/services/memory/artifacts/service.py,413,observability.observe(
+MEMORY_ARTIFACT_RETENTION_SWEPT,ConversationEvents,YES,,src/muxi/runtime/services/memory/artifacts/service.py,612,observability.observe(
 MEMORY_AUTO_EXTRACTED,ConversationEvents,YES,,src/muxi/runtime/services/memory/graph/service.py,176,observability.observe(
 MEMORY_AUTO_EXTRACTED,ConversationEvents,YES,,src/muxi/runtime/services/memory/graph/service.py,414,observability.observe(
 MEMORY_AUTO_EXTRACTED,ConversationEvents,YES,,src/muxi/runtime/services/memory/log/service.py,357,observability.observe(
@@ -837,6 +837,7 @@ MEMORY_OPERATION_FAILED,ErrorEvents,YES,,src/muxi/runtime/formation/overlord/cha
 MEMORY_OPERATION_FAILED,ErrorEvents,YES,,src/muxi/runtime/formation/overlord/chat_orchestrator.py,1123,observability.observe(
 MEMORY_OPERATION_FAILED,ErrorEvents,YES,,src/muxi/runtime/formation/overlord/clarification.py,423,observability.observe(
 MEMORY_OPERATION_FAILED,ErrorEvents,YES,,src/muxi/runtime/formation/overlord/clarification.py,796,observability.observe(
+MEMORY_OPERATION_FAILED,ErrorEvents,YES,,src/muxi/runtime/services/memory/artifacts/service.py,481,observability.observe(
 MEMORY_OPERATION_FAILED,ErrorEvents,YES,,src/muxi/runtime/services/memory/memobase.py,185,observability.observe(
 MEMORY_OPERATION_FAILED,ErrorEvents,YES,,src/muxi/runtime/services/memory/memobase.py,507,observability.observe(
 MEMORY_PROJECTION_APPLIED,ConversationEvents,YES,,src/muxi/runtime/services/memory/events/service.py,232,observability.observe(

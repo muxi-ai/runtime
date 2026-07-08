@@ -115,6 +115,7 @@ class TestTableCreation:
 
     def test_artifact_indexes(self, engine):
         indexes = {index["name"] for index in inspect(engine).get_indexes("artifacts")}
+        assert "idx_artifacts_chain_head" in indexes
         assert "idx_artifacts_user" in indexes
         assert "idx_artifacts_user_latest" in indexes
         assert "idx_artifacts_user_name" in indexes
@@ -144,7 +145,8 @@ class TestDefaults:
     def test_public_id_unique(self, session):
         session.add(make_artifact(public_id="fixed-public-id-00001"))
         session.commit()
-        session.add(make_artifact(public_id="fixed-public-id-00001"))
+        # Different name so only the public_id constraint is in play.
+        session.add(make_artifact(public_id="fixed-public-id-00001", name="other.pdf"))
         with pytest.raises(IntegrityError):
             session.commit()
         session.rollback()
@@ -165,7 +167,10 @@ class TestVersionChainColumns:
         v1 = make_artifact()
         session.add(v1)
         session.commit()
+        # Demote before inserting the new head, mirroring the storage
+        # layer's explicit ordering under the chain-head unique index.
         v1.is_latest = False
+        session.flush()
         v2 = make_artifact(version=2, parent_id=v1.id, is_latest=True)
         session.add(v2)
         session.commit()
@@ -173,6 +178,41 @@ class TestVersionChainColumns:
         assert v2.parent_id == v1.id
         assert v1.is_latest is False
         assert v2.is_latest is True
+
+
+class TestChainHeadUniqueness:
+    """idx_artifacts_chain_head allows exactly one live head per name."""
+
+    def test_second_live_head_rejected(self, session):
+        session.add(make_artifact())
+        session.commit()
+        session.add(make_artifact())  # same (formation, user, name), also latest
+        with pytest.raises(IntegrityError):
+            session.commit()
+        session.rollback()
+
+    def test_demoted_versions_share_the_name(self, session):
+        session.add(make_artifact(is_latest=False))
+        session.add(make_artifact(is_latest=False, version=2))
+        session.add(make_artifact(version=3))
+        session.commit()
+        assert session.query(Artifact).count() == 3
+
+    def test_soft_deleted_head_does_not_block_a_new_head(self, session):
+        from muxi.runtime.utils.datetime_utils import utc_now_naive
+
+        session.add(make_artifact(deleted_at=utc_now_naive()))
+        session.commit()
+        session.add(make_artifact())
+        session.commit()
+        assert session.query(Artifact).count() == 2
+
+    def test_other_users_and_names_unconstrained(self, session):
+        session.add(make_artifact())
+        session.add(make_artifact(user_id="u2"))
+        session.add(make_artifact(name="other.pdf"))
+        session.commit()
+        assert session.query(Artifact).count() == 3
 
 
 class TestArtifactSavedEventSchema:
