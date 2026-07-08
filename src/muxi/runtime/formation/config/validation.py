@@ -564,16 +564,6 @@ class FormationValidator:
             if "mcp_servers" in agent_config:
                 self._validate_agent_mcp_servers(agent_config["mcp_servers"], agent_id or i)
 
-            # Validate soul document reference (Proactiveness Phase 1).
-            # Existence is checked by the loader during path resolution.
-            if "soul" in agent_config:
-                soul = agent_config["soul"]
-                if not isinstance(soul, str) or not soul.strip():
-                    self.result.add_error(
-                        f"Agent {agent_id or i} 'soul' must be a non-empty path string "
-                        "relative to the formation directory (e.g. './SOUL.md')"
-                    )
-
     def _validate_model_config(self, model_config: Dict[str, Any], context: str) -> None:
         """Validate model configuration."""
         if not isinstance(model_config, dict):

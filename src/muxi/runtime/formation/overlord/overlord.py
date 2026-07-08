@@ -2181,25 +2181,6 @@ class Overlord:
                 f"LLM text capability configuration is mandatory for agent creation. Error: {str(e)}"
             )
 
-        # Load the optional soul document (Proactiveness Phase 1). The path
-        # was resolved and confined to the formation directory at load time;
-        # a missing or unreadable file fails agent creation (fail fast).
-        soul_content = None
-        soul_path = agent_config.get("soul")
-        if soul_path:
-            try:
-                soul_content = Path(soul_path).read_text(encoding="utf-8")
-            except OSError as e:
-                raise ValueError(
-                    f"Failed to read soul document for agent "
-                    f"{agent_config.get('id', 'unknown')} at {soul_path}: {e}"
-                )
-            if not soul_content.strip():
-                raise ValueError(
-                    f"Soul document for agent {agent_config.get('id', 'unknown')} "
-                    f"is empty: {soul_path}"
-                )
-
         # Create agent instance
         agent = Agent(
             model=model,
@@ -2208,7 +2189,6 @@ class Overlord:
             name=agent_config.get("name"),
             system_message=agent_config.get("system_message"),
             knowledge_config=agent_config.get("knowledge"),
-            soul=soul_content,
         )
 
         # Expose agent-level model overrides so get_model_for_capability's
