@@ -2,6 +2,27 @@
 
 ## [unreleased]
 
+### Proactiveness, Phase 3: built-in commands (#245)
+
+Eight built-in slash commands land in the registry Phase 1 left open --
+all fully deterministic, zero LLM round-trips, active whenever the
+``commands:`` block is enabled (no block still means no interception).
+
+- ``/setup``: a stateful guided flow derived from the formation's own
+  config (channel question only when channels are declared, then
+  timezone), per-user with a 10-minute expiry that replies with a clear
+  expiration message instead of leaking answers to the LLM.
+- ``/jobs``: list/pause/resume/cancel/logs against the scheduler with
+  caller-ownership enforcement; ``/identity``: link/unlink identifiers
+  with cross-user protection; ``/channels`` and ``/preferences``:
+  read/write per-user channel state (``/channels test`` routes a real
+  notification); ``/reset``: clears the current session buffer;
+  ``/help`` and ``/status``: pure reads.
+- Formation-defined commands shadow built-ins (author control wins), and
+  a ``commands.builtin:`` map disables individual built-ins.
+- Handler failures return a friendly reply and emit new
+  ``command.{executed,failed}`` events -- never a crashed turn.
+
 ### Proactiveness, Phase 2: channel templates (#243)
 
 Platform channels ship as declarative content, not MCPs. A channel is a
