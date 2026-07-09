@@ -203,6 +203,39 @@ class Test516:
             print(f"     v1 round-tripped {len(restored)} bytes")
             checks.append("Previous version content decrypts and decompresses intact")
 
+            # 9. REST read surface over real HTTP (real formation ->
+            #    overlord -> route wiring; guards the serving-time
+            #    attribute contract the unit mocks cannot).
+            print("\n  9. Exercising the REST read surface over HTTP...")
+            import httpx
+
+            await self.formation.start_server(block=False)
+            await asyncio.sleep(2)
+            base_url = "http://127.0.0.1:8275/v1"
+            headers = {
+                "X-Muxi-Client-Key": "test-client-key-456",
+                "X-Muxi-User-ID": effective_user,
+            }
+            async with httpx.AsyncClient(timeout=30.0) as client:
+                r = await client.get(f"{base_url}/artifacts", headers=headers)
+                assert r.status_code == 200, f"GET /artifacts returned {r.status_code}: {r.text}"
+                data = r.json()["data"]
+                assert data["total"] >= 1, f"REST listing empty: {data}"
+                listed_ids = {row["id"] for row in data["artifacts"]}
+                assert head["public_id"] in listed_ids, "REST listing missing the chain head"
+                print(f"     GET /artifacts listed {data['total']} artifact(s)")
+                checks.append("REST GET /v1/artifacts served the captured artifacts")
+
+                r = await client.get(
+                    f"{base_url}/artifacts/{head['public_id']}/content", headers=headers
+                )
+                assert r.status_code == 200, f"content download returned {r.status_code}"
+                assert r.headers["x-muxi-artifact-id"] == head["public_id"]
+                assert len(r.content) == head["size_bytes"], "HTTP content size mismatch"
+                assert b"units" in r.content, "downloaded CSV missing the v2 'units' column"
+                print(f"     Content download streamed {len(r.content)} bytes")
+                checks.append("REST content download decrypted and streamed the latest version")
+
         except Exception as e:
             print(f"\n  ERROR: {e}")
             import traceback

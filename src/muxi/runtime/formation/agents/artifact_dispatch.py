@@ -40,6 +40,11 @@ _TEXTUAL_MIME_TYPES = {
 _SEARCH_LIMIT_DEFAULT = 5
 _SEARCH_LIMIT_MAX = 20
 
+# Filtered searches (query/category) apply their predicates in Python, so
+# they scan at most this many of the most recently accessed rows instead
+# of the user's entire artifact history.
+_SEARCH_SCAN_CAP = 200
+
 
 def artifact_tools_available(overlord: Any) -> bool:
     """Whether the artifact retrieval tools should exist for this formation."""
@@ -277,7 +282,12 @@ async def _search_artifacts(
         limit = _SEARCH_LIMIT_DEFAULT
     limit = max(1, min(limit, _SEARCH_LIMIT_MAX))
 
-    rows = await service.list_artifacts(user_id, order_by_last_accessed=True)
+    # Push the cap into the database instead of materializing every row:
+    # an unfiltered listing needs exactly ``limit`` rows; lexical filters
+    # are applied in Python, so filtered searches scan a bounded window
+    # of the most recently accessed rows rather than the whole history.
+    fetch_limit = limit if not (query or category) else _SEARCH_SCAN_CAP
+    rows = await service.list_artifacts(user_id, order_by_last_accessed=True, limit=fetch_limit)
     matches = []
     for row in rows:
         if category and (row.get("category") or "").lower() != category:

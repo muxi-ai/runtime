@@ -328,20 +328,30 @@ class ArtifactMemoryStorage:
 
             chain: Dict[int, Dict[str, Any]] = {anchor.id: anchor.to_dict()}
 
-            # Ancestors: follow parent_id links up to the chain root.
+            # Ancestors: follow parent_id links up to the chain root. The
+            # user check is defensive -- chains never legitimately cross
+            # users, but a stray link must not leak another user's rows.
             parent_id = anchor.parent_id
             while parent_id is not None and parent_id not in chain:
                 parent = await session.get(Artifact, parent_id)
-                if parent is None or (not include_deleted and parent.deleted_at is not None):
+                if (
+                    parent is None
+                    or parent.user_id != str(user_id)
+                    or parent.formation_id != self.formation_id
+                    or (not include_deleted and parent.deleted_at is not None)
+                ):
                     break
                 chain[parent.id] = parent.to_dict()
                 parent_id = parent.parent_id
 
-            # Descendants: follow the reverse link down to the chain head.
+            # Descendants: follow the reverse link down to the chain head,
+            # scoped by user like every other chain query.
             current_id = anchor.id
             while True:
                 stmt = select(Artifact).filter_by(
-                    formation_id=self.formation_id, parent_id=current_id
+                    user_id=str(user_id),
+                    formation_id=self.formation_id,
+                    parent_id=current_id,
                 )
                 if not include_deleted:
                     stmt = stmt.filter(Artifact.deleted_at.is_(None))

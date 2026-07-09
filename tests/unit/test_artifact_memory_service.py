@@ -595,6 +595,56 @@ class TestRetrievalSurface:
         assert await service.count_artifacts("u1") == 2
         assert await service.count_artifacts("u2") == 0
 
+    async def test_chain_walk_excludes_foreign_user_rows(self, db_manager, store_dir):
+        # Version chains never legitimately cross users, but a stray or
+        # malicious parent link must not let one user's chain walk pull
+        # another user's rows -- in either direction (Greptile #264).
+        service = make_service(db_manager, store_dir)
+        v1, v2 = await self._seed_chain(service, bodies=("v1", "v2"))
+
+        async with db_manager.get_async_session() as session:
+            # Foreign "descendant": a u2 row whose parent_id points at
+            # u1's chain head.
+            session.add(
+                Artifact(
+                    user_id="u2",
+                    formation_id=FORMATION_ID,
+                    name="notes.md",
+                    content_type="text/markdown",
+                    summary="foreign child row",
+                    storage_ref="u2/xx/foreign-child.bin",
+                    size_bytes=1,
+                    compressed_bytes=1,
+                    checksum_sha256="0" * 64,
+                    version=3,
+                    parent_id=v2["id"],
+                    is_latest=True,
+                )
+            )
+            # Foreign "ancestor": a u2 chain whose head u1 points at.
+            foreign_parent = Artifact(
+                user_id="u2",
+                formation_id=FORMATION_ID,
+                name="foreign-parent.md",
+                content_type="text/markdown",
+                summary="foreign parent row",
+                storage_ref="u2/yy/foreign-parent.bin",
+                size_bytes=1,
+                compressed_bytes=1,
+                checksum_sha256="0" * 64,
+                version=1,
+                is_latest=True,
+            )
+            session.add(foreign_parent)
+            await session.flush()
+            anchored = await session.get(Artifact, v1["id"])
+            anchored.parent_id = foreign_parent.id
+            await session.flush()
+
+        chain = await service.get_history("u1", v2["public_id"])
+        assert [row["version"] for row in chain] == [2, 1]
+        assert all(row["user_id"] == "u1" for row in chain)
+
 
 class TestUserIsolation:
     """All reads are user-scoped; per-user keys segregate blobs."""

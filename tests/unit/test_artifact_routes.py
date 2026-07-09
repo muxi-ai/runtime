@@ -3,19 +3,31 @@
 Covers user scoping (X-Muxi-User-ID required; cross-user ids 404), the
 inert posture without artifact memory, list shape (manifest ordering,
 total), metadata reads, streamed content delivery (headers, bytes,
-version selection, last_accessed refresh), and version history.
+version selection, last_accessed refresh, header-injection hardening),
+and version history.
+
+Wiring fidelity: the app fixture attaches the service through a REAL
+``Overlord`` instance built with the same ``configured_services``
+handoff the Formation performs at boot, and the routes resolve it from
+``formation._overlord`` exactly like at serving time. This is the
+regression guard for the review blocker where the routes read a
+formation attribute the serving path never populated and the test mocks
+agreed with the wrong name -- an attribute drift on either side now
+fails these tests instead of passing silently.
 """
 
 from __future__ import annotations
 
 from datetime import datetime
 from types import SimpleNamespace
+from unittest.mock import MagicMock
 
 import pytest
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
 
 from muxi.runtime.datatypes.artifacts import ArtifactMetadata, MuxiArtifact
+from muxi.runtime.formation.overlord import Overlord
 from muxi.runtime.formation.server.routes.client.artifacts import router
 from muxi.runtime.services.db import Base, DatabaseManager
 from muxi.runtime.services.memory.artifacts import ArtifactMemoryService
@@ -43,12 +55,26 @@ def service(db_manager, tmp_path):
     )
 
 
+def make_overlord(artifact_memory) -> Overlord:
+    """A real Overlord carrying the service via configured_services --
+    the same handoff Formation performs (formation.py builds
+    ``configured_services["artifact_memory"]`` from its init-time
+    attribute; Overlord.__init__ exposes it as ``self.artifact_memory``,
+    which is what the routes read)."""
+    return Overlord(
+        configured_services={
+            "observability_manager": MagicMock(),
+            "artifact_memory": artifact_memory,
+        }
+    )
+
+
 def make_app(artifact_memory) -> FastAPI:
-    """Minimal app: the artifacts router + a formation stub on app.state."""
+    """The artifacts router wired the way the runtime serves it."""
     app = FastAPI()
     app.include_router(router, prefix="/v1")
     app.state.formation = SimpleNamespace(
-        _artifact_memory=artifact_memory,
+        _overlord=make_overlord(artifact_memory),
         formation_id=FORMATION_ID,
         request_middleware=None,
         permission_resolver=None,
@@ -77,6 +103,37 @@ async def seed(service, artifact, user_id="u1", agent_id="writer"):
     )
     assert len(captured) == 1
     return captured[0]
+
+
+class TestServiceResolution:
+    """The routes must resolve the service from the live overlord, never
+    from the formation's init-time attribute (review blocker #264)."""
+
+    async def test_formation_attribute_alone_serves_nothing(self, service):
+        # A formation carrying only the init-time attribute (no overlord
+        # exposure) must NOT serve artifacts: flipping the routes back to
+        # formation._artifact_memory makes this test fail.
+        await seed(service, text_artifact())
+        app = FastAPI()
+        app.include_router(router, prefix="/v1")
+        app.state.formation = SimpleNamespace(
+            _artifact_memory=service,
+            _overlord=make_overlord(None),
+            formation_id=FORMATION_ID,
+            request_middleware=None,
+            permission_resolver=None,
+        )
+        response = TestClient(app).get("/v1/artifacts", headers=USER_HEADER)
+        assert response.status_code == 200
+        assert response.json()["data"]["total"] == 0
+
+    async def test_overlord_wiring_serves(self, service, client):
+        # The positive direction: the real Overlord configured_services
+        # handoff is sufficient for the routes to serve.
+        row = await seed(service, text_artifact())
+        response = client.get("/v1/artifacts", headers=USER_HEADER)
+        assert response.json()["data"]["total"] == 1
+        assert response.json()["data"]["artifacts"][0]["id"] == row["public_id"]
 
 
 class TestAuthAndInertness:
@@ -181,6 +238,22 @@ class TestContent:
         row = await seed(service, text_artifact(), user_id="u2")
         response = client.get(f"/v1/artifacts/{row['public_id']}/content", headers=USER_HEADER)
         assert response.status_code == 404
+
+    async def test_filename_header_injection_is_neutralized(self, service, client):
+        # Artifact names are agent-generated: CR/LF in the name must not
+        # smuggle extra HTTP headers through Content-Disposition.
+        evil_name = 'evil\r\nX-Injected: 1\r\n.md"'
+        row = await seed(service, text_artifact(evil_name, "payload"))
+        response = client.get(f"/v1/artifacts/{row['public_id']}/content", headers=USER_HEADER)
+        assert response.status_code == 200
+        assert response.content == b"payload"
+        assert "x-injected" not in response.headers
+        disposition = response.headers["content-disposition"]
+        assert "\r" not in disposition and "\n" not in disposition
+        # RFC 6266: the true name rides filename* fully percent-encoded.
+        assert "filename*=UTF-8''evil%0D%0AX-Injected" in disposition
+        # The quoted ASCII fallback carries no quotes or control chars.
+        assert 'filename="evil__X-Injected: 1__.md"' in disposition
 
 
 class TestVersions:

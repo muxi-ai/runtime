@@ -18,7 +18,9 @@ formation without artifact memory returns empty lists / 404s rather than
 errors -- the read surface is inert, never broken.
 """
 
+import re
 from typing import Optional, Tuple
+from urllib.parse import quote
 
 from fastapi import APIRouter, Header, Query, Request
 from fastapi.responses import JSONResponse, StreamingResponse
@@ -58,6 +60,23 @@ def _public_row(row: dict) -> dict:
     return data
 
 
+def _content_disposition(name: str) -> str:
+    """RFC 6266 Content-Disposition for an artifact name.
+
+    Artifact names are agent-generated, so they are untrusted header
+    input: control characters (CR/LF header injection), quotes, and
+    backslashes are stripped from the quoted ASCII fallback, and the
+    original name rides the ``filename*`` UTF-8 form fully
+    percent-encoded (which cannot carry raw control bytes).
+    """
+    raw = str(name)
+    ascii_fallback = re.sub(r"[^\x20-\x7e]", "_", raw).replace('"', "").replace("\\", "")
+    if not ascii_fallback.strip():
+        ascii_fallback = "artifact"
+    encoded = quote(raw, safe="")
+    return f"inline; filename=\"{ascii_fallback}\"; filename*=UTF-8''{encoded}"
+
+
 async def _artifact_request_context(
     request: Request,
     x_user_id: Optional[str],
@@ -84,7 +103,13 @@ async def _artifact_request_context(
     if error_response:
         return None, None, request_id, error_response
 
-    service = getattr(formation, "_artifact_memory", None)
+    # Resolve the artifact memory service through the overlord, exactly
+    # like the other client routes resolve their services: the overlord
+    # is handed the service as ``artifact_memory`` at boot and is the
+    # live serving-time attachment point (``formation._artifact_memory``
+    # is an initialization-time detail, not the serving contract).
+    overlord = getattr(formation, "_overlord", None)
+    service = getattr(overlord, "artifact_memory", None) if overlord else None
     if service is not None and not getattr(service, "enabled", False):
         service = None
     return service, user_id, request_id, None
@@ -209,6 +234,15 @@ async def download_artifact_content(
     try:
         # read_content verifies the checksum and refreshes last_accessed_at
         # (and the last_accessed retention expiry) on the exact version read.
+        #
+        # KNOWN LIMITATION: read_content buffers the whole decrypted
+        # payload in memory (decrypt + gunzip are whole-blob operations
+        # in the Phase 1 pipeline), so the chunked response below bounds
+        # CLIENT delivery, not server memory. Peak server usage is
+        # ~one decoded artifact per in-flight download, capped by
+        # artifacts.max_size_mb (default 50MB). A storage-level streaming
+        # read (chunked AES-GCM framing) is the future fix when the
+        # retrieval platform lands.
         content = await service.read_content(user_id, row["public_id"])
     except Exception as e:
         response = create_error_response(
@@ -221,12 +255,11 @@ async def download_artifact_content(
             end = offset + CONTENT_CHUNK_BYTES
             yield content[offset:end]
 
-    filename = str(row["name"]).replace('"', "")
     return StreamingResponse(
         _iter_chunks(),
         media_type=row["content_type"],
         headers={
-            "Content-Disposition": f'inline; filename="{filename}"',
+            "Content-Disposition": _content_disposition(row["name"]),
             "Content-Length": str(len(content)),
             "X-Muxi-Artifact-Id": row["public_id"],
             "X-Muxi-Artifact-Version": str(row["version"]),

@@ -190,6 +190,40 @@ class TestGetArtifact:
         assert result["success"] is False
         assert "store down" in result["error"]
 
+    async def test_unfiltered_search_pushes_limit_into_storage(
+        self, service, overlord, monkeypatch
+    ):
+        # The cap must reach the database query, not slice a full
+        # materialization (Greptile #264).
+        captured_kwargs = {}
+        real_list = service.list_artifacts
+
+        async def recording_list(user_id, **kwargs):
+            captured_kwargs.update(kwargs)
+            return await real_list(user_id, **kwargs)
+
+        monkeypatch.setattr(service, "list_artifacts", recording_list)
+        await seed(service, text_artifact())
+        captured_kwargs.clear()
+
+        result = await handle_get_artifact("agent", {"limit": 3}, overlord, user_id="u1")
+        assert result["success"] is True
+        assert captured_kwargs["limit"] == 3
+        assert captured_kwargs["order_by_last_accessed"] is True
+
+    async def test_filtered_search_scans_a_bounded_window(self, service, overlord, monkeypatch):
+        # Lexical filters run in Python, so filtered searches fetch a
+        # bounded window instead of the whole history.
+        captured_kwargs = {}
+
+        async def recording_list(user_id, **kwargs):
+            captured_kwargs.update(kwargs)
+            return []
+
+        monkeypatch.setattr(service, "list_artifacts", recording_list)
+        await handle_get_artifact("agent", {"query": "sales"}, overlord, user_id="u1")
+        assert captured_kwargs["limit"] == artifact_dispatch._SEARCH_SCAN_CAP
+
 
 class TestGetArtifactContent:
     async def test_full_text_content(self, service, overlord):
