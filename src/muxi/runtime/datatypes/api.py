@@ -28,6 +28,7 @@ class APIEventType(str, Enum):
     AGENT_UPDATED = "agent.updated"
     AGENT_DELETED = "agent.deleted"
     AGENT_LIST = "agent.list"
+    AGENT_KNOWLEDGE_SYNCED = "agent.knowledge.synced"
 
     SECRET_CREATED = "secret.created"
     SECRET_RETRIEVED = "secret.retrieved"
