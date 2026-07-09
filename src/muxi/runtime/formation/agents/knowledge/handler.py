@@ -939,9 +939,7 @@ class KnowledgeHandler:
         mode = self._effective_tree_mode(knowledge_source)
         if mode in EMBEDDING_RETRIEVAL_MODES:
             scoring = self._get_scoring_service()
-            current_model = (
-                (self._embedding_model_slug or scoring.model_slug) if scoring else None
-            )
+            current_model = (self._embedding_model_slug or scoring.model_slug) if scoring else None
             needs_embeddings = scoring is not None and (
                 not tree.chunk_embeddings or (tree.embedding_model or "") != (current_model or "")
             )
