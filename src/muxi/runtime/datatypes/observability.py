@@ -936,6 +936,13 @@ class ConversationEvents(Enum):
     MEMORY_ARTIFACT_RETENTION_SWEPT = "memory.artifact.retention_swept"
     # When the retention sweep soft-deletes expired artifacts and prunes blobs
 
+    # Artifact memory retrieval (Artifact Memory Phase 2)
+    MEMORY_ARTIFACT_RETRIEVED = "memory.artifact.retrieved"
+    # When an agent tool or REST read returns artifact metadata or content
+
+    MEMORY_ARTIFACT_RETRIEVAL_FAILED = "memory.artifact.retrieval_failed"
+    # When an artifact retrieval fails (isolated; the turn gets a friendly error)
+
     USER_INFO_EXTRACTION_STARTED = "user.info.extraction.started"
     # When background user information extraction task is initiated
 

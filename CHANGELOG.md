@@ -2,6 +2,50 @@
 
 ## [unreleased]
 
+### Artifact memory phase 2 - manifest + retrieval tools
+
+Agents now use what artifact memory captures (artifact-memory PRD Phase 2,
+"Use the Data"; Phase 1 capture shipped earlier):
+
+- Artifact manifest in agent context: the Knowledge Index's artifacts
+  section now renders the PRD manifest shape - one line per artifact with
+  id, version, name, type, producing agent, date, and summary - capped at
+  the 20 most recently accessed (`memory.index.artifact_cap`), with a
+  "... and N more. Use get_artifact to search." pointer beyond the cap.
+- Built-in retrieval tools, registered only when artifact memory is live
+  (no persistent memory or `artifacts.enabled: false` means no tools, no
+  manifest): `get_artifact` (id lookup with a 500-char content preview,
+  or lexical search over name/summary/tags with a category filter),
+  `get_artifact_content` (full decrypted+decompressed content with
+  version selection; binary content is guarded out of model context),
+  and `get_artifact_history` (the full version chain from any version's
+  id). All user-scoped (cross-user ids read as not found) and
+  failure-isolated (friendly tool errors, never a crashed turn).
+  Retrieval refreshes `last_accessed_at` (and the last_accessed
+  retention expiry). Semantic search over artifact summaries stays
+  deferred to the embedding-platform phase.
+- Overlord routing awareness: the routing prompt includes the user's
+  artifact manifest (with each artifact's creating agent) so "update
+  that sales report" routes to the agent that created it, and treats
+  own-artifact retrieval - including by opaque artifact id - as normal
+  memory access rather than a security threat.
+- REST read surface under the client routes (dual-auth, user-scoped
+  through the request middleware + RBAC pipeline): `GET /v1/artifacts`,
+  `GET /v1/artifacts/{id}`, `GET /v1/artifacts/{id}/content` (standard
+  HTTP streaming with the artifact's own content type; `?version=N`),
+  and `GET /v1/artifacts/{id}/versions`.
+- Capture-side hardening from the PRD's open questions: configurable
+  `artifacts.max_size_mb` (default 50, fail-fast validated) skips
+  oversized captures, and checksum dedup skips re-captures that are
+  byte-identical to the current chain head instead of minting a
+  redundant version (compared on raw content inside the chain lock;
+  fails open on a corrupt head).
+- New observability events `MEMORY_ARTIFACT_RETRIEVED` /
+  `MEMORY_ARTIFACT_RETRIEVAL_FAILED` (event validation stays 100%). New
+  e2e: `5_artifacts/test_5_16_artifact_retrieval.py` (generate a file in
+  one turn, retrieve it by id in a later turn, list history after an
+  update).
+
 ### Memory revamp phases 3-5 - context optimization, knowledge index, lint
 
 The memory system's read-path and lifecycle layers on top of the Phase 1-2

@@ -428,6 +428,174 @@ class TestChainConcurrency:
         assert sum(row["is_latest"] for row in rows) == 1
 
 
+class TestDedup:
+    """Identical re-captures of a chain head are skipped (PRD open q. 2)."""
+
+    async def test_identical_recapture_is_skipped(self, db_manager, store_dir):
+        service = make_service(db_manager, store_dir)
+        first = await service.capture_response_artifacts(
+            [text_artifact(content="same body")], user_id="u1"
+        )
+        assert len(first) == 1
+        duplicate = await service.capture_response_artifacts(
+            [text_artifact(content="same body")], user_id="u1"
+        )
+        assert duplicate == []
+        rows = await service.list_artifacts("u1", latest_only=False)
+        assert len(rows) == 1
+        assert rows[0]["version"] == 1
+        # No orphan blob was written for the skipped duplicate.
+        assert len(list(store_dir.rglob("*.bin"))) == 1
+
+    async def test_changed_content_still_versions(self, db_manager, store_dir):
+        service = make_service(db_manager, store_dir)
+        await service.capture_response_artifacts([text_artifact(content="draft")], user_id="u1")
+        second = await service.capture_response_artifacts(
+            [text_artifact(content="final")], user_id="u1"
+        )
+        assert second[0]["version"] == 2
+
+    async def test_same_size_different_content_versions(self, db_manager, store_dir):
+        # The size gate alone must not decide: equal sizes force the
+        # content comparison, which detects the difference.
+        service = make_service(db_manager, store_dir)
+        await service.capture_response_artifacts([text_artifact(content="aaaa")], user_id="u1")
+        second = await service.capture_response_artifacts(
+            [text_artifact(content="bbbb")], user_id="u1"
+        )
+        assert second[0]["version"] == 2
+
+    async def test_identical_content_different_users_both_capture(self, db_manager, store_dir):
+        service = make_service(db_manager, store_dir)
+        await service.capture_response_artifacts([text_artifact(content="same")], user_id="u1")
+        other = await service.capture_response_artifacts(
+            [text_artifact(content="same")], user_id="u2"
+        )
+        assert len(other) == 1
+
+    async def test_dedup_fails_open_on_missing_head_blob(self, db_manager, store_dir):
+        # A corrupt store (head blob missing) must not block new captures:
+        # the dedup check fails open and the capture proceeds as a version.
+        service = make_service(db_manager, store_dir)
+        first = await service.capture_response_artifacts(
+            [text_artifact(content="same body")], user_id="u1"
+        )
+        (store_dir / first[0]["storage_ref"]).unlink()
+        second = await service.capture_response_artifacts(
+            [text_artifact(content="same body")], user_id="u1"
+        )
+        assert len(second) == 1
+        assert second[0]["version"] == 2
+
+
+class TestMaxSize:
+    """Oversized content is skipped at capture (PRD open question 1)."""
+
+    async def test_oversized_capture_is_skipped(self, db_manager, store_dir):
+        service = make_service(db_manager, store_dir, config={"max_size_mb": 1})
+        oversized = "x" * (1024 * 1024 + 1)
+        captured = await service.capture_response_artifacts(
+            [text_artifact(content=oversized)], user_id="u1"
+        )
+        assert captured == []
+        assert await service.list_artifacts("u1") == []
+
+    async def test_content_at_the_limit_is_captured(self, db_manager, store_dir):
+        service = make_service(db_manager, store_dir, config={"max_size_mb": 1})
+        at_limit = "x" * (1024 * 1024)
+        captured = await service.capture_response_artifacts(
+            [text_artifact(content=at_limit)], user_id="u1"
+        )
+        assert len(captured) == 1
+
+
+class TestRetrievalSurface:
+    """Phase 2 reads: metadata, version resolution, history, manifest."""
+
+    async def _seed_chain(self, service, bodies=("v1", "v2", "v3"), user_id="u1"):
+        rows = []
+        for body in bodies:
+            captured = await service.capture_response_artifacts(
+                [text_artifact(content=body)], user_id=user_id, agent_id="writer"
+            )
+            rows.append(captured[0])
+        return rows
+
+    async def test_get_metadata_is_user_scoped(self, db_manager, store_dir):
+        service = make_service(db_manager, store_dir)
+        captured = await service.capture_response_artifacts([text_artifact()], user_id="u1")
+        assert await service.get_metadata("u1", captured[0]["public_id"]) is not None
+        assert await service.get_metadata("u2", captured[0]["public_id"]) is None
+
+    async def test_get_history_returns_full_chain_from_any_version(self, db_manager, store_dir):
+        service = make_service(db_manager, store_dir)
+        v1, v2, v3 = await self._seed_chain(service)
+        # Any version's public id resolves the whole chain, newest first.
+        for anchor in (v1, v2, v3):
+            chain = await service.get_history("u1", anchor["public_id"])
+            assert [row["version"] for row in chain] == [3, 2, 1]
+        assert chain[0]["is_latest"] is True
+        assert chain[0]["agent_id"] == "writer"
+
+    async def test_get_history_is_user_scoped(self, db_manager, store_dir):
+        service = make_service(db_manager, store_dir)
+        (head,) = await self._seed_chain(service, bodies=("only",))
+        assert await service.get_history("u2", head["public_id"]) == []
+
+    async def test_resolve_version_walks_the_chain(self, db_manager, store_dir):
+        service = make_service(db_manager, store_dir)
+        v1, v2, v3 = await self._seed_chain(service)
+        resolved = await service.resolve_version("u1", v3["public_id"], version=1)
+        assert resolved["public_id"] == v1["public_id"]
+        # And the content of that version reads back.
+        assert (await service.read_content("u1", resolved["public_id"])) == b"v1"
+
+    async def test_resolve_version_unknown_version_is_none(self, db_manager, store_dir):
+        service = make_service(db_manager, store_dir)
+        v1, _, _ = await self._seed_chain(service)
+        assert await service.resolve_version("u1", v1["public_id"], version=9) is None
+
+    async def test_resolve_version_default_is_the_id_itself(self, db_manager, store_dir):
+        service = make_service(db_manager, store_dir)
+        v1, _, _ = await self._seed_chain(service)
+        resolved = await service.resolve_version("u1", v1["public_id"])
+        assert resolved["version"] == 1
+
+    async def test_read_content_refreshes_last_accessed(self, db_manager, store_dir):
+        service = make_service(db_manager, store_dir)
+        captured = await service.capture_response_artifacts([text_artifact()], user_id="u1")
+        before = captured[0]["last_accessed_at"]
+        await asyncio.sleep(0.01)
+        await service.read_content("u1", captured[0]["public_id"])
+        after = (await service.get_metadata("u1", captured[0]["public_id"]))["last_accessed_at"]
+        assert after > before
+
+    async def test_manifest_orders_by_last_accessed_and_caps(self, db_manager, store_dir):
+        service = make_service(db_manager, store_dir)
+        for i in range(4):
+            await service.capture_response_artifacts(
+                [text_artifact(f"file-{i}.md", f"body {i}")], user_id="u1"
+            )
+        # Reading an older artifact bumps it to the top of the manifest.
+        rows = await service.list_artifacts("u1")
+        oldest = next(row for row in rows if row["name"] == "file-0.md")
+        await asyncio.sleep(0.01)
+        await service.read_content("u1", oldest["public_id"])
+
+        manifest = await service.list_manifest("u1", limit=2)
+        assert len(manifest) == 2
+        assert manifest[0]["name"] == "file-0.md"
+
+    async def test_count_artifacts_counts_latest_only(self, db_manager, store_dir):
+        service = make_service(db_manager, store_dir)
+        await self._seed_chain(service)  # 3 versions, 1 head
+        await service.capture_response_artifacts(
+            [text_artifact("other.md", "unrelated")], user_id="u1"
+        )
+        assert await service.count_artifacts("u1") == 2
+        assert await service.count_artifacts("u2") == 0
+
+
 class TestUserIsolation:
     """All reads are user-scoped; per-user keys segregate blobs."""
 

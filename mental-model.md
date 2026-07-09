@@ -1696,6 +1696,116 @@ backfill, GDPR). **E2E:** `2_memory/test_2s1_memory_event_substrate.py`
 `test_2s2_provenance_and_rebuild.py` (provenance chains on a real
 conversation, GDPR forget + rebuild, legacy backfill).
 
+### Artifact Memory Phase 2 (2026-07-09): Manifest + Retrieval Tools
+
+**PRD:** `engineering/prds/artifact-memory.md` Phase 2 ("Use the Data").
+Phase 1 (capture: interceptor, gzip+AES-GCM blob pipeline, versioning,
+retention, encryption) shipped earlier; Phase 2 makes agents use what was
+captured.
+
+**Retrieval surface on the service**
+(`services/memory/artifacts/service.py` + `storage.py`): `list_manifest`
+(latest artifacts, `last_accessed_at DESC`, capped), `count_artifacts`
+(COUNT query, also used by the index fingerprint), `get_metadata`,
+`get_history` (full version chain resolved from ANY version's public id —
+walks `parent_id` ancestors AND reverse-link descendants), and
+`resolve_version` (chain walk to a numbered version, backing
+`get_artifact_content(id, version=N)`). `read_content` (Phase 1) remains
+the only access that refreshes `last_accessed_at` (and the last_accessed
+retention expiry) — metadata reads deliberately do not count as access.
+
+**Manifest injection** rides the Knowledge Index seam
+(`services/memory/index.py`): the artifacts section now renders the PRD
+2.1 shape, one line per artifact —
+`- {public_id} v{version} | {name} (type) by {agent} | {date} -- {summary}` —
+capped at the 20 most recently accessed (`memory.index.artifact_cap`),
+with `... and {N} more. Use get_artifact to search.` beyond the cap.
+Pagination past the cap is the retrieval tools' job, not the manifest's.
+NOTE: the index's overall `max_tokens` budget (default 300) still clips
+final assembly — formations that want the full 20-entry manifest visible
+should raise `memory.index.max_tokens`.
+
+**Built-in tools** (`formation/agents/artifact_dispatch.py`, registered +
+dispatched in `agent.py` exactly like record_lesson/generate_file):
+`get_artifact` (id lookup -> metadata + 500-char preview; or lexical
+search over name/summary/tags with category filter — semantic search is
+DEFERRED to the embedding-platform phase since capture summaries are
+deterministic and unembedded), `get_artifact_content` (full decrypted
+content; version selection; binary content is refused into context with a
+pointer to the REST endpoint; text truncates at 50K chars), and
+`get_artifact_history` (version chain). All are user-scoped through
+invoke_tool's `user_id` (cross-user ids read as "not found") and
+failure-isolated (friendly `{"success": False, "error"}` dicts, never a
+raised exception). Tools only register when
+`overlord.artifact_memory` exists AND is enabled — no persistent memory
+or `artifacts.enabled: false` means no tools, no manifest (pinned by
+unit tests).
+
+**Overlord routing awareness** (PRD 2.6, `agent_router.py`):
+`select_agent_for_message` takes `user_id`; when artifact memory is live
+the routing system prompt gains a "User artifacts context" section (up to
+10 manifest lines with each artifact's creating agent) plus an
+instruction to prefer the creating agent for update/regenerate requests.
+Failure-isolated: any hint-build error routes without the hint.
+
+**Security-layer false positives (found by e2e, fixed with a
+deterministic override):** BOTH LLM security layers — the routing LLM
+(SECURITY_BLOCK) and the RequestAnalyzer — intermittently flag
+artifact-retrieval-by-id turns as threats: the opaque Nano ID reads like
+a credential and "show the stored file's exact contents" reads like
+extraction. Prompt carve-outs alone were NOT reliable with gpt-4o-mini.
+Fix mirrors the user-self-recall pattern:
+`RequestAnalyzer._heuristic_is_artifact_retrieval` (explicit
+get_artifact* tool mention, or "artifact" + retrieval/history verb)
+downgrades `information_extraction` / `credential_fishing`
+classifications in the analyzer and downgrades SECURITY_BLOCK to
+fallback selection in the router (router override additionally requires
+artifact memory to be live). `prompt_injection` / `jailbreak` are never
+downgraded. Both prompts also gained explicit artifact carve-out text
+(`workflow_request_analysis.md`, routing system prompt).
+
+**REST read surface** (`server/routes/client/artifacts.py`, dual-auth
+like the memory routes, same middleware+RBAC pipeline): `GET /v1/artifacts`
+(latest, manifest order, `total`), `GET /v1/artifacts/{id}`,
+`GET /v1/artifacts/{id}/content` (StreamingResponse in 64KB chunks with
+the artifact's own content type + Content-Disposition; `?version=N`),
+`GET /v1/artifacts/{id}/versions`. The content route's operation_id is
+`download_artifact_content` (NOT `get_artifact_content`) so the
+MCP-exposed API tool namespace cannot shadow the built-in tool.
+
+**Capture-side additions** (PRD open questions): `artifacts.max_size_mb`
+(default 50; fail-fast validated via the shared `parse_artifacts_config`)
+skips oversized captures; checksum dedup skips a re-capture that is
+byte-identical to the current chain head (compared on RAW content inside
+the chain lock — the stored `checksum_sha256` covers the encrypted blob,
+which changes with every random nonce, so it cannot be compared
+directly). Dedup fails open: a missing/corrupt head blob never blocks a
+new capture.
+
+**Observability:** `MEMORY_ARTIFACT_RETRIEVED` /
+`MEMORY_ARTIFACT_RETRIEVAL_FAILED` (ConversationEvents); dedup skips
+reuse `MEMORY_ARTIFACT_CAPTURE_SKIPPED` with reason `duplicate_content`,
+size skips use `exceeds_max_size`.
+
+**Tests:** `tests/unit/test_artifact_tools.py` (28: gating, each tool,
+cross-user denial, binary/truncation guards, failure isolation),
+`test_artifact_routes.py` (14: REST surface incl. streaming headers),
+extensions in `test_artifact_memory_service.py` (dedup, max size,
+retrieval surface), `test_artifact_memory_config.py` (max_size_mb),
+`test_knowledge_index.py` (manifest shape/cap), `test_agent_router.py`
+(routing hint). E2E: `5_artifacts/test_5_16_artifact_retrieval.py`
+(generate -> manifest shape -> retrieve by id in a later turn (proven by
+the last_accessed_at refresh) -> update -> history through a chat turn).
+
+**Gotchas:**
+1. Dedup MUST compare decrypted content, not `checksum_sha256` — the
+   AES-GCM nonce randomizes the blob every time.
+2. The version-chain walk needs both directions: a v1 id has no parent,
+   so descendants are found via `parent_id == current.id` reverse lookup.
+3. `_run_request_pipeline` (shared with the memory routes) lowercases
+   the user id; artifacts captured under mixed-case chat user ids are
+   normalized the same way on the chat path, so they agree.
+
 ---
 
 ## 4. LLM Layer

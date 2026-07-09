@@ -82,6 +82,14 @@ LINT_FINDINGS_KEY_FORMAT = "memory_lint:{user_id}"
 MAX_ENTITIES_FETCHED = 50
 MAX_GAPS_RENDERED = 5
 
+# Artifact manifest cap (artifact-memory PRD 2.1: the 20 most recently
+# accessed artifacts; anything beyond is reachable via get_artifact).
+DEFAULT_ARTIFACT_CAP = 20
+
+# Manifest line summary clip: each entry stays around the PRD's ~30-token
+# budget even with a verbose stored summary.
+ARTIFACT_SUMMARY_CLIP = 90
+
 
 class KnowledgeIndexService:
     """Generates, caches, and serves the per-user memory index blob."""
@@ -113,6 +121,7 @@ class KnowledgeIndexService:
         self.entity_count_threshold = int(
             config.get("entity_count_threshold", DEFAULT_ENTITY_COUNT_THRESHOLD)
         )
+        self.artifact_cap = int(config.get("artifact_cap", DEFAULT_ARTIFACT_CAP))
         regenerate_on = config.get("regenerate_on", DEFAULT_REGENERATE_ON)
         self.regenerate_on = {str(trigger).strip().lower() for trigger in regenerate_on}
 
@@ -196,7 +205,7 @@ class KnowledgeIndexService:
 
         artifacts: List[Dict[str, Any]] = []
         if self.artifact_memory is not None and getattr(self.artifact_memory, "enabled", False):
-            artifacts = await self.artifact_memory.list_artifacts(user_id)
+            artifacts = await self._fetch_manifest(user_id)
 
         gaps = await self.get_lint_findings(user_id)
 
@@ -205,6 +214,7 @@ class KnowledgeIndexService:
             entities=entities,
             log_stats=log_stats,
             artifacts=artifacts,
+            artifact_total=fingerprint["artifacts"],
             gaps=gaps,
         )
 
@@ -304,9 +314,20 @@ class KnowledgeIndexService:
     async def _artifact_count(self, user_id: str) -> int:
         """Count the user's live artifacts through the artifact service."""
         try:
+            counter = getattr(self.artifact_memory, "count_artifacts", None)
+            if counter is not None:
+                return int(await counter(user_id))
             return len(await self.artifact_memory.list_artifacts(user_id))
         except Exception:
             return 0
+
+    async def _fetch_manifest(self, user_id: str) -> List[Dict[str, Any]]:
+        """The capped manifest rows (most recently accessed first)."""
+        lister = getattr(self.artifact_memory, "list_manifest", None)
+        if lister is not None:
+            return await lister(user_id, limit=self.artifact_cap)
+        rows = await self.artifact_memory.list_artifacts(user_id)
+        return rows[: self.artifact_cap]
 
     async def _log_stats(self, user_id: str) -> Dict[str, Any]:
         """Entry count, date span, and most recent summary for the log."""
@@ -347,6 +368,7 @@ class KnowledgeIndexService:
         log_stats: Dict[str, Any],
         artifacts: List[Dict[str, Any]],
         gaps: List[str],
+        artifact_total: int = 0,
     ) -> str:
         """Render the index blob within the max_tokens character budget."""
         if not entity_count and not log_stats["count"] and not artifacts and not gaps:
@@ -373,10 +395,13 @@ class KnowledgeIndexService:
             sections.append(line)
 
         if artifacts:
-            labels = [_artifact_label(artifact) for artifact in artifacts]
-            sections.append(
-                _fit_listing(f"Artifacts ({len(artifacts)}): ", labels, len(artifacts), budget=None)
-            )
+            total = max(artifact_total, len(artifacts))
+            lines = [f"Artifacts ({total}):"]
+            lines.extend(_artifact_label(artifact) for artifact in artifacts)
+            omitted = total - len(artifacts)
+            if omitted > 0:
+                lines.append(f"... and {omitted} more. Use get_artifact to search.")
+            sections.append("\n".join(lines))
 
         if gaps:
             shown = gaps[:MAX_GAPS_RENDERED]
@@ -469,16 +494,29 @@ def _entity_label(entity: Dict[str, Any]) -> str:
 
 
 def _artifact_label(artifact: Dict[str, Any]) -> str:
-    """Render one artifact as ``Name (type, date)`` for the index listing."""
-    parts = []
+    """Render one artifact manifest line (artifact-memory PRD 2.1).
+
+    Shape: ``- {id} v{version} | {name} ({type}) by {agent} | {date} --
+    {summary}`` -- id, name, version, producing agent, and summary so
+    agents can retrieve by id and the overlord can route by creator,
+    at roughly 30 tokens per entry.
+    """
+    parts = [f"- {artifact['public_id']}" if artifact.get("public_id") else "-"]
+    if artifact.get("version"):
+        parts.append(f"v{artifact['version']}")
+    label = " ".join(parts) + f" | {artifact.get('name', '?')}"
     content_type = artifact.get("content_type")
     if content_type:
-        parts.append(str(content_type).rsplit("/", 1)[-1])
-    created = artifact.get("created_at")
-    if created:
-        parts.append(str(created)[:10])
-    suffix = f" ({', '.join(parts)})" if parts else ""
-    return f"{artifact.get('name', '?')}{suffix}"
+        label += f" ({str(content_type).rsplit('/', 1)[-1]})"
+    label += f" by {artifact.get('agent_id') or 'overlord'}"
+    stamp = artifact.get("last_accessed_at") or artifact.get("updated_at")
+    stamp = stamp or artifact.get("created_at")
+    if stamp:
+        label += f" | {str(stamp)[:10]}"
+    summary = artifact.get("summary")
+    if summary:
+        label += f" -- {_clip(str(summary), ARTIFACT_SUMMARY_CLIP)}"
+    return label
 
 
 def _fit_listing(prefix: str, labels: List[str], total: int, budget: Optional[int]) -> str:
