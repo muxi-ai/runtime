@@ -847,6 +847,9 @@ class Overlord:
         # a2a_cache_manager will be initialized earlier in __init__ at line 385
         self.mcp_service = MCPService.get_instance()  # Get existing instance
         self.scheduler_service: Optional[SchedulerService] = None
+        # Remote knowledge re-sync service (Phase 3). Created only when an
+        # agent declares url-based knowledge sources; None otherwise.
+        self.knowledge_sync_service: Optional[Any] = None
 
         # Initialize TaskDecomposer now that MCP service is available
         self.task_decomposer = TaskDecomposer(
@@ -1564,6 +1567,11 @@ class Overlord:
         # No-op for formations without a 'proactive' block.
         self._initialize_proactive_services()
 
+        # Register periodic re-sync of remote knowledge sources (Phase 3)
+        # after the scheduler for the same reason. No-op for formations
+        # without url-based knowledge sources.
+        self._initialize_knowledge_sync_service()
+
         # Start the knowledge graph periodic extraction loop now that the
         # extraction/default model is resolved. The getter is evaluated per
         # run so the loop always uses the current capability model.
@@ -1738,6 +1746,65 @@ class Overlord:
                 f"heartbeat {'on' if self.heartbeat_service else 'off'}",
             )
         )
+
+    def _initialize_knowledge_sync_service(self) -> None:
+        """
+        Create the remote knowledge re-sync service (Remote Knowledge
+        Sources Phase 3).
+
+        Inert when unconfigured: formations without url-based knowledge
+        sources never import the remote knowledge package (the cheap dict
+        check below mirrors ``KnowledgeHandler.from_agent_config``). When
+        remote sources exist, the service always supports manual sync
+        triggers; periodic re-sync additionally requires the scheduler
+        (the service registers as a periodic task on its worker loop, the
+        same extension point the proactive heartbeat uses). Declared
+        schedules without a running scheduler degrade to startup-only
+        sync with a loud init warning - never a startup failure.
+        """
+        agent_sources: Dict[str, List[Dict[str, Any]]] = {}
+        for agent_id, agent in self.agents.items():
+            knowledge_config = getattr(agent, "_knowledge_config", None)
+            if not isinstance(knowledge_config, dict) or not knowledge_config.get("enabled"):
+                continue
+            remote_sources = [
+                source
+                for source in (knowledge_config.get("sources") or [])
+                if isinstance(source, dict) and source.get("url")
+            ]
+            if remote_sources:
+                agent_sources[agent_id] = remote_sources
+
+        if not agent_sources:
+            return
+
+        from ...datatypes.observability import InitEventFormatter
+        from ..agents.knowledge.remote.scheduler import KnowledgeSyncService
+
+        self.knowledge_sync_service = KnowledgeSyncService(
+            overlord=self,
+            agent_sources=agent_sources,
+            formation_id=self.formation_id,
+        )
+
+        if not self.knowledge_sync_service.has_scheduled_sources:
+            return
+        if self.scheduler_service:
+            self.scheduler_service.register_periodic_task(self.knowledge_sync_service)
+            print(
+                InitEventFormatter.format_ok(
+                    "Remote knowledge sync scheduler active",
+                    f"{self.knowledge_sync_service.scheduled_source_count} scheduled source(s)",
+                )
+            )
+        else:
+            print(
+                InitEventFormatter.format_warn(
+                    "Remote knowledge schedules require the scheduler",
+                    "sources synced at startup only - enable 'scheduler.enabled: true' "
+                    "(requires persistent memory) for periodic re-sync",
+                )
+            )
 
     async def record_inbound_channel(
         self,

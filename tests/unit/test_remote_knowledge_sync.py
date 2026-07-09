@@ -1,13 +1,15 @@
 """Unit tests for the remote knowledge SyncManager orchestration.
 
 Uses a stub in-memory protocol handler so sync behavior (change
-detection, degrade paths, path safety, limits) is tested without any
-network dependency.
+detection, degrade paths, path safety, limits, archive extraction) is
+tested without any network dependency.
 """
 
 import hashlib
+import io
 import os
 import sys
+import zipfile
 from pathlib import Path
 from typing import Dict, List, Optional
 from unittest import mock
@@ -411,6 +413,188 @@ class TestEnumeratedSync:
         assert len(result.skipped_files) == 3
 
 
+class TestChangePaths:
+    async def test_enumerated_sync_reports_changed_and_deleted_paths(self, tmp_path):
+        state = {"files": {"a.md": b"alpha", "b.md": b"beta"}}
+
+        def factory(cfg):
+            return StubHandler(cfg, state["files"])
+
+        manager, patcher = make_manager(tmp_path, factory)
+        with patcher:
+            first = await manager.sync_source(dict(SOURCE))
+            state["files"] = {"a.md": b"ALPHA v2", "c.md": b"gamma"}
+            second = await manager.sync_source(dict(SOURCE))
+
+        assert sorted(first.changed_paths) == ["a.md", "b.md"]
+        assert first.deleted_paths == []
+        assert first.has_changes
+        assert sorted(second.changed_paths) == ["a.md", "c.md"]
+        assert second.deleted_paths == ["b.md"]
+
+    async def test_no_change_sync_reports_no_changes(self, tmp_path):
+        files = {"a.md": b"alpha"}
+        manager, patcher = make_manager(tmp_path, lambda cfg: StubHandler(cfg, files))
+        with patcher:
+            await manager.sync_source(dict(SOURCE))
+            second = await manager.sync_source(dict(SOURCE))
+        assert not second.has_changes
+
+
+def make_zip_bytes(files: Dict[str, bytes]) -> bytes:
+    buffer = io.BytesIO()
+    with zipfile.ZipFile(buffer, "w") as archive:
+        for name, content in files.items():
+            archive.writestr(name, content)
+    return buffer.getvalue()
+
+
+ARCHIVE_SOURCE = {
+    "url": "stub://kb.zip",
+    "id": "archive-source",
+    "description": "stub archive source",
+    "extract": True,
+}
+
+
+class TestArchiveSync:
+    def archive_manager(self, tmp_path, state):
+        def factory(cfg):
+            handler = StubHandler(cfg, {"kb.zip": state["zip"]})
+            state["handlers"].append(handler)
+            return handler
+
+        return make_manager(tmp_path, factory)
+
+    async def test_cold_archive_sync_extracts_content(self, tmp_path):
+        state = {
+            "zip": make_zip_bytes({"a.md": b"alpha", "docs/b.md": b"beta"}),
+            "handlers": [],
+        }
+        manager, patcher = self.archive_manager(tmp_path, state)
+        with patcher:
+            result = await manager.sync_source(dict(ARCHIVE_SOURCE))
+
+        assert result.status == "success"
+        assert result.files_added == 2
+        assert sorted(result.changed_paths) == ["a.md", "docs/b.md"]
+        content_dir = Path(result.content_dir)
+        assert (content_dir / "a.md").read_bytes() == b"alpha"
+        assert (content_dir / "docs" / "b.md").read_bytes() == b"beta"
+        # The archive itself is never mirrored into the content dir
+        assert not list(content_dir.rglob("*.zip"))
+        # Temp extraction state is cleaned up
+        assert not list(content_dir.parent.glob(".archive-*"))
+
+        manifest = Manifest.load(
+            str(content_dir.parent / MANIFEST_FILENAME), "archive-source", ARCHIVE_SOURCE["url"]
+        )
+        assert manifest.archive_hash.startswith("hash:")
+        assert set(manifest.files) == {"a.md", "docs/b.md"}
+
+    async def test_unchanged_archive_not_redownloaded(self, tmp_path):
+        state = {"zip": make_zip_bytes({"a.md": b"alpha"}), "handlers": []}
+        manager, patcher = self.archive_manager(tmp_path, state)
+        with patcher:
+            await manager.sync_source(dict(ARCHIVE_SOURCE))
+            second = await manager.sync_source(dict(ARCHIVE_SOURCE))
+
+        assert second.status == "success"
+        assert not second.has_changes
+        assert state["handlers"][1].download_calls == []
+
+    async def test_changed_archive_reports_only_changed_files(self, tmp_path):
+        state = {
+            "zip": make_zip_bytes({"a.md": b"alpha", "b.md": b"beta"}),
+            "handlers": [],
+        }
+        manager, patcher = self.archive_manager(tmp_path, state)
+        with patcher:
+            await manager.sync_source(dict(ARCHIVE_SOURCE))
+            state["zip"] = make_zip_bytes({"a.md": b"alpha", "b.md": b"beta v2", "c.md": b"new"})
+            result = await manager.sync_source(dict(ARCHIVE_SOURCE))
+
+        assert result.files_added == 1
+        assert result.files_modified == 1
+        assert sorted(result.changed_paths) == ["b.md", "c.md"]
+        assert result.deleted_paths == []
+
+    async def test_removed_archive_member_deleted_locally(self, tmp_path):
+        state = {
+            "zip": make_zip_bytes({"a.md": b"alpha", "b.md": b"beta"}),
+            "handlers": [],
+        }
+        manager, patcher = self.archive_manager(tmp_path, state)
+        with patcher:
+            await manager.sync_source(dict(ARCHIVE_SOURCE))
+            state["zip"] = make_zip_bytes({"a.md": b"alpha"})
+            result = await manager.sync_source(dict(ARCHIVE_SOURCE))
+
+        assert result.deleted_paths == ["b.md"]
+        assert not (Path(result.content_dir) / "b.md").exists()
+
+    async def test_extract_pattern_filters_members(self, tmp_path):
+        state = {
+            "zip": make_zip_bytes({"a.md": b"keep", "b.txt": b"skip", "docs/c.md": b"keep"}),
+            "handlers": [],
+        }
+        source = {**ARCHIVE_SOURCE, "extract_pattern": "*.md"}
+        manager, patcher = self.archive_manager(tmp_path, state)
+        with patcher:
+            result = await manager.sync_source(source)
+
+        content_dir = Path(result.content_dir)
+        assert (content_dir / "a.md").exists()
+        assert (content_dir / "docs" / "c.md").exists()
+        assert not (content_dir / "b.txt").exists()
+        assert "b.txt" in result.skipped_files
+
+    async def test_corrupt_archive_degrades_to_stale_content(self, tmp_path):
+        state = {"zip": make_zip_bytes({"a.md": b"good v1"}), "handlers": []}
+        manager, patcher = self.archive_manager(tmp_path, state)
+        with patcher:
+            first = await manager.sync_source(dict(ARCHIVE_SOURCE))
+            state["zip"] = b"corrupt bytes, not a zip"
+            second = await manager.sync_source(dict(ARCHIVE_SOURCE))
+
+        assert first.status == "success"
+        assert second.status == "failed"
+        assert "extract" in second.error.lower() or "archive" in second.error.lower()
+        # Stale-wins: the previously extracted content survives untouched
+        assert (Path(second.content_dir) / "a.md").read_bytes() == b"good v1"
+        # And the failed attempt leaked no temp extraction dirs
+        assert not list(Path(second.content_dir).parent.glob(".archive-*"))
+
+    async def test_bomb_bound_fails_sync_without_partial_ingest(self, tmp_path):
+        state = {
+            "zip": make_zip_bytes({f"f{i}.md": b"x" * 4096 for i in range(10)}),
+            "handlers": [],
+        }
+        source = {**ARCHIVE_SOURCE, "max_extracted_size": 8192}
+        manager, patcher = self.archive_manager(tmp_path, state)
+        with patcher:
+            result = await manager.sync_source(source)
+
+        assert result.status == "failed"
+        assert "max_extracted_size" in result.error
+        assert not result.has_local_content
+
+    async def test_traversal_members_never_escape_mirror(self, tmp_path):
+        state = {
+            "zip": make_zip_bytes({"../evil.md": b"escape", "safe.md": b"ok"}),
+            "handlers": [],
+        }
+        manager, patcher = self.archive_manager(tmp_path, state)
+        with patcher:
+            result = await manager.sync_source(dict(ARCHIVE_SOURCE))
+
+        content_dir = Path(result.content_dir)
+        assert (content_dir / "safe.md").exists()
+        assert not (content_dir.parent / "evil.md").exists()
+        assert not (tmp_path / "evil.md").exists()
+        assert "../evil.md" in result.skipped_files
+
+
 class TestIncrementalSync:
     async def test_incremental_add_modify_delete(self, tmp_path):
         state = {"files": {"a.md": b"alpha", "b.md": b"beta"}}
@@ -434,6 +618,73 @@ class TestIncrementalSync:
             str(content_dir.parent / MANIFEST_FILENAME), "stub-source", SOURCE["url"]
         )
         assert set(manifest.files) == {"a.md", "c.md"}
+
+
+class TestRefreshRemoteSource:
+    """KnowledgeHandler.refresh_remote_source: incremental re-embed (Phase 3)."""
+
+    def make_handler(self, tmp_path):
+        from muxi.runtime.formation.agents.knowledge.handler import KnowledgeHandler
+
+        working_memory = mock.MagicMock()
+        working_memory.remove_by_metadata.return_value = 1
+        handler = KnowledgeHandler(
+            "agent-x",
+            working_memory=working_memory,
+            cache_dir=str(tmp_path / "cache"),
+            embedding_dimension=8,
+        )
+
+        async def fake_embeddings(texts):
+            return [[0.0] * 8 for _ in texts]
+
+        handler._generate_embeddings_fn = fake_embeddings
+        return handler, working_memory
+
+    async def test_removes_stale_chunks_and_reingests_changed_files(self, tmp_path):
+        from muxi.runtime.formation.agents.knowledge.handler import KnowledgeHandler
+
+        handler, working_memory = self.make_handler(tmp_path)
+        mirror = tmp_path / "mirror"
+        mirror.mkdir()
+        changed_file = mirror / "a.md"
+        changed_file.write_text("updated content", encoding="utf-8")
+        deleted_file = str(mirror / "gone.md")
+
+        source_config = {"path": str(mirror), "name": "src", "description": "remote mirror"}
+        with mock.patch.object(
+            KnowledgeHandler, "add_file", new_callable=mock.AsyncMock, return_value=2
+        ) as add_mock:
+            chunks = await handler.refresh_remote_source(
+                source_config, [str(changed_file)], [deleted_file]
+            )
+
+        assert chunks == 2
+        # Stale chunks for both files were removed via per-chunk file_path
+        removed_paths = {
+            call.kwargs["metadata_filter"].get("file_path")
+            for call in working_memory.remove_by_metadata.call_args_list
+            if "file_path" in call.kwargs.get("metadata_filter", {})
+        }
+        assert removed_paths == {str(changed_file), deleted_file}
+        # Only the changed file was re-ingested (deleted one is gone)
+        add_mock.assert_awaited_once()
+        ingested_source = add_mock.await_args.args[0]
+        assert ingested_source.path == str(changed_file)
+        assert ingested_source.name == "src"
+        # The transient per-file source never leaks into the sources list
+        assert handler.sources == []
+
+    async def test_no_embedding_fn_skips_reembed(self, tmp_path):
+        handler, _ = self.make_handler(tmp_path)
+        handler._generate_embeddings_fn = None
+        mirror = tmp_path / "mirror"
+        mirror.mkdir()
+        (mirror / "a.md").write_text("x", encoding="utf-8")
+        chunks = await handler.refresh_remote_source(
+            {"path": str(mirror), "name": "src"}, [str(mirror / "a.md")], []
+        )
+        assert chunks == 0
 
 
 class TestPrepareSources:

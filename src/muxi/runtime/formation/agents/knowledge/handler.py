@@ -122,16 +122,25 @@ from ....utils.user_dirs import get_knowledge_dir
 from ...documents.storage.chunk_manager import DocumentChunkManager
 from .base import FileKnowledge
 
-# Reasoning-based RAG (tree indexing + Method A retrieval). See
+# Reasoning-based RAG (tree indexing + Method A/B/hybrid retrieval). See
 # formation/agents/knowledge/reasoning/ and the knowledge-reasoning-rag PRD.
 from .reasoning import (
     DEFAULT_REASONING_THRESHOLD,
     DEFAULT_TREE_SETTINGS,
+    EMBEDDING_RETRIEVAL_MODES,
+    TREE_RETRIEVAL_MODES,
+    AgentTreeStore,
+    ScoringService,
     TreeBuilder,
     TreeCache,
     TreeSearchA,
+    TreeSearchB,
+    TreeSearchHybrid,
+    build_node_chunk_embeddings,
+    compute_source_md5,
     count_tokens,
     load_document_text,
+    source_id_for,
 )
 
 # Document-specific namespace constants
@@ -170,6 +179,20 @@ class KnowledgeHandler:
         # every source flows through the vector pipeline unchanged.
         reasoning_config: Optional[Dict[str, Any]] = None,
         tree_llm: Optional[Any] = None,
+        # Hybrid sufficiency evaluator model (``knowledge.tree.
+        # terminator_model`` resolved through the model hierarchy in the
+        # agent wiring). None = fall back to ``tree_llm``.
+        terminator_llm: Optional[Any] = None,
+        # Formation directory for per-agent tree persistence
+        # (``<formation_path>/.knowledge-trees/``). None disables the
+        # agent-tree path (sources declaring ``agent_tree:`` fall back to
+        # per-document trees with a warning event).
+        formation_path: Optional[str] = None,
+        # Embedding model slug backing ``generate_embeddings_fn``. Only
+        # used for bookkeeping: Method B chunk-embedding sidecars record
+        # it so a model swap invalidates persisted vectors (the tree JSON
+        # and KV survive - only vectors recompute).
+        embedding_model_slug: Optional[str] = None,
     ):
         """
         Initialize the knowledge handler with hybrid architecture components and memory integration.
@@ -195,8 +218,24 @@ class KnowledgeHandler:
         # handlers never touch it.
         self.reasoning_config = reasoning_config or {}
         self.tree_llm = tree_llm
+        self.terminator_llm = terminator_llm
+        self.formation_path = formation_path
         self._tree_indexes: Dict[str, Any] = {}
+        # Per-tree retrieval mode (abs path -> "tree" | "tree-vector" |
+        # "hybrid") deciding which searcher serves the tree at query time.
+        self._tree_modes: Dict[str, str] = {}
+        # Per-agent tree bookkeeping: abs source path -> its config dict
+        # (source_id, regenerate trigger, retrieval mode) for the rebuild
+        # API and regeneration triggers.
+        self._agent_tree_sources: Dict[str, Dict[str, Any]] = {}
+        self._agent_tree_store: Optional[AgentTreeStore] = None
         self._tree_cache: Optional[TreeCache] = None
+        # Lazy ScoringService for Method B / hybrid (built on first use
+        # from the handler's embedding function; None until then).
+        self._scoring_service: Optional[ScoringService] = None
+        self._embedding_model_slug = embedding_model_slug or ""
+        # Once-per-(mode, cause) throttle for query-time degrade warnings.
+        self._tree_degrade_warned: set = set()
         # Keyed locks serializing tree check-and-build per (path, md5) so
         # concurrent ingestion of the same file never fires duplicate LLM
         # builds (same pattern as the artifact version-chain locks in
@@ -354,18 +393,112 @@ class KnowledgeHandler:
         Cheap gate: can tree ingestion possibly apply to this source?
 
         Explicit ``retrieval: vector`` always wins; explicit ``retrieval:
-        tree`` always enters the tree path (which falls back with an event
-        when no tree model is available); otherwise the automatic threshold
-        gate requires a tree LLM and a non-zero threshold. When this
-        returns False the source flows through the vector pipeline exactly
-        as before this feature existed.
+        tree`` / ``tree-vector`` / ``hybrid`` always enters the tree path
+        (which falls back with an event when no tree model is available);
+        otherwise the automatic threshold gate requires a tree LLM and a
+        non-zero threshold. When this returns False the source flows
+        through the vector pipeline exactly as before this feature existed.
         """
         explicit = getattr(knowledge_source, "retrieval", None)
         if explicit == "vector":
             return False
-        if explicit == "tree":
+        if explicit in TREE_RETRIEVAL_MODES:
             return True
         return self.tree_llm is not None and self._reasoning_threshold > 0
+
+    def _effective_tree_mode(self, knowledge_source) -> str:
+        """
+        The tree retrieval mode a source's tree serves under at query time.
+
+        Explicit ``tree-vector`` / ``hybrid`` opt-ins win; everything else
+        that reaches the tree path (explicit ``tree`` or the automatic
+        threshold gate) serves Method A only.
+        """
+        explicit = getattr(knowledge_source, "retrieval", None)
+        if explicit in EMBEDDING_RETRIEVAL_MODES:
+            return explicit
+        return "tree"
+
+    def _get_scoring_service(self) -> Optional[ScoringService]:
+        """
+        Lazy ScoringService over the handler's embedding function.
+
+        Returns None when no embedding function is available (Method B and
+        hybrid then degrade: ingestion skips chunk embeddings and query
+        time falls back to Method A / vector).
+        """
+        if self._scoring_service is None and self._generate_embeddings_fn is not None:
+            self._scoring_service = ScoringService(self._generate_embeddings_fn)
+        return self._scoring_service
+
+    async def _node_chunker(self, text: str) -> List[str]:
+        """Chunk node text for Method B via the shared DocumentChunkManager."""
+        chunks = await self.chunk_manager.chunk_document(
+            content=text, filename="tree-node.md", strategy="fixed"
+        )
+        return [c.content for c in chunks]
+
+    async def _ensure_tree_embeddings(self, tree, file_path: str, file_md5: str) -> bool:
+        """
+        Make sure ``tree`` carries Method B per-node chunk embeddings.
+
+        No-op when embeddings already exist for the current embedding
+        backend. Computes and persists them otherwise. Returns True when
+        the tree ends up with usable embeddings; False (with a fallback
+        event) when it does not - the tree then serves Method A only,
+        never failing ingestion.
+        """
+        scoring = self._get_scoring_service()
+        if scoring is None:
+            observability.observe(
+                event_type=observability.SystemEvents.KNOWLEDGE_TREE_FALLBACK_TO_VECTOR,
+                level=observability.EventLevel.WARNING,
+                description="Method B requested but no embedding function available",
+                data={
+                    "file_path": file_path,
+                    "cause": "no_embedding_function",
+                    "phase": "ingestion",
+                },
+            )
+            return False
+        # Embeddings computed with a different model are stale: the slugs
+        # differ ("" = unknown backend, matches any unknown backend).
+        current_model = self._embedding_model_slug or scoring.model_slug or ""
+        if tree.chunk_embeddings and (tree.embedding_model or "") == current_model:
+            return True
+        try:
+            chunk_count = await build_node_chunk_embeddings(
+                tree, scoring, chunker=self._node_chunker
+            )
+            if current_model:
+                tree.embedding_model = current_model
+        except Exception as e:
+            observability.observe(
+                event_type=observability.SystemEvents.KNOWLEDGE_TREE_FALLBACK_TO_VECTOR,
+                level=observability.EventLevel.WARNING,
+                description="Per-node chunk embedding failed - tree serves Method A only",
+                data={
+                    "file_path": file_path,
+                    "cause": "embedding_failure",
+                    "phase": "ingestion",
+                    "error": str(e),
+                    "error_type": type(e).__name__,
+                },
+            )
+            return False
+        self._get_tree_cache().save_embeddings(tree, file_path, file_md5)
+        observability.observe(
+            event_type=observability.SystemEvents.KNOWLEDGE_TREE_BUILD_COMPLETED,
+            level=observability.EventLevel.DEBUG,
+            description="Per-node chunk embeddings built for Method B",
+            data={
+                "file_path": file_path,
+                "content_hash": file_md5[:8],
+                "chunk_count": chunk_count,
+                "embedded_nodes": len(tree.chunk_embeddings),
+            },
+        )
+        return True
 
     @asynccontextmanager
     async def _tree_build_lock(self, key: str):
@@ -428,14 +561,21 @@ class KnowledgeHandler:
     ) -> Optional[int]:
         """Cache check + threshold gate + tree build (call under the lock)."""
         explicit = getattr(knowledge_source, "retrieval", None)
+        explicit_tree = explicit in TREE_RETRIEVAL_MODES
+        mode = self._effective_tree_mode(knowledge_source)
         threshold = self._reasoning_threshold
         tree_settings = self._tree_settings
 
         # Cache first: same (path, md5) never rebuilds (no content load,
-        # no LLM calls).
+        # no LLM calls). Method B embeddings ride the same cache; when the
+        # mode needs them and the sidecar is missing/stale they are
+        # recomputed here without an LLM rebuild.
         cached = self._get_tree_cache().load(file_path, file_md5)
         if cached is not None:
             self._tree_indexes[file_path] = cached
+            self._tree_modes[file_path] = mode
+            if mode in EMBEDDING_RETRIEVAL_MODES:
+                await self._ensure_tree_embeddings(cached, file_path, file_md5)
             observability.observe(
                 event_type=observability.SystemEvents.KNOWLEDGE_TREE_BUILD_COMPLETED,
                 level=observability.EventLevel.DEBUG,
@@ -444,6 +584,7 @@ class KnowledgeHandler:
                     "file_path": file_path,
                     "content_hash": file_md5[:8],
                     "node_count": cached.node_count,
+                    "retrieval_mode": mode,
                     "from_cache": True,
                 },
             )
@@ -452,7 +593,7 @@ class KnowledgeHandler:
         # Cheap size pre-filter for auto-gated files: a file whose byte
         # size is under ``threshold * 2`` cannot reach ``threshold`` tokens
         # (~4 chars/token), so skip loading its content entirely.
-        if explicit != "tree":
+        if not explicit_tree:
             try:
                 if os.path.getsize(file_path) < threshold * 2:
                     return None
@@ -464,7 +605,7 @@ class KnowledgeHandler:
             return None
 
         token_count = count_tokens(text)
-        if explicit != "tree" and token_count < threshold:
+        if not explicit_tree and token_count < threshold:
             return None
 
         max_doc_tokens = int(tree_settings.get("max_document_tokens", 500000))
@@ -522,8 +663,16 @@ class KnowledgeHandler:
             )
             return None
 
+        # Method B scaffolding: per-node chunk embeddings for tree-vector /
+        # hybrid sources, computed before the cache write so the sidecar
+        # persists in the same pass. Embedding failure degrades the tree to
+        # Method A only (never fails ingestion).
+        if mode in EMBEDDING_RETRIEVAL_MODES:
+            await self._ensure_tree_embeddings(tree, file_path, file_md5)
+
         self._get_tree_cache().save(tree, file_path, file_md5)
         self._tree_indexes[file_path] = tree
+        self._tree_modes[file_path] = mode
         observability.observe(
             event_type=observability.SystemEvents.KNOWLEDGE_TREE_BUILD_COMPLETED,
             level=observability.EventLevel.INFO,
@@ -534,6 +683,7 @@ class KnowledgeHandler:
                 "node_count": tree.node_count,
                 "token_count": token_count,
                 "tree_token_count": tree.tree_token_count,
+                "retrieval_mode": mode,
                 "build_seconds": round(time.time() - build_start, 2),
                 "from_cache": False,
             },
@@ -570,24 +720,378 @@ class KnowledgeHandler:
         """Drop a file's tree from the registry and the disk cache."""
         abs_path = os.path.abspath(file_path)
         removed = self._tree_indexes.pop(abs_path, None) is not None
+        self._tree_modes.pop(abs_path, None)
+        # Agent-tree sources also drop their formation-directory files -
+        # a source removed from config would otherwise leave an orphan in
+        # the committed .knowledge-trees/ directory.
+        registry = self._agent_tree_sources.pop(abs_path, None)
+        if registry is not None:
+            store = self._get_agent_tree_store()
+            if store is not None:
+                store.remove(registry.get("source_id", ""))
+            return removed
         if removed or self.tree_llm is not None:
             self._get_tree_cache().invalidate(abs_path)
         return removed
 
+    # ------------------------------------------------------------------
+    # Per-agent (formation-level) trees - PRD Phase 4
+    # ------------------------------------------------------------------
+
+    def _get_agent_tree_store(self) -> Optional[AgentTreeStore]:
+        """Lazy AgentTreeStore; None when no formation directory is known."""
+        if self._agent_tree_store is None and self.formation_path:
+            self._agent_tree_store = AgentTreeStore(self.formation_path)
+        return self._agent_tree_store
+
+    async def _ingest_agent_tree(self, knowledge_source) -> Optional[int]:
+        """
+        Load-or-build the persistent agent-level tree for a source.
+
+        Returns the node count on success; None when the agent-tree path
+        cannot serve this source (no formation directory, no tree model,
+        size cap, or build failure) - the caller then falls through to the
+        standard per-file pipeline. Never raises.
+        """
+        store = self._get_agent_tree_store()
+        agent_tree_config = getattr(knowledge_source, "agent_tree", None) or {}
+        regenerate = str(agent_tree_config.get("regenerate", "manual"))
+        source_path = os.path.abspath(knowledge_source.path)
+        source_id = source_id_for(getattr(knowledge_source, "name", "") or source_path)
+
+        if store is None:
+            observability.observe(
+                event_type=observability.SystemEvents.KNOWLEDGE_TREE_FALLBACK_TO_VECTOR,
+                level=observability.EventLevel.WARNING,
+                description=(
+                    "agent_tree declared but no formation directory known - "
+                    "serving the source through the standard pipeline"
+                ),
+                data={
+                    "source_path": source_path,
+                    "cause": "no_formation_path",
+                    "phase": "ingestion",
+                },
+            )
+            return None
+
+        files = [f for f in knowledge_source.get_files() if os.path.isfile(f)]
+        if not files:
+            return None
+        md5_root = source_path if os.path.isdir(source_path) else os.path.dirname(source_path)
+        source_md5 = compute_source_md5(files, self._calculate_file_md5, root=md5_root)
+        mode = self._effective_tree_mode(knowledge_source)
+
+        # Register for the rebuild API before any build attempt so a failed
+        # initial build stays reachable via rebuild_agent_trees().
+        self._agent_tree_sources[source_path] = {
+            "source": knowledge_source,
+            "source_id": source_id,
+            "regenerate": regenerate,
+            "mode": mode,
+        }
+
+        if not store.needs_rebuild(source_id, source_md5, regenerate):
+            tree = store.load(source_id)
+            if tree is not None:
+                if await self._finalize_agent_tree(tree, knowledge_source):
+                    # Embeddings were recomputed (mode upgrade or model
+                    # swap) - persist the refreshed tree once.
+                    store.save(tree, source_id, source_md5)
+                observability.observe(
+                    event_type=observability.SystemEvents.KNOWLEDGE_TREE_BUILD_COMPLETED,
+                    level=observability.EventLevel.DEBUG,
+                    description="Agent tree loaded from formation directory",
+                    data={
+                        "source_path": source_path,
+                        "source_id": source_id,
+                        "node_count": tree.node_count,
+                        "retrieval_mode": mode,
+                        "from_cache": True,
+                    },
+                )
+                return tree.node_count
+
+        trigger = "missing" if store.load_meta(source_id) is None else regenerate
+        return await self._build_agent_tree(knowledge_source, files, source_md5, trigger)
+
+    async def _build_agent_tree(
+        self, knowledge_source, files: List[str], source_md5: str, trigger: str
+    ) -> Optional[int]:
+        """Build + persist the agent tree for a source (never raises)."""
+        store = self._get_agent_tree_store()
+        if store is None:
+            return None
+        source_path = os.path.abspath(knowledge_source.path)
+        registry = self._agent_tree_sources.get(source_path) or {}
+        source_id = registry.get("source_id") or source_id_for(source_path)
+        tree_settings = self._tree_settings
+
+        if self.tree_llm is None:
+            observability.observe(
+                event_type=observability.SystemEvents.KNOWLEDGE_TREE_FALLBACK_TO_VECTOR,
+                level=observability.EventLevel.WARNING,
+                description="Agent tree requested but no tree model available",
+                data={
+                    "source_path": source_path,
+                    "cause": "no_tree_model",
+                    "phase": "ingestion",
+                },
+            )
+            return None
+
+        # Concatenate the source corpus. Multi-file sources get a level-1
+        # filename heading per file so the deterministic segmentation pass
+        # keeps file boundaries as top-level tree nodes.
+        parts: List[str] = []
+        for f in sorted(files):
+            text = load_document_text(f, knowledge_source)
+            if not text or not text.strip():
+                continue
+            if len(files) > 1:
+                parts.append(f"# {os.path.basename(f)}\n\n{text.strip()}")
+            else:
+                parts.append(text.strip())
+        corpus = "\n\n".join(parts)
+        if not corpus.strip():
+            return None
+
+        token_count = count_tokens(corpus)
+        max_doc_tokens = int(tree_settings.get("max_document_tokens", 500000))
+        if token_count > max_doc_tokens:
+            observability.observe(
+                event_type=observability.SystemEvents.KNOWLEDGE_TREE_FALLBACK_TO_VECTOR,
+                level=observability.EventLevel.WARNING,
+                description="Agent tree corpus exceeds size cap - falling back",
+                data={
+                    "source_path": source_path,
+                    "cause": "size_cap",
+                    "phase": "ingestion",
+                    "token_count": token_count,
+                    "max_document_tokens": max_doc_tokens,
+                },
+            )
+            return None
+
+        observability.observe(
+            event_type=observability.SystemEvents.KNOWLEDGE_TREE_BUILD_STARTED,
+            level=observability.EventLevel.INFO,
+            description="Building agent-level knowledge tree",
+            data={
+                "source_path": source_path,
+                "source_id": source_id,
+                "file_count": len(files),
+                "token_count": token_count,
+                "trigger": trigger,
+            },
+        )
+        build_start = time.time()
+        try:
+            builder = TreeBuilder(llm=self.tree_llm, settings=tree_settings)
+            tree = await builder.build(
+                text=corpus, document_name=getattr(knowledge_source, "name", source_id)
+            )
+        except Exception as e:
+            observability.observe(
+                event_type=observability.SystemEvents.KNOWLEDGE_TREE_BUILD_FAILED,
+                level=observability.EventLevel.ERROR,
+                description="Agent tree build failed",
+                data={
+                    "source_path": source_path,
+                    "source_id": source_id,
+                    "error": str(e),
+                    "error_type": type(e).__name__,
+                },
+            )
+            observability.observe(
+                event_type=observability.SystemEvents.KNOWLEDGE_TREE_FALLBACK_TO_VECTOR,
+                level=observability.EventLevel.WARNING,
+                description="Agent tree build failed - falling back to standard pipeline",
+                data={
+                    "source_path": source_path,
+                    "cause": "build_failure",
+                    "phase": "ingestion",
+                    "error": str(e),
+                },
+            )
+            return None
+
+        tree.scope = "agent"
+        await self._finalize_agent_tree(tree, knowledge_source)
+        # Single persistence point per build (finalize never saves).
+        store.save(tree, source_id, source_md5)
+        observability.observe(
+            event_type=observability.SystemEvents.KNOWLEDGE_AGENT_TREE_REGENERATED,
+            level=observability.EventLevel.INFO,
+            description="Agent-level knowledge tree regenerated",
+            data={
+                "source_path": source_path,
+                "source_id": source_id,
+                "trigger": trigger,
+                "node_count": tree.node_count,
+                "token_count": token_count,
+                "tree_token_count": tree.tree_token_count,
+                "retrieval_mode": self._tree_modes.get(source_path, "tree"),
+                "build_seconds": round(time.time() - build_start, 2),
+            },
+        )
+        return tree.node_count
+
+    async def _finalize_agent_tree(self, tree, knowledge_source) -> bool:
+        """
+        Register an agent tree and ensure Method B embeddings when needed.
+
+        Does NOT persist: the caller owns the single ``store.save`` so a
+        tree is never written twice per ingestion (a second save failing
+        mid-write must not be able to clobber a good first save). Returns
+        True when embeddings were (re)computed and the tree needs saving.
+        """
+        source_path = os.path.abspath(knowledge_source.path)
+        mode = self._effective_tree_mode(knowledge_source)
+        embeddings_updated = False
+        if mode in EMBEDDING_RETRIEVAL_MODES:
+            scoring = self._get_scoring_service()
+            current_model = (self._embedding_model_slug or scoring.model_slug) if scoring else None
+            needs_embeddings = scoring is not None and (
+                not tree.chunk_embeddings or (tree.embedding_model or "") != (current_model or "")
+            )
+            if needs_embeddings:
+                try:
+                    await build_node_chunk_embeddings(tree, scoring, chunker=self._node_chunker)
+                    if current_model:
+                        tree.embedding_model = current_model
+                    embeddings_updated = True
+                except Exception as e:
+                    observability.observe(
+                        event_type=observability.SystemEvents.KNOWLEDGE_TREE_FALLBACK_TO_VECTOR,
+                        level=observability.EventLevel.WARNING,
+                        description=("Agent tree chunk embedding failed - serving Method A only"),
+                        data={
+                            "source_path": source_path,
+                            "cause": "embedding_failure",
+                            "phase": "ingestion",
+                            "error": str(e),
+                        },
+                    )
+        self._tree_indexes[source_path] = tree
+        self._tree_modes[source_path] = mode
+        return embeddings_updated
+
+    async def rebuild_agent_trees(self, source_id: Optional[str] = None) -> Dict[str, Any]:
+        """
+        Force-rebuild persistent agent trees (the runtime side of
+        ``muxi knowledge rebuild``; exposed over the admin API).
+
+        Args:
+            source_id: Rebuild only this source (slug) when given;
+                otherwise every registered agent-tree source.
+
+        Returns:
+            ``{"rebuilt": [...], "failed": [...], "skipped": [...]}`` with
+            one entry per registered agent-tree source.
+        """
+        report: Dict[str, Any] = {"rebuilt": [], "failed": [], "skipped": []}
+        for source_path, registry in list(self._agent_tree_sources.items()):
+            sid = registry.get("source_id", "")
+            if source_id and sid != source_id:
+                report["skipped"].append(sid)
+                continue
+            source = registry.get("source")
+            files = [f for f in source.get_files() if os.path.isfile(f)]
+            if not files:
+                report["failed"].append(sid)
+                continue
+            md5_root = source_path if os.path.isdir(source_path) else os.path.dirname(source_path)
+            source_md5 = compute_source_md5(files, self._calculate_file_md5, root=md5_root)
+            nodes = await self._build_agent_tree(source, files, source_md5, trigger="manual")
+            if nodes is None:
+                report["failed"].append(sid)
+            else:
+                report["rebuilt"].append({"source_id": sid, "node_count": nodes})
+        return report
+
+    def _tree_searcher_for(self, mode: str):
+        """
+        Build the searcher serving a tree's retrieval mode, or None when
+        the mode's dependencies are unavailable.
+
+        Degradation ladder (never waste a working method):
+        - hybrid without a tree model -> Method B only (embeddings were
+          already built at ingestion; dropping to vector would waste them)
+        - hybrid or tree-vector without an embedding function -> Method A
+        - no tree model AND no embeddings -> None (vector serves the turn)
+        """
+        scoring = self._get_scoring_service() if mode in EMBEDDING_RETRIEVAL_MODES else None
+        if mode == "tree-vector" and scoring is not None:
+            return TreeSearchB(scoring)
+        if mode == "hybrid" and scoring is not None:
+            if self.tree_llm is not None:
+                return TreeSearchHybrid(
+                    llm=self.tree_llm,
+                    scoring_service=scoring,
+                    terminator_llm=self.terminator_llm,
+                    settings=self._tree_settings,
+                )
+            self._warn_tree_degrade_once(
+                mode,
+                cause="no_tree_model",
+                description="Hybrid retrieval degraded: no tree model - serving Method B only",
+            )
+            return TreeSearchB(scoring)
+        if self.tree_llm is not None:
+            if mode in EMBEDDING_RETRIEVAL_MODES:
+                self._warn_tree_degrade_once(
+                    mode,
+                    cause="no_embedding_function",
+                    description=(
+                        f"{mode} retrieval degraded: no embedding function - "
+                        "serving Method A only"
+                    ),
+                )
+            return TreeSearchA(self.tree_llm)
+        return None
+
+    def _warn_tree_degrade_once(self, mode: str, cause: str, description: str) -> None:
+        """Emit one degrade warning per (mode, cause) per handler lifetime.
+
+        ``_tree_searcher_for`` runs on every query; unthrottled events here
+        would spam the stream with the same fact each turn.
+        """
+        key = f"{mode}:{cause}"
+        if key in self._tree_degrade_warned:
+            return
+        self._tree_degrade_warned.add(key)
+        observability.observe(
+            event_type=observability.ErrorEvents.WARNING,
+            level=observability.EventLevel.WARNING,
+            description=description,
+            data={"retrieval_mode": mode, "cause": cause, "phase": "query"},
+        )
+
     async def _search_trees(self, query: str, top_k: int) -> List[Dict[str, Any]]:
         """
-        Run Method A navigation over every tree-indexed document.
+        Run mode-appropriate retrieval over every tree-indexed document:
+        Method A for ``tree``, Method B for ``tree-vector``, the parallel
+        A+B runner for ``hybrid``.
 
-        Never raises: a navigation failure on one tree logs a fallback
+        Never raises: a retrieval failure on one tree logs a fallback
         event and moves on, so the caller's vector results still serve the
         turn (failure isolation per the reasoning-RAG PRD).
+
+        Multi-tree merge: per-tree result lists are interleaved round-robin
+        (each list relevance-ordered) instead of concatenated, so with
+        several trees indexed the first tree cannot hog every ``top_k``
+        slot when the query targets a later one.
         """
-        if not self._tree_indexes or self.tree_llm is None:
+        if not self._tree_indexes:
             return []
-        searcher = TreeSearchA(self.tree_llm)
-        collected: List[Dict[str, Any]] = []
+        per_tree: List[List[Dict[str, Any]]] = []
         max_nodes = min(3, max(1, top_k))
         for file_path, tree in list(self._tree_indexes.items()):
+            mode = self._tree_modes.get(file_path, "tree")
+            searcher = self._tree_searcher_for(mode)
+            if searcher is None:
+                continue
             try:
                 node_results = await searcher.search(query=query, tree=tree, max_nodes=max_nodes)
             except Exception as e:
@@ -609,20 +1113,33 @@ class KnowledgeHandler:
                 observability.observe(
                     event_type=observability.ConversationEvents.CONTENT_RETRIEVED,
                     level=observability.EventLevel.INFO,
-                    description="Tree navigation selected nodes",
+                    description="Tree retrieval selected nodes",
                     data={
                         "document": tree.document,
-                        "method": "tree_a",
+                        "method": mode,
                         "node_ids": [r.metadata.get("node_id") for r in node_results],
                         "query": query[:100],
                     },
                 )
-            for result in node_results:
+            tree_collected: List[Dict[str, Any]] = []
+            for result in sorted(node_results, key=lambda r: r.relevance, reverse=True):
                 result_dict = result.to_dict()
                 result_dict["metadata"].setdefault("source", file_path)
                 result_dict["metadata"].setdefault("knowledge_source", tree.document)
-                collected.append(result_dict)
-        return collected[:top_k]
+                tree_collected.append(result_dict)
+            if tree_collected:
+                per_tree.append(tree_collected)
+
+        merged: List[Dict[str, Any]] = []
+        rank = 0
+        while len(merged) < top_k and any(per_tree):
+            for tree_results in per_tree:
+                if rank < len(tree_results) and len(merged) < top_k:
+                    merged.append(tree_results[rank])
+            rank += 1
+            if all(rank >= len(tree_results) for tree_results in per_tree):
+                break
+        return merged
 
     async def add_knowledge_source(self, source, generate_embeddings_fn: Optional[Callable] = None):
         """Add a knowledge source and process its content using hybrid architecture."""
@@ -1154,6 +1671,9 @@ class KnowledgeHandler:
                 # Reasoning-based RAG (tree indexing)
                 reasoning_config=reasoning_config or None,
                 tree_llm=kwargs.get("tree_llm"),
+                terminator_llm=kwargs.get("terminator_llm"),
+                formation_path=kwargs.get("formation_path"),
+                embedding_model_slug=kwargs.get("embedding_model_slug"),
             )
 
             # Apply reasonable file size limits to prevent memory issues
@@ -1251,6 +1771,25 @@ class KnowledgeHandler:
                 "description": description,
             },
         )
+
+        # Method B / hybrid need an embedding path at ingestion; keep the
+        # stored function in sync for direct add_file callers (config-path
+        # callers set it in from_agent_config before loading sources).
+        if self._generate_embeddings_fn is None and generate_embeddings_fn is not None:
+            self._generate_embeddings_fn = generate_embeddings_fn
+
+        # Per-agent (formation-level) tree: one persistent tree for the
+        # whole source, stored in <formation_dir>/.knowledge-trees/. Takes
+        # the place of both per-file trees and vector chunking for this
+        # source; failure falls through to the standard pipeline below.
+        if getattr(knowledge_source, "agent_tree", None) and self._reasoning_enabled_for(
+            knowledge_source
+        ):
+            agent_nodes = await self._ingest_agent_tree(knowledge_source)
+            if agent_nodes is not None:
+                if knowledge_source not in self.sources:
+                    self.sources.append(knowledge_source)
+                return agent_nodes
 
         # For directories, skip MD5 calculation since we can't hash a directory
         # Individual files will have their own content hashes
@@ -1840,6 +2379,93 @@ class KnowledgeHandler:
                 f"Knowledge source initialization failed: "
                 f"{len(knowledge_sources)} sources configured but failed"
             )
+
+    async def refresh_remote_source(
+        self,
+        source_config: Dict[str, Any],
+        changed_files: List[str],
+        deleted_files: List[str],
+    ) -> int:
+        """Re-embed only the files a remote re-sync changed (Phase 3).
+
+        The startup ingestion treats each synced mirror as one directory
+        source; scheduled re-syncs must not re-embed the whole mirror when
+        a single file changes. This removes the stale chunks for the
+        changed/deleted files (matched via per-chunk ``file_path``
+        metadata, which both directory and single-file ingestion record)
+        and re-ingests just the changed files through the standard
+        ``add_file`` pipeline (chunking, tree gate, MD5 dedupe, events).
+
+        Args:
+            source_config: The synthetic local source config of the mirror
+                (``SyncManager.synthetic_local_source``)
+            changed_files: Absolute paths of added/modified mirror files
+            deleted_files: Absolute paths of files removed from the mirror
+
+        Returns:
+            Number of chunks (or tree nodes) added for the changed files
+        """
+        if self.working_memory is None:
+            return 0
+
+        for file_path in {*changed_files, *deleted_files}:
+            abs_path = os.path.abspath(file_path)
+            # Directory-ingested chunks carry source=<mirror dir> but
+            # always record the per-file path; single-file re-ingests
+            # carry source=<file>. Clear both shapes.
+            self.working_memory.remove_by_metadata(
+                metadata_filter={"file_path": abs_path}, namespace=DOCUMENT_NAMESPACE
+            )
+            self.working_memory.remove_by_metadata(
+                metadata_filter={"source": abs_path}, namespace=DOCUMENT_NAMESPACE
+            )
+            self._remove_tree_for(abs_path)
+            cache_file = self._get_cache_file_path(abs_path)
+            if os.path.exists(cache_file):
+                try:
+                    os.remove(cache_file)
+                except OSError:
+                    pass
+
+        generate_embeddings_fn = self._generate_embeddings_fn
+        if generate_embeddings_fn is None:
+            observability.observe(
+                event_type=observability.SystemEvents.KNOWLEDGE_SOURCE_LOADED,
+                level=observability.EventLevel.WARNING,
+                description="Remote refresh has no embedding function - skipping re-embed",
+                data={"source_name": source_config.get("name", "")},
+            )
+            return 0
+
+        chunks_added = 0
+        for file_path in changed_files:
+            if not os.path.isfile(file_path):
+                continue
+            knowledge_source = FileKnowledge(
+                path=file_path,
+                description=source_config.get("description"),
+                name=source_config.get("name"),
+                max_file_size=source_config.get("max_file_size", 10 * 1024 * 1024),
+                recursive=False,
+            )
+            chunks_added += await self.add_file(knowledge_source, generate_embeddings_fn)
+            # Transient per-file source: keep the registered sources list
+            # stable across re-syncs (the mirror's directory source stays).
+            if knowledge_source in self.sources:
+                self.sources.remove(knowledge_source)
+
+        observability.observe(
+            event_type=observability.SystemEvents.KNOWLEDGE_SOURCE_LOADED,
+            level=observability.EventLevel.INFO,
+            description="Remote knowledge changes re-embedded",
+            data={
+                "source_name": source_config.get("name", ""),
+                "files_changed": len(changed_files),
+                "files_deleted": len(deleted_files),
+                "chunks_added": chunks_added,
+            },
+        )
+        return chunks_added
 
     async def _inject_knowledge_into_memory(
         self,

@@ -7,21 +7,21 @@
 # Usage:        SyncManager calls create_handler(source_config)
 # Author:       Muxi Framework Team
 #
-# Phase 1 protocols: http(s), s3, rsync(+ssh), file. Phase 4 protocols
-# (gs, az, ftp, sftp) are declared in PLANNED_SCHEMES so config validation
-# can distinguish "not yet supported" from "unknown scheme".
+# Protocol auto-detection: the URL scheme picks the handler. Handler
+# imports are local so optional/heavy protocol dependencies (boto3,
+# google-cloud-storage, azure-storage-blob, paramiko) are only touched
+# when a formation actually declares that protocol; missing optional
+# dependencies raise a clear RemoteSyncError naming the install extra.
 # =============================================================================
 
 from urllib.parse import urlparse
 
 from ..handler import ProtocolHandler, RemoteSyncError, SourceConfig
 
-# Schemes implemented in Phase 1
-SUPPORTED_SCHEMES = frozenset({"http", "https", "s3", "rsync", "rsync+ssh", "file"})
-
-# Schemes on the roadmap (PRD Phase 4) - rejected at validation time with
-# a "planned" message rather than "unknown scheme"
-PLANNED_SCHEMES = frozenset({"gs", "az", "ftp", "sftp"})
+# Every scheme with a shipped handler (PRD Phases 1 + 4)
+SUPPORTED_SCHEMES = frozenset(
+    {"http", "https", "s3", "gs", "az", "rsync", "rsync+ssh", "ftp", "sftp", "file"}
+)
 
 
 def get_url_scheme(url: str) -> str:
@@ -45,10 +45,26 @@ def create_handler(config: SourceConfig) -> ProtocolHandler:
         from .s3 import S3Handler
 
         return S3Handler(config)
+    if scheme == "gs":
+        from .gcs import GCSHandler
+
+        return GCSHandler(config)
+    if scheme == "az":
+        from .azure import AzureHandler
+
+        return AzureHandler(config)
     if scheme in ("rsync", "rsync+ssh"):
         from .rsync import RsyncHandler
 
         return RsyncHandler(config)
+    if scheme == "ftp":
+        from .ftp import FTPHandler
+
+        return FTPHandler(config)
+    if scheme == "sftp":
+        from .sftp import SFTPHandler
+
+        return SFTPHandler(config)
     if scheme == "file":
         from .file import FileHandler
 
@@ -60,7 +76,6 @@ def create_handler(config: SourceConfig) -> ProtocolHandler:
 
 
 __all__ = [
-    "PLANNED_SCHEMES",
     "SUPPORTED_SCHEMES",
     "create_handler",
     "get_url_scheme",

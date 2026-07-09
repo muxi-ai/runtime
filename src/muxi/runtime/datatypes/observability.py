@@ -408,11 +408,38 @@ class SystemEvents(Enum):
     # When a tree-eligible source silently falls back to vector indexing/search
     # (build failure, size cap, or missing tree model); data includes the cause
 
+    KNOWLEDGE_TREE_NODE_SELECTED = "knowledge.tree.node.selected"
+    # When Method A (LLM navigation) or Method B (value scoring) selects
+    # tree node(s) for a query; data includes node_ids and method ("a"/"b")
+
+    KNOWLEDGE_TREE_HYBRID_QUEUED = "knowledge.tree.hybrid.queued"
+    # When hybrid retrieval dedup-merges Method A + Method B results;
+    # data includes the queue size and per-method counts
+
+    KNOWLEDGE_TREE_SUFFICIENCY_EVALUATED = "knowledge.tree.sufficiency.evaluated"
+    # Each hybrid sufficiency evaluator call; data includes the verdict
+    # (enough_info, gaps) or the failure when the evaluator errored
+
+    KNOWLEDGE_TREE_HYBRID_TERMINATED_EARLY = "knowledge.tree.hybrid.terminated_early"
+    # When the sufficiency evaluator declares enough_info before max rounds
+
+    KNOWLEDGE_TREE_HYBRID_LOOP_CAPPED = "knowledge.tree.hybrid.loop_capped"
+    # When hybrid expansion stops on a bound (max_sufficiency_rounds or
+    # max_fetched_nodes_pct) without a sufficiency verdict
+
+    KNOWLEDGE_AGENT_TREE_REGENERATED = "knowledge.agent_tree.regenerated"
+    # When a per-agent (formation-level) tree is rebuilt; data includes the
+    # trigger reason (manual / on-source-change / on-formation-load / missing)
+
     KNOWLEDGE_SYNC_STARTED = "knowledge.sync.started"
     # When a remote knowledge source sync begins
 
     KNOWLEDGE_SYNC_COMPLETED = "knowledge.sync.completed"
     # When a remote knowledge source sync completes (includes partial syncs)
+
+    KNOWLEDGE_SYNC_SKIPPED = "knowledge.sync.skipped"
+    # When a scheduled/manual sync is skipped because a sync for the same
+    # source is still in flight (per-source lock, no overlapping syncs)
 
     # ===================================================================
     # INFRASTRUCTURE MONITORING (MOVED FROM CONVERSATIONEVENTs)

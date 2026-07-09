@@ -627,6 +627,7 @@ class FormationServer:
             agents,
             audit,
             config,
+            knowledge,
             llm,
             logging,
             logs,
@@ -651,6 +652,7 @@ class FormationServer:
             logging.router,
             logs.router,
             memory.router,
+            knowledge.router,
             async_router,
             # scheduler.router moved to dual_auth_routers (GET /scheduler/jobs needs both keys)
             a2a.router,

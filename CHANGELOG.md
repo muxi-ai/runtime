@@ -45,6 +45,142 @@ Agents now use what artifact memory captures (artifact-memory PRD Phase 2,
   e2e: `5_artifacts/test_5_16_artifact_retrieval.py` (generate a file in
   one turn, retrieve it by id in a later turn, list history after an
   update).
+### Memory benchmarking - Tier 2 structured recall + Tier 4 cost efficiency
+
+Extends the `bench/memory/` harness (memory-benchmarking PRD; Tier 1
+shipped in #220) with MUXI's differentiated benchmarks:
+
+- Tier 2 structured recall: a seeded, fully deterministic synthetic
+  corpus + Q&A generator (`structured_corpus.py`, no LLM calls) covering
+  the five PRD categories - KG relationship recall, temporal validity,
+  Captain's Log narrative recall, cross-agent knowledge, and
+  contradiction detection. Committed CI fixture (3 sequences / 30
+  questions) plus a `--preset full` PRD-scale dataset (50 sequences /
+  500 questions). New `structured_recall_runner.py` runs the Tier 1
+  vector modes as baselines plus a `structured` mode that exercises the
+  real Knowledge Graph + Captain's Log services (ground-truth manifest
+  ingestion via `apply_extraction`/`upsert_entry`; LLM-extraction replay
+  is the documented Tier 3 seam). Reports add two metric blocks:
+  exact-string recall (verbatim emails/codes/ids in top-K context - the
+  decision input for memory-revamp Phase 6 hybrid/BM25 search, with
+  misses listed by question id) and contradiction-detection
+  precision/recall against the injected ground truth.
+- Tier 4 cost efficiency: new `cost_runner.py` measures retrieval
+  latency percentiles (p50/p95/p99) under a bounded-concurrency load
+  pattern, estimated context tokens per query, measured
+  tokens-per-accurate-recall (with `--qa`), cost per 1,000 queries with
+  monthly projections for the PRD usage scenarios (10/50/200
+  queries/day), and storage footprint per ingested turn. Model pricing
+  moved to an updatable `bench/memory/pricing.json` table (report.py now
+  loads it; behavior unchanged).
+- HuggingFace publication prep: `hf_publish.py` renders the dataset
+  card (MIT) + flat JSONL views ready for `hf upload` (upload itself is
+  a documented owner-only manual step).
+- All runners keep the Tier 1 conventions: real formation, cheap-model
+  config ($0 retrieval-only runs), per-case failure isolation, reports
+  always written on partial failure, nonzero exit on incomplete runs,
+  committed fixture reports under `bench/memory/results/`.
+### Knowledge reasoning RAG - Method B, hybrid mode, per-agent trees (Phases 2-5)
+
+Completes the knowledge-reasoning-rag PRD on top of Phase 1's Method A:
+
+- **Method B (`retrieval: tree-vector`)**: per-node chunk embeddings computed
+  at tree build through the unified embedding layer and scored at query time
+  with the PageIndex formula `NodeScore = (1/sqrt(N+1)) * sum(ChunkScore)` -
+  nodes are retrieved, chunks are scoring scaffolding; zero LLM calls per
+  query. Embeddings persist as a cache sidecar (`.tree.emb.jsonl`) keyed to
+  the embedding model, so a model swap recomputes vectors without an LLM
+  rebuild.
+- **`ScoringService`** (`reasoning/scoring_service.py`): standalone,
+  memory-agnostic `embed` / `score` / `aggregate_with_diminishing_returns`
+  primitive - the published cross-PRD contract that memory-revamp Layer 3
+  (hybrid search) consumes.
+- **Hybrid mode (`retrieval: hybrid`)**: Method A and B run in parallel,
+  results dedup-merge by node_id, and a sufficiency evaluator (dedicated
+  structured-output LLM call on `knowledge.tree.terminator_model`, resolved
+  through the model hierarchy, default: the tree model) decides whether to
+  fetch more via gap-topic scoring. Loop bounds: `tree.max_sufficiency_rounds`
+  (default 3) and `tree.max_fetched_nodes_pct` (default 50). Results carry a
+  `cost` metadata block (llm_calls / evaluator_rounds).
+- **Per-agent trees** (`agent_tree:` block on a source): one persistent tree
+  per source in `<formation>/.knowledge-trees/` (tree + KV + embeddings +
+  versioned `meta.json`), committable to the formation repo so deployments
+  load without rebuilding. Regeneration triggers: `manual` /
+  `on-source-change` (aggregate source MD5) / `on-formation-load`. Force
+  rebuild via the new admin endpoint `POST /v1/knowledge/rebuild` (the
+  runtime side of the CLI's `muxi knowledge rebuild`) or
+  `KnowledgeHandler.rebuild_agent_trees()`.
+- Multi-tree query results now merge round-robin by per-tree relevance rank
+  so one tree cannot crowd out another's top results; all reasoning LLM calls
+  pin explicit `max_tokens` so formation-level chat caps cannot truncate
+  structured outputs, and bypass the semantic response cache.
+- New observability events: `KNOWLEDGE_TREE_NODE_SELECTED`,
+  `KNOWLEDGE_TREE_HYBRID_QUEUED`, `KNOWLEDGE_TREE_SUFFICIENCY_EVALUATED`,
+  `KNOWLEDGE_TREE_HYBRID_TERMINATED_EARLY`,
+  `KNOWLEDGE_TREE_HYBRID_LOOP_CAPPED`, `KNOWLEDGE_AGENT_TREE_REGENERATED`.
+- New comparison bench (`bench/knowledge/`): vector vs A vs B vs hybrid on a
+  fixture corpus; contributor doc `contributing/knowledge-trees.md`. All
+  retrieval modes fall back to vector on failure; existing formations without
+  the new keys behave byte-identically.
+### Remote knowledge sources - archives, scheduling, extra protocols (Phases 2-4)
+
+Completes the remote-knowledge-sources PRD on top of the Phase 1 core
+sync: archive extraction, scheduled re-sync with incremental
+re-embedding, a manual sync trigger endpoint, and four more protocols.
+
+- **Archive extraction (Phase 2)**: ``extract: true`` sources download a
+  single archive (``.zip``, ``.tar``, ``.tar.gz``/``.tgz``,
+  ``.tar.bz2``, ``.tar.xz``) and extract it into the local mirror;
+  ``extract_pattern`` keeps only matching members. Extraction is
+  security-hardened: member names are path-traversal-safe (same guards
+  as the manifest), symlink/hardlink/device members are rejected, and
+  decompression bombs are bounded by ``max_extracted_files`` (default
+  1000) and ``max_extracted_size`` (default 500MB) counted on the
+  DECOMPRESSED stream, never trusted from headers. Extraction happens in
+  a temp dir next to the mirror (always cleaned up); the mirror is only
+  updated after the whole archive extracted successfully, so a corrupt
+  or malicious archive degrades to the previously synced content.
+  Unchanged archives (hash + size) skip both download and extraction.
+- **Scheduled re-sync (Phase 3)**: sources with a cron ``schedule``
+  (or ``@hourly``/``@daily``/``@weekly``) now actually re-sync
+  periodically. The new ``KnowledgeSyncService`` registers with the
+  existing SchedulerService worker loop (the heartbeat's periodic-task
+  extension point -- no second scheduler). Per-source locks skip
+  overlapping syncs (``knowledge.sync.skipped``); total failures retry
+  with exponential backoff (per-source ``retry:`` block --
+  ``max_attempts``/``initial_delay``/``max_delay``/``exponential_base``,
+  defaults 3/5s/300s/2) and then fall back to the next cron fire, always
+  serving stale content in the meantime. After a sync that changed the
+  mirror, only the changed/deleted files are re-embedded
+  (``KnowledgeHandler.refresh_remote_source``), not the whole source.
+  Schedules without a running scheduler degrade to startup-only sync
+  with a loud init warning. ``@startup`` / no schedule keep the Phase 1
+  startup-only behavior.
+- **Manual sync trigger**: ``POST /v1/agents/{agent_id}/knowledge/sync``
+  (AdminKey; optional ``{"source_id": ...}`` body) re-syncs an agent's
+  remote sources on demand through the same locks and incremental
+  re-embed path, returning per-source results.
+- **Additional protocols (Phase 4)**: ``gs://`` (Google Cloud Storage,
+  Content-MD5 change detection, optional ``auth: {type: gcp,
+  credentials_json}`` else ADC), ``az://`` (Azure Blob Storage,
+  Content-MD5/ETag; requires ``auth: {type: azure}`` with
+  ``connection_string`` or ``account_name``+``account_key``),
+  ``ftp://`` (stdlib, size+mtime, ``basic`` auth or URL userinfo), and
+  ``sftp://`` (paramiko, size+mtime, ``ssh_key`` or ``basic`` auth;
+  strict host-key checking by default with the same
+  ``accept_new_host_keys`` opt-in as rsync+ssh). All use the shared
+  atomic-download path. Optional SDKs ship as extras --
+  ``muxi-runtime[gcs]``, ``[azure]``, ``[sftp]`` -- with clear
+  config-time errors naming the extra when missing; ftp needs nothing.
+- Fixed a latent WorkingMemory bug surfaced by incremental re-embedding:
+  FAISS partitions for pre-computed embeddings (knowledge chunks) were
+  created/rebuilt at the buffer's own embedding dimension, silently
+  dropping vectors on write and crashing every vector search after the
+  first index rebuild. Partition dimensionality now follows the vectors
+  it stores.
+- All new config keys are fail-fast validated at load time; formations
+  without remote sources remain untouched (the remote machinery is never
+  imported).
 
 ### Memory revamp phases 3-5 - context optimization, knowledge index, lint
 

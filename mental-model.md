@@ -595,13 +595,16 @@ different plan instead of returning the failure. Off by default; enable via
   the for-loop to `asyncio.gather`. There's a `TODO(perf-round-2)`
   comment in `load_sources_from_config` flagging this.
 
-**Remote Knowledge Sources (Phase 1 core sync, 2026-07-09):**
+**Remote Knowledge Sources (Phases 1-4 complete, 2026-07-09):**
 - Agents can declare url-based knowledge sources alongside local paths:
-  `knowledge.sources[*].url` with schemes `http(s)://`, `s3://`,
-  `rsync://`, `rsync+ssh://`, `file://` (bind mounts). Everything lives in
+  `knowledge.sources[*].url` with schemes `http(s)://`, `s3://`, `gs://`,
+  `az://`, `rsync://`, `rsync+ssh://`, `ftp://`, `sftp://`, `file://`
+  (bind mounts). Everything lives in
   `formation/agents/knowledge/remote/`: `handler.py` (ProtocolHandler ABC
-  + `SourceConfig`), `protocols/{http,s3,rsync,file}.py`, `manifest.py`
-  (per-source sync state), `sync.py` (SyncManager orchestration).
+  + `SourceConfig`), `protocols/{http,s3,gcs,azure,rsync,ftp,sftp,file}.py`,
+  `manifest.py` (per-source sync state), `sync.py` (SyncManager
+  orchestration), `extractor.py` (Phase 2 archive extraction),
+  `scheduler.py` (Phase 3 KnowledgeSyncService).
 - **Architecture: mirror-then-ingest.** `KnowledgeHandler.from_agent_config`
   partitions sources; remote ones sync into a local mirror at
   `<get_knowledge_dir()>/remote/<agent_id>/<source_id>/content/` (i.e.
@@ -626,9 +629,74 @@ different plan instead of returning the failure. Off by default; enable via
   `KNOWLEDGE_SYNC_FAILED` event (WARNING-level when stale content
   exists). E2E: `6_knowledge/test_6f2_remote_source_failure_isolation.py`.
 - **Change detection** is protocol-native: HTTP ETag/Last-Modified, S3
-  ETag, file:// size+mtime composite, rsync native delta (`sync_tree`
-  incremental path; the manifest is rebuilt from the local tree after).
-  A missing remote hash forces a re-download (correctness > bandwidth).
+  ETag, GCS Content-MD5, Azure Content-MD5/ETag, ftp/sftp/file://
+  size+mtime composites, rsync native delta (`sync_tree` incremental
+  path; the manifest is rebuilt from the local tree after). A missing
+  remote hash forces a re-download (correctness > bandwidth).
+- **Optional protocol SDKs** ship as pip extras — `muxi-runtime[gcs]`
+  (google-cloud-storage, usually already present via the core
+  google-cloud-aiplatform dependency), `[azure]` (azure-storage-blob),
+  `[sftp]` (paramiko); ftp uses the stdlib. Missing SDKs raise a clear
+  `RemoteSyncError` naming the extra at handler creation (config time),
+  mirroring the boto3/kafka optional-dep pattern. All SDK calls run in
+  `asyncio.to_thread` (they are sync clients).
+- **Archive extraction (Phase 2, `extract: true`).** The source URL must
+  be a single archive (`.zip`, `.tar`, `.tar.gz`/`.tgz`, `.tar.bz2`,
+  `.tar.xz`); `SyncManager._sync_archive` downloads it into a hidden
+  temp dir NEXT TO the mirror (same fs, never ingested, always cleaned
+  up), extracts via `extractor.py::ArchiveExtractor`, then updates the
+  mirror file-by-file (`os.replace`) and diffs against the manifest for
+  per-file change detection (manifest also stores `archive_hash`/`size`
+  so an unchanged archive skips download AND extraction). Security:
+  member names go through the same `safe_relative_path`/`resolve_within`
+  guards as the manifest, symlink/hardlink/device members are rejected,
+  and decompression bombs are bounded by `max_extracted_files` (1000)
+  and `max_extracted_size` (500MB) counted on the DECOMPRESSED stream —
+  a violation aborts the whole extraction, leaving the previous mirror
+  intact (stale-wins). `extract_pattern` filters members; skipped
+  members are never decompressed (don't count against bounds).
+- **Scheduling (Phase 3, `scheduler.py::KnowledgeSyncService`).** NOT a
+  second loop: the overlord (`_initialize_knowledge_sync_service`, right
+  after proactive services) registers the service with
+  `SchedulerService.register_periodic_task` — the same extension point
+  as the proactive heartbeat — when any source has a periodic schedule
+  (cron or `@hourly`/`@daily`/`@weekly`; `@startup`/no schedule =
+  startup-only). `tick()` never raises; croniter computes per-source
+  `next_fire`. Per-source `asyncio.Lock`s skip overlapping syncs
+  (`knowledge.sync.skipped` SystemEvent), shared by scheduled AND manual
+  triggers. Total sync failure retries with exponential backoff (source
+  `retry:` block — max_attempts/initial_delay/max_delay/exponential_base,
+  defaults 3/5s/300s/2), then falls back to the next cron fire; partial
+  syncs don't retry (stale-wins already applied). Schedules declared
+  without a running scheduler degrade to startup-only + init warning
+  (never a startup failure — backward compatible with Phase 1
+  formations).
+- **Incremental re-embedding.** `SyncResult` carries
+  `changed_paths`/`deleted_paths`; after a sync with changes the service
+  calls `KnowledgeHandler.refresh_remote_source`, which removes stale
+  chunks by per-chunk `file_path` metadata (directory-ingested chunks
+  carry it) and re-ingests ONLY the changed files through `add_file`
+  (transient per-file FileKnowledge, popped from `handler.sources`
+  after). The whole mirror is never re-embedded on a one-file change.
+  Re-embed failure is isolated (event + stale embeddings served).
+- **Manual sync trigger**: `POST /v1/agents/{agent_id}/knowledge/sync`
+  (admin routes, `routes/admin/agents.py`; optional `{"source_id": ...}`
+  body) calls `KnowledgeSyncService.sync_now` — same locks, same
+  re-embed path; a source with a sync in flight reports status
+  `skipped`. Works even without the scheduler (the service is created
+  whenever remote sources exist). E2E:
+  `6_knowledge/test_6f4_manual_sync_trigger.py` (also proves the
+  re-embed end-to-end: the agent answers from post-startup content).
+- **WorkingMemory partition-dim fix (found by Phase 3).** FAISS
+  partitions used to be created/rebuilt at the memory-wide `dimension`;
+  knowledge chunks arrive via `add_with_embedding` with PRE-COMPUTED
+  vectors whose dim can differ (e.g. 1536 openai doc embeddings in the
+  768 nomic buffer memory) — writes were silently dropped
+  (`index_count == 0` recency fallback masked it) and the first
+  `_rebuild_index` after a `remove_by_metadata` shape-crashed every
+  vector search. Partitions are now created at the dim of the vectors
+  they store (`_get_partition(dimension=...)`, `_rebuild_index` groups
+  by actual embedding length).
 - **Downloads are atomic** (`atomic_download` in `remote/handler.py`):
   HTTP/S3/file handlers stream into a `.part` temp file in the SAME
   directory as the destination, fsync, then `os.replace`. A mid-stream
@@ -639,31 +707,35 @@ different plan instead of returning the failure. Off by default; enable via
   untrusted: `safe_relative_path` rejects absolute/traversal/backslash
   paths and `resolve_within` re-verifies the resolved (symlink-aware)
   target stays inside the content dir. rsync runs with `--safe-links`.
-- **SSH host keys are strict by default** (rsync+ssh):
-  `StrictHostKeyChecking=yes` — the host must already be in known_hosts
-  or the sync fails, so a MITM on first contact cannot inject knowledge
-  content. `accept_new_host_keys: true` on the source is the explicit
-  opt-in for SSH's trust-on-first-use (`accept-new` still rejects
-  CHANGED keys). Mechanism not policy: safe default, loud escape hatch.
-  The temp file holding `ssh_key` material is 0600 and removed even
-  when setup fails mid-way (write/chmod) — never left behind.
+- **SSH host keys are strict by default** (rsync+ssh AND sftp):
+  `StrictHostKeyChecking=yes` / paramiko `RejectPolicy` — the host must
+  already be in known_hosts or the sync fails, so a MITM on first
+  contact cannot inject knowledge content. `accept_new_host_keys: true`
+  on the source is the explicit opt-in for SSH's trust-on-first-use.
+  Mechanism not policy: safe default, loud escape hatch. The temp file
+  holding rsync `ssh_key` material is 0600 and removed even when setup
+  fails mid-way (write/chmod) — never left behind.
 - **Validation is fail-fast** (`config/validation.py::
-  _validate_remote_knowledge_source`): unsupported/planned schemes
-  (`gs`, `az`, `ftp`, `sftp` are "planned"), glob on http(s)/rsync URLs,
-  malformed auth blocks (`basic`/`bearer` for http, `aws` for s3,
-  `ssh_key` for rsync+ssh), `accept_new_host_keys` outside rsync+ssh,
-  and Phase 2 `extract`/`extract_pattern` keys are load-time errors.
-  For `aws` auth, `access_key`/`secret_key` are both-or-neither —
-  neither means boto3's default credential chain (env vars, instance
-  profile). Credentials flow through the standard `${{ secrets.* }}`
+  _validate_remote_knowledge_source`): unknown schemes, glob on
+  http(s)/rsync URLs (and with `extract`), malformed auth blocks
+  (`basic`/`bearer` for http, `aws` for s3, `gcp` for gs, `azure` for
+  az — REQUIRED for az since the account is not in the URL, `basic` for
+  ftp, `ssh_key`/`basic` for sftp, `ssh_key` for rsync+ssh),
+  `accept_new_host_keys` outside rsync+ssh/sftp, extract options
+  (`extract` boolean, not for rsync; `extract_pattern`/bounds require
+  `extract: true`), and the `retry:` block (allowed keys + ranges) are
+  load-time errors. For `aws` auth, `access_key`/`secret_key` are
+  both-or-neither; `gcp` `credentials_json` is optional (ADC chain).
+  Credentials flow through the standard `${{ secrets.* }}`
   interpolation (resolved before handlers see config).
-- **Phase 1 scope note:** `schedule` is accepted and syntax-validated
-  (cron or `@startup`/`@hourly`/`@daily`/`@weekly`) but periodic re-sync
-  is Phase 3 — every remote source syncs exactly once at formation
-  startup. Archive extraction is Phase 2. HTTP sources are single-file
-  only (no directory listing protocol).
-- Events: `knowledge.sync.started` / `knowledge.sync.completed`
-  (SystemEvents) and `error.knowledge.sync.failed` (ErrorEvents).
+- HTTP sources are single-file only (no directory listing protocol) —
+  which is exactly what archive sources want (`extract: true` over one
+  zip export URL).
+- Events: `knowledge.sync.started` / `knowledge.sync.completed` /
+  `knowledge.sync.skipped` (SystemEvents) and
+  `error.knowledge.sync.failed` (ErrorEvents; also used with
+  `phase: retry_scheduled|retries_exhausted|reingest|tick` data by the
+  Phase 3 scheduler).
 
 **Pre-routing gate ordering (current state, 2026-04-26):**
 ```
@@ -1410,21 +1482,39 @@ def model(self):
 **Gotcha:**  
 Before the fix, API keys weren't passed through the embedding pipeline, causing authentication failures. Now the formation explicitly passes `api_key` to memory constructors.
 
-### Knowledge Reasoning RAG (2026-07-09, Phase 1: Method A)
+### Knowledge Reasoning RAG (2026-07-09, Phases 1-5: A, B, hybrid, agent trees)
 
 **Location:** `src/muxi/runtime/formation/agents/knowledge/reasoning/`
-**PRD:** `engineering/prds/knowledge-reasoning-rag.md` (Phase 1 shipped; Method B,
-hybrid mode, and per-agent formation-level trees are later phases)
+**PRD:** `engineering/prds/knowledge-reasoning-rag.md` (all phases shipped; the
+Phase 4 stretch spike — unified scope-selection prompt subsuming Memory Revamp
+Layer 4 Step 2 — is deferred). Contributor doc: `contributing/knowledge-trees.md`.
 
-Large knowledge files get a **hierarchical tree index navigated by an LLM at
-query time** instead of vector chunking. Gate is per-file at ingestion:
+Large knowledge files get a **hierarchical tree index** instead of vector
+chunking. Gate is per-file at ingestion; explicit per-source `retrieval:`
+overrides it (`vector` / `tree` / `tree-vector` / `hybrid` — all four active):
 
 ```
-add_file -> file crosses knowledge.reasoning_threshold tokens (default 40000, 0 disables)
+add_file -> source declares agent_tree: -> ONE persistent per-source tree
+            (formation dir .knowledge-trees/, regenerate trigger decides rebuild)
+         -> else: file crosses knowledge.reasoning_threshold tokens (default
+            40000, 0 disables) OR declares an explicit tree-serving mode
          -> TreeBuilder (structure pass + LLM summary pass) -> TreeCache (disk)
-         -> handler._tree_indexes[abs_path] = TreeIndex     (NO vector chunks for this file)
+         -> [tree-vector|hybrid] per-node chunk embeddings via ScoringService
+            (chunk each node's KV raw, embed through the UEL, persist sidecar)
+         -> handler._tree_indexes[abs_path] = TreeIndex,
+            handler._tree_modes[abs_path] = mode  (NO vector chunks for this file)
    else  -> vector pipeline, byte-identical to before this feature
 ```
+
+Query dispatch per tree (`_tree_searcher_for`): `tree` -> TreeSearchA (one LLM
+call), `tree-vector` -> TreeSearchB (query embed + cosine per chunk, NodeScore
+= `(1/sqrt(N+1)) * sum(ChunkScore)` — nodes retrieved, chunks are scaffolding),
+`hybrid` -> TreeSearchHybrid (A+B via `asyncio.gather`, dedup by node_id with
+A's picks leading, then a sufficiency-evaluator loop on the terminator model:
+`{"enough_info", "gaps"}`; gaps expand via B scoring over unfetched nodes;
+bounds `tree.max_sufficiency_rounds` (3) and `tree.max_fetched_nodes_pct`
+(50)). Multi-tree results merge ROUND-ROBIN by per-tree relevance rank — plain
+concatenation let the first tree hog every `top_k` slot (found in e2e 6H2).
 
 **Modules:**
 - `types.py` — `TreeNode` / `TreeIndex` (compact tree JSON + separate node->raw
@@ -1439,55 +1529,99 @@ add_file -> file crosses knowledge.reasoning_threshold tokens (default 40000, 0 
   descendants own their spans. `count_tokens` uses tiktoken with a `len//4`
   fallback.
 - `tree_cache.py` — cache key `(file_path, file_md5)` ->
-  `<path_hash>_<md5>.tree.json` + `.tree.kv.jsonl` in the same cache dir as
-  the vector embedding caches. Same MD5 never rebuilds (zero LLM calls);
-  changed MD5 evicts stale entries; corrupt files are removed and treated as
-  a miss.
+  `<path_hash>_<md5>.tree.json` + `.tree.kv.jsonl` (+ `.tree.emb.jsonl` for
+  Method B: meta header with the embedding model, then one
+  `{node_id, vectors}` line per node) in the same cache dir as the vector
+  embedding caches. Same MD5 never rebuilds (zero LLM calls); changed MD5
+  evicts stale entries; a stale embedding model recomputes only the sidecar;
+  corrupt files are removed and treated as a miss.
 - `tree_search_a.py` — Method A: ONE LLM call with the compressed tree
   (titles + summaries only, never raw) + query -> `{"thinking", "node_list"}`;
-  selected node_ids resolve raw content from the KV. Hallucinated ids are
+  selected node_ids resolve raw content from the KV
+  (`TreeIndex.resolve_content`, shared by A/B/hybrid). Hallucinated ids are
   skipped; parent selections append children content up to a 6k-char cap.
+- `scoring_service.py` — **cross-PRD contract with memory-revamp Layer 3**:
+  standalone, memory-agnostic `ScoringService(embedder)` (slug through the UEL
+  or an injected async callable) with `embed` / `score` (cosine) /
+  `aggregate_with_diminishing_returns` (`(1/sqrt(N+1)) * sum`; empty -> 0.0).
+  Grouping semantics stay OUT of the service.
+- `tree_search_b.py` — Method B retriever + `build_node_chunk_embeddings`
+  (chunker injected by the handler wrapping DocumentChunkManager
+  strategy="fixed"; deterministic paragraph splitter as fallback). No LLM
+  calls at query time.
+- `tree_search_hybrid.py` — hybrid runner + `SufficiencyEvaluator`. Emits the
+  hybrid observability events and stamps a `cost` metadata block
+  (`llm_calls`/`evaluator_rounds`) on every result.
+- `agent_trees.py` — `AgentTreeStore`: `<formation_dir>/.knowledge-trees/
+  <source_id>.json|.kv.jsonl|.emb.jsonl|.meta.json` (meta: schema version,
+  aggregate `source_md5` over relpath:file_md5 pairs, build timestamp,
+  embedding model). Deterministic, committable to the formation repo (a
+  persisted 26-node tree reloads in ~0.5s). Triggers: `manual` (serve stale
+  until explicit rebuild), `on-source-change` (MD5 drift), `on-formation-load`.
 
 **Handler integration** (`knowledge/handler.py`): `_maybe_ingest_as_tree` in
 `add_file` (per-file inside directories too — tree-indexed files are excluded
-from the vector chunking pass), `_search_trees` in `search()` (tree results
-merged ahead of vector results, truncated to `top_k`), tree cleanup hooks in
-`remove_file` / `cleanup_deleted_sources`.
+from the vector chunking pass); `_ingest_agent_tree` runs FIRST for
+`agent_tree:` sources (one tree replaces both per-file trees and vector
+chunks; requires `formation_path`, passed from
+`overlord._configured_services`); `_search_trees` in `search()` dispatches
+per `_tree_modes` and round-robin-merges; `rebuild_agent_trees()` force-
+rebuilds (exposed as admin `POST /v1/knowledge/rebuild` — the runtime side of
+the CLI's `muxi knowledge rebuild`); tree cleanup hooks in `remove_file` /
+`cleanup_deleted_sources` also purge `.knowledge-trees/` files.
 
 **Model selection:** tree build + navigation use the agent's text model by
-default; `knowledge.tree.model` overrides via the hierarchical model-selection
-resolution (alias or `provider/model`, resolved in
-`agent._initialize_knowledge` through `overlord.resolve_model_override`).
-Validation is fail-fast at load (`config/validation.py`:
-`_validate_knowledge_reasoning_config`, `_validate_source_retrieval_mode`;
-per-source `retrieval:` accepts `vector`/`tree`, rejects the reserved
-`tree-vector`/`hybrid` until those phases ship).
+default; `knowledge.tree.model` overrides, and the hybrid evaluator resolves
+`knowledge.tree.terminator_model` the same way (alias or `provider/model` via
+`overlord.resolve_model_override`; default = tree model — MUXI ships the knob,
+not a price table). Method B sidecars record the knowledge embedding slug
+(`embedding_model_slug` through the handler) so a model swap recomputes only
+the vectors, never the tree/KV. Validation is fail-fast at load
+(`config/validation.py`: all four `retrieval:` modes accepted; `agent_tree`
+requires an explicit tree-serving mode, rejects url-sources, `regenerate` in
+manual/on-source-change/on-formation-load; `max_sufficiency_rounds` positive
+int, `max_fetched_nodes_pct` 1-100).
 
-**Failure isolation (pinned by `tests/unit/test_knowledge_reasoning.py`):**
+**Failure isolation (pinned by the `test_knowledge_*` unit suites):**
 - Build failure at ingestion -> vector pipeline + `KNOWLEDGE_TREE_BUILD_FAILED`
   + `KNOWLEDGE_TREE_FALLBACK_TO_VECTOR` (also emitted for the
   `tree.max_document_tokens` size cap and a missing tree model).
-- Navigation failure at query time -> vector results still serve the turn
-  (fallback event with `phase: query`); never a failed turn.
+- Method B embedding failure at ingest -> tree serves Method A only (never
+  fails ingestion); at query time B failure falls back like A.
+- In hybrid, one method failing degrades to the other's results; BOTH failing
+  raises into the handler's vector fallback; sufficiency-evaluator failure
+  serves the current fetched set.
+- `agent_tree:` without a known formation dir -> per-document pipeline with a
+  warning event; agent-tree build failure -> vector.
 - No tree model (`tree_llm=None`, e.g. handler used outside an agent) or
   `reasoning_threshold: 0` -> fully inert, vector write sequence identical.
 
-**Gotchas (learned in e2e 6G1/6G2):**
-1. **LLM semantic cache poisons navigation.** Navigation prompts over the same
-   tree differ only by the short query, so OneLLM's semantic cache matches
-   them as "similar" and replays node selections from unrelated queries. Both
-   reasoning LLM calls pass `caching=False` (same class of bug as user-info
-   extraction above).
+**Gotchas (learned in e2e 6G1/6G2/6H1/6H2):**
+1. **LLM semantic cache poisons navigation AND sufficiency.** Prompts over the
+   same tree differ only by the short query, so OneLLM's semantic cache
+   matches them as "similar" and replays node selections/verdicts from
+   unrelated queries. EVERY reasoning LLM call passes `caching=False` (same
+   class of bug as user-info extraction above).
 2. **`temperature=0.0` is coerced to the instance default (0.7)** by
    `LLM.chat`'s falsy check — the reasoning calls use `0.1`.
 3. **Summaries must carry identifiers verbatim** (part names, codes, values);
    generic summaries make the navigator miss fact lookups.
+4. **Formation-level `llm.settings.max_tokens` truncates structured outputs**
+   — a 400-token cap cut the 40-node batch-summary JSON mid-object and every
+   tree build silently fell back to vector (found via bench/knowledge). All
+   reasoning calls now pin explicit `max_tokens`.
+5. **The workflow planner hijacks "retrieve X and Y from the handbook"
+   phrasing**: it decomposes into steps delegated to the knowledge-less
+   generalist instead of answering from the injected context. E2E chat checks
+   ask one simple factual question.
 
-**E2E:** `e2e/tests/6_knowledge/test_6g1_tree_reasoning_large_doc.py`
-(tree indexing + Method A retrieval + chat grounding) and
-`test_6g2_tree_vector_coexistence.py` (tree + vector sources in one agent),
-both on `formations/formation-tree-reasoning/` (the 6f slot went to the
-remote-knowledge-sources tests that merged concurrently).
+**E2E:** `test_6g1`/`test_6g2` (Method A, `formations/formation-tree-reasoning/`),
+`test_6h1_tree_vector_scoring.py` (Method B: node-scoped embeddings, no
+query-time LLM) and `test_6h2_hybrid_retrieval.py` (hybrid + persistent agent
+tree + on-source-change reuse across loads), both on
+`formations/formation-tree-hybrid/`. **Bench:** `bench/knowledge/` compares
+vector vs A vs B vs hybrid on a fixture corpus (last run: 8/8 hits for all
+three tree modes, 0/8 for flat vector on the same buried-fact questions).
 
 ### Memory Revamp Phases 3-5 (2026-07-09): Context Optimization, Knowledge Index, Lint
 

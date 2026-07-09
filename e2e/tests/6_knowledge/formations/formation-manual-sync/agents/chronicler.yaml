@@ -1,0 +1,19 @@
+schema: "1.0.0"
+id: "chronicler"
+name: "Chronicler Agent"
+description: "AI assistant specialized in the Emberfall Chronicle"
+
+system_message: |
+  You are an AI assistant with knowledge about the Emberfall Chronicle.
+  Answer questions using your knowledge base.
+
+role: "assistant"
+specialties:
+  - "emberfall_chronicle"
+
+knowledge:
+  enabled: true
+  sources:
+    - url: "http://127.0.0.1:18933/kb/emberfall-chronicle.md"
+      id: emberfall-chronicle
+      description: "Emberfall Chronicle reference document (remote HTTP source)"

@@ -1,0 +1,42 @@
+[
+  {
+    "id": "elections",
+    "query": "How often are council elections held?",
+    "expected": ["30 months"]
+  },
+  {
+    "id": "rotation",
+    "query": "What is the mandated crop rotation cycle in Dome C?",
+    "expected": ["90 sols"]
+  },
+  {
+    "id": "purity",
+    "query": "What is the heavy metal limit for potable water and which assay verifies it?",
+    "expected": ["12 ppb", "WQ-88"]
+  },
+  {
+    "id": "rationing",
+    "query": "At what reservoir level does Tier-2 water rationing begin?",
+    "expected": ["40 percent"]
+  },
+  {
+    "id": "rationing_limit",
+    "query": "How many liters of water per day may a household use under Tier-2 rationing?",
+    "expected": ["85 liters"]
+  },
+  {
+    "id": "quarantine",
+    "query": "How long is the standard quarantine period for novel pathogens?",
+    "expected": ["21 days"]
+  },
+  {
+    "id": "battery",
+    "query": "Below what level must the flow battery reserve never be drawn?",
+    "expected": ["15 percent"]
+  },
+  {
+    "id": "rover",
+    "query": "When is rover pressure-vessel recertification due and where is it performed?",
+    "expected": ["500 operating hours", "Bay 4"]
+  }
+]

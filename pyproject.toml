@@ -192,6 +192,20 @@ kafka = [
     "kafka-python>=2.0.0",  # Kafka streaming support for observability
 ]
 
+# Remote knowledge source protocols (PRD: remote-knowledge-sources).
+# Each extra unlocks one optional protocol handler; the handlers raise a
+# clear config-time error naming the extra when the library is missing.
+# s3:// uses boto3 (already core), ftp:// uses the stdlib.
+gcs = [
+    "google-cloud-storage>=2.14.0",  # gs:// knowledge sources
+]
+azure = [
+    "azure-storage-blob>=12.19.0",  # az:// knowledge sources
+]
+sftp = [
+    "paramiko>=3.4.0",  # sftp:// knowledge sources
+]
+
 # ---------------------------------------------------------------------------
 # Runtime variants
 # ---------------------------------------------------------------------------
@@ -240,6 +254,11 @@ cuda = [
 ]
 
 dev = [
+    # Optional protocol SDKs so the mocked remote-knowledge handler tests
+    # (azure/sftp) execute instead of skipping (gcs ships transitively via
+    # google-cloud-aiplatform in core)
+    "azure-storage-blob>=12.19.0",
+    "paramiko>=3.4.0",
     "pytest>=9.0.3",
     "pytest-asyncio>=0.21.0",
     "pytest-cov>=4.0.0",

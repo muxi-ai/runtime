@@ -24,7 +24,6 @@ from muxi.runtime.formation.agents.knowledge.remote.handler import (
     split_url_pattern,
 )
 from muxi.runtime.formation.agents.knowledge.remote.protocols import (
-    PLANNED_SCHEMES,
     SUPPORTED_SCHEMES,
     create_handler,
 )
@@ -59,15 +58,20 @@ class TestUrlHelpers:
         assert a != b
         assert "/" not in a and ":" not in a
 
-    def test_registry_scheme_sets_are_disjoint(self):
-        assert not (SUPPORTED_SCHEMES & PLANNED_SCHEMES)
+    def test_all_prd_schemes_supported(self):
+        assert SUPPORTED_SCHEMES == frozenset(
+            {"http", "https", "s3", "gs", "az", "rsync", "rsync+ssh", "ftp", "sftp", "file"}
+        )
 
     def test_create_handler_dispatch(self):
+        from muxi.runtime.formation.agents.knowledge.remote.protocols.ftp import FTPHandler
+
         assert isinstance(create_handler(make_config("https://h/x.md")), HTTPHandler)
         assert isinstance(create_handler(make_config("file:///tmp/x")), FileHandler)
         assert isinstance(create_handler(make_config("rsync://h/mod/x/")), RsyncHandler)
+        assert isinstance(create_handler(make_config("ftp://h/x")), FTPHandler)
         with pytest.raises(RemoteSyncError):
-            create_handler(make_config("ftp://h/x"))
+            create_handler(make_config("gopher://h/x"))
 
 
 class TestFileHandler:
