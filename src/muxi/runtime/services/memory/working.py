@@ -371,7 +371,10 @@ class WorkingMemory:
         """
         partition = self.partitions.get(key)
         if partition is None:
-            partition = _IndexPartition(dimension or self.dimension)
+            # Explicit None check (not truthiness): an explicit dimension
+            # must always win; only an absent override falls back to the
+            # memory-wide dim.
+            partition = _IndexPartition(dimension if dimension is not None else self.dimension)
             self.partitions[key] = partition
         return partition
 
