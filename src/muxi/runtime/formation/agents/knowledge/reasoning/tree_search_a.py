@@ -20,12 +20,14 @@
 #
 # Failure isolation: any LLM/parse failure raises ``TreeNavigationError``;
 # the caller falls back to vector search results - navigation failure never
-# fails a user turn. Later phases add Method B (tree_search_b) and the
-# hybrid runner (tree_search_hybrid) beside this module.
+# fails a user turn. Method B (tree_search_b) and the hybrid runner
+# (tree_search_hybrid) live beside this module and share the same
+# ``TreeIndex.resolve_content`` resolution path.
 # =============================================================================
 
 from typing import Any, List
 
+from .....services import observability
 from .tree_builder import extract_json_object
 from .types import RetrievalResult, TreeIndex, TreeNavigationError
 
@@ -110,17 +112,20 @@ class TreeSearchA:
             )
 
         results: List[RetrievalResult] = []
+        source_type = "agent_tree" if tree.scope == "agent" else "tree"
         for rank, raw_id in enumerate(node_list[:max_nodes]):
             node = tree.get_node(_normalize_node_id(raw_id))
             if node is None:
                 continue  # hallucinated id - skip, keep the valid ones
-            raw = self._resolve_content(tree, node)
+            # Parent nodes only own their intro text (descendants own their
+            # spans); resolve_content appends children up to the cap.
+            raw = tree.resolve_content(node.node_id, _MAX_NODE_CONTENT_CHARS)
             if not raw:
                 continue
             results.append(
                 RetrievalResult(
-                    source_type="tree",
-                    content=raw[:_MAX_NODE_CONTENT_CHARS],
+                    source_type=source_type,
+                    content=raw,
                     # Rank-derived relevance: Method A has no similarity
                     # scores; earlier selections rank higher.
                     relevance=max(0.1, 1.0 - rank * 0.1),
@@ -133,26 +138,15 @@ class TreeSearchA:
                     node_path=tree.node_path(node.node_id),
                 )
             )
+        if results:
+            observability.observe(
+                event_type=observability.SystemEvents.KNOWLEDGE_TREE_NODE_SELECTED,
+                level=observability.EventLevel.DEBUG,
+                description="Method A tree navigation selected nodes",
+                data={
+                    "document": tree.document,
+                    "method": "a",
+                    "node_ids": [r.metadata["node_id"] for r in results],
+                },
+            )
         return results
-
-    @staticmethod
-    def _resolve_content(tree: TreeIndex, node) -> str:
-        """
-        Resolve a selected node's raw content.
-
-        Parent nodes only own their intro text (descendants own their
-        spans), so when the navigator selects a parent, append the
-        children's raw content until the per-node cap is reached.
-        """
-        parts = [tree.fetch_raw(node.node_id)]
-        total = len(parts[0])
-        if total < _MAX_NODE_CONTENT_CHARS:
-            stack = list(node.sub_nodes)
-            while stack and total < _MAX_NODE_CONTENT_CHARS:
-                child = stack.pop(0)
-                child_raw = tree.fetch_raw(child.node_id)
-                if child_raw:
-                    parts.append(child_raw)
-                    total += len(child_raw)
-                stack = list(child.sub_nodes) + stack
-        return "\n\n".join(p for p in parts if p).strip()

@@ -1103,16 +1103,27 @@ class FormationValidator:
     # Reasoning-RAG per-source retrieval modes (fail-fast at load time).
     # Mirror of formation/agents/knowledge/reasoning/types.py - kept literal
     # here so config validation stays import-light.
-    _SUPPORTED_RETRIEVAL_MODES = ("vector", "tree")
-    _RESERVED_RETRIEVAL_MODES = ("tree-vector", "hybrid")
+    _SUPPORTED_RETRIEVAL_MODES = ("vector", "tree", "tree-vector", "hybrid")
+    _RESERVED_RETRIEVAL_MODES = ()
+
+    # Retrieval modes an ``agent_tree:`` source must explicitly declare
+    # (a persistent agent tree makes no sense for the plain vector path).
+    _AGENT_TREE_RETRIEVAL_MODES = ("tree", "tree-vector", "hybrid")
+
+    # Regeneration triggers for the per-source ``agent_tree.regenerate``
+    # field (mirror of reasoning/types.py AGENT_TREE_REGENERATE_MODES).
+    _AGENT_TREE_REGENERATE_MODES = ("manual", "on-source-change", "on-formation-load")
 
     # Allowed keys and value validators for the ``knowledge.tree`` block.
     _TREE_SETTING_KEYS = (
         "model",
+        "terminator_model",
         "max_depth",
         "max_pages_per_node",
         "max_tokens_per_node",
         "max_document_tokens",
+        "max_sufficiency_rounds",
+        "max_fetched_nodes_pct",
     )
 
     def _validate_agent_knowledge_config(self, knowledge_config: Dict[str, Any]) -> None:
@@ -1153,6 +1164,11 @@ class FormationValidator:
                     continue
 
                 if "url" in source:
+                    if "agent_tree" in source:
+                        self.result.add_error(
+                            f"{subject} 'agent_tree' is not supported on remote (url) "
+                            "sources - sync the source locally first"
+                        )
                     self._validate_remote_knowledge_source(source, subject, seen_source_ids)
                     self._validate_knowledge_source_description(source, subject)
                     continue
@@ -1173,6 +1189,10 @@ class FormationValidator:
                 if "retrieval" in source:
                     self._validate_source_retrieval_mode(source["retrieval"], i)
 
+                # Validate per-source agent_tree block (reasoning-RAG Phase 4)
+                if "agent_tree" in source:
+                    self._validate_source_agent_tree(source, i)
+
         # Allow any additional fields users might want to add for knowledge configuration
 
     def _validate_source_retrieval_mode(self, retrieval: Any, source_index: int) -> None:
@@ -1185,13 +1205,40 @@ class FormationValidator:
         if retrieval in self._RESERVED_RETRIEVAL_MODES:
             self.result.add_error(
                 f"{where} 'retrieval' mode '{retrieval}' is not yet supported "
-                f"(supported modes: {', '.join(self._SUPPORTED_RETRIEVAL_MODES)}; "
-                "'tree-vector' and 'hybrid' ship in a later phase)"
+                f"(supported modes: {', '.join(self._SUPPORTED_RETRIEVAL_MODES)})"
             )
         elif retrieval not in self._SUPPORTED_RETRIEVAL_MODES:
             self.result.add_error(
                 f"{where} 'retrieval' must be one of: "
                 f"{', '.join(self._SUPPORTED_RETRIEVAL_MODES)} (got '{retrieval}')"
+            )
+
+    def _validate_source_agent_tree(self, source: Dict[str, Any], source_index: int) -> None:
+        """Validate a knowledge source's ``agent_tree:`` block (fail fast)."""
+        where = f"Agent knowledge source {source_index}"
+        agent_tree = source["agent_tree"]
+        if not isinstance(agent_tree, dict):
+            self.result.add_error(f"{where} 'agent_tree' must be a dictionary")
+            return
+        for key in agent_tree:
+            if key != "regenerate":
+                self.result.add_error(
+                    f"{where} agent_tree setting '{key}' is not recognized " "(allowed: regenerate)"
+                )
+        regenerate = agent_tree.get("regenerate", "manual")
+        if regenerate not in self._AGENT_TREE_REGENERATE_MODES:
+            self.result.add_error(
+                f"{where} agent_tree 'regenerate' must be one of: "
+                f"{', '.join(self._AGENT_TREE_REGENERATE_MODES)} (got '{regenerate}')"
+            )
+        # A persistent agent tree requires an explicit tree-serving
+        # retrieval mode - the plain vector path never consults it.
+        retrieval = source.get("retrieval")
+        if retrieval not in self._AGENT_TREE_RETRIEVAL_MODES:
+            self.result.add_error(
+                f"{where} 'agent_tree' requires an explicit 'retrieval' mode of "
+                f"{', '.join(self._AGENT_TREE_RETRIEVAL_MODES)} "
+                f"(got '{retrieval or 'unset'}')"
             )
 
     def _validate_knowledge_reasoning_config(self, knowledge_config: Dict[str, Any]) -> None:
@@ -1222,11 +1269,17 @@ class FormationValidator:
         if tree_config.get("model") is not None:
             self._validate_model_reference(tree_config["model"], "Agent knowledge tree")
 
+        if tree_config.get("terminator_model") is not None:
+            self._validate_model_reference(
+                tree_config["terminator_model"], "Agent knowledge tree terminator"
+            )
+
         for key in (
             "max_depth",
             "max_pages_per_node",
             "max_tokens_per_node",
             "max_document_tokens",
+            "max_sufficiency_rounds",
         ):
             if key in tree_config:
                 value = tree_config[key]
@@ -1234,6 +1287,14 @@ class FormationValidator:
                     self.result.add_error(
                         f"Agent knowledge tree '{key}' must be a positive integer"
                     )
+
+        if "max_fetched_nodes_pct" in tree_config:
+            value = tree_config["max_fetched_nodes_pct"]
+            if isinstance(value, bool) or not isinstance(value, int) or not 1 <= value <= 100:
+                self.result.add_error(
+                    "Agent knowledge tree 'max_fetched_nodes_pct' must be an "
+                    "integer between 1 and 100"
+                )
 
     def _validate_knowledge_source_description(self, source: Dict[str, Any], subject: str) -> None:
         """Validate the required 'description' field on a knowledge source."""
