@@ -115,9 +115,12 @@ class SufficiencyEvaluator:
             # caching=False + temperature 0.1: see module frontmatter (the
             # semantic cache replays verdicts across unrelated queries, and
             # LLM.chat coerces falsy temperatures to the instance default).
+            # Explicit max_tokens decouples the structured verdict from any
+            # formation-level chat cap.
             response = await self.llm.chat(
                 messages=messages,
                 temperature=0.1,
+                max_tokens=400,
                 caching=False,
                 metadata={"component": "knowledge_tree_sufficiency"},
             )

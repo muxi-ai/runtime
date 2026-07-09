@@ -1,0 +1,71 @@
+# Knowledge retrieval benchmark formation (reasoning-RAG PRD Phase 5).
+#
+# Template only: the harness copies the fixture corpus into a run-local
+# directory, rewrites the source's ``retrieval:`` mode per benchmark run
+# (vector / tree / tree-vector / hybrid), and renders this file there.
+#
+# Cheap-model configuration by design:
+#   - Embeddings: openai/text-embedding-3-small. Cloud rather than local
+#     ONNX on purpose: knowledge ingestion of the ~24k-token corpus
+#     through a local sentence-transformer triggers the multi-gigabyte
+#     CoreML compile documented in mental-model.md (macOS jetsam kills);
+#     the cloud embed costs well under a cent per four-mode run.
+#   - Text model: openai/gpt-4o-mini — used for tree builds (once per
+#     mode-run; ~2 summary calls per build), Method A navigation, and the
+#     hybrid sufficiency evaluator. A full four-mode run costs on the
+#     order of a cent.
+
+schema: "1.0.0"
+id: "knowbench"
+description: "Formation used by the knowledge retrieval comparison benchmark"
+
+runtime:
+  built_in_mcps: false
+
+llm:
+  settings:
+    temperature: 0.0
+  api_keys:
+    openai: "${{ secrets.OPENAI_API_KEY }}"
+  models:
+    - text: "openai/gpt-4o-mini"
+    - embedding: "openai/text-embedding-3-small"
+
+agents:
+  - id: "knowbench-agent"
+    name: "KnowBench Agent"
+    description: "Answers questions from the fixture corpus"
+    model: "openai/gpt-4o-mini"
+    system_message: |
+      You answer questions about the New Meridian colony operations
+      handbook using only the provided excerpts.
+    knowledge:
+      enabled: true
+      tree:
+        max_sufficiency_rounds: 2
+      sources:
+        - path: "knowledge/colony-handbook.md"
+          description: "New Meridian colony operations handbook"
+          retrieval: vector  # rewritten per run by the harness
+
+overlord:
+  clarification:
+    enabled: false
+
+memory:
+  buffer:
+    size: 50
+    multiplier: 10
+    vector_search: false
+
+logging:
+  system:
+    level: "warning"
+    destination: "stdout"
+  conversation:
+    enabled: true
+    streams:
+      - transport: "file"
+        destination: "knowbench-events.jsonl"
+        level: "info"
+        format: "jsonl"

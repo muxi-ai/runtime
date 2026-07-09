@@ -95,9 +95,13 @@ class TreeSearchA:
             #   only by the (short) query, so the semantic response cache
             #   matches them as "similar" and replays node selections from
             #   previous, unrelated queries.
+            # - explicit max_tokens: decouples the structured output from
+            #   any formation-level chat cap (a tight cap would truncate
+            #   the JSON mid-object and fail navigation).
             response = await self.llm.chat(
                 messages=messages,
                 temperature=0.1,
+                max_tokens=600,
                 caching=False,
                 metadata={"component": "knowledge_tree_search_a"},
             )
