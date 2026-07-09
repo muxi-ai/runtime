@@ -2,6 +2,42 @@
 
 ## [unreleased]
 
+### Remote knowledge sources - Phase 1 core sync
+
+Agents can now declare url-based knowledge sources next to local paths
+(remote-knowledge-sources PRD, Phase 1):
+
+- ``knowledge.sources[*].url`` supports ``http(s)://`` (single file),
+  ``s3://`` (prefix + glob), ``rsync://`` / ``rsync+ssh://`` (incremental
+  tree sync), and ``file://`` (bind mounts). Credentials go through the
+  existing ``${{ secrets.* }}`` interpolation (``auth`` blocks:
+  ``basic``/``bearer`` for http, ``aws`` for s3, ``ssh_key`` for
+  rsync+ssh; plus http ``headers``).
+- Remote content syncs at formation startup into a per-source local
+  mirror under the runtime knowledge cache dir with manifest-based
+  change detection (ETag / Last-Modified / size+mtime), then feeds the
+  unchanged local ingestion pipeline. Downloads are atomic (temp file +
+  rename), so a mid-stream failure can never truncate a previously
+  synced good copy. ``include``/``exclude`` filters and ``max_files`` /
+  ``max_file_size`` / ``max_total_size`` / ``timeout`` limits are
+  enforced. For rsync+ssh, SSH host key checking is strict by default;
+  ``accept_new_host_keys: true`` is the explicit opt-in for
+  trust-on-first-use. S3 ``auth: {type: aws}`` without explicit keys
+  uses boto3's default credential chain.
+- Failure isolation: a failing sync never blocks formation startup or
+  chat -- sources degrade to previously synced content (stale-wins); on
+  a cold start with an unreachable source the formation still starts
+  with a loud warning. New observability events:
+  ``knowledge.sync.started``, ``knowledge.sync.completed``,
+  ``error.knowledge.sync.failed``.
+- Fail-fast load-time validation of source declarations (schemes, auth
+  shape, limits, cron ``schedule`` syntax). Not yet in Phase 1 (config
+  is rejected or documented accordingly): archive extraction
+  (``extract``), scheduled re-sync (``schedule`` accepted, sync runs at
+  startup only), and ``gs``/``az``/``ftp``/``sftp`` protocols.
+- Formations with only local knowledge sources are untouched (the remote
+  sync machinery is never even imported).
+
 ### RBAC membership via request middleware; server.auth and user_groups removed
 
 MUXI stops storing group memberships (request-middleware PRD). Breaking
