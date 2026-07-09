@@ -788,6 +788,16 @@ def initialize_memory_systems(formation) -> None:
                 # formations without it get no artifact capture.
                 _initialize_artifact_memory(formation)
 
+                # Initialize the knowledge index (Memory Revamp Phase 4).
+                # Placed last among the memory services because the index
+                # catalogs all of them (graph, log, artifacts).
+                _initialize_memory_index(formation, memory_config.get("index", {}) or {})
+
+                # Initialize memory lint (Memory Revamp Phase 5). Inert
+                # when unconfigured: only constructed when the formation
+                # declares a memory.lint block. Findings feed the index.
+                _initialize_memory_lint(formation, memory_config.get("lint"))
+
 
 def _initialize_memory_events(formation, events_config: Dict[str, Any]) -> None:
     """Initialize the memory event substrate on top of persistent memory."""
@@ -863,6 +873,86 @@ def _initialize_artifact_memory(formation) -> None:
             description=f"Failed to initialize artifact memory: {str(e)}",
         )
         # Don't raise - artifact memory is additive to persistent memory
+
+
+def _initialize_memory_index(formation, index_config: Dict[str, Any]) -> None:
+    """Initialize the knowledge index service (Memory Revamp Phase 4)."""
+    if index_config.get("enabled", True) is False:
+        formation._memory_index = None
+        return
+
+    # The index catalogs the other memory services; without at least one
+    # source there is nothing to index.
+    sources = [
+        getattr(formation, "_knowledge_graph", None),
+        getattr(formation, "_captains_log", None),
+        getattr(formation, "_artifact_memory", None),
+    ]
+    if all(source is None for source in sources):
+        formation._memory_index = None
+        return
+
+    try:
+        from ..services.memory.index import KnowledgeIndexService
+
+        formation._memory_index = KnowledgeIndexService(
+            db_manager=formation._db_manager,
+            formation_id=getattr(formation, "formation_id", "default-formation"),
+            config=index_config,
+            knowledge_graph=getattr(formation, "_knowledge_graph", None),
+            captains_log=getattr(formation, "_captains_log", None),
+            artifact_memory=getattr(formation, "_artifact_memory", None),
+        )
+        print(
+            InitEventFormatter.format_ok(
+                "Initializing knowledge index",
+                f"max {formation._memory_index.max_tokens} tokens",
+            )
+        )
+    except Exception as e:
+        formation._memory_index = None
+        observability.observe(
+            event_type=observability.ErrorEvents.MEMORY_INITIALIZATION_FAILED,
+            level=observability.EventLevel.WARNING,
+            data={"error": str(e), "service": "memory_index"},
+            description=f"Failed to initialize knowledge index service: {str(e)}",
+        )
+        # Don't raise - the knowledge index is additive to persistent memory
+
+
+def _initialize_memory_lint(formation, lint_config) -> None:
+    """Initialize the memory lint service (Memory Revamp Phase 5).
+
+    Inert when unconfigured: formations without a ``memory.lint`` block get
+    no lint service at all (pinned by unit test).
+    """
+    if not isinstance(lint_config, dict) or lint_config.get("enabled", True) is False:
+        formation._memory_lint = None
+        return
+
+    try:
+        from ..services.memory.lint import MemoryLintService
+
+        formation._memory_lint = MemoryLintService(
+            db_manager=formation._db_manager,
+            formation_id=getattr(formation, "formation_id", "default-formation"),
+            config=lint_config,
+            knowledge_graph=getattr(formation, "_knowledge_graph", None),
+            captains_log=getattr(formation, "_captains_log", None),
+            artifact_memory=getattr(formation, "_artifact_memory", None),
+            index=getattr(formation, "_memory_index", None),
+        )
+        schedule = lint_config.get("schedule", "weekly")
+        print(InitEventFormatter.format_ok("Initializing memory lint", f"schedule {schedule}"))
+    except Exception as e:
+        formation._memory_lint = None
+        observability.observe(
+            event_type=observability.ErrorEvents.MEMORY_INITIALIZATION_FAILED,
+            level=observability.EventLevel.WARNING,
+            data={"error": str(e), "service": "memory_lint"},
+            description=f"Failed to initialize memory lint service: {str(e)}",
+        )
+        # Don't raise - lint is additive to persistent memory
 
 
 def _register_memory_projectors(formation) -> None:

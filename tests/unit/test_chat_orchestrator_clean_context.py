@@ -67,6 +67,9 @@ def _make_orchestrator(
     }
     overlord.is_multi_user = False
     overlord.auto_extract_user_info = False
+    # Memory Revamp Phases 3-4: absent unless the formation configures them.
+    overlord.context_pruner = None
+    overlord.memory_index = None
 
     async def _search_buffer(
         query: str,
@@ -269,6 +272,9 @@ async def test_no_buffer_returns_empty_turns_not_error() -> None:
     overlord.long_term_memory = None
     overlord.buffer_memory_manager = None
     overlord.get_user_synopsis = AsyncMock(return_value="")
+    # Memory Revamp Phases 3-4: absent unless configured.
+    overlord.context_pruner = None
+    overlord.memory_index = None
     orch.overlord = overlord
 
     bundle = await orch._build_clean_chat_context(

@@ -1,0 +1,83 @@
+schema: "1.0.0"
+id: "memory-revamp-test-formation"
+description: "Formation for testing memory revamp phases 3-5 (context optimization, knowledge index, lint)"
+auto_extract_user_info: true
+
+runtime:
+  built_in_mcps: false
+
+agents:
+  - memory_agent
+
+overlord:
+  clarification:
+    enabled: false
+
+llm:
+  settings:
+    temperature: 0.7
+    max_tokens: 2000
+  api_keys:
+    openai: "${{ secrets.OPENAI_API_KEY }}"
+  models:
+    - text: "openai/gpt-4o-mini"
+    - embedding: "openai/text-embedding-3-small"
+
+memory:
+  working:
+    max_memory_mb: 1
+    fifo_interval_min: 5
+    vector_dimension: 1536
+    mode: "local"
+    auto_extract:
+      enabled: true
+      extract_user_info: true
+
+  buffer:
+    size: 50
+    multiplier: 10
+    vector_search: false
+
+  persistent:
+    provider: "sqlite"
+    connection_string: "memory_revamp_test.db"
+    embedding_model: "openai/text-embedding-3-small"
+
+  # Memory Revamp Phase 3: pre-compaction flush + cache-TTL pruning
+  compaction:
+    flush_enabled: true
+    flush_threshold: 0.80
+
+  pruning:
+    mode: "cache-ttl"
+    cache_ttl_seconds: 300
+    keep_last_n_tool_results: 3
+    soft_trim_max_chars: 4000
+
+  # Memory Revamp Phase 4: knowledge index
+  index:
+    enabled: true
+    max_tokens: 300
+    regenerate_on: ["lint", "log_entry", "artifact_save", "entity_count_threshold"]
+    entity_count_threshold: 10
+
+  # Memory Revamp Phase 5: lint
+  lint:
+    enabled: true
+    schedule: "weekly"
+    conflict_resolution_days: 7
+    orphan_cleanup: true
+    stale_artifact_days: 90
+
+logging:
+  system:
+    level: "debug"
+    destination: "stdout"
+  conversation:
+    enabled: true
+    streams:
+      - transport: "stdout"
+        level: "debug"
+        format: "jsonl"
+
+# Agent will be auto-discovered from agents/ directory

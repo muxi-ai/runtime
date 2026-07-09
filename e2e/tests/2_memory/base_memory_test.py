@@ -36,6 +36,7 @@ class BaseMemoryTest(BaseE2ETest):
         "basic": "formation-basic.yaml",
         "local_384": "formation-local-384.yaml",
         "local_768": "formation-local-768.yaml",
+        "memory_revamp": "formation-memory-revamp.yaml",
     }
 
     def __init__(self):
