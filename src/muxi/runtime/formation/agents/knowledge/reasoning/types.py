@@ -22,10 +22,12 @@
 # - Config defaults for the ``knowledge.reasoning_threshold`` and
 #   ``knowledge.tree.*`` settings.
 #
-# Phase 1 implements Method A (pure LLM tree search) only. Method B
-# (value-based scoring), hybrid mode, and per-agent formation-level trees
-# are later phases; the ``scope`` field and the mode vocabulary below leave
-# the seams they need.
+# Phase 1 shipped Method A (pure LLM tree search). Phases 2-4 (this
+# revision) add Method B per-node chunk embeddings (``chunk_embeddings`` on
+# TreeIndex, persisted as a cache sidecar), the hybrid runner settings
+# (``terminator_model``, ``max_sufficiency_rounds``, ``max_fetched_nodes_pct``),
+# and per-agent formation-level trees (``scope: "agent"``, the
+# ``agent_tree.regenerate`` trigger vocabulary).
 # =============================================================================
 
 from collections import deque
@@ -42,18 +44,33 @@ DEFAULT_REASONING_THRESHOLD = 40000
 # Defaults for the ``knowledge.tree`` settings block (PRD "Configuration").
 DEFAULT_TREE_SETTINGS: Dict[str, Any] = {
     "model": None,  # null = use the agent's text model
+    "terminator_model": None,  # null = fall back through the model hierarchy
     "max_depth": 3,
     "max_pages_per_node": 10,
     "max_tokens_per_node": 20000,
     "max_document_tokens": 500000,  # above this: fall back to vector
+    "max_sufficiency_rounds": 3,  # hybrid: evaluator rounds per query
+    "max_fetched_nodes_pct": 50,  # hybrid: fetched-node cap as % of tree nodes
 }
 
 # Retrieval modes recognized by the per-source ``retrieval:`` field.
-# Phase 1 supports "vector" and "tree"; "tree-vector" (Method B) and
-# "hybrid" (A+B+terminator) are reserved for later phases and rejected
-# by config validation until they ship.
-SUPPORTED_RETRIEVAL_MODES = ("vector", "tree")
-RESERVED_RETRIEVAL_MODES = ("tree-vector", "hybrid")
+# "vector" and "tree" shipped in Phase 1; "tree-vector" (Method B) and
+# "hybrid" (A+B+terminator) shipped in Phases 2-3. RESERVED_RETRIEVAL_MODES
+# is kept (empty) so config validation has a single place to park modes
+# for future phases.
+SUPPORTED_RETRIEVAL_MODES = ("vector", "tree", "tree-vector", "hybrid")
+RESERVED_RETRIEVAL_MODES = ()
+
+# Retrieval modes that consult a tree index at query time (everything but
+# the plain vector pipeline).
+TREE_RETRIEVAL_MODES = ("tree", "tree-vector", "hybrid")
+
+# Retrieval modes that require Method B per-node chunk embeddings.
+EMBEDDING_RETRIEVAL_MODES = ("tree-vector", "hybrid")
+
+# Regeneration triggers accepted by the per-source ``agent_tree.regenerate``
+# field (per-agent formation-level trees, PRD Phase 4).
+AGENT_TREE_REGENERATE_MODES = ("manual", "on-source-change", "on-formation-load")
 
 
 class TreeBuildError(Exception):
@@ -147,9 +164,15 @@ class TreeIndex:
     root: TreeNode
     token_count: int = 0
     tree_token_count: int = 0
-    scope: str = "document"  # "document" now; "agent" in a later phase
+    scope: str = "document"  # "document" (per-file) or "agent" (per-source)
     schema_version: int = TREE_SCHEMA_VERSION
     kv: Dict[str, str] = field(default_factory=dict)
+    # Method B scaffolding: per-node chunk embedding vectors
+    # (node_id -> list of chunk vectors) plus the embedding model slug they
+    # were computed with. Empty for Method-A-only trees. Persisted as a
+    # cache sidecar (``.tree.emb.jsonl``), never inside the tree JSON.
+    chunk_embeddings: Dict[str, List[List[float]]] = field(default_factory=dict)
+    embedding_model: Optional[str] = None
     # Lazy id->node and child_id->parent_id lookup maps so the query hot
     # path (get_node / node_path per selected node id) never re-traverses
     # the tree. Built once on first use; trees are immutable after
@@ -206,6 +229,32 @@ class TreeIndex:
     def fetch_raw(self, node_id: str) -> str:
         """Fetch the raw content for a node from the KV mapping."""
         return self.kv.get(node_id, "")
+
+    def resolve_content(self, node_id: str, max_chars: int = 6000) -> str:
+        """
+        Resolve a node's raw content for retrieval, capped at ``max_chars``.
+
+        Parent nodes only own their intro text (descendants own their
+        spans), so when a parent is selected, children's raw content is
+        appended depth-first until the cap is reached. Shared by every
+        retrieval method (A, B, hybrid) so selected nodes resolve
+        identically regardless of how they were chosen.
+        """
+        node = self.get_node(node_id)
+        if node is None:
+            return ""
+        parts = [self.fetch_raw(node.node_id)]
+        total = len(parts[0])
+        if total < max_chars:
+            stack = list(node.sub_nodes)
+            while stack and total < max_chars:
+                child = stack.pop(0)
+                child_raw = self.fetch_raw(child.node_id)
+                if child_raw:
+                    parts.append(child_raw)
+                    total += len(child_raw)
+                stack = list(child.sub_nodes) + stack
+        return "\n\n".join(p for p in parts if p).strip()[:max_chars]
 
     def compressed_json(self) -> str:
         """Compact JSON of the tree only (no raw content) for LLM prompts."""

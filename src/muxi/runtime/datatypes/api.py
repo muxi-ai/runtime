@@ -56,6 +56,9 @@ class APIEventType(str, Enum):
     JOB_DELETED = "job.deleted"
     JOB_LIST = "job.list"
 
+    # Knowledge events (reasoning-RAG per-agent trees)
+    KNOWLEDGE_TREES_REBUILT = "knowledge.trees.rebuilt"
+
     # Configuration events
     OVERLORD_CONFIG_RETRIEVED = "overlord.config.retrieved"
     OVERLORD_CONFIG_UPDATED = "overlord.config.updated"
@@ -175,6 +178,7 @@ class APIObjectType(str, Enum):
     MEMORY = "memory"
     MEMORY_LIST = "memory_list"
     MEMORY_CONFIG = "memory_config"
+    KNOWLEDGE = "knowledge"
     MEMORY_INGESTION = "memory_ingestion"
     MEMORY_DISTILLATION = "memory_distillation"
     MEMORY_DISTILLERY = "memory_distillery"

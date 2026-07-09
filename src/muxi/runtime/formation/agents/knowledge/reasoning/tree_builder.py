@@ -317,9 +317,15 @@ class TreeBuilder:
                 #   response cache; a stale hit would silently attach the
                 #   wrong summaries to a fresh tree. Builds are already
                 #   deduplicated by the MD5-keyed TreeCache.
+                # - explicit max_tokens: a formation-level ``llm.settings.
+                #   max_tokens`` chat cap would truncate the batch-summary
+                #   JSON mid-object (up to 40 summaries per response) and
+                #   fail the build; ~75 tokens per node covers a 30-word
+                #   summary plus JSON overhead.
                 response = await self.llm.chat(
                     messages=messages,
                     temperature=0.1,
+                    max_tokens=_SUMMARY_BATCH_SIZE * 75,
                     caching=False,
                     metadata={"component": "knowledge_tree_builder"},
                 )

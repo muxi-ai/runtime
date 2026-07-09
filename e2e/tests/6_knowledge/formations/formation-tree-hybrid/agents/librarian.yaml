@@ -1,0 +1,35 @@
+schema: "1.0.0"
+id: "librarian"
+name: "Librarian Agent"
+description: "AI assistant answering questions about the SS Steadfast operations manual and the New Meridian colony handbook"
+
+system_message: |
+  You are the ship librarian. Answer questions using the SS Steadfast
+  technical operations manual and the New Meridian colony operations
+  handbook. Quote specific values (intervals, codes, percentages, part
+  names) exactly as documented.
+
+role: "assistant"
+specialties:
+  - "steadfast_manual"
+  - "colony_handbook"
+
+knowledge:
+  enabled: true
+  tree:
+    # Hybrid sufficiency evaluator model, resolved through the model
+    # hierarchy (here: an explicit provider/model reference).
+    terminator_model: "openai/gpt-4o-mini"
+    max_sufficiency_rounds: 2
+  sources:
+  - path: "knowledge/starship-manual.md"
+    description: "SS Steadfast technical operations manual"
+    # Method B: per-node chunk-embedding scoring, no LLM calls at query time
+    retrieval: tree-vector
+  - path: "knowledge/colony-handbook.md"
+    description: "New Meridian colony operations handbook"
+    # Hybrid: parallel A+B with the sufficiency evaluator, persisted as an
+    # agent-level tree in <formation>/.knowledge-trees/
+    retrieval: hybrid
+    agent_tree:
+      regenerate: on-source-change
