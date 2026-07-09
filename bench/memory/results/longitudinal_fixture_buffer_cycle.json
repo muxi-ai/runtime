@@ -1,0 +1,844 @@
+{
+  "benchmark": "longitudinal",
+  "config": {
+    "buffer_max_mb": 0.4,
+    "fetch_limit": 25,
+    "flush_digest": false,
+    "formation_yaml": "bench/memory/formation/formation.yaml",
+    "ground_truth_ingestion": "manifest via apply_extraction (no LLM extraction; see README Tier 2)",
+    "max_embed_chars": 6000,
+    "mode": "structured",
+    "qa": true,
+    "structured_backends": [
+      "knowledge_graph",
+      "captains_log"
+    ],
+    "text_model": "openai/gpt-4o-mini",
+    "working_embedding_model": "local/nomic-ai/nomic-embed-text-v1.5"
+  },
+  "dataset": {
+    "cases": 1,
+    "fixture": true,
+    "path": "bench/memory/fixtures/longitudinal_sample.json",
+    "questions": 7,
+    "scenario_config": {
+      "fact_sets": 1,
+      "filler_exchanges": 6,
+      "sessions": 18,
+      "span_days": 30
+    },
+    "sessions": 18
+  },
+  "k": 5,
+  "metrics": {
+    "compensation": {
+      "evicted_recall_structured": 1.0,
+      "evicted_recall_working": 0.0,
+      "evidence_evicted_fraction": 1.0,
+      "recent_recall_structured": 1.0,
+      "recent_recall_working": 1.0,
+      "target": 0.85,
+      "target_met": true
+    },
+    "contradiction_detection": null,
+    "decisions": {
+      "expected": 1,
+      "found": 1,
+      "lost": 0,
+      "lost_decisions": [],
+      "zero_lost_met": true
+    },
+    "eviction": {
+      "cleanup_passes": 18,
+      "evicted_turns": 131,
+      "ingested_turns": 228,
+      "max_memory_mb": 0.4,
+      "resident_turns": 97
+    },
+    "exact_strings": {
+      "by_category": {
+        "evicted_recall": {
+          "missed_question_ids": [],
+          "questions": 3,
+          "recall@5": 1.0,
+          "recall@fetch": 1.0
+        },
+        "recent_recall": {
+          "missed_question_ids": [],
+          "questions": 2,
+          "recall@5": 1.0,
+          "recall@fetch": 1.0
+        }
+      },
+      "overall": {
+        "missed_question_ids": [],
+        "questions": 5,
+        "recall@5": 1.0,
+        "recall@fetch": 1.0
+      }
+    },
+    "flush": {
+      "attached": true,
+      "digest_enabled": false,
+      "hand_offs": 11,
+      "items_handed": 131
+    },
+    "k": 5,
+    "qa": {
+      "by_question_type": {
+        "evicted_recall": {
+          "accuracy": 1.0,
+          "questions": 5
+        },
+        "recent_recall": {
+          "accuracy": 1.0,
+          "questions": 2
+        }
+      },
+      "overall": {
+        "accuracy": 1.0,
+        "questions": 7
+      }
+    },
+    "questions_abstention": 0,
+    "questions_errored": 0,
+    "questions_scored": 7,
+    "questions_total": 7,
+    "retrieval": {
+      "session_level": {
+        "by_question_type": {
+          "evicted_recall": {
+            "coverage@5": 1.0,
+            "mrr": 1.0,
+            "questions": 5,
+            "recall@5": 1.0
+          },
+          "recent_recall": {
+            "coverage@5": 1.0,
+            "mrr": 1.0,
+            "questions": 2,
+            "recall@5": 1.0
+          }
+        },
+        "overall": {
+          "coverage@5": 1.0,
+          "mrr": 1.0,
+          "questions": 7,
+          "recall@5": 1.0
+        }
+      },
+      "turn_level": {
+        "by_question_type": {
+          "evicted_recall": {
+            "coverage@5": 1.0,
+            "mrr": 1.0,
+            "questions": 4,
+            "recall@5": 1.0
+          },
+          "recent_recall": {
+            "coverage@5": 1.0,
+            "mrr": 1.0,
+            "questions": 2,
+            "recall@5": 1.0
+          }
+        },
+        "overall": {
+          "coverage@5": 1.0,
+          "mrr": 1.0,
+          "questions": 6,
+          "recall@5": 1.0
+        }
+      }
+    },
+    "working_baseline": {
+      "k": 5,
+      "qa": null,
+      "questions_abstention": 0,
+      "questions_errored": 0,
+      "questions_scored": 7,
+      "questions_total": 7,
+      "retrieval": {
+        "session_level": {
+          "by_question_type": {
+            "evicted_recall": {
+              "coverage@5": 0.0,
+              "mrr": 0.0,
+              "questions": 5,
+              "recall@5": 0.0
+            },
+            "recent_recall": {
+              "coverage@5": 1.0,
+              "mrr": 1.0,
+              "questions": 2,
+              "recall@5": 1.0
+            }
+          },
+          "overall": {
+            "coverage@5": 0.2857142857142857,
+            "mrr": 0.2857142857142857,
+            "questions": 7,
+            "recall@5": 0.2857142857142857
+          }
+        },
+        "turn_level": {
+          "by_question_type": {
+            "evicted_recall": {
+              "coverage@5": 0.0,
+              "mrr": 0.0,
+              "questions": 4,
+              "recall@5": 0.0
+            },
+            "recent_recall": {
+              "coverage@5": 1.0,
+              "mrr": 1.0,
+              "questions": 2,
+              "recall@5": 1.0
+            }
+          },
+          "overall": {
+            "coverage@5": 0.3333333333333333,
+            "mrr": 0.3333333333333333,
+            "questions": 6,
+            "recall@5": 0.3333333333333333
+          }
+        }
+      }
+    }
+  },
+  "mode": "buffer_cycle",
+  "results": [
+    {
+      "category": "evicted_recall",
+      "elapsed_seconds": 1.487,
+      "error": null,
+      "evidence_evicted": true,
+      "evidence_session_ids": [
+        "seq_buffer_cycle_000_s001"
+      ],
+      "evidence_turn_ids": [
+        "seq_buffer_cycle_000_s001:2"
+      ],
+      "exact_string_rank": 1,
+      "exact_strings": [
+        "mara.kovacs@vertexlabs.example.com"
+      ],
+      "is_abstention": false,
+      "layer": "structured",
+      "qa_answer": "Mara Kovacs's email address is mara.kovacs@vertexlabs.example.com.",
+      "qa_correct": true,
+      "question_id": "seq_buffer_cycle_000_q001_evicted_recall",
+      "question_type": "evicted_recall",
+      "retrieved_session_ids": [
+        "seq_buffer_cycle_000_s001"
+      ],
+      "retrieved_turn_ids": [
+        "seq_buffer_cycle_000_s001:2"
+      ]
+    },
+    {
+      "category": "evicted_recall",
+      "elapsed_seconds": 0.022,
+      "error": null,
+      "evidence_evicted": true,
+      "evidence_session_ids": [
+        "seq_buffer_cycle_000_s001"
+      ],
+      "evidence_turn_ids": [
+        "seq_buffer_cycle_000_s001:2"
+      ],
+      "exact_string_rank": null,
+      "exact_strings": [
+        "mara.kovacs@vertexlabs.example.com"
+      ],
+      "is_abstention": false,
+      "layer": "working",
+      "qa_answer": null,
+      "qa_correct": null,
+      "question_id": "seq_buffer_cycle_000_q001_evicted_recall#working",
+      "question_type": "evicted_recall",
+      "retrieved_session_ids": [
+        "seq_buffer_cycle_000_s017",
+        "seq_buffer_cycle_000_s016",
+        "seq_buffer_cycle_000_s012",
+        "seq_buffer_cycle_000_s013",
+        "seq_buffer_cycle_000_s014",
+        "seq_buffer_cycle_000_s018",
+        "seq_buffer_cycle_000_s011",
+        "seq_buffer_cycle_000_s015"
+      ],
+      "retrieved_turn_ids": [
+        "seq_buffer_cycle_000_s017:3",
+        "seq_buffer_cycle_000_s017:2",
+        "seq_buffer_cycle_000_s016:2",
+        "seq_buffer_cycle_000_s016:3",
+        "seq_buffer_cycle_000_s012:9",
+        "seq_buffer_cycle_000_s012:8",
+        "seq_buffer_cycle_000_s013:5",
+        "seq_buffer_cycle_000_s013:4",
+        "seq_buffer_cycle_000_s014:1",
+        "seq_buffer_cycle_000_s018:1",
+        "seq_buffer_cycle_000_s016:11",
+        "seq_buffer_cycle_000_s014:0",
+        "seq_buffer_cycle_000_s017:7",
+        "seq_buffer_cycle_000_s011:11",
+        "seq_buffer_cycle_000_s015:11",
+        "seq_buffer_cycle_000_s015:1",
+        "seq_buffer_cycle_000_s012:7",
+        "seq_buffer_cycle_000_s014:11",
+        "seq_buffer_cycle_000_s018:5",
+        "seq_buffer_cycle_000_s016:5",
+        "seq_buffer_cycle_000_s017:5",
+        "seq_buffer_cycle_000_s012:1",
+        "seq_buffer_cycle_000_s013:9",
+        "seq_buffer_cycle_000_s015:5",
+        "seq_buffer_cycle_000_s018:11"
+      ]
+    },
+    {
+      "category": "evicted_recall",
+      "elapsed_seconds": 1.539,
+      "error": null,
+      "evidence_evicted": true,
+      "evidence_session_ids": [
+        "seq_buffer_cycle_000_s002"
+      ],
+      "evidence_turn_ids": [
+        "seq_buffer_cycle_000_s002:2"
+      ],
+      "exact_string_rank": 1,
+      "exact_strings": [
+        "petra.lindqvist@vertexlabs.example.com"
+      ],
+      "is_abstention": false,
+      "layer": "structured",
+      "qa_answer": "Petra Lindqvist's email address is petra.lindqvist@vertexlabs.example.com.",
+      "qa_correct": true,
+      "question_id": "seq_buffer_cycle_000_q002_evicted_recall",
+      "question_type": "evicted_recall",
+      "retrieved_session_ids": [
+        "seq_buffer_cycle_000_s002"
+      ],
+      "retrieved_turn_ids": [
+        "seq_buffer_cycle_000_s002:2"
+      ]
+    },
+    {
+      "category": "evicted_recall",
+      "elapsed_seconds": 0.025,
+      "error": null,
+      "evidence_evicted": true,
+      "evidence_session_ids": [
+        "seq_buffer_cycle_000_s002"
+      ],
+      "evidence_turn_ids": [
+        "seq_buffer_cycle_000_s002:2"
+      ],
+      "exact_string_rank": null,
+      "exact_strings": [
+        "petra.lindqvist@vertexlabs.example.com"
+      ],
+      "is_abstention": false,
+      "layer": "working",
+      "qa_answer": null,
+      "qa_correct": null,
+      "question_id": "seq_buffer_cycle_000_q002_evicted_recall#working",
+      "question_type": "evicted_recall",
+      "retrieved_session_ids": [
+        "seq_buffer_cycle_000_s017",
+        "seq_buffer_cycle_000_s016",
+        "seq_buffer_cycle_000_s012",
+        "seq_buffer_cycle_000_s018",
+        "seq_buffer_cycle_000_s013",
+        "seq_buffer_cycle_000_s015",
+        "seq_buffer_cycle_000_s014"
+      ],
+      "retrieved_turn_ids": [
+        "seq_buffer_cycle_000_s017:3",
+        "seq_buffer_cycle_000_s017:2",
+        "seq_buffer_cycle_000_s016:3",
+        "seq_buffer_cycle_000_s012:9",
+        "seq_buffer_cycle_000_s016:2",
+        "seq_buffer_cycle_000_s018:5",
+        "seq_buffer_cycle_000_s013:7",
+        "seq_buffer_cycle_000_s012:11",
+        "seq_buffer_cycle_000_s015:1",
+        "seq_buffer_cycle_000_s017:11",
+        "seq_buffer_cycle_000_s013:0",
+        "seq_buffer_cycle_000_s014:1",
+        "seq_buffer_cycle_000_s016:11",
+        "seq_buffer_cycle_000_s018:1",
+        "seq_buffer_cycle_000_s013:9",
+        "seq_buffer_cycle_000_s017:0",
+        "seq_buffer_cycle_000_s014:3",
+        "seq_buffer_cycle_000_s017:9",
+        "seq_buffer_cycle_000_s012:4",
+        "seq_buffer_cycle_000_s016:13",
+        "seq_buffer_cycle_000_s018:3",
+        "seq_buffer_cycle_000_s014:5",
+        "seq_buffer_cycle_000_s013:5",
+        "seq_buffer_cycle_000_s015:8",
+        "seq_buffer_cycle_000_s017:7"
+      ]
+    },
+    {
+      "category": "evicted_recall",
+      "elapsed_seconds": 1.153,
+      "error": null,
+      "evidence_evicted": true,
+      "evidence_session_ids": [
+        "seq_buffer_cycle_000_s003"
+      ],
+      "evidence_turn_ids": [
+        "seq_buffer_cycle_000_s003:2"
+      ],
+      "exact_string_rank": null,
+      "exact_strings": [],
+      "is_abstention": false,
+      "layer": "structured",
+      "qa_answer": "Ingrid Alvarez recommended using Kafka for the search revamp.",
+      "qa_correct": true,
+      "question_id": "seq_buffer_cycle_000_q003_evicted_recall",
+      "question_type": "evicted_recall",
+      "retrieved_session_ids": [
+        "seq_buffer_cycle_000_s003"
+      ],
+      "retrieved_turn_ids": [
+        "seq_buffer_cycle_000_s003:2"
+      ]
+    },
+    {
+      "category": "evicted_recall",
+      "elapsed_seconds": 0.02,
+      "error": null,
+      "evidence_evicted": true,
+      "evidence_session_ids": [
+        "seq_buffer_cycle_000_s003"
+      ],
+      "evidence_turn_ids": [
+        "seq_buffer_cycle_000_s003:2"
+      ],
+      "exact_string_rank": null,
+      "exact_strings": [],
+      "is_abstention": false,
+      "layer": "working",
+      "qa_answer": null,
+      "qa_correct": null,
+      "question_id": "seq_buffer_cycle_000_q003_evicted_recall#working",
+      "question_type": "evicted_recall",
+      "retrieved_session_ids": [
+        "seq_buffer_cycle_000_s017",
+        "seq_buffer_cycle_000_s016",
+        "seq_buffer_cycle_000_s018",
+        "seq_buffer_cycle_000_s014",
+        "seq_buffer_cycle_000_s015",
+        "seq_buffer_cycle_000_s013",
+        "seq_buffer_cycle_000_s011",
+        "seq_buffer_cycle_000_s012"
+      ],
+      "retrieved_turn_ids": [
+        "seq_buffer_cycle_000_s017:3",
+        "seq_buffer_cycle_000_s017:2",
+        "seq_buffer_cycle_000_s016:3",
+        "seq_buffer_cycle_000_s016:2",
+        "seq_buffer_cycle_000_s018:1",
+        "seq_buffer_cycle_000_s017:13",
+        "seq_buffer_cycle_000_s014:7",
+        "seq_buffer_cycle_000_s018:7",
+        "seq_buffer_cycle_000_s015:3",
+        "seq_buffer_cycle_000_s013:11",
+        "seq_buffer_cycle_000_s011:3",
+        "seq_buffer_cycle_000_s016:11",
+        "seq_buffer_cycle_000_s014:1",
+        "seq_buffer_cycle_000_s013:5",
+        "seq_buffer_cycle_000_s012:9",
+        "seq_buffer_cycle_000_s017:7",
+        "seq_buffer_cycle_000_s018:0",
+        "seq_buffer_cycle_000_s015:1",
+        "seq_buffer_cycle_000_s013:9",
+        "seq_buffer_cycle_000_s018:5",
+        "seq_buffer_cycle_000_s017:11",
+        "seq_buffer_cycle_000_s014:0",
+        "seq_buffer_cycle_000_s014:5",
+        "seq_buffer_cycle_000_s016:10",
+        "seq_buffer_cycle_000_s013:4"
+      ]
+    },
+    {
+      "category": "evicted_recall",
+      "elapsed_seconds": 1.353,
+      "error": null,
+      "evidence_evicted": true,
+      "evidence_session_ids": [
+        "seq_buffer_cycle_000_s001"
+      ],
+      "evidence_turn_ids": [
+        "seq_buffer_cycle_000_s001:4"
+      ],
+      "exact_string_rank": 1,
+      "exact_strings": [
+        "INV-5150-SK"
+      ],
+      "is_abstention": false,
+      "layer": "structured",
+      "qa_answer": "The reference number of the invoice Yuki Mensah opened for the payments integration is INV-5150-SK.",
+      "qa_correct": true,
+      "question_id": "seq_buffer_cycle_000_q004_evicted_recall",
+      "question_type": "evicted_recall",
+      "retrieved_session_ids": [
+        "seq_buffer_cycle_000_s001"
+      ],
+      "retrieved_turn_ids": [
+        "seq_buffer_cycle_000_s001:4"
+      ]
+    },
+    {
+      "category": "evicted_recall",
+      "elapsed_seconds": 0.025,
+      "error": null,
+      "evidence_evicted": true,
+      "evidence_session_ids": [
+        "seq_buffer_cycle_000_s001"
+      ],
+      "evidence_turn_ids": [
+        "seq_buffer_cycle_000_s001:4"
+      ],
+      "exact_string_rank": null,
+      "exact_strings": [
+        "INV-5150-SK"
+      ],
+      "is_abstention": false,
+      "layer": "working",
+      "qa_answer": null,
+      "qa_correct": null,
+      "question_id": "seq_buffer_cycle_000_q004_evicted_recall#working",
+      "question_type": "evicted_recall",
+      "retrieved_session_ids": [
+        "seq_buffer_cycle_000_s017",
+        "seq_buffer_cycle_000_s016",
+        "seq_buffer_cycle_000_s012",
+        "seq_buffer_cycle_000_s011",
+        "seq_buffer_cycle_000_s013",
+        "seq_buffer_cycle_000_s018",
+        "seq_buffer_cycle_000_s015",
+        "seq_buffer_cycle_000_s014"
+      ],
+      "retrieved_turn_ids": [
+        "seq_buffer_cycle_000_s017:3",
+        "seq_buffer_cycle_000_s016:3",
+        "seq_buffer_cycle_000_s017:2",
+        "seq_buffer_cycle_000_s016:2",
+        "seq_buffer_cycle_000_s012:9",
+        "seq_buffer_cycle_000_s017:1",
+        "seq_buffer_cycle_000_s011:9",
+        "seq_buffer_cycle_000_s011:5",
+        "seq_buffer_cycle_000_s012:1",
+        "seq_buffer_cycle_000_s013:1",
+        "seq_buffer_cycle_000_s018:1",
+        "seq_buffer_cycle_000_s015:7",
+        "seq_buffer_cycle_000_s016:5",
+        "seq_buffer_cycle_000_s013:5",
+        "seq_buffer_cycle_000_s018:9",
+        "seq_buffer_cycle_000_s015:9",
+        "seq_buffer_cycle_000_s015:5",
+        "seq_buffer_cycle_000_s011:7",
+        "seq_buffer_cycle_000_s014:11",
+        "seq_buffer_cycle_000_s012:5",
+        "seq_buffer_cycle_000_s018:11",
+        "seq_buffer_cycle_000_s014:9",
+        "seq_buffer_cycle_000_s016:1",
+        "seq_buffer_cycle_000_s016:7",
+        "seq_buffer_cycle_000_s012:3"
+      ]
+    },
+    {
+      "category": "recent_recall",
+      "elapsed_seconds": 1.529,
+      "error": null,
+      "evidence_evicted": false,
+      "evidence_session_ids": [
+        "seq_buffer_cycle_000_s016"
+      ],
+      "evidence_turn_ids": [
+        "seq_buffer_cycle_000_s016:2"
+      ],
+      "exact_string_rank": 1,
+      "exact_strings": [
+        "dario.nakamura@vertexlabs.example.com"
+      ],
+      "is_abstention": false,
+      "layer": "structured",
+      "qa_answer": "Dario Nakamura's email address is dario.nakamura@vertexlabs.example.com.",
+      "qa_correct": true,
+      "question_id": "seq_buffer_cycle_000_q005_recent_recall",
+      "question_type": "recent_recall",
+      "retrieved_session_ids": [
+        "seq_buffer_cycle_000_s016"
+      ],
+      "retrieved_turn_ids": [
+        "seq_buffer_cycle_000_s016:2"
+      ]
+    },
+    {
+      "category": "recent_recall",
+      "elapsed_seconds": 0.019,
+      "error": null,
+      "evidence_evicted": false,
+      "evidence_session_ids": [
+        "seq_buffer_cycle_000_s016"
+      ],
+      "evidence_turn_ids": [
+        "seq_buffer_cycle_000_s016:2"
+      ],
+      "exact_string_rank": 1,
+      "exact_strings": [
+        "dario.nakamura@vertexlabs.example.com"
+      ],
+      "is_abstention": false,
+      "layer": "working",
+      "qa_answer": null,
+      "qa_correct": null,
+      "question_id": "seq_buffer_cycle_000_q005_recent_recall#working",
+      "question_type": "recent_recall",
+      "retrieved_session_ids": [
+        "seq_buffer_cycle_000_s016",
+        "seq_buffer_cycle_000_s017",
+        "seq_buffer_cycle_000_s013",
+        "seq_buffer_cycle_000_s015",
+        "seq_buffer_cycle_000_s012",
+        "seq_buffer_cycle_000_s011",
+        "seq_buffer_cycle_000_s014",
+        "seq_buffer_cycle_000_s018"
+      ],
+      "retrieved_turn_ids": [
+        "seq_buffer_cycle_000_s016:2",
+        "seq_buffer_cycle_000_s016:3",
+        "seq_buffer_cycle_000_s017:2",
+        "seq_buffer_cycle_000_s017:3",
+        "seq_buffer_cycle_000_s013:1",
+        "seq_buffer_cycle_000_s017:1",
+        "seq_buffer_cycle_000_s015:9",
+        "seq_buffer_cycle_000_s012:5",
+        "seq_buffer_cycle_000_s016:7",
+        "seq_buffer_cycle_000_s011:9",
+        "seq_buffer_cycle_000_s012:8",
+        "seq_buffer_cycle_000_s014:0",
+        "seq_buffer_cycle_000_s013:4",
+        "seq_buffer_cycle_000_s016:10",
+        "seq_buffer_cycle_000_s017:0",
+        "seq_buffer_cycle_000_s016:5",
+        "seq_buffer_cycle_000_s014:11",
+        "seq_buffer_cycle_000_s012:4",
+        "seq_buffer_cycle_000_s016:6",
+        "seq_buffer_cycle_000_s018:0",
+        "seq_buffer_cycle_000_s011:7",
+        "seq_buffer_cycle_000_s013:0",
+        "seq_buffer_cycle_000_s015:8",
+        "seq_buffer_cycle_000_s018:11",
+        "seq_buffer_cycle_000_s015:7"
+      ]
+    },
+    {
+      "category": "recent_recall",
+      "elapsed_seconds": 1.618,
+      "error": null,
+      "evidence_evicted": false,
+      "evidence_session_ids": [
+        "seq_buffer_cycle_000_s017"
+      ],
+      "evidence_turn_ids": [
+        "seq_buffer_cycle_000_s017:2"
+      ],
+      "exact_string_rank": 1,
+      "exact_strings": [
+        "TKT-7623-HB"
+      ],
+      "is_abstention": false,
+      "layer": "structured",
+      "qa_answer": "The reference number of the support ticket Owen Haddad opened for the auth migration is TKT-7623-HB.",
+      "qa_correct": true,
+      "question_id": "seq_buffer_cycle_000_q006_recent_recall",
+      "question_type": "recent_recall",
+      "retrieved_session_ids": [
+        "seq_buffer_cycle_000_s017"
+      ],
+      "retrieved_turn_ids": [
+        "seq_buffer_cycle_000_s017:2"
+      ]
+    },
+    {
+      "category": "recent_recall",
+      "elapsed_seconds": 0.029,
+      "error": null,
+      "evidence_evicted": false,
+      "evidence_session_ids": [
+        "seq_buffer_cycle_000_s017"
+      ],
+      "evidence_turn_ids": [
+        "seq_buffer_cycle_000_s017:2"
+      ],
+      "exact_string_rank": 1,
+      "exact_strings": [
+        "TKT-7623-HB"
+      ],
+      "is_abstention": false,
+      "layer": "working",
+      "qa_answer": null,
+      "qa_correct": null,
+      "question_id": "seq_buffer_cycle_000_q006_recent_recall#working",
+      "question_type": "recent_recall",
+      "retrieved_session_ids": [
+        "seq_buffer_cycle_000_s017",
+        "seq_buffer_cycle_000_s016",
+        "seq_buffer_cycle_000_s014",
+        "seq_buffer_cycle_000_s012",
+        "seq_buffer_cycle_000_s011",
+        "seq_buffer_cycle_000_s018",
+        "seq_buffer_cycle_000_s015",
+        "seq_buffer_cycle_000_s013"
+      ],
+      "retrieved_turn_ids": [
+        "seq_buffer_cycle_000_s017:2",
+        "seq_buffer_cycle_000_s017:3",
+        "seq_buffer_cycle_000_s016:3",
+        "seq_buffer_cycle_000_s016:2",
+        "seq_buffer_cycle_000_s014:11",
+        "seq_buffer_cycle_000_s016:5",
+        "seq_buffer_cycle_000_s012:3",
+        "seq_buffer_cycle_000_s011:7",
+        "seq_buffer_cycle_000_s018:11",
+        "seq_buffer_cycle_000_s015:7",
+        "seq_buffer_cycle_000_s012:9",
+        "seq_buffer_cycle_000_s013:5",
+        "seq_buffer_cycle_000_s014:1",
+        "seq_buffer_cycle_000_s018:1",
+        "seq_buffer_cycle_000_s018:10",
+        "seq_buffer_cycle_000_s017:7",
+        "seq_buffer_cycle_000_s016:11",
+        "seq_buffer_cycle_000_s015:6",
+        "seq_buffer_cycle_000_s012:2",
+        "seq_buffer_cycle_000_s014:10",
+        "seq_buffer_cycle_000_s011:6",
+        "seq_buffer_cycle_000_s016:4",
+        "seq_buffer_cycle_000_s013:9",
+        "seq_buffer_cycle_000_s015:1",
+        "seq_buffer_cycle_000_s017:11"
+      ]
+    },
+    {
+      "category": "evicted_recall",
+      "elapsed_seconds": 2.805,
+      "error": null,
+      "evidence_evicted": null,
+      "evidence_session_ids": [
+        "seq_buffer_cycle_000_s003"
+      ],
+      "evidence_turn_ids": [],
+      "exact_string_rank": null,
+      "exact_strings": [],
+      "is_abstention": false,
+      "layer": "structured",
+      "qa_answer": "The main decision made on 2026-03-22 was to adopt Kafka for the search revamp, based on Ingrid Alvarez's recommendation.",
+      "qa_correct": true,
+      "question_id": "seq_buffer_cycle_000_q007_evicted_recall",
+      "question_type": "evicted_recall",
+      "retrieved_session_ids": [
+        "seq_buffer_cycle_000_s003"
+      ],
+      "retrieved_turn_ids": [
+        "seq_buffer_cycle_000_s003:log:2026-03-22"
+      ]
+    },
+    {
+      "category": "evicted_recall",
+      "elapsed_seconds": 0.02,
+      "error": null,
+      "evidence_evicted": null,
+      "evidence_session_ids": [
+        "seq_buffer_cycle_000_s003"
+      ],
+      "evidence_turn_ids": [],
+      "exact_string_rank": null,
+      "exact_strings": [],
+      "is_abstention": false,
+      "layer": "working",
+      "qa_answer": null,
+      "qa_correct": null,
+      "question_id": "seq_buffer_cycle_000_q007_evicted_recall#working",
+      "question_type": "evicted_recall",
+      "retrieved_session_ids": [
+        "seq_buffer_cycle_000_s013",
+        "seq_buffer_cycle_000_s011",
+        "seq_buffer_cycle_000_s015",
+        "seq_buffer_cycle_000_s014",
+        "seq_buffer_cycle_000_s012",
+        "seq_buffer_cycle_000_s018",
+        "seq_buffer_cycle_000_s017",
+        "seq_buffer_cycle_000_s016"
+      ],
+      "retrieved_turn_ids": [
+        "seq_buffer_cycle_000_s013:9",
+        "seq_buffer_cycle_000_s011:7",
+        "seq_buffer_cycle_000_s015:1",
+        "seq_buffer_cycle_000_s014:11",
+        "seq_buffer_cycle_000_s014:5",
+        "seq_buffer_cycle_000_s012:3",
+        "seq_buffer_cycle_000_s018:5",
+        "seq_buffer_cycle_000_s017:11",
+        "seq_buffer_cycle_000_s013:7",
+        "seq_buffer_cycle_000_s012:11",
+        "seq_buffer_cycle_000_s017:3",
+        "seq_buffer_cycle_000_s015:7",
+        "seq_buffer_cycle_000_s016:5",
+        "seq_buffer_cycle_000_s017:9",
+        "seq_buffer_cycle_000_s018:11",
+        "seq_buffer_cycle_000_s011:10",
+        "seq_buffer_cycle_000_s017:2",
+        "seq_buffer_cycle_000_s014:3",
+        "seq_buffer_cycle_000_s016:13",
+        "seq_buffer_cycle_000_s018:3",
+        "seq_buffer_cycle_000_s011:8",
+        "seq_buffer_cycle_000_s013:5",
+        "seq_buffer_cycle_000_s012:9",
+        "seq_buffer_cycle_000_s012:6",
+        "seq_buffer_cycle_000_s017:7"
+      ]
+    }
+  ],
+  "run": {
+    "git_commit": "04736f7960212883e1f851c735714fbcb8ff60d4",
+    "python": "3.11.13",
+    "started_at": "2026-07-09T23:42:09Z",
+    "wall_seconds": 32.05
+  },
+  "schema_version": "1.0",
+  "usage": {
+    "cost": {
+      "estimated_usd": 0.00044,
+      "note": "List-price estimate for reporting only; local/* models are free.",
+      "per_model_usd": {
+        "openai/gpt-4o-mini": 0.00044
+      },
+      "unpriced_models": []
+    },
+    "ingested_turns": 233,
+    "llm_requests": 14,
+    "searches": 14,
+    "tokens": {
+      "in": 2290,
+      "out": 160,
+      "total": 2450,
+      "total_cached": 0
+    },
+    "tokens_by_model": {
+      "openai/gpt-4o-mini": [
+        2450,
+        2290,
+        160,
+        0,
+        0,
+        0
+      ]
+    },
+    "truncated_turns": 0
+  }
+}

@@ -1,0 +1,108 @@
+{
+  "benchmark": "longitudinal",
+  "config": {
+    "fetch_limit": 25,
+    "flush_digest": false,
+    "formation_yaml": "bench/memory/formation/formation.yaml",
+    "ground_truth_ingestion": "manifest via apply_extraction (no LLM extraction; see README Tier 2)",
+    "max_embed_chars": 6000,
+    "mode": "structured",
+    "qa": true,
+    "structured_backends": [
+      "knowledge_graph",
+      "captains_log"
+    ],
+    "text_model": "openai/gpt-4o-mini",
+    "working_embedding_model": "local/nomic-ai/nomic-embed-text-v1.5"
+  },
+  "dataset": {
+    "cases": 1,
+    "fixture": true,
+    "path": "bench/memory/fixtures/longitudinal_sample.json",
+    "questions": 0,
+    "scenario_config": {
+      "conflicted": 3,
+      "sessions": 12,
+      "span_days": 45,
+      "superseded": 3
+    },
+    "sessions": 12
+  },
+  "k": 5,
+  "metrics": {
+    "contradiction_detection": {
+      "detected": 6,
+      "detection_kind_accuracy": 1.0,
+      "expected": 6,
+      "false_positive_pairs": [],
+      "false_positives": 0,
+      "kind_mismatches": [],
+      "missed_pairs": [],
+      "precision": 1.0,
+      "recall": 1.0,
+      "true_positives": 6
+    },
+    "ingest": {
+      "extraction_batches": 11
+    },
+    "rebuild": {
+      "audit": {
+        "detected": 6,
+        "detection_kind_accuracy": 1.0,
+        "expected": 6,
+        "false_positive_pairs": [],
+        "false_positives": 0,
+        "kind_mismatches": [],
+        "missed_pairs": [],
+        "precision": 1.0,
+        "recall": 1.0,
+        "true_positives": 6
+      },
+      "consistent_with_live": true,
+      "projection_report": {
+        "applied": 11,
+        "events": 11,
+        "failed": 0
+      }
+    },
+    "substrate_events": {
+      "available": true,
+      "events": 6,
+      "matches_detections": true
+    },
+    "targets": {
+      "precision_met": true,
+      "precision_target": 0.9,
+      "recall_met": true,
+      "recall_target": 0.8
+    }
+  },
+  "mode": "contradiction",
+  "results": [],
+  "run": {
+    "git_commit": "04736f7960212883e1f851c735714fbcb8ff60d4",
+    "python": "3.11.13",
+    "started_at": "2026-07-09T23:44:08Z",
+    "wall_seconds": 13.05
+  },
+  "schema_version": "1.0",
+  "usage": {
+    "cost": {
+      "estimated_usd": 0.0,
+      "note": "List-price estimate for reporting only; local/* models are free.",
+      "per_model_usd": {},
+      "unpriced_models": []
+    },
+    "ingested_turns": 11,
+    "llm_requests": 0,
+    "searches": 0,
+    "tokens": {
+      "in": 0,
+      "out": 0,
+      "total": 0,
+      "total_cached": 0
+    },
+    "tokens_by_model": {},
+    "truncated_turns": 0
+  }
+}

@@ -11,10 +11,11 @@ Knowledge Graph and Captain's Log services instead of vector search:
   chronological order. No LLM is involved: ingesting the manifest
   directly isolates *structured recall* (can the KG/log query surface
   answer the question?) from *extraction quality* (can the LLM build
-  the right graph from raw text?). The extraction-quality half is the
-  Tier 3 seam: once the memory-substrate rebuild lands, the same
-  dataset can be replayed turn-by-turn through
-  ``process_conversation_turn`` to measure the full pipeline.
+  the right graph from raw text?). Tier 3 builds on this adapter
+  (:mod:`bench.memory.longitudinal_adapter`): its Scenario D replays
+  manifests per-session through the live ``store_extraction`` path;
+  the full LLM replay via ``process_conversation_turn`` remains a
+  documented non-goal (one LLM call per turn — see the README).
 - **Retrieval** matches question text against KG entities (whole-word,
   longest-first), ranks the relationships touching matched entities by
   confidence, and — for date-scoped questions — fetches Captain's-Log
@@ -218,7 +219,7 @@ class StructuredMemoryAdapter(MuxiMemoryAdapter):
         # relationship-only rendering would lose them (that gap showed up
         # as 0% exact-string recall on entity-attribute questions).
         items: List[RetrievedItem] = []
-        seen_turns = set()
+        by_turn: Dict[str, RetrievedItem] = {}
         for entity in matched:
             attributes = dict(entity.get("attributes") or {})
             if not attributes:
@@ -227,18 +228,17 @@ class StructuredMemoryAdapter(MuxiMemoryAdapter):
             for session_id, turn_id in self._entity_provenance.get(_name_key(entity["name"]), [])[
                 :1
             ]:
-                if turn_id in seen_turns:
+                if turn_id in by_turn:
                     continue
-                seen_turns.add(turn_id)
-                items.append(
-                    RetrievedItem(
-                        turn_id=turn_id,
-                        session_id=session_id,
-                        text=text,
-                        score=float(entity.get("confidence") or 0.0),
-                        source="knowledge_graph",
-                    )
+                item = RetrievedItem(
+                    turn_id=turn_id,
+                    session_id=session_id,
+                    text=text,
+                    score=float(entity.get("confidence") or 0.0),
+                    source="knowledge_graph",
                 )
+                by_turn[turn_id] = item
+                items.append(item)
 
         relationships = await graph.storage.list_relationships(user_id, status=None, limit=1000)
         touching = [
@@ -259,18 +259,26 @@ class StructuredMemoryAdapter(MuxiMemoryAdapter):
                 attributes["status"] = status
             text = f"{from_name} -[{rel['type']}]-> {to_name}{_render_attributes(attributes)}"
             for session_id, turn_id in self._rel_provenance.get(key, []):
-                if turn_id in seen_turns:
+                existing = by_turn.get(turn_id)
+                if existing is not None:
+                    # Several facts can share a provenance turn (an
+                    # entity card and the relationship stated by the
+                    # same utterance). The turn stays at its best rank,
+                    # but its TEXT must carry every fact — dropping the
+                    # relationship here starved the QA context of
+                    # answers retrieval had already found.
+                    if text not in existing.text:
+                        existing.text = f"{existing.text} | {text}"
                     continue
-                seen_turns.add(turn_id)
-                items.append(
-                    RetrievedItem(
-                        turn_id=turn_id,
-                        session_id=session_id,
-                        text=text,
-                        score=float(rel["confidence"] or 0.0),
-                        source="knowledge_graph",
-                    )
+                item = RetrievedItem(
+                    turn_id=turn_id,
+                    session_id=session_id,
+                    text=text,
+                    score=float(rel["confidence"] or 0.0),
+                    source="knowledge_graph",
                 )
+                by_turn[turn_id] = item
+                items.append(item)
             if len(items) >= fetch_limit:
                 break
         return items[:fetch_limit]
@@ -374,6 +382,6 @@ class StructuredMemoryAdapter(MuxiMemoryAdapter):
         if self.mode == STRUCTURED_MODE:
             config["structured_backends"] = ["knowledge_graph", "captains_log"]
             config["ground_truth_ingestion"] = (
-                "manifest via apply_extraction (no LLM extraction; see README Tier 3 seam)"
+                "manifest via apply_extraction (no LLM extraction; see README Tier 2)"
             )
         return config
