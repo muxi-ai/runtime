@@ -292,6 +292,52 @@ async def rebuild_memory_projections(
     return JSONResponse(content=response.model_dump(), status_code=200)
 
 
+class MemoryLintRequest(BaseModel):
+    """Model for an on-demand memory lint request."""
+
+    user_id: Optional[str] = None  # None audits every user
+
+
+@router.post("/memory/lint", response_model=APIResponse, operation_id="lint_memory")
+async def lint_memory(request: Request, lint: MemoryLintRequest) -> JSONResponse:
+    """
+    Run the memory lint audit on demand (Memory Revamp Phase 5).
+
+    Walks the knowledge store (one user, or every user when ``user_id`` is
+    omitted) and returns the health report: unresolved conflicts, superseded
+    facts hard-deleted, orphaned relationships removed, captain's log gaps,
+    stale artifacts, and knowledge index regenerations. Findings are written
+    back into the knowledge index as knowledge gaps.
+    """
+    formation = request.app.state.formation
+    request_id = getattr(request.state, "request_id", None)
+
+    overlord = getattr(formation, "_overlord", None)
+    memory_lint = getattr(overlord, "memory_lint", None) if overlord else None
+    if memory_lint is None:
+        response = create_error_response(
+            "SERVICE_UNAVAILABLE",
+            "Memory lint is not configured (declare a 'memory.lint' block)",
+            None,
+            request_id,
+        )
+        return JSONResponse(content=response.model_dump(), status_code=503)
+
+    try:
+        report = await memory_lint.run_lint(user_id=lint.user_id)
+    except Exception as e:
+        response = create_error_response(
+            "INTERNAL_ERROR", f"Memory lint failed: {str(e)}", None, request_id
+        )
+        return JSONResponse(content=response.model_dump(), status_code=500)
+
+    data = {"user_id": lint.user_id, "report": report}
+    response = create_success_response(
+        APIObjectType.MEMORY, APIEventType.MEMORY_RETRIEVED, data, request_id
+    )
+    return JSONResponse(content=response.model_dump(), status_code=200)
+
+
 @router.get(
     "/memory/rebuild/{job_id}",
     response_model=APIResponse,

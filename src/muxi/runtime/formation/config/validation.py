@@ -2264,6 +2264,127 @@ class FormationValidator:
             else:
                 self._validate_persistent_memory_config(persistent_config)
 
+        # Validate context optimization configuration (Memory Revamp Phase 3)
+        if "compaction" in memory_config:
+            self._validate_compaction_config(memory_config["compaction"])
+        if "pruning" in memory_config:
+            self._validate_pruning_config(memory_config["pruning"])
+
+        # Validate knowledge index configuration (Memory Revamp Phase 4)
+        if "index" in memory_config:
+            self._validate_memory_index_config(memory_config["index"])
+
+        # Validate lint configuration (Memory Revamp Phase 5)
+        if "lint" in memory_config:
+            self._validate_memory_lint_config(memory_config["lint"])
+
+    def _validate_compaction_config(self, compaction_config: Any) -> None:
+        """Validate memory.compaction (pre-compaction flush) configuration."""
+        if not isinstance(compaction_config, dict):
+            self.result.add_error("memory.compaction must be a dictionary")
+            return
+        flush_enabled = compaction_config.get("flush_enabled", True)
+        if not isinstance(flush_enabled, bool):
+            self.result.add_error("memory.compaction.flush_enabled must be a boolean")
+        threshold = compaction_config.get("flush_threshold", 0.80)
+        if not isinstance(threshold, (int, float)) or isinstance(threshold, bool):
+            self.result.add_error("memory.compaction.flush_threshold must be a number")
+        elif not 0 < threshold <= 1:
+            self.result.add_error(
+                "memory.compaction.flush_threshold must be between 0 (exclusive) and 1"
+            )
+
+    def _validate_pruning_config(self, pruning_config: Any) -> None:
+        """Validate memory.pruning (cache-TTL pruning) configuration."""
+        if not isinstance(pruning_config, dict):
+            self.result.add_error("memory.pruning must be a dictionary")
+            return
+        from ...services.memory.pruning import PRUNING_MODES, PRUNING_STRATEGIES
+
+        mode = pruning_config.get("mode", "cache-ttl")
+        if not isinstance(mode, str) or mode.strip().lower() not in PRUNING_MODES:
+            self.result.add_error(f"memory.pruning.mode must be one of {sorted(PRUNING_MODES)}")
+        strategy = pruning_config.get("strategy", "soft_trim")
+        if not isinstance(strategy, str) or strategy.strip().lower() not in PRUNING_STRATEGIES:
+            self.result.add_error(
+                f"memory.pruning.strategy must be one of {sorted(PRUNING_STRATEGIES)}"
+            )
+        for key in ("cache_ttl_seconds", "soft_trim_max_chars"):
+            if key in pruning_config:
+                value = pruning_config[key]
+                if not isinstance(value, (int, float)) or isinstance(value, bool) or value <= 0:
+                    self.result.add_error(f"memory.pruning.{key} must be a positive number")
+        if "keep_last_n_tool_results" in pruning_config:
+            value = pruning_config["keep_last_n_tool_results"]
+            if not isinstance(value, int) or isinstance(value, bool) or value < 0:
+                self.result.add_error(
+                    "memory.pruning.keep_last_n_tool_results must be a non-negative integer"
+                )
+
+    def _validate_memory_index_config(self, index_config: Any) -> None:
+        """Validate memory.index (knowledge index) configuration."""
+        if not isinstance(index_config, dict):
+            self.result.add_error("memory.index must be a dictionary")
+            return
+        if "enabled" in index_config and not isinstance(index_config["enabled"], bool):
+            self.result.add_error("memory.index.enabled must be a boolean")
+        for key in ("max_tokens", "entity_count_threshold"):
+            if key in index_config:
+                value = index_config[key]
+                if not isinstance(value, int) or isinstance(value, bool) or value <= 0:
+                    self.result.add_error(f"memory.index.{key} must be a positive integer")
+        if "regenerate_on" in index_config:
+            from ...services.memory.index import REGENERATE_TRIGGERS
+
+            triggers = index_config["regenerate_on"]
+            if not isinstance(triggers, list):
+                self.result.add_error("memory.index.regenerate_on must be a list")
+            else:
+                for trigger in triggers:
+                    if (
+                        not isinstance(trigger, str)
+                        or trigger.strip().lower() not in REGENERATE_TRIGGERS
+                    ):
+                        self.result.add_error(
+                            f"memory.index.regenerate_on entries must be one of "
+                            f"{sorted(REGENERATE_TRIGGERS)} (got {trigger!r})"
+                        )
+
+    def _validate_memory_lint_config(self, lint_config: Any) -> None:
+        """Validate memory.lint configuration."""
+        if not isinstance(lint_config, dict):
+            self.result.add_error("memory.lint must be a dictionary")
+            return
+        if "enabled" in lint_config and not isinstance(lint_config["enabled"], bool):
+            self.result.add_error("memory.lint.enabled must be a boolean")
+        if "schedule" in lint_config:
+            schedule = lint_config["schedule"]
+            valid_string = isinstance(schedule, str) and schedule.strip().lower() in (
+                "daily",
+                "weekly",
+            )
+            valid_number = (
+                isinstance(schedule, (int, float))
+                and not isinstance(schedule, bool)
+                and schedule > 0
+            )
+            if not valid_string and not valid_number:
+                self.result.add_error(
+                    "memory.lint.schedule must be 'daily', 'weekly', or a positive "
+                    "number of seconds"
+                )
+        if "orphan_cleanup" in lint_config and not isinstance(lint_config["orphan_cleanup"], bool):
+            self.result.add_error("memory.lint.orphan_cleanup must be a boolean")
+        for key in (
+            "conflict_resolution_days",
+            "stale_artifact_days",
+            "superseded_retention_days",
+        ):
+            if key in lint_config:
+                value = lint_config[key]
+                if not isinstance(value, int) or isinstance(value, bool) or value <= 0:
+                    self.result.add_error(f"memory.lint.{key} must be a positive integer")
+
     def _get_default_working_memory_config(self) -> Dict[str, Any]:
         """Get default working memory configuration."""
         return {

@@ -811,6 +811,36 @@ class ConversationEvents(Enum):
     MEMORY_LESSON_ARCHIVED = "memory.lesson.archived"
     # When lessons are archived by confidence decay
 
+    # Context optimization operations (Memory Revamp Phase 3)
+    MEMORY_PRECOMPACTION_FLUSH_TRIGGERED = "memory.precompaction.flush.triggered"
+    # When at-risk buffer items are handed to the pre-compaction flush
+
+    MEMORY_PRECOMPACTION_FLUSH_COMPLETED = "memory.precompaction.flush.completed"
+    # When the silent flush turn persists at-risk buffer items
+
+    MEMORY_PRECOMPACTION_FLUSH_FAILED = "memory.precompaction.flush.failed"
+    # When the pre-compaction flush fails (eviction proceeds regardless)
+
+    MEMORY_CONTEXT_PRUNED = "memory.context.pruned"
+    # When stale tool results are pruned from a resumed session's context
+
+    # Knowledge index operations (Memory Revamp Phase 4)
+    MEMORY_INDEX_REGENERATED = "memory.index.regenerated"
+    # When the per-user knowledge index blob is regenerated
+
+    MEMORY_INDEX_FAILED = "memory.index.failed"
+    # When a knowledge index lookup or regeneration fails
+
+    # Lint operations (Memory Revamp Phase 5)
+    MEMORY_LINT_STARTED = "memory.lint.started"
+    # When a memory lint run starts (scheduled or on-demand)
+
+    MEMORY_LINT_COMPLETED = "memory.lint.completed"
+    # When a memory lint run completes (report attached)
+
+    MEMORY_LINT_FAILED = "memory.lint.failed"
+    # When a memory lint run or per-user pass fails
+
     # Memory event substrate operations (Memory Platform Phase 2)
     MEMORY_EVENT_APPENDED = "memory.event.appended"
     # When a memory event is appended to the immutable event log
