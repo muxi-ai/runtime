@@ -395,6 +395,12 @@ class SystemEvents(Enum):
     KNOWLEDGE_SOURCE_FAILED = "knowledge.source.failed"
     # When knowledge source loading fails
 
+    KNOWLEDGE_SYNC_STARTED = "knowledge.sync.started"
+    # When a remote knowledge source sync begins
+
+    KNOWLEDGE_SYNC_COMPLETED = "knowledge.sync.completed"
+    # When a remote knowledge source sync completes (includes partial syncs)
+
     # ===================================================================
     # INFRASTRUCTURE MONITORING (MOVED FROM CONVERSATIONEVENTs)
     # ===================================================================
@@ -1461,6 +1467,9 @@ class ErrorEvents(Enum):
     # ===================================================================
     KNOWLEDGE_SOURCE_MISSING = "error.knowledge.source.missing"
     # When knowledge source file or directory doesn't exist
+
+    KNOWLEDGE_SYNC_FAILED = "error.knowledge.sync.failed"
+    # When a remote knowledge source sync fails (formation degrades to synced state)
 
     MARKITDOWN_INITIALIZATION_FAILED = "error.markitdown.initialization.failed"
     # When MarkItDown document processor initialization fails

@@ -783,8 +783,25 @@ class KnowledgeHandler:
             # Store embedding function for later use
             handler._generate_embeddings_fn = generate_embeddings_fn
 
+            # Remote knowledge sources (url-based): sync each one into a
+            # local mirror and replace it with a synthetic local source
+            # pointing at the mirror. Formations with only local sources
+            # never touch this path (the remote package is not even
+            # imported), keeping local-only behavior identical. Sync
+            # failures degrade to previously synced content and never
+            # block startup (see remote/sync.py for the policy).
+            sources_to_load = sources_config
+            if any(isinstance(s, dict) and s.get("url") for s in sources_config):
+                from .remote.sync import SyncManager
+
+                sync_manager = SyncManager(
+                    agent_id=agent_id,
+                    formation_id=kwargs.get("formation_id", "default-formation"),
+                )
+                sources_to_load = await sync_manager.prepare_sources(sources_config)
+
             # Load ALL sources with smart invalidation
-            await handler.load_sources_from_config(sources_config, generate_embeddings_fn)
+            await handler.load_sources_from_config(sources_to_load, generate_embeddings_fn)
 
             source_count = len(handler.sources)
             # Get document count from WorkingMemory documents namespace

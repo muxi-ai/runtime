@@ -1,0 +1,20 @@
+schema: "1.0.0"
+id: "zephyria"
+name: "Zephyria Agent"
+description: "AI assistant specialized in the Zephyrine Protocol and Zephyria lore"
+
+system_message: |
+  You are an AI assistant with knowledge about the Zephyrine Protocol.
+  Answer questions using your knowledge base.
+
+role: "assistant"
+specialties:
+  - "zephyrine_protocol"
+  - "zephyria"
+
+knowledge:
+  enabled: true
+  sources:
+    - url: "http://127.0.0.1:18931/kb/zephyria-facts.md"
+      id: zephyria-facts
+      description: "Zephyrine Protocol reference document (remote HTTP source)"
