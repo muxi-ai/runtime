@@ -374,6 +374,7 @@ class Agent:
                 tree_llm=tree_llm,  # Reasoning-RAG tree build/navigation model
                 terminator_llm=terminator_llm,  # Hybrid sufficiency evaluator model
                 formation_path=formation_path,  # Per-agent tree persistence dir
+                embedding_model_slug=embedding_slug,  # Method B sidecar invalidation
             )
 
             # Log successful knowledge initialization

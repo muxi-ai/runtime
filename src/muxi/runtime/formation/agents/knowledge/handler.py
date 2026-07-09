@@ -188,6 +188,11 @@ class KnowledgeHandler:
         # agent-tree path (sources declaring ``agent_tree:`` fall back to
         # per-document trees with a warning event).
         formation_path: Optional[str] = None,
+        # Embedding model slug backing ``generate_embeddings_fn``. Only
+        # used for bookkeeping: Method B chunk-embedding sidecars record
+        # it so a model swap invalidates persisted vectors (the tree JSON
+        # and KV survive - only vectors recompute).
+        embedding_model_slug: Optional[str] = None,
     ):
         """
         Initialize the knowledge handler with hybrid architecture components and memory integration.
@@ -228,6 +233,7 @@ class KnowledgeHandler:
         # Lazy ScoringService for Method B / hybrid (built on first use
         # from the handler's embedding function; None until then).
         self._scoring_service: Optional[ScoringService] = None
+        self._embedding_model_slug = embedding_model_slug or ""
         # Keyed locks serializing tree check-and-build per (path, md5) so
         # concurrent ingestion of the same file never fires duplicate LLM
         # builds (same pattern as the artifact version-chain locks in
@@ -454,14 +460,16 @@ class KnowledgeHandler:
             )
             return False
         # Embeddings computed with a different model are stale: the slugs
-        # differ ("" = injected callable, matches any callable backend).
-        current_model = scoring.model_slug or ""
+        # differ ("" = unknown backend, matches any unknown backend).
+        current_model = self._embedding_model_slug or scoring.model_slug or ""
         if tree.chunk_embeddings and (tree.embedding_model or "") == current_model:
             return True
         try:
             chunk_count = await build_node_chunk_embeddings(
                 tree, scoring, chunker=self._node_chunker
             )
+            if current_model:
+                tree.embedding_model = current_model
         except Exception as e:
             observability.observe(
                 event_type=observability.SystemEvents.KNOWLEDGE_TREE_FALLBACK_TO_VECTOR,
@@ -931,13 +939,17 @@ class KnowledgeHandler:
         mode = self._effective_tree_mode(knowledge_source)
         if mode in EMBEDDING_RETRIEVAL_MODES:
             scoring = self._get_scoring_service()
-            current_model = scoring.model_slug if scoring else None
+            current_model = (
+                (self._embedding_model_slug or scoring.model_slug) if scoring else None
+            )
             needs_embeddings = scoring is not None and (
                 not tree.chunk_embeddings or (tree.embedding_model or "") != (current_model or "")
             )
             if needs_embeddings:
                 try:
                     await build_node_chunk_embeddings(tree, scoring, chunker=self._node_chunker)
+                    if current_model:
+                        tree.embedding_model = current_model
                     store = self._get_agent_tree_store()
                     if store is not None:
                         store.save(tree, source_id, source_md5)
@@ -1019,10 +1031,15 @@ class KnowledgeHandler:
         Never raises: a retrieval failure on one tree logs a fallback
         event and moves on, so the caller's vector results still serve the
         turn (failure isolation per the reasoning-RAG PRD).
+
+        Multi-tree merge: per-tree result lists are interleaved round-robin
+        (each list relevance-ordered) instead of concatenated, so with
+        several trees indexed the first tree cannot hog every ``top_k``
+        slot when the query targets a later one.
         """
         if not self._tree_indexes:
             return []
-        collected: List[Dict[str, Any]] = []
+        per_tree: List[List[Dict[str, Any]]] = []
         max_nodes = min(3, max(1, top_k))
         for file_path, tree in list(self._tree_indexes.items()):
             mode = self._tree_modes.get(file_path, "tree")
@@ -1058,12 +1075,25 @@ class KnowledgeHandler:
                         "query": query[:100],
                     },
                 )
-            for result in node_results:
+            tree_collected: List[Dict[str, Any]] = []
+            for result in sorted(node_results, key=lambda r: r.relevance, reverse=True):
                 result_dict = result.to_dict()
                 result_dict["metadata"].setdefault("source", file_path)
                 result_dict["metadata"].setdefault("knowledge_source", tree.document)
-                collected.append(result_dict)
-        return collected[:top_k]
+                tree_collected.append(result_dict)
+            if tree_collected:
+                per_tree.append(tree_collected)
+
+        merged: List[Dict[str, Any]] = []
+        rank = 0
+        while len(merged) < top_k and any(per_tree):
+            for tree_results in per_tree:
+                if rank < len(tree_results) and len(merged) < top_k:
+                    merged.append(tree_results[rank])
+            rank += 1
+            if all(rank >= len(tree_results) for tree_results in per_tree):
+                break
+        return merged
 
     async def add_knowledge_source(self, source, generate_embeddings_fn: Optional[Callable] = None):
         """Add a knowledge source and process its content using hybrid architecture."""
@@ -1597,6 +1627,7 @@ class KnowledgeHandler:
                 tree_llm=kwargs.get("tree_llm"),
                 terminator_llm=kwargs.get("terminator_llm"),
                 formation_path=kwargs.get("formation_path"),
+                embedding_model_slug=kwargs.get("embedding_model_slug"),
             )
 
             # Apply reasonable file size limits to prevent memory issues
