@@ -1830,6 +1830,105 @@ backfill, GDPR). **E2E:** `2_memory/test_2s1_memory_event_substrate.py`
 `test_2s2_provenance_and_rebuild.py` (provenance chains on a real
 conversation, GDPR forget + rebuild, legacy backfill).
 
+### Memory Ingestion Maturation (2026-07-10): Tiers, Entity Resolution, Synthesis
+
+**Location:** `src/muxi/runtime/services/memory/ingest/` (tiers, config),
+`services/memory/graph/resolution.py`, `services/memory/synthesis.py`
+
+The maturation of the Phase 3a ingestion pipeline (memory-ingestion PRD):
+the shipped `POST /v1/memories` accept + classify/filter/extract pipeline
+gains escalation heuristics, the synthesis layer, and batched scheduling.
+Config all lives under `memory.ingestion`; `parse_ingestion_config`
+(`ingest/config.py`) is the single fail-fast parser, shared by
+`MemoryIngestionService.__init__` and the formation validator
+(`_validate_memory_ingestion_config`) so they can never disagree.
+
+**Tier heuristics (`ingest/tiers.py`):** per kept item, a PURE decision
+(no LLM decides whether to use an LLM):
+
+- Tier 0 = `content_signals()` regex counts (identities, dates, money,
+  commitments), Tier 1 = classify + verbatim event-sourced fact (no LLM),
+  Tier 2 = LLM extraction + KG link pass, Tier 3 = same with the
+  configured frontier model (`tiers.models.t3`, falls back to `t2`, then
+  the default extraction model).
+- Escalation order: per-source pin (`sources.<s>.tier`) > priority flag
+  (`metadata.priority: high` -> T3) > synthesis-worthy category
+  (personal/work/unknown -> T2) or ambiguous margin
+  (`tiers.ambiguity_margin`) > high-signal score
+  (`tiers.t3_signal_score` -> T3). Everything else rests at T1.
+- Per-JOB budgets (`tiers.budget.t{2,3}_items_per_job`) demote capped
+  items to the best affordable tier (never drop); the demotion is part
+  of the recorded reason. Every escalation is observable:
+  `memory.ingestion.tier_escalated` + `tier`/`tier_reason` on the item
+  report (returned verbatim by the status endpoint).
+- `tiers.enabled: false` restores the Phase 3a always-extract behavior.
+- BEHAVIOR CHANGE from 3a: kept noise (e.g. `filter: off` sources) now
+  rests at T1 -- stored verbatim, recallable, NO LLM extraction.
+
+**Entity resolution (`graph/resolution.py`):** probabilistic identity
+matching over kg_entities (name/email/handle/role/shared-neighbor
+context; weights are scorer mechanisms, thresholds are the config
+surface: `entity_resolution.auto_merge_threshold` 0.85 /
+`flag_threshold` 0.5). Runs at extraction time (after the ingestion KG
+link pass) and in synthesis cadences. Decisions are event-first:
+`entity.resolved` events (source `synthesis`) with a deterministic
+per-pair source_id `entity_resolution/<type>/<a>|<b>/<decision>` -- the
+substrate's idempotency index is what makes re-ingestion unable to merge
+twice or differently. `apply_entity_resolution` (graph service) is a
+pure function of the payload; the KnowledgeGraphProjector consumes
+`entity.resolved` alongside `graph.extracted`, so rebuilds replay
+recorded decisions verbatim (never re-scored). Merges re-point edges
+(collisions/self-loops become status `superseded`, retained), absorb
+attributes, record `aliases`; the duplicate row gets status `merged` +
+`superseded_by`, and `upsert_entity` REDIRECTS merged names to the
+canonical row (sticky -- re-mentions can never revive a duplicate).
+Flags stamp `attributes.possible_duplicates` on both rows; a flagged
+pair can still merge later on stronger evidence (distinct keys).
+
+**Pattern extraction (v1, in `synthesis.py`):** deterministic
+aggregation only, no LLM. `schedule` (event-timestamp histograms, needs
+`synthesis.patterns.min_events`), `preferences` (User's `prefers` /
+`interested_in` edges), `expertise` (most-reinforced topic entities).
+Written as `fact.extracted` events, source `synthesis`, decay_rate
+`decaying`, keyed `pattern/<kind>/<ISO week>` -- idempotent per week.
+
+**Synthesis scheduling (`MemorySynthesisService`):** registered via
+`scheduler_service.register_periodic_task` (the heartbeat/knowledge-sync
+extension point -- NO new loop); `tick()` gates per cadence and never
+raises; every per-user step is failure-isolated. Cadences (each
+`enabled` + `interval_seconds` configurable): hot 5min = entity
+resolution for users with new ingestion/graph events; warm hourly =
+preference/expertise patterns; cold nightly = schedule pattern + full
+resolution; cold_cold WEEKLY = full re-synthesis from the event log via
+`MemoryEventService.rebuild` per user, then the full pass -- this is how
+extraction-logic improvements become retroactive. hot/warm/cold keep
+durable per-user cursors in `projection_checkpoints` (names
+`synthesis_hot` etc. -- not registered projectors, so the applier and
+rebuild ignore them). Interval baselines stamp construction time
+(heartbeat convention: no startup stampede).
+
+**Wiring:** `Overlord._initialize_memory_synthesis` (after knowledge
+sync, needs the scheduler + substrate). INERT when `memory.ingestion`
+is unconfigured -- no service, no periodic task (pinned by unit test).
+Without a scheduler it degrades to manual `run_cadence` with an init
+warning, mirroring remote knowledge sync.
+
+**Gotchas:**
+1. **Resolution events always use source `synthesis`** even when
+   triggered from ingestion (caused_by still links the raw event) --
+   one deterministic idempotency key per pair, regardless of trigger.
+2. **`KnowledgeGraphProjector.apply` dispatches on `event_type`** with
+   `.get()` -- the legacy backfill path calls apply without that key
+   (graph.extracted implied).
+3. **The extractor accepts a per-call `model=` override** (tier
+   models); `knowledge_graph.process_conversation_turn` already did.
+
+**Unit tests:** `test_ingestion_tiers.py`, `test_entity_resolution.py`,
+`test_memory_synthesis.py` (+ updated `test_memory_ingestion.py`).
+**E2E:** `2_memory/test_2v2_ingestion_maturation.py` (tier-observable
+ingest, duplicate identity merged via the hot cadence, cursor + replay
+idempotency, merged identity recalled in chat).
+
 ---
 
 ## 4. LLM Layer

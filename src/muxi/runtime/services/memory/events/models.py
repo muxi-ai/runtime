@@ -85,6 +85,16 @@ EVENT_INGESTION_FILTERED = "ingestion.filtered"
 # metadata; v1 events are reconstructed best-effort).
 EVENT_ARTIFACT_SAVED = "artifact.saved"
 
+# One entity-resolution decision (Memory Ingestion maturation): two graph
+# entities probabilistically matched as the same identity, either
+# auto-merged (score at/above the merge threshold) or flagged for review.
+# Applied by the knowledge-graph projector so a rebuild replays the exact
+# recorded decision (the scoring runs on the live path only; replay never
+# re-scores, so threshold changes cannot rewrite history). Idempotent via
+# a deterministic per-pair source_id, which is what makes re-ingestion
+# unable to re-merge differently.
+EVENT_ENTITY_RESOLVED = "entity.resolved"
+
 # One contradiction detected by the knowledge graph writer (Phase 2c):
 # a new fact on an exclusive predicate conflicted with (or superseded)
 # an existing fact. Audit/provenance only -- the conflict marking itself
@@ -179,6 +189,15 @@ EVENT_SCHEMAS: Dict[str, Dict[int, Dict[str, tuple]]] = {
             ),
         },
     },
+    EVENT_ENTITY_RESOLVED: {
+        1: {
+            # decision: 'merged' or 'flagged'. Names identify the rows by
+            # the graph's natural key (user, formation, type, name) so the
+            # apply is a pure function of the event on live and replay.
+            "required": ("decision", "entity_type", "canonical_name", "duplicate_name"),
+            "optional": ("score", "signals"),
+        }
+    },
     EVENT_FACT_CONTRADICTED: {
         1: {
             # detection: 'superseded' (new fact auto-replaced the old one)
@@ -203,6 +222,7 @@ _LIST_KEYS = {
     "relationships",
     "decisions",
     "projects",
+    "signals",
     "sources",
     "tags",
     "target_event_ids",
@@ -227,6 +247,7 @@ SOURCE_TOOL = "tool"  # the record_lesson agent tool
 SOURCE_USER_EDIT = "user_edit"  # user-initiated corrections/deletions
 SOURCE_ARTIFACT_MEMORY = "artifact_memory"  # artifact capture audit events
 SOURCE_LEGACY = "legacy"  # synthetic events backfilled for pre-event-log rows (Phase B)
+SOURCE_SYNTHESIS = "synthesis"  # synthesis layer (entity resolution, pattern extraction)
 
 # Scope shape recorded for forward compatibility with memory namespaces.
 from ..base import SCOPE_TYPE_USER  # noqa: E402 -- canonical scope constants

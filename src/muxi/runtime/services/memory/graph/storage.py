@@ -32,11 +32,16 @@ from .models import (
     EXCLUSIVE_RELATIONSHIP_TYPES,
     STATUS_ACTIVE,
     STATUS_CONFLICTED,
+    STATUS_MERGED,
     STATUS_SUPERSEDED,
     SUPERSEDE_CONFIDENCE_DELTA,
     KGEntity,
     KGRelationship,
 )
+
+# Bound on merge-chain hops followed by the upsert redirect (defensive;
+# chains longer than this indicate corrupted bookkeeping).
+MAX_MERGE_CHAIN_DEPTH = 10
 
 
 class KnowledgeGraphStorage:
@@ -73,6 +78,11 @@ class KnowledgeGraphStorage:
         keep the highest confidence seen. When ``event_id`` is provided it
         is appended to the row's provenance list (idempotently).
 
+        Sticky entity resolution: a name previously merged away by entity
+        resolution redirects to its canonical entity (following the
+        ``superseded_by`` merge chain), so re-mentions of the duplicate
+        name enrich the canonical row instead of reviving the duplicate.
+
         Returns:
             Dict representation of the stored entity.
         """
@@ -88,6 +98,9 @@ class KnowledgeGraphStorage:
                 name=name,
             )
             existing = (await session.execute(stmt)).scalar_one_or_none()
+
+            if existing is not None and existing.status == STATUS_MERGED:
+                existing = await self._follow_merge_chain(session, existing)
 
             if existing is not None:
                 merged = dict(existing.attributes or {})
@@ -116,6 +129,26 @@ class KnowledgeGraphStorage:
             session.add(entity)
             await session.flush()
             return entity.to_dict()
+
+    @staticmethod
+    async def _follow_merge_chain(session, entity: KGEntity) -> KGEntity:
+        """Resolve a merged entity to its canonical row (bounded chain).
+
+        Returns the last resolvable row: the canonical entity in the
+        normal case, or the input row itself when the chain is broken
+        (defensive -- never returns None, so the caller's upsert can
+        always merge into an existing row instead of violating the
+        (user, formation, type, name) unique constraint).
+        """
+        current = entity
+        for _ in range(MAX_MERGE_CHAIN_DEPTH):
+            if current.status != STATUS_MERGED or current.superseded_by is None:
+                return current
+            target = await session.get(KGEntity, current.superseded_by)
+            if target is None:
+                return current
+            current = target
+        return current
 
     async def get_entity(
         self, user_id: str, entity_type: str, name: str
@@ -355,6 +388,142 @@ class KnowledgeGraphStorage:
                 stmt = stmt.filter(KGRelationship.type.in_([normalize_type(t) for t in rel_types]))
             rows = (await session.execute(stmt)).scalars().all()
             return [row.to_dict() for row in rows]
+
+    # ------------------------------------------------------------------
+    # Entity resolution (Memory Ingestion maturation)
+    # ------------------------------------------------------------------
+
+    async def merge_entities(
+        self,
+        user_id: str,
+        canonical_id: int,
+        duplicate_id: int,
+        event_id: Optional[int] = None,
+    ) -> Dict[str, Any]:
+        """
+        Merge a duplicate identity into its canonical entity.
+
+        Deterministic and idempotent: relationships are re-pointed from
+        the duplicate to the canonical entity (an edge that would collide
+        with an existing canonical edge, or become a self-loop, is marked
+        superseded instead -- facts are retained, never deleted); the
+        canonical row absorbs the duplicate's attributes (canonical values
+        win on conflict), keeps the max confidence, and records the
+        duplicate's name under ``attributes.aliases``. The duplicate row
+        is marked ``merged`` with ``superseded_by`` -> canonical, which
+        the upsert path treats as a redirect.
+
+        Returns:
+            {"repointed": n, "superseded": n} edge counts (both zero when
+            either entity is missing or the merge already happened).
+        """
+        user_id = str(user_id)
+        async with self.db_manager.get_async_session() as session:
+            canonical = await session.get(KGEntity, canonical_id)
+            duplicate = await session.get(KGEntity, duplicate_id)
+            if (
+                canonical is None
+                or duplicate is None
+                or canonical.id == duplicate.id
+                or canonical.user_id != user_id
+                or duplicate.user_id != user_id
+                or duplicate.status == STATUS_MERGED
+            ):
+                return {"repointed": 0, "superseded": 0}
+
+            # Existing canonical edge index for collision detection.
+            stmt = select(KGRelationship).filter_by(user_id=user_id, formation_id=self.formation_id)
+            edges = (await session.execute(stmt)).scalars().all()
+            canonical_edges: Dict[tuple, KGRelationship] = {}
+            duplicate_edges = []
+            for edge in edges:
+                touches_duplicate = duplicate.id in (edge.from_entity_id, edge.to_entity_id)
+                if touches_duplicate:
+                    duplicate_edges.append(edge)
+                elif canonical.id in (edge.from_entity_id, edge.to_entity_id):
+                    canonical_edges[(edge.from_entity_id, edge.to_entity_id, edge.type)] = edge
+
+            repointed = superseded = 0
+            for edge in duplicate_edges:
+                new_from = (
+                    canonical.id if edge.from_entity_id == duplicate.id else edge.from_entity_id
+                )
+                new_to = canonical.id if edge.to_entity_id == duplicate.id else edge.to_entity_id
+                collision = canonical_edges.get((new_from, new_to, edge.type))
+                if new_from == new_to:
+                    # Would become a self-loop (e.g. duplicate -> canonical
+                    # "knows" edge): retain as a superseded fact.
+                    edge.status = STATUS_SUPERSEDED
+                    edge.derived_from_event_ids = append_event_id(
+                        edge.derived_from_event_ids, event_id
+                    )
+                    superseded += 1
+                elif collision is not None:
+                    collision.confidence = max(collision.confidence or 0.0, edge.confidence or 0.0)
+                    merged_attrs = dict(edge.attributes or {})
+                    merged_attrs.update(collision.attributes or {})
+                    collision.attributes = merged_attrs
+                    collision.derived_from_event_ids = append_event_id(
+                        collision.derived_from_event_ids, event_id
+                    )
+                    edge.status = STATUS_SUPERSEDED
+                    edge.superseded_by = collision.id
+                    superseded += 1
+                else:
+                    edge.from_entity_id = new_from
+                    edge.to_entity_id = new_to
+                    edge.derived_from_event_ids = append_event_id(
+                        edge.derived_from_event_ids, event_id
+                    )
+                    canonical_edges[(new_from, new_to, edge.type)] = edge
+                    repointed += 1
+
+            # Canonical absorbs the duplicate (canonical attributes win).
+            merged_attrs = dict(duplicate.attributes or {})
+            merged_attrs.update(canonical.attributes or {})
+            aliases = set(merged_attrs.get("aliases") or [])
+            aliases.update((duplicate.attributes or {}).get("aliases") or [])
+            aliases.add(duplicate.name)
+            aliases.discard(canonical.name)
+            merged_attrs["aliases"] = sorted(aliases)
+            canonical.attributes = merged_attrs
+            canonical.confidence = max(canonical.confidence or 0.0, duplicate.confidence or 0.0)
+            canonical.derived_from_event_ids = append_event_id(
+                canonical.derived_from_event_ids, event_id
+            )
+
+            duplicate.status = STATUS_MERGED
+            duplicate.superseded_by = canonical.id
+            duplicate.derived_from_event_ids = append_event_id(
+                duplicate.derived_from_event_ids, event_id
+            )
+            await session.flush()
+            return {"repointed": repointed, "superseded": superseded}
+
+    async def mark_possible_duplicate(
+        self, entity_id: int, other_name: str, event_id: Optional[int] = None
+    ) -> bool:
+        """
+        Stamp a below-threshold resolution match on an entity.
+
+        The stored marker is ``attributes.possible_duplicates`` (a sorted,
+        de-duplicated name list), so flagged pairs are reviewable without
+        a schema change and re-application is idempotent.
+        """
+        async with self.db_manager.get_async_session() as session:
+            entity = await session.get(KGEntity, entity_id)
+            if entity is None:
+                return False
+            attributes = dict(entity.attributes or {})
+            flagged = set(attributes.get("possible_duplicates") or [])
+            if other_name in flagged:
+                return False
+            flagged.add(other_name)
+            attributes["possible_duplicates"] = sorted(flagged)
+            entity.attributes = attributes
+            entity.derived_from_event_ids = append_event_id(entity.derived_from_event_ids, event_id)
+            await session.flush()
+            return True
 
     # ------------------------------------------------------------------
     # Rebuild support (Memory Event Substrate)

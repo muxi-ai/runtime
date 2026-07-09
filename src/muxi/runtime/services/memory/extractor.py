@@ -108,6 +108,7 @@ class MemoryExtractor:
         message_count=1,
         caused_by_event_id=None,
         event_source=None,
+        model=None,
     ):
         """
         Process a conversation turn and extract information if needed.
@@ -128,6 +129,10 @@ class MemoryExtractor:
                 (default: interaction). The ingestion pipeline passes the
                 developer's source ("gmail", ...) so derived facts carry
                 their true origin.
+            model: Optional extraction LLM override for this turn. The
+                ingestion tier heuristics pass the resolved tier model
+                (T2 mid / T3 frontier); None keeps the instance's
+                extraction model / overlord default resolution.
         """
         if not self.auto_extract:
             return
@@ -163,7 +168,7 @@ class MemoryExtractor:
             conversation = f"User: {user_message}\n(Note: Extract from user's statement alone, agent hasn't responded yet)"
 
         # Extract information
-        extraction_results = await self._extract_user_information(conversation)
+        extraction_results = await self._extract_user_information(conversation, model=model)
 
         # Process and store results if confidence threshold is met
         await self._process_extraction_results(
@@ -247,7 +252,7 @@ class MemoryExtractor:
 
         return True
 
-    async def _extract_user_information(self, conversation):
+    async def _extract_user_information(self, conversation, model=None):
         """
         Extract user information using the specified LLM.
 
@@ -256,12 +261,14 @@ class MemoryExtractor:
 
         Args:
             conversation: The conversation text to analyze
+            model: Optional per-call LLM override (ingestion tier models)
 
         Returns:
             A dictionary of extracted information with confidence scores
         """
-        # Use the specified extraction model if available, otherwise use overlord's default
-        model = self.extraction_model or self.overlord.default_model
+        # Per-call override first (ingestion tiers), then the configured
+        # extraction model, then the overlord's default.
+        model = model or self.extraction_model or self.overlord.default_model
 
         # Create extraction prompt
         prompt = self._create_extraction_prompt(conversation)

@@ -59,6 +59,8 @@ from .classification import (
     classify_content,
     is_filtered,
 )
+from .config import TIER_LOCAL, parse_ingestion_config
+from .tiers import TierBudget, content_signals, decide_tier
 
 # Fallback ceiling on concurrently processing ingestion jobs per user.
 # One job may carry a whole batch, so this caps background work, not
@@ -245,8 +247,14 @@ class MemoryIngestionService:
         except (TypeError, ValueError):
             self.max_in_flight = DEFAULT_MAX_IN_FLIGHT_PER_USER
 
+        # Maturation settings (tiers / entity resolution / synthesis):
+        # fail-fast on invalid values (the formation validator surfaces
+        # the same parser's message at load time).
+        self.settings = parse_ingestion_config(config)
+
         self._in_flight: Dict[str, int] = {}
         self._in_flight_lock = asyncio.Lock()
+        self._entity_resolver = None
 
     # ------------------------------------------------------------------
     # Configuration surface
@@ -470,9 +478,13 @@ class MemoryIngestionService:
 
         try:
             await tracker.update_request(processing_id, RequestStatus.PROCESSING)
+            # One escalation budget per job (PRD "Cost Management"): caps
+            # how many items may run T2/T3 extraction; capped items demote
+            # to the best affordable tier, never drop.
+            budget = TierBudget.from_settings(self.settings.tiers)
             reports: List[Dict[str, Any]] = []
             for index, item, event in items:
-                report = await self._process_item(user_id, item, event)
+                report = await self._process_item(user_id, item, event, budget)
                 report["index"] = index
                 report["event_id"] = event["public_id"]
                 reports.append(report)
@@ -523,9 +535,13 @@ class MemoryIngestionService:
             await self._release_slot(user_id)
 
     async def _process_item(
-        self, user_id: str, item: IngestItem, event: Dict[str, Any]
+        self,
+        user_id: str,
+        item: IngestItem,
+        event: Dict[str, Any],
+        budget: Optional[TierBudget] = None,
     ) -> Dict[str, Any]:
-        """Run classify -> filter -> extract/store for one item.
+        """Run classify -> filter -> tier -> extract/store for one item.
 
         Per-item failures are contained: the job continues and the item
         reports disposition "failed" with the error.
@@ -550,15 +566,73 @@ class MemoryIngestionService:
                 report["disposition"] = DISPOSITION_FILTERED
                 return report
 
+            # Stage 3 gate: tier decision (Tier 0 signals + heuristics,
+            # budget-capped per job). Shared-scope items bypass tiering:
+            # they are stored verbatim by policy (#215), never extracted.
+            tier = TIER_LOCAL
+            if item.scope is None:
+                decision = self._decide_item_tier(user_id, item, event, category, margin, budget)
+                tier = decision["tier"]
+                report["tier"] = decision["tier"]
+                report["tier_reason"] = decision["reason"]
+
             # Stages 3-6: extract -> embed -> link -> store, all riding
             # the existing extraction machinery.
-            report.update(await self._store_item(user_id, item, event))
+            report.update(await self._store_item(user_id, item, event, tier))
             report["disposition"] = DISPOSITION_STORED
             return report
         except Exception as exc:
             report["disposition"] = DISPOSITION_FAILED
             report["error"] = str(exc)
             return report
+
+    def _decide_item_tier(
+        self,
+        user_id: str,
+        item: IngestItem,
+        event: Dict[str, Any],
+        category: str,
+        margin: float,
+        budget: Optional[TierBudget],
+    ) -> Dict[str, Any]:
+        """Heuristic tier decision + budget admission for one kept item.
+
+        Every escalation past Tier 1 is observable: the tier, the
+        heuristic reason, and any budget demotion are emitted as a
+        memory.ingestion.tier_escalated event and recorded on the item
+        report (which the status endpoint returns verbatim).
+        """
+        signals = content_signals(item.content_text)
+        priority = item.metadata.get("priority") if item.metadata else None
+        requested, reason = decide_tier(
+            category,
+            margin,
+            signals,
+            self.settings.tiers,
+            source_tier=self.settings.source_tiers.get(item.source),
+            priority=priority,
+        )
+        granted, capped = (requested, False) if budget is None else budget.admit(requested)
+        if capped:
+            reason = f"{reason};budget_capped_from_t{requested}"
+
+        if granted > TIER_LOCAL or capped:
+            observability.observe(
+                event_type=observability.ConversationEvents.MEMORY_INGESTION_TIER_ESCALATED,
+                level=observability.EventLevel.DEBUG,
+                data={
+                    "user_id": user_id,
+                    "source": item.source,
+                    "source_id": item.source_id,
+                    "tier": granted,
+                    "requested_tier": requested,
+                    "reason": reason,
+                    "signals": {k: v for k, v in signals.items() if v},
+                    "memory_event_id": event["id"],
+                },
+                description=f"Ingested item escalated to tier {granted} ({reason})",
+            )
+        return {"tier": granted, "reason": reason}
 
     async def _get_classifier(self):
         """The shared LocalClassifier (overlord-warmed when available)."""
@@ -603,19 +677,28 @@ class MemoryIngestionService:
         )
 
     async def _store_item(
-        self, user_id: str, item: IngestItem, event: Dict[str, Any]
+        self, user_id: str, item: IngestItem, event: Dict[str, Any], tier: int = TIER_LOCAL
     ) -> Dict[str, Any]:
-        """Extract/embed/link/store one kept item through existing paths."""
+        """Extract/embed/link/store one kept item through existing paths.
+
+        ``tier`` is the granted extraction tier: Tier 1 stores the content
+        verbatim as an event-sourced fact (small local processing only --
+        classified, embedded on write, recallable); Tiers 2/3 run the LLM
+        extraction + knowledge-graph link pass, with the tier's model when
+        one is configured (memory.ingestion.tiers.models).
+        """
         if item.scope is not None:
             return await self._store_shared(user_id, item, event)
 
         extractor = getattr(self.overlord, "extractor", None)
-        if extractor is None:
-            # No extractor configured (auto extraction disabled): store the
-            # content verbatim as an event-sourced user-scope fact so the
-            # item is still recallable.
+        if extractor is None or tier <= TIER_LOCAL:
+            # Tier 1 (or auto extraction disabled): store the content
+            # verbatim as an event-sourced user-scope fact so the item is
+            # still recallable. The raw event stays replayable through
+            # deeper tiers later (weekly re-synthesis / rebuild).
             return await self._store_fact(user_id, item, event, scope=None)
 
+        tier_model = await self._tier_model(tier)
         await extractor.process_conversation_turn(
             user_message=item.content_text,
             agent_response="",
@@ -623,28 +706,85 @@ class MemoryIngestionService:
             message_count=extractor.extraction_interval,  # always run for ingestion
             caused_by_event_id=event["id"],
             event_source=item.source,
+            model=tier_model,
         )
 
-        # Link pass: the knowledge graph's real-time extraction (entity
-        # resolution + relationships) with provenance back to the raw event.
+        # Link pass: the knowledge graph's real-time extraction (entities
+        # + relationships) with provenance back to the raw event.
         knowledge_graph = getattr(self.overlord, "knowledge_graph", None)
         if knowledge_graph is not None:
             await knowledge_graph.process_conversation_turn(
                 user_message=item.content_text,
                 agent_response="",
                 user_id=user_id,
-                model=getattr(self.overlord, "default_model", None),
+                model=tier_model or getattr(self.overlord, "default_model", None),
                 caused_by_event_id=event["id"],
                 event_source=item.source,
             )
 
         derived = await self._derived_events(user_id, event)
-        return {
+        report = {
             "facts_extracted": sum(1 for d in derived if d["event_type"] == EVENT_FACT_EXTRACTED),
             "graph_extractions": sum(
                 1 for d in derived if d["event_type"] == EVENT_GRAPH_EXTRACTED
             ),
         }
+
+        # Entity resolution at extraction time (PRD "Synthesis layer"):
+        # probabilistic identity matching over the user's graph, event-
+        # first and failure-isolated -- a resolution error never fails
+        # the item.
+        resolver = self.entity_resolver
+        if resolver is not None and knowledge_graph is not None:
+            resolution = await resolver.resolve_user(user_id, caused_by=event["id"])
+            if resolution.get("merged") or resolution.get("flagged"):
+                report["entity_resolution"] = resolution
+        return report
+
+    @property
+    def entity_resolver(self):
+        """The lazily constructed EntityResolver (None when unavailable)."""
+        if not self.settings.entity_resolution.enabled:
+            return None
+        knowledge_graph = getattr(self.overlord, "knowledge_graph", None)
+        memory_events = self.memory_events
+        if knowledge_graph is None or memory_events is None:
+            return None
+        if self._entity_resolver is None:
+            from ..graph.resolution import EntityResolver
+
+            self._entity_resolver = EntityResolver(
+                knowledge_graph, memory_events, self.settings.entity_resolution
+            )
+        return self._entity_resolver
+
+    async def _tier_model(self, tier: int):
+        """Resolve the configured LLM for a tier (None = extractor default).
+
+        Tier 3 without a configured frontier model falls back to the Tier
+        2 model; resolution failures degrade to the default extraction
+        model with a warning rather than failing the item.
+        """
+        name = None
+        if tier >= 3:
+            name = self.settings.tiers.t3_model or self.settings.tiers.t2_model
+        elif tier == 2:
+            name = self.settings.tiers.t2_model
+        if not name:
+            return None
+        getter = getattr(self.overlord, "_get_or_create_model", None)
+        if getter is None:
+            return None
+        try:
+            return await getter({"model": name}, cache_scope=f"ingestion:t{tier}")
+        except Exception as exc:
+            observability.observe(
+                event_type=observability.ErrorEvents.WARNING,
+                level=observability.EventLevel.WARNING,
+                data={"tier": tier, "model": name, "error": str(exc)},
+                description=f"Ingestion tier {tier} model {name!r} unavailable: {exc}",
+            )
+            return None
 
     async def _store_shared(
         self, user_id: str, item: IngestItem, event: Dict[str, Any]

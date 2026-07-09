@@ -38,6 +38,7 @@ from typing import Any, Dict, List, Optional, Tuple
 from ..base import SCOPE_TYPE_USER
 from .models import (
     EVENT_ARTIFACT_SAVED,
+    EVENT_ENTITY_RESOLVED,
     EVENT_FACT_EXTRACTED,
     EVENT_GRAPH_EXTRACTED,
     EVENT_LESSON_RECORDED,
@@ -116,21 +117,30 @@ async def apply_fact_event(
 
 
 class KnowledgeGraphProjector:
-    """Rebuilds kg_entities / kg_relationships from graph.extracted events."""
+    """Rebuilds kg_entities / kg_relationships from graph.extracted and
+    entity.resolved events (extraction batches + identity merges replay
+    in append order, converging to the same merged graph)."""
 
     name = "knowledge_graph"
-    event_types = (EVENT_GRAPH_EXTRACTED,)
+    event_types = (EVENT_GRAPH_EXTRACTED, EVENT_ENTITY_RESOLVED)
 
     def __init__(self, knowledge_graph_service):
         self.service = knowledge_graph_service
 
     async def apply(self, event: Dict[str, Any]) -> Dict[str, Any]:
-        """Apply one extraction batch through the service's upsert path.
+        """Apply one extraction batch or resolution decision.
 
-        Returns the apply result (counts + detected contradictions) so
+        Extraction batches go through the service's upsert path and
+        return the apply result (counts + detected contradictions) so
         the live incremental path can record fact.contradicted audit
-        events; rebuild replay ignores the return value.
+        events; resolution decisions replay the recorded merge/flag
+        exactly (never re-scored). Rebuild replay ignores the return
+        value either way.
         """
+        if event.get("event_type") == EVENT_ENTITY_RESOLVED:
+            return await self.service.apply_entity_resolution(
+                event["user_id"], event["payload"], event_id=event["id"]
+            )
         return await self.service.apply_extraction(
             event["user_id"], event["payload"], event_id=event["id"]
         )

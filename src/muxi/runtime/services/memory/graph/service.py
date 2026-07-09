@@ -328,6 +328,47 @@ class KnowledgeGraphService:
             result_counts["contradictions"] = contradictions
         return result_counts
 
+    async def apply_entity_resolution(
+        self,
+        user_id: Any,
+        payload: Dict[str, Any],
+        event_id: Optional[int] = None,
+    ) -> Dict[str, Any]:
+        """Apply one entity.resolved decision (live path and replay).
+
+        A pure function of the payload (Memory Ingestion maturation):
+        entities are addressed by their (type, name) natural key, so
+        replaying the recorded decision on a rebuilt graph converges to
+        the same merged state. Missing entities (e.g. their source events
+        were forgotten) make the apply a no-op rather than an error.
+        """
+        user_id = str(user_id)
+        from .resolution import DECISION_MERGED
+
+        entity_type = normalize_type(payload["entity_type"])
+        canonical = await self.storage.get_entity(user_id, entity_type, payload["canonical_name"])
+        duplicate = await self.storage.get_entity(user_id, entity_type, payload["duplicate_name"])
+        if canonical is None or duplicate is None or canonical["id"] == duplicate["id"]:
+            return {"applied": False}
+
+        if payload["decision"] == DECISION_MERGED:
+            result = await self.storage.merge_entities(
+                user_id, canonical["id"], duplicate["id"], event_id=event_id
+            )
+            self.algorithms.invalidate(user_id)
+            return {"applied": True, "decision": payload["decision"], **result}
+
+        flagged_canonical = await self.storage.mark_possible_duplicate(
+            canonical["id"], duplicate["name"], event_id=event_id
+        )
+        flagged_duplicate = await self.storage.mark_possible_duplicate(
+            duplicate["id"], canonical["name"], event_id=event_id
+        )
+        return {
+            "applied": flagged_canonical or flagged_duplicate,
+            "decision": payload["decision"],
+        }
+
     async def _resolve_endpoint(
         self,
         user_id: str,
