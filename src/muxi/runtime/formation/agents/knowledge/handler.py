@@ -97,11 +97,13 @@
 #   )
 # =============================================================================
 
+import asyncio
 import hashlib
 import os
 import pickle
 import time
 import traceback
+from contextlib import asynccontextmanager
 from typing import Any, Callable, Dict, List, Optional, Union
 
 import numpy as np
@@ -195,6 +197,12 @@ class KnowledgeHandler:
         self.tree_llm = tree_llm
         self._tree_indexes: Dict[str, Any] = {}
         self._tree_cache: Optional[TreeCache] = None
+        # Keyed locks serializing tree check-and-build per (path, md5) so
+        # concurrent ingestion of the same file never fires duplicate LLM
+        # builds (same pattern as the artifact version-chain locks in
+        # services/memory/artifacts). Pruned when the last waiter releases.
+        self._tree_build_locks: Dict[str, asyncio.Lock] = {}
+        self._tree_build_lock_waiters: Dict[str, int] = {}
 
         # Store embedding function for later use
         self._generate_embeddings_fn = None
@@ -359,6 +367,32 @@ class KnowledgeHandler:
             return True
         return self.tree_llm is not None and self._reasoning_threshold > 0
 
+    @asynccontextmanager
+    async def _tree_build_lock(self, key: str):
+        """
+        Serialize tree check-and-build per ``(file_path, file_md5)``.
+
+        Concurrent ingestion of the same file would otherwise fire
+        duplicate full TreeBuilder LLM builds (correct outcome, wasted
+        spend); the second entrant re-checks the cache under the lock and
+        gets a hit instead. Keyed per file+hash so unrelated files never
+        serialize against each other; the maps are pruned when the last
+        waiter for a key releases (mirrors the artifact version-chain
+        locks in ``services/memory/artifacts``).
+        """
+        lock = self._tree_build_locks.setdefault(key, asyncio.Lock())
+        self._tree_build_lock_waiters[key] = self._tree_build_lock_waiters.get(key, 0) + 1
+        try:
+            async with lock:
+                yield
+        finally:
+            remaining = self._tree_build_lock_waiters[key] - 1
+            if remaining:
+                self._tree_build_lock_waiters[key] = remaining
+            else:
+                del self._tree_build_lock_waiters[key]
+                self._tree_build_locks.pop(key, None)
+
     async def _maybe_ingest_as_tree(
         self, knowledge_source, file_path: str, file_md5: str
     ) -> Optional[int]:
@@ -371,10 +405,6 @@ class KnowledgeHandler:
         falls back to vector indexing with a
         ``KNOWLEDGE_TREE_FALLBACK_TO_VECTOR`` event.
         """
-        explicit = getattr(knowledge_source, "retrieval", None)
-        threshold = self._reasoning_threshold
-        tree_settings = self._tree_settings
-
         if self.tree_llm is None:
             # Only reachable for explicit ``retrieval: tree`` sources (the
             # cheap gate filters the rest). No model to build with - fall
@@ -386,6 +416,20 @@ class KnowledgeHandler:
                 data={"file_path": file_path, "cause": "no_tree_model", "phase": "ingestion"},
             )
             return None
+
+        # The whole check-and-build sequence runs under a per-(path, md5)
+        # lock; a concurrent ingest of the same content waits and then
+        # hits the cache check instead of duplicating the LLM build.
+        async with self._tree_build_lock(f"{file_path}:{file_md5}"):
+            return await self._check_and_build_tree(knowledge_source, file_path, file_md5)
+
+    async def _check_and_build_tree(
+        self, knowledge_source, file_path: str, file_md5: str
+    ) -> Optional[int]:
+        """Cache check + threshold gate + tree build (call under the lock)."""
+        explicit = getattr(knowledge_source, "retrieval", None)
+        threshold = self._reasoning_threshold
+        tree_settings = self._tree_settings
 
         # Cache first: same (path, md5) never rebuilds (no content load,
         # no LLM calls).
@@ -496,16 +540,19 @@ class KnowledgeHandler:
         )
         return tree.node_count
 
-    async def _tree_ingest_directory(self, knowledge_source) -> int:
+    async def _tree_ingest_directory(self, knowledge_source) -> tuple:
         """
         Apply the per-file tree gate to a directory source.
 
-        Files that get tree-indexed are excluded from the vector chunking
-        pass (by narrowing FileKnowledge's discovery cache) so no file is
-        double-indexed. Returns total tree nodes created.
+        Returns ``(total_nodes, tree_files)`` where ``tree_files`` are the
+        paths that got tree-indexed. The caller passes them as per-call
+        exclusions to ``process_with_chunk_manager`` so no file is
+        double-indexed. The source object is never mutated: a later
+        ingestion pass over the same FileKnowledge instance re-evaluates
+        every file (tree files then hit the MD5 cache).
         """
         total_nodes = 0
-        vector_files = []
+        tree_files = []
         files = knowledge_source.get_files()
         for f in files:
             file_md5 = self._calculate_file_md5(f)
@@ -514,14 +561,10 @@ class KnowledgeHandler:
                 nodes = await self._maybe_ingest_as_tree(
                     knowledge_source, os.path.abspath(f), file_md5
                 )
-            if nodes is None:
-                vector_files.append(f)
-            else:
+            if nodes is not None:
                 total_nodes += nodes
-        # Narrow the discovery cache so process_with_chunk_manager only
-        # vector-chunks the files that were not tree-indexed.
-        knowledge_source._files = vector_files
-        return total_nodes
+                tree_files.append(f)
+        return total_nodes, tree_files
 
     def _remove_tree_for(self, file_path: str) -> bool:
         """Drop a file's tree from the registry and the disk cache."""
@@ -1211,15 +1254,19 @@ class KnowledgeHandler:
 
         # For directories, skip MD5 calculation since we can't hash a directory
         # Individual files will have their own content hashes
+        tree_excluded_files: List[str] = []
         if os.path.isdir(file_path):
             file_md5 = None  # Will calculate MD5 for individual files later
 
             # Reasoning-RAG gate (per-file, inside the directory): files
             # crossing the token threshold get tree-indexed and are
-            # excluded from the vector chunking pass below.
+            # excluded (per-call, no source mutation) from the vector
+            # chunking pass below.
             if self._reasoning_enabled_for(knowledge_source):
-                tree_nodes = await self._tree_ingest_directory(knowledge_source)
-                if tree_nodes and not knowledge_source.get_files():
+                tree_nodes, tree_excluded_files = await self._tree_ingest_directory(
+                    knowledge_source
+                )
+                if tree_nodes and len(tree_excluded_files) == len(knowledge_source.get_files()):
                     # Every file in the directory was tree-indexed; nothing
                     # left for the vector pipeline.
                     if knowledge_source not in self.sources:
@@ -1292,10 +1339,13 @@ class KnowledgeHandler:
         # Load and process the file using hybrid architecture
         try:
             # Use the knowledge source's process method which supports markitdown
-            # For directories, respect the max_files_per_source limit
+            # For directories, respect the max_files_per_source limit and keep
+            # tree-indexed files out of the vector pass (per-call exclusion,
+            # never mutating the source's discovery cache).
             document_chunks = await knowledge_source.process_with_chunk_manager(
                 chunk_manager=self.chunk_manager,
                 file_limit=self.max_files_per_source,  # Respect configured limit
+                exclude_files=tree_excluded_files or None,
             )
 
             if not document_chunks:

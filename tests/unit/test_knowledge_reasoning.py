@@ -407,3 +407,160 @@ class TestInertWhenUnconfigured:
         assert llm.calls == 0, "no trees -> no tree navigation LLM calls"
         assert len(results) == 1
         assert results[0]["content"] == "chunk"
+
+
+# ---------------------------------------------------------------------------
+# Tree walk / lookup structure
+# ---------------------------------------------------------------------------
+
+
+class TestTreeWalkAndLookup:
+    def test_walk_is_preorder_and_lookups_match(self):
+        llm = FakeLLM()
+        builder = TreeBuilder(llm=llm, settings={})
+        tree = asyncio.run(builder.build(text=STRUCTURED_DOC, document_name="manual.md"))
+
+        # The builder assigns node ids in pre-order, so a pre-order walk
+        # must yield strictly increasing ids starting at the root.
+        walked_ids = [n.node_id for n in tree.walk()]
+        assert walked_ids == sorted(walked_ids)
+        assert walked_ids[0] == "0000"
+
+        # get_node / node_path use the lazy lookup maps, not traversal
+        for node_id in walked_ids:
+            node = tree.get_node(node_id)
+            assert node is not None and node.node_id == node_id
+            path = tree.node_path(node_id)
+            assert path and path[0] == "manual.md" and path[-1] == node.title
+        assert tree.get_node("9999") is None
+        assert tree.node_path("9999") == []
+
+
+# ---------------------------------------------------------------------------
+# Directory sources (incl. remote-mirror shape) and repeat ingestion
+# ---------------------------------------------------------------------------
+
+
+class TestDirectoryGating:
+    def _make_mixed_dir(self, tmp_path):
+        """A directory source shaped like a remote-sync content mirror:
+        recursive path dir containing one over-threshold file and one
+        small file (remote sources are presented to the handler exactly
+        like this, so this also pins that remote-synced files flow
+        through the tree gate)."""
+        content_dir = tmp_path / "mirror" / "content"
+        content_dir.mkdir(parents=True)
+        (content_dir / "big-manual.md").write_text(STRUCTURED_DOC, encoding="utf-8")
+        (content_dir / "small-note.md").write_text("# Note\nA tiny note.", encoding="utf-8")
+        return FileKnowledge(path=str(content_dir), description="synced mirror", recursive=True)
+
+    def test_directory_gates_per_file(self, tmp_path):
+        llm = FakeLLM()
+        handler = make_handler(
+            tmp_path, tree_llm=llm, reasoning_config={"reasoning_threshold": LOW_THRESHOLD}
+        )
+        source = self._make_mixed_dir(tmp_path)
+
+        asyncio.run(handler.add_file(source, fake_embeddings_fn))
+
+        tree_paths = list(handler._tree_indexes)
+        assert any("big-manual.md" in p for p in tree_paths), "large file should be tree-indexed"
+        assert not any("small-note.md" in p for p in tree_paths)
+        vector_texts = [
+            c.kwargs["text"] for c in handler.working_memory.add_with_embedding.await_args_list
+        ]
+        assert any("tiny note" in t for t in vector_texts), "small file stays on the vector path"
+        assert not any(
+            "FIRMWARE-X9" in t for t in vector_texts
+        ), "tree-indexed file must not be vector-chunked"
+
+    def test_repeat_ingestion_of_same_source_object_keeps_tree_files_visible(self, tmp_path):
+        llm = FakeLLM()
+        handler = make_handler(
+            tmp_path, tree_llm=llm, reasoning_config={"reasoning_threshold": LOW_THRESHOLD}
+        )
+        source = self._make_mixed_dir(tmp_path)
+        all_files = list(source.get_files())
+
+        asyncio.run(handler.add_file(source, fake_embeddings_fn))
+        calls_after_first = llm.calls
+        assert calls_after_first > 0
+
+        # The source object must NOT have been narrowed to the non-tree
+        # subset: a second pass over the same FileKnowledge instance still
+        # sees (and re-evaluates) every file.
+        assert list(source.get_files()) == all_files
+
+        asyncio.run(handler.add_file(source, fake_embeddings_fn))
+        assert list(source.get_files()) == all_files
+        assert (
+            llm.calls == calls_after_first
+        ), "second pass re-evaluates tree files via the MD5 cache (no rebuild)"
+        assert any("big-manual.md" in p for p in handler._tree_indexes)
+
+
+# ---------------------------------------------------------------------------
+# Concurrency: keyed check-and-build lock
+# ---------------------------------------------------------------------------
+
+
+class TestConcurrentBuildLock:
+    def test_concurrent_ingest_builds_once(self, tmp_path):
+        class SlowFakeLLM(FakeLLM):
+            async def chat(self, messages, **kwargs):
+                # Yield control mid-build so a concurrent ingest of the
+                # same file gets a chance to race the check-and-build.
+                await asyncio.sleep(0.01)
+                return await super().chat(messages, **kwargs)
+
+        llm = SlowFakeLLM()
+        handler = make_handler(
+            tmp_path, tree_llm=llm, reasoning_config={"reasoning_threshold": LOW_THRESHOLD}
+        )
+        doc = write_doc(tmp_path)
+        source = FileKnowledge(path=doc, description="m")
+        import hashlib as _hashlib
+
+        md5 = _hashlib.md5(STRUCTURED_DOC.encode("utf-8")).hexdigest()
+
+        async def _race():
+            return await asyncio.gather(
+                handler._maybe_ingest_as_tree(source, doc, md5),
+                handler._maybe_ingest_as_tree(source, doc, md5),
+            )
+
+        first, second = asyncio.run(_race())
+
+        assert first == second and first > 0
+        assert llm.calls == 1, "second entrant must hit the cache under the lock, not rebuild"
+        assert not handler._tree_build_locks, "lock map is pruned after the last waiter releases"
+
+
+# ---------------------------------------------------------------------------
+# Retry backoff in the summary pass
+# ---------------------------------------------------------------------------
+
+
+class TestSummaryRetryBackoff:
+    def test_transient_failure_retries_after_backoff(self, tmp_path):
+        class FlakyLLM(FakeLLM):
+            async def chat(self, messages, **kwargs):
+                self.calls += 1
+                if self.calls == 1:
+                    raise RuntimeError("429 simulated rate limit")
+                node_ids = re.findall(r"node_id: (\d{4})", messages[-1]["content"])
+                return json.dumps({"summaries": {i: f"s{i}" for i in node_ids}})
+
+        from unittest.mock import patch
+
+        from muxi.runtime.formation.agents.knowledge.reasoning import tree_builder as tb
+
+        llm = FlakyLLM()
+        sleep_mock = AsyncMock()
+        with patch.object(tb.asyncio, "sleep", sleep_mock):
+            builder = TreeBuilder(llm=llm, settings={})
+            tree = asyncio.run(builder.build(text=STRUCTURED_DOC, document_name="manual.md"))
+
+        assert llm.calls == 2, "first attempt fails, retry succeeds"
+        assert tree.node_count > 1
+        sleep_mock.assert_awaited_once_with(2)  # 1 * (attempt + 1) for attempt=1

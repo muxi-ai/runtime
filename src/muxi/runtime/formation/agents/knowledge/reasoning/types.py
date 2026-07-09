@@ -28,6 +28,7 @@
 # the seams they need.
 # =============================================================================
 
+from collections import deque
 from dataclasses import dataclass, field
 from typing import Any, Dict, Iterator, List, Optional
 
@@ -149,39 +150,58 @@ class TreeIndex:
     scope: str = "document"  # "document" now; "agent" in a later phase
     schema_version: int = TREE_SCHEMA_VERSION
     kv: Dict[str, str] = field(default_factory=dict)
+    # Lazy id->node and child_id->parent_id lookup maps so the query hot
+    # path (get_node / node_path per selected node id) never re-traverses
+    # the tree. Built once on first use; trees are immutable after
+    # construction (the builder fills summaries in place on the same node
+    # objects the maps reference, so mutation-by-summary is safe).
+    _node_map: Optional[Dict[str, TreeNode]] = field(
+        default=None, init=False, repr=False, compare=False
+    )
+    _parent_map: Optional[Dict[str, str]] = field(
+        default=None, init=False, repr=False, compare=False
+    )
 
     def walk(self) -> Iterator[TreeNode]:
         """Yield all nodes in pre-order (root first)."""
-        stack = [self.root]
+        stack = deque([self.root])
         while stack:
-            node = stack.pop(0)
+            node = stack.popleft()
             yield node
-            stack = list(node.sub_nodes) + stack
+            # Prepend children (in order) so traversal stays depth-first
+            # pre-order: extendleft reverses, hence the reversed() input.
+            stack.extendleft(reversed(node.sub_nodes))
+
+    def _ensure_maps(self) -> Dict[str, "TreeNode"]:
+        if self._node_map is None:
+            node_map: Dict[str, TreeNode] = {}
+            parent_map: Dict[str, str] = {}
+            for node in self.walk():
+                node_map[node.node_id] = node
+                for child in node.sub_nodes:
+                    parent_map[child.node_id] = node.node_id
+            self._node_map = node_map
+            self._parent_map = parent_map
+        return self._node_map
 
     @property
     def node_count(self) -> int:
-        return sum(1 for _ in self.walk())
+        return len(self._ensure_maps())
 
     def get_node(self, node_id: str) -> Optional[TreeNode]:
-        for node in self.walk():
-            if node.node_id == node_id:
-                return node
-        return None
+        return self._ensure_maps().get(node_id)
 
     def node_path(self, node_id: str) -> List[str]:
         """Return the title breadcrumb from the root to ``node_id``."""
-
-        def _find(node: TreeNode, trail: List[str]) -> Optional[List[str]]:
-            trail = trail + [node.title]
-            if node.node_id == node_id:
-                return trail
-            for child in node.sub_nodes:
-                found = _find(child, trail)
-                if found:
-                    return found
-            return None
-
-        return _find(self.root, []) or []
+        node_map = self._ensure_maps()
+        if node_id not in node_map:
+            return []
+        titles: List[str] = []
+        current: Optional[str] = node_id
+        while current is not None:
+            titles.append(node_map[current].title)
+            current = self._parent_map.get(current)
+        return list(reversed(titles))
 
     def fetch_raw(self, node_id: str) -> str:
         """Fetch the raw content for a node from the KV mapping."""

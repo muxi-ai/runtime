@@ -28,6 +28,7 @@
 # formation load.
 # =============================================================================
 
+import asyncio
 import re
 from dataclasses import dataclass, field
 from typing import Any, Dict, List, Optional
@@ -301,7 +302,12 @@ class TreeBuilder:
         ]
 
         last_error: Optional[Exception] = None
-        for _attempt in range(2):  # one retry on transient/parse failure
+        for attempt in range(2):  # one retry on transient/parse failure
+            if attempt:
+                # Short backoff before the retry so transient failures
+                # (429 rate limits, provider hiccups) have a chance to
+                # clear instead of retrying instantly into the same error.
+                await asyncio.sleep(1 * (attempt + 1))
             try:
                 # Notes:
                 # - temperature 0.1 rather than 0.0: LLM.chat coerces falsy

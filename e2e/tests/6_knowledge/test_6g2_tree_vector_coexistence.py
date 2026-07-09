@@ -1,5 +1,5 @@
 """
-Test 6F2: Tree and Vector Sources Coexist in One Agent's Knowledge Base
+Test 6G2: Tree and Vector Sources Coexist in One Agent's Knowledge Base
 
 Verifies the coexistence requirement of the knowledge-reasoning-rag PRD:
 one agent declares a large document (tree-indexed via the token threshold)
@@ -22,7 +22,7 @@ FORMATION_PATH = Path(__file__).parent / "formations" / "formation-tree-reasonin
 
 
 async def test_tree_vector_coexistence():
-    print("\n=== Test 6F2: Tree + Vector Coexistence in One Agent ===")
+    print("\n=== Test 6G2: Tree + Vector Coexistence in One Agent ===")
     print("One agent, two sources: large manual (tree) + small FAQ (vector)\n")
 
     print("Loading formation...")
@@ -60,8 +60,8 @@ async def test_tree_vector_coexistence():
         print("👤 User: What are the fleet support desk hours?")
         response1 = await overlord.chat(
             message="What are the fleet support desk hours according to the FAQ?",
-            user_id="test_user_6f2",
-            session_id="test_6f2_session_1",
+            user_id="test_user_6g2",
+            session_id="test_6g2_session_1",
             stream=False,
         )
         text1 = response1.content if hasattr(response1, "content") else str(response1)
@@ -76,8 +76,8 @@ async def test_tree_vector_coexistence():
         response2 = await overlord.chat(
             message="Per the operations manual, what coolant is approved for the "
                     "secondary loop?",
-            user_id="test_user_6f2",
-            session_id="test_6f2_session_2",
+            user_id="test_user_6g2",
+            session_id="test_6g2_session_2",
             stream=False,
         )
         text2 = response2.content if hasattr(response2, "content") else str(response2)
@@ -89,11 +89,11 @@ async def test_tree_vector_coexistence():
     finally:
         await formation.stop_overlord()
 
-    print("\n=== Test 6F2 Summary ===")
+    print("\n=== Test 6G2 Summary ===")
     print("✓ Large manual tree-indexed, small FAQ vector-indexed (same agent)")
     print("✓ Vector question answered from FAQ")
     print("✓ Tree question answered from manual")
-    print("\n✅ Test 6F2 PASSED: Tree and vector sources coexist correctly")
+    print("\n✅ Test 6G2 PASSED: Tree and vector sources coexist correctly")
     return True
 
 

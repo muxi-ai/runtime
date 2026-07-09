@@ -1472,7 +1472,7 @@ per-source `retrieval:` accepts `vector`/`tree`, rejects the reserved
 - No tree model (`tree_llm=None`, e.g. handler used outside an agent) or
   `reasoning_threshold: 0` -> fully inert, vector write sequence identical.
 
-**Gotchas (learned in e2e 6F1/6F2):**
+**Gotchas (learned in e2e 6G1/6G2):**
 1. **LLM semantic cache poisons navigation.** Navigation prompts over the same
    tree differ only by the short query, so OneLLM's semantic cache matches
    them as "similar" and replays node selections from unrelated queries. Both
@@ -1483,10 +1483,11 @@ per-source `retrieval:` accepts `vector`/`tree`, rejects the reserved
 3. **Summaries must carry identifiers verbatim** (part names, codes, values);
    generic summaries make the navigator miss fact lookups.
 
-**E2E:** `e2e/tests/6_knowledge/test_6f1_tree_reasoning_large_doc.py`
+**E2E:** `e2e/tests/6_knowledge/test_6g1_tree_reasoning_large_doc.py`
 (tree indexing + Method A retrieval + chat grounding) and
-`test_6f2_tree_vector_coexistence.py` (tree + vector sources in one agent),
-both on `formations/formation-tree-reasoning/`.
+`test_6g2_tree_vector_coexistence.py` (tree + vector sources in one agent),
+both on `formations/formation-tree-reasoning/` (the 6f slot went to the
+remote-knowledge-sources tests that merged concurrently).
 
 ---
 

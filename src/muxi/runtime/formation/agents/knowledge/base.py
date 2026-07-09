@@ -378,7 +378,10 @@ class FileKnowledge(KnowledgeSource):
         )
 
     async def process_with_chunk_manager(
-        self, chunk_manager: DocumentChunkManager, file_limit: Optional[int] = None
+        self,
+        chunk_manager: DocumentChunkManager,
+        file_limit: Optional[int] = None,
+        exclude_files: Optional[List[str]] = None,
     ) -> List[DocumentChunk]:
         """
         Process files using DocumentChunkManager for hybrid architecture integration.
@@ -390,12 +393,20 @@ class FileKnowledge(KnowledgeSource):
         Args:
             chunk_manager: DocumentChunkManager instance for chunking
             file_limit: Optional limit on number of files to process
+            exclude_files: Optional paths to skip for this call only (used by
+                reasoning-RAG to keep tree-indexed files out of the vector
+                chunking pass without mutating the source's discovery cache)
 
         Returns:
             List of DocumentChunk objects from all processed files
         """
         all_chunks = []
         files = self._discover_files()
+
+        # Per-call exclusions (does not touch the discovery cache)
+        if exclude_files:
+            excluded = {os.path.abspath(f) for f in exclude_files}
+            files = [f for f in files if os.path.abspath(f) not in excluded]
 
         # Apply file limit if specified
         if file_limit is not None:

@@ -1,5 +1,5 @@
 """
-Test 6F1: Reasoning-RAG Tree Indexing of a Large Document
+Test 6G1: Reasoning-RAG Tree Indexing of a Large Document
 
 Verifies Phase 1 of the knowledge-reasoning-rag PRD end to end:
   1. A knowledge file above ``reasoning_threshold`` gets tree-indexed at
@@ -20,7 +20,7 @@ FORMATION_PATH = Path(__file__).parent / "formations" / "formation-tree-reasonin
 
 
 async def test_tree_reasoning_large_doc():
-    print("\n=== Test 6F1: Reasoning-RAG Tree Indexing of a Large Document ===")
+    print("\n=== Test 6G1: Reasoning-RAG Tree Indexing of a Large Document ===")
     print("Verifies tree indexing at ingestion and Method A retrieval at query time\n")
 
     print("Loading formation...")
@@ -83,8 +83,8 @@ async def test_tree_reasoning_large_doc():
         response = await overlord.chat(
             message="According to the operations manual, how often must the warp coil "
                     "be recalibrated?",
-            user_id="test_user_6f1",
-            session_id="test_6f1_session",
+            user_id="test_user_6g1",
+            session_id="test_6g1_session",
             stream=False,
         )
         response_text = response.content if hasattr(response, "content") else str(response)
@@ -96,11 +96,11 @@ async def test_tree_reasoning_large_doc():
     finally:
         await formation.stop_overlord()
 
-    print("\n=== Test 6F1 Summary ===")
+    print("\n=== Test 6G1 Summary ===")
     print("✓ Large document tree-indexed at ingestion (no vector double-indexing)")
     print("✓ Method A navigation retrieved the correct node")
     print("✓ Chat flow answered with the buried fact")
-    print("\n✅ Test 6F1 PASSED: Reasoning-RAG tree retrieval working correctly")
+    print("\n✅ Test 6G1 PASSED: Reasoning-RAG tree retrieval working correctly")
     return True
 
 
