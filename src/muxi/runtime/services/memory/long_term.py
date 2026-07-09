@@ -1636,6 +1636,42 @@ class LongTermMemory:
                 for m in memories
             ]
 
+    async def list_extracted_orphan_memories(
+        self, external_user_id: Optional[str] = None
+    ) -> List[Dict[str, Any]]:
+        """
+        Extraction rows without event provenance (legacy backfill support).
+
+        Rows whose metadata says ``source == 'extraction'`` but carries no
+        ``derived_from_event_id`` predate the memory event substrate; the
+        backfill synthesizes fact.extracted events for exactly these so a
+        rebuild can recreate them. Non-extraction rows are never listed.
+        """
+        internal_user_id = await self._resolve_user_id_async(external_user_id)
+        source_marker = type_coerce(self.MemoryModel.meta_data, JSON)["source"].as_string()
+        event_marker = type_coerce(self.MemoryModel.meta_data, JSON)[
+            "derived_from_event_id"
+        ].as_string()
+        async with self.AsyncSession() as session:
+            query = (
+                select(self.MemoryModel)
+                .where(self.MemoryModel.user_id == internal_user_id)
+                .where(source_marker == "extraction")
+                .where(event_marker.is_(None))
+                .order_by(self.MemoryModel.created_at, self.MemoryModel.id)
+            )
+            rows = (await session.execute(query)).scalars().all()
+            return [
+                {
+                    "id": row.id,
+                    "text": row.text,
+                    "collection": row.collection,
+                    "metadata": row.meta_data or {},
+                    "created_at": row.created_at.isoformat() if row.created_at else None,
+                }
+                for row in rows
+            ]
+
     async def delete_extracted_memories(self, external_user_id: Optional[str] = None) -> int:
         """
         Delete every event-sourced memory for a user (all collections).

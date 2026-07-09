@@ -693,6 +693,11 @@ class MemoryIngestionService:
             raise IngestionUnavailableError(
                 "The memory event substrate rejected the fact append; " "the item was not stored"
             )
+        if getattr(memory_events, "event_first", False):
+            # Event-first cutover (flag-gated, default off): the append is
+            # the write; the substrate's applier projects the fact.
+            await memory_events.apply_event(fact_event)
+            return {"facts_extracted": 1}
         memory_id = await apply_fact_event(
             self.overlord.long_term_memory,
             user_id,
