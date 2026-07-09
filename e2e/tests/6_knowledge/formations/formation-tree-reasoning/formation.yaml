@@ -1,0 +1,30 @@
+schema: "1.0.0"
+id: "tree-reasoning-test"
+description: "Formation exercising reasoning-RAG tree indexing alongside vector knowledge"
+
+llm:
+  api_keys:
+    openai: "${{ secrets.OPENAI_API_KEY }}"
+  models:
+    - text: "openai/gpt-4o-mini"
+    - embedding: "openai/text-embedding-3-small"
+
+agents:
+  - librarian
+
+memory:
+  buffer:
+    size: 50
+    multiplier: 10
+    vector_search: false
+
+logging:
+  system:
+    level: "debug"
+    destination: "stdout"
+  conversation:
+    enabled: true
+    streams:
+      - transport: "stdout"
+        level: "info"
+        format: "jsonl"

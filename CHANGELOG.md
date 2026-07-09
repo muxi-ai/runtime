@@ -2,6 +2,39 @@
 
 ## [unreleased]
 
+### Knowledge reasoning RAG - Method A tree retrieval (Phase 1)
+
+Large knowledge files are now indexed as hierarchical trees navigated by an
+LLM at query time instead of vector chunking (knowledge-reasoning-rag PRD,
+Phase 1):
+
+- New `formation/agents/knowledge/reasoning/` package: `TreeBuilder`
+  (deterministic heading/window segmentation + batched LLM summaries),
+  `TreeCache` (MD5-keyed disk persistence: compact tree JSON + separate
+  node->raw KV file), and `TreeSearchA` (Method A: one LLM call selects
+  node_ids from the compressed tree; raw content resolved from the KV).
+- Per-file gate at ingestion: files above `knowledge.reasoning_threshold`
+  tokens (default 40000, `0` disables) are tree-indexed; everything else
+  flows through the unchanged vector pipeline. Applies inside directory
+  sources too. Per-source `retrieval: vector|tree` overrides the gate
+  (`tree-vector`/`hybrid` are reserved for later phases and rejected at
+  load). New `knowledge.tree` settings block: `model` (defaults to the
+  agent's text model; accepts an `llm.aliases` name or `provider/model`),
+  `max_depth`, `max_pages_per_node`, `max_tokens_per_node`,
+  `max_document_tokens`. All new keys fail-fast validated at load time.
+- Tree and vector sources coexist in one agent's knowledge base; tree
+  results carry `source_type: "tree"` plus a `node_path` breadcrumb via the
+  unified `RetrievalResult` schema (contract shared with the memory-revamp
+  PRD).
+- Failure isolation: tree build failure (or the `max_document_tokens` size
+  cap) falls back to vector indexing; navigation failure at query time falls
+  back to vector search results - never a failed turn. New observability
+  events: `KNOWLEDGE_TREE_BUILD_STARTED` / `_COMPLETED` / `_FAILED` and
+  `KNOWLEDGE_TREE_FALLBACK_TO_VECTOR` (with cause).
+- Inert when unconfigured: files under the threshold (and handlers without a
+  tree model) behave byte-identically to the previous vector path, pinned by
+  unit tests.
+
 ### Remote knowledge sources - Phase 1 core sync
 
 Agents can now declare url-based knowledge sources next to local paths

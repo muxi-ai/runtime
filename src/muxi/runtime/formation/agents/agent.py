@@ -327,6 +327,21 @@ class Agent:
             # Get formation_id from overlord
             formation_id = getattr(self.overlord, "formation_id", "default-formation")
 
+            # Resolve the LLM used for reasoning-RAG tree building and
+            # Method A navigation. Default is the agent's own text model
+            # (PRD resolved question 1); ``knowledge.tree.model`` overrides
+            # via the same alias / "provider/model" resolution as the
+            # hierarchical model-selection feature. Resolution failure
+            # falls back to the agent model (never blocks knowledge init).
+            tree_llm = self.model
+            tree_model_ref = (knowledge_config.get("tree") or {}).get("model")
+            if tree_model_ref and hasattr(self.overlord, "resolve_model_override"):
+                resolved = await self.overlord.resolve_model_override(
+                    tree_model_ref, source="knowledge_tree"
+                )
+                if resolved is not None:
+                    tree_llm = resolved
+
             # Create knowledge handler using the factory method with formation config.
             # ``working_memory`` was already resolved above when computing the
             # embedding slug; reuse it instead of re-fetching from the overlord.
@@ -338,6 +353,7 @@ class Agent:
                 working_memory=working_memory,
                 auto_inject_knowledge=True,
                 formation_id=formation_id,  # Pass formation_id explicitly
+                tree_llm=tree_llm,  # Reasoning-RAG tree build/navigation model
             )
 
             # Log successful knowledge initialization
