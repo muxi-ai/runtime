@@ -1,0 +1,21 @@
+schema: "1.0.0"
+id: "hybrid"
+name: "Hybrid Knowledge Agent"
+description: "AI assistant with local knowledge plus an unreachable remote source"
+
+system_message: |
+  You are an AI assistant with knowledge about the Aurelian Ledger.
+  Answer questions using your knowledge base.
+
+role: "assistant"
+specialties:
+  - "aurelian_ledger"
+
+knowledge:
+  enabled: true
+  sources:
+    - path: "knowledge/local-facts.md"
+      description: "Aurelian Ledger reference document (local)"
+    - url: "http://127.0.0.1:59721/never-online/docs.md"
+      id: unreachable-docs
+      description: "Intentionally unreachable remote source (failure isolation test)"

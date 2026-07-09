@@ -1072,9 +1072,17 @@ class FormationValidator:
                 self.result.add_error("Knowledge sources must be a list")
                 return
 
+            seen_source_ids: set = set()
             for i, source in enumerate(sources):
                 if not isinstance(source, dict):
                     self.result.add_error(f"Knowledge source {i} must be a dictionary")
+                    continue
+
+                # Remote (url-based) sources have their own validation path
+                if "url" in source:
+                    self._validate_remote_knowledge_source(
+                        source, f"Knowledge source {i}", seen_source_ids
+                    )
                     continue
 
                 # Check for path
@@ -1129,16 +1137,29 @@ class FormationValidator:
                 self.result.add_error("Agent knowledge 'sources' must be a list")
                 return
 
+            seen_source_ids: set = set()
             for i, source in enumerate(sources):
                 if not isinstance(source, dict):
                     self.result.add_error(f"Agent knowledge source {i} must be a dictionary")
                     continue
 
+                subject = f"Agent knowledge source {i}"
+
+                # A source is either local (path) or remote (url), never both
+                if "path" in source and "url" in source:
+                    self.result.add_error(
+                        f"{subject} must declare either 'path' or 'url', not both"
+                    )
+                    continue
+
+                if "url" in source:
+                    self._validate_remote_knowledge_source(source, subject, seen_source_ids)
+                    self._validate_knowledge_source_description(source, subject)
+                    continue
+
                 # Validate required fields for each source
                 if "path" not in source:
-                    self.result.add_error(
-                        f"Agent knowledge source {i} missing required field: 'path'"
-                    )
+                    self.result.add_error(f"{subject} missing required field: 'path' or 'url'")
                 else:
                     path = source["path"]
                     if not isinstance(path, str):
@@ -1146,20 +1167,7 @@ class FormationValidator:
                     elif not path.strip():
                         self.result.add_error(f"Agent knowledge source {i} 'path' cannot be empty")
 
-                if "description" not in source:
-                    self.result.add_error(
-                        f"Agent knowledge source {i} missing required field: 'description'"
-                    )
-                else:
-                    description = source["description"]
-                    if not isinstance(description, str):
-                        self.result.add_error(
-                            f"Agent knowledge source {i} 'description' must be a string"
-                        )
-                    elif not description.strip():
-                        self.result.add_error(
-                            f"Agent knowledge source {i} 'description' cannot be empty"
-                        )
+                self._validate_knowledge_source_description(source, subject)
 
                 # Validate per-source retrieval mode (reasoning-RAG)
                 if "retrieval" in source:
@@ -1225,6 +1233,244 @@ class FormationValidator:
                 if isinstance(value, bool) or not isinstance(value, int) or value < 1:
                     self.result.add_error(
                         f"Agent knowledge tree '{key}' must be a positive integer"
+                    )
+
+    def _validate_knowledge_source_description(self, source: Dict[str, Any], subject: str) -> None:
+        """Validate the required 'description' field on a knowledge source."""
+        if "description" not in source:
+            self.result.add_error(f"{subject} missing required field: 'description'")
+            return
+        description = source["description"]
+        if not isinstance(description, str):
+            self.result.add_error(f"{subject} 'description' must be a string")
+        elif not description.strip():
+            self.result.add_error(f"{subject} 'description' cannot be empty")
+
+    # URL schemes accepted for remote knowledge sources in Phase 1, and
+    # schemes from the PRD roadmap that are recognized but not built yet.
+    REMOTE_KNOWLEDGE_SUPPORTED_SCHEMES = {"http", "https", "s3", "rsync", "rsync+ssh", "file"}
+    REMOTE_KNOWLEDGE_PLANNED_SCHEMES = {"gs", "az", "ftp", "sftp"}
+    REMOTE_KNOWLEDGE_SCHEDULE_ALIASES = {"@startup", "@hourly", "@daily", "@weekly"}
+
+    def _validate_remote_knowledge_source(
+        self, source: Dict[str, Any], subject: str, seen_source_ids: set
+    ) -> None:
+        """Validate a remote (url-based) knowledge source declaration.
+
+        Fail-fast at load time: unsupported schemes, malformed URLs,
+        incomplete auth blocks, and Phase 2+ options (archive extraction)
+        are configuration errors. Credentials should be referenced via
+        ``${{ secrets.* }}`` interpolation, which resolves before the
+        handlers ever see the config.
+        """
+        from urllib.parse import urlparse
+
+        url = source.get("url")
+        if not isinstance(url, str) or not url.strip():
+            self.result.add_error(f"{subject} 'url' must be a non-empty string")
+            return
+
+        parsed = urlparse(url)
+        scheme = parsed.scheme.lower()
+
+        if scheme in self.REMOTE_KNOWLEDGE_PLANNED_SCHEMES:
+            self.result.add_error(
+                f"{subject} scheme '{scheme}://' is not yet supported (planned). "
+                f"Supported schemes: "
+                f"{', '.join(sorted(self.REMOTE_KNOWLEDGE_SUPPORTED_SCHEMES))}"
+            )
+            return
+        if scheme not in self.REMOTE_KNOWLEDGE_SUPPORTED_SCHEMES:
+            self.result.add_error(
+                f"{subject} has unsupported URL scheme '{scheme or '(none)'}'. "
+                f"Supported schemes: "
+                f"{', '.join(sorted(self.REMOTE_KNOWLEDGE_SUPPORTED_SCHEMES))}"
+            )
+            return
+
+        # Scheme-specific structural checks
+        has_glob = any(c in url for c in "*?[")
+        if scheme in ("http", "https"):
+            if not parsed.netloc:
+                self.result.add_error(f"{subject} '{scheme}://' URL is missing a host")
+            if has_glob:
+                self.result.add_error(
+                    f"{subject} glob patterns are not supported for {scheme}:// sources "
+                    "(HTTP has no directory listing); point at a single file"
+                )
+        elif scheme == "s3":
+            if not parsed.netloc:
+                self.result.add_error(f"{subject} 's3://' URL is missing a bucket name")
+        elif scheme in ("rsync", "rsync+ssh"):
+            if not parsed.netloc:
+                self.result.add_error(f"{subject} '{scheme}://' URL is missing a host")
+            if has_glob:
+                self.result.add_error(
+                    f"{subject} glob patterns are not supported for {scheme}:// sources; "
+                    "use 'include'/'exclude' filters instead"
+                )
+        elif scheme == "file":
+            if parsed.netloc not in ("", "localhost"):
+                self.result.add_error(
+                    f"{subject} 'file://' sources must be local paths (file:///path)"
+                )
+            elif not parsed.path or not parsed.path.startswith("/"):
+                self.result.add_error(
+                    f"{subject} 'file://' sources require an absolute path (file:///path)"
+                )
+
+        # Optional identifier: non-empty and unique per sources list
+        if "id" in source:
+            source_id = source["id"]
+            if not isinstance(source_id, str) or not source_id.strip():
+                self.result.add_error(f"{subject} 'id' must be a non-empty string")
+            elif source_id in seen_source_ids:
+                self.result.add_error(f"{subject} duplicate remote source id: '{source_id}'")
+            else:
+                seen_source_ids.add(source_id)
+
+        # Phase 2 surface: archive extraction is not implemented yet.
+        # Fail fast rather than silently ingesting the raw archive.
+        for phase2_key in ("extract", "extract_pattern"):
+            if phase2_key in source:
+                self.result.add_error(
+                    f"{subject} '{phase2_key}' (archive extraction) is not yet supported"
+                )
+
+        self._validate_remote_knowledge_auth(source, subject, scheme)
+        self._validate_remote_knowledge_options(source, subject, scheme)
+
+    def _validate_remote_knowledge_auth(
+        self, source: Dict[str, Any], subject: str, scheme: str
+    ) -> None:
+        """Validate the optional 'auth' block of a remote knowledge source."""
+        if "auth" not in source:
+            return
+        auth = source["auth"]
+        if not isinstance(auth, dict):
+            self.result.add_error(f"{subject} 'auth' must be a mapping with a 'type' field")
+            return
+
+        auth_type = auth.get("type")
+        if not isinstance(auth_type, str) or not auth_type.strip():
+            self.result.add_error(f"{subject} 'auth' requires a 'type' field")
+            return
+        auth_type = auth_type.lower()
+
+        valid_types_by_scheme = {
+            "http": {"basic", "bearer"},
+            "https": {"basic", "bearer"},
+            "s3": {"aws"},
+            "rsync": set(),
+            "rsync+ssh": {"ssh_key"},
+            "file": set(),
+        }
+        valid_types = valid_types_by_scheme.get(scheme, set())
+        if auth_type not in valid_types:
+            allowed = ", ".join(sorted(valid_types)) if valid_types else "none"
+            self.result.add_error(
+                f"{subject} auth type '{auth_type}' is not valid for "
+                f"'{scheme}://' sources (allowed: {allowed})"
+            )
+            return
+
+        if auth_type == "aws":
+            # Explicit credentials are optional: without them the handler
+            # falls through to boto3's default credential chain (env vars,
+            # instance profile, ...). But access_key and secret_key only
+            # make sense together - one without the other is a config bug.
+            has_access = "access_key" in auth
+            has_secret = "secret_key" in auth
+            if has_access != has_secret:
+                missing = "secret_key" if has_access else "access_key"
+                self.result.add_error(
+                    f"{subject} auth type 'aws' declares "
+                    f"'{'access_key' if has_access else 'secret_key'}' without "
+                    f"'{missing}' - provide both explicit credentials or neither "
+                    "(neither uses boto3's default credential chain)"
+                )
+            required_fields = ["access_key", "secret_key"] if has_access and has_secret else []
+        else:
+            required_fields = {
+                "basic": ["username", "password"],
+                "bearer": ["token"],
+                "ssh_key": ["key"],
+            }[auth_type]
+        for auth_field in required_fields:
+            value = auth.get(auth_field)
+            if not isinstance(value, str) or not value.strip():
+                self.result.add_error(
+                    f"{subject} auth type '{auth_type}' requires a non-empty "
+                    f"'{auth_field}' field (use ${{{{ secrets.* }}}} for credentials)"
+                )
+
+    def _validate_remote_knowledge_options(
+        self, source: Dict[str, Any], subject: str, scheme: str
+    ) -> None:
+        """Validate optional filter/limit/schedule fields of a remote source."""
+        # headers: HTTP(S) only, string -> string map
+        if "headers" in source:
+            headers = source["headers"]
+            if scheme not in ("http", "https"):
+                self.result.add_error(f"{subject} 'headers' is only valid for http(s):// sources")
+            elif not isinstance(headers, dict) or not all(
+                isinstance(k, str) and isinstance(v, str) for k, v in headers.items()
+            ):
+                self.result.add_error(
+                    f"{subject} 'headers' must be a map of string keys to string values"
+                )
+
+        # include / exclude: lists of non-empty fnmatch patterns
+        for filter_key in ("include", "exclude"):
+            if filter_key not in source:
+                continue
+            patterns = source[filter_key]
+            if not isinstance(patterns, list) or not all(
+                isinstance(p, str) and p.strip() for p in patterns
+            ):
+                self.result.add_error(
+                    f"{subject} '{filter_key}' must be a list of non-empty string patterns"
+                )
+
+        # size / count / timeout limits: positive integers
+        for limit_key in ("max_files", "max_file_size", "max_total_size", "timeout"):
+            if limit_key not in source:
+                continue
+            value = source[limit_key]
+            if not isinstance(value, int) or isinstance(value, bool) or value <= 0:
+                self.result.add_error(f"{subject} '{limit_key}' must be a positive integer")
+
+        # accept_new_host_keys: rsync+ssh only. Opts into SSH's
+        # trust-on-first-use (StrictHostKeyChecking=accept-new) instead of
+        # the strict default that requires the host in known_hosts. TOFU
+        # means a MITM on FIRST contact could inject knowledge content -
+        # hence explicit opt-in, never the default.
+        if "accept_new_host_keys" in source:
+            value = source["accept_new_host_keys"]
+            if scheme != "rsync+ssh":
+                self.result.add_error(
+                    f"{subject} 'accept_new_host_keys' is only valid for " "rsync+ssh:// sources"
+                )
+            elif not isinstance(value, bool):
+                self.result.add_error(f"{subject} 'accept_new_host_keys' must be a boolean")
+
+        # schedule: accepted and syntax-checked in Phase 1, but periodic
+        # re-sync lands in a later phase — every remote source syncs at
+        # formation startup regardless of the declared schedule.
+        if "schedule" in source:
+            schedule = source["schedule"]
+            if not isinstance(schedule, str) or not schedule.strip():
+                self.result.add_error(f"{subject} 'schedule' must be a non-empty string")
+            elif schedule.strip() not in self.REMOTE_KNOWLEDGE_SCHEDULE_ALIASES:
+                try:
+                    import croniter
+
+                    croniter.croniter(schedule.strip())
+                except Exception:
+                    aliases = ", ".join(sorted(self.REMOTE_KNOWLEDGE_SCHEDULE_ALIASES))
+                    self.result.add_error(
+                        f"{subject} 'schedule' must be a valid cron expression "
+                        f"or one of: {aliases}"
                     )
 
     def _validate_agent_mcp_servers(

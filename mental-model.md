@@ -595,6 +595,76 @@ different plan instead of returning the failure. Off by default; enable via
   the for-loop to `asyncio.gather`. There's a `TODO(perf-round-2)`
   comment in `load_sources_from_config` flagging this.
 
+**Remote Knowledge Sources (Phase 1 core sync, 2026-07-09):**
+- Agents can declare url-based knowledge sources alongside local paths:
+  `knowledge.sources[*].url` with schemes `http(s)://`, `s3://`,
+  `rsync://`, `rsync+ssh://`, `file://` (bind mounts). Everything lives in
+  `formation/agents/knowledge/remote/`: `handler.py` (ProtocolHandler ABC
+  + `SourceConfig`), `protocols/{http,s3,rsync,file}.py`, `manifest.py`
+  (per-source sync state), `sync.py` (SyncManager orchestration).
+- **Architecture: mirror-then-ingest.** `KnowledgeHandler.from_agent_config`
+  partitions sources; remote ones sync into a local mirror at
+  `<get_knowledge_dir()>/remote/<agent_id>/<source_id>/content/` (i.e.
+  `~/.muxi/<formation_id>/cache/knowledge/remote/...`, never inside the
+  formation directory, which may be read-only in SIF). Each remote source
+  is then replaced by a synthetic local `path` source pointing at its
+  mirror, so the existing ingestion pipeline (FileKnowledge chunking,
+  MD5 change detection, embedding disk cache) is completely unchanged
+  downstream. The manifest (`manifest.json`) sits NEXT TO `content/`,
+  never inside it, so it is never ingested as knowledge.
+- **Inert when unconfigured.** Formations with only local `path` sources
+  never import the remote package at all (guarded by an `any(url)` check
+  in `from_agent_config`); `tests/unit/test_remote_knowledge_sync.py::`
+  `TestInertWhenUnconfigured` pins this.
+- **Failure isolation / cold-start policy.** A failing sync NEVER blocks
+  formation startup or chat. Per-file failures keep the previously synced
+  copy (stale-wins, PRD open question #2). Total sync failure degrades to
+  whatever the manifest recorded from earlier runs. Cold start (nothing
+  ever synced + source unreachable): the source contributes zero
+  knowledge, the formation still starts, and the gap is surfaced loudly —
+  an `InitEventFormatter.format_warn` line at startup plus an ERROR-level
+  `KNOWLEDGE_SYNC_FAILED` event (WARNING-level when stale content
+  exists). E2E: `6_knowledge/test_6f2_remote_source_failure_isolation.py`.
+- **Change detection** is protocol-native: HTTP ETag/Last-Modified, S3
+  ETag, file:// size+mtime composite, rsync native delta (`sync_tree`
+  incremental path; the manifest is rebuilt from the local tree after).
+  A missing remote hash forces a re-download (correctness > bandwidth).
+- **Downloads are atomic** (`atomic_download` in `remote/handler.py`):
+  HTTP/S3/file handlers stream into a `.part` temp file in the SAME
+  directory as the destination, fsync, then `os.replace`. A mid-stream
+  failure removes the temp and leaves the previous good copy untouched —
+  this is what makes stale-wins trustworthy (a truncated write would
+  otherwise be served under the manifest's old still-valid hash).
+- **Path safety.** Relative paths from handlers and manifests are
+  untrusted: `safe_relative_path` rejects absolute/traversal/backslash
+  paths and `resolve_within` re-verifies the resolved (symlink-aware)
+  target stays inside the content dir. rsync runs with `--safe-links`.
+- **SSH host keys are strict by default** (rsync+ssh):
+  `StrictHostKeyChecking=yes` — the host must already be in known_hosts
+  or the sync fails, so a MITM on first contact cannot inject knowledge
+  content. `accept_new_host_keys: true` on the source is the explicit
+  opt-in for SSH's trust-on-first-use (`accept-new` still rejects
+  CHANGED keys). Mechanism not policy: safe default, loud escape hatch.
+  The temp file holding `ssh_key` material is 0600 and removed even
+  when setup fails mid-way (write/chmod) — never left behind.
+- **Validation is fail-fast** (`config/validation.py::
+  _validate_remote_knowledge_source`): unsupported/planned schemes
+  (`gs`, `az`, `ftp`, `sftp` are "planned"), glob on http(s)/rsync URLs,
+  malformed auth blocks (`basic`/`bearer` for http, `aws` for s3,
+  `ssh_key` for rsync+ssh), `accept_new_host_keys` outside rsync+ssh,
+  and Phase 2 `extract`/`extract_pattern` keys are load-time errors.
+  For `aws` auth, `access_key`/`secret_key` are both-or-neither —
+  neither means boto3's default credential chain (env vars, instance
+  profile). Credentials flow through the standard `${{ secrets.* }}`
+  interpolation (resolved before handlers see config).
+- **Phase 1 scope note:** `schedule` is accepted and syntax-validated
+  (cron or `@startup`/`@hourly`/`@daily`/`@weekly`) but periodic re-sync
+  is Phase 3 — every remote source syncs exactly once at formation
+  startup. Archive extraction is Phase 2. HTTP sources are single-file
+  only (no directory listing protocol).
+- Events: `knowledge.sync.started` / `knowledge.sync.completed`
+  (SystemEvents) and `error.knowledge.sync.failed` (ErrorEvents).
+
 **Pre-routing gate ordering (current state, 2026-04-26):**
 ```
 chat() -> _process_sync_chat()
@@ -2563,37 +2633,37 @@ def enable_conversation_logging(formation):
 
 ### Event System
 
-**349 typed events** across 5 categories:
+**418 typed events** across 5 categories:
 
 ```python
 class SystemEvents(Enum):
-    # Infrastructure events (71 events)
+    # Infrastructure events (133 events)
     LLM_INITIALIZED = "llm.initialized"
     MCP_SERVER_REGISTERED = "mcp.server.registration.completed"
     AGENT_INITIALIZED = "agent.initialized"
     # ...
 
 class ConversationEvents(Enum):
-    # User-facing events (183 events)
+    # User-facing events (210 events)
     REQUEST_STARTED = "request.started"
     REQUEST_COMPLETED = "request.completed"
     AGENT_SELECTED = "agent.selected"
     # ...
 
 class ServerEvents(Enum):
-    # API server events (34 events)
+    # API server events (9 events)
     SERVER_STARTED = "server.started"
     REQUEST_RECEIVED = "request.received"
     # ...
 
 class APIEvents(Enum):
-    # API operation events (29 events)
+    # API operation events (2 events)
     ROUTE_MATCHED = "route.matched"
     VALIDATION_PASSED = "validation.passed"
     # ...
 
 class ErrorEvents(Enum):
-    # Error events (32 events)
+    # Error events (64 events)
     VALIDATION_FAILED = "validation.failed"
     LLM_CALL_FAILED = "llm.call.failed"
     # ...
