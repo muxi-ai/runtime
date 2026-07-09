@@ -395,6 +395,19 @@ class SystemEvents(Enum):
     KNOWLEDGE_SOURCE_FAILED = "knowledge.source.failed"
     # When knowledge source loading fails
 
+    KNOWLEDGE_TREE_BUILD_STARTED = "knowledge.tree.build.started"
+    # When the reasoning-RAG TreeBuilder begins indexing a file or source
+
+    KNOWLEDGE_TREE_BUILD_COMPLETED = "knowledge.tree.build.completed"
+    # When a document tree index is successfully built/loaded and cached
+
+    KNOWLEDGE_TREE_BUILD_FAILED = "knowledge.tree.build.failed"
+    # When tree index construction fails (LLM error, timeout, oversized doc)
+
+    KNOWLEDGE_TREE_FALLBACK_TO_VECTOR = "knowledge.tree.fallback_to_vector"
+    # When a tree-eligible source silently falls back to vector indexing/search
+    # (build failure, size cap, or missing tree model); data includes the cause
+
     # ===================================================================
     # INFRASTRUCTURE MONITORING (MOVED FROM CONVERSATIONEVENTs)
     # ===================================================================

@@ -1340,6 +1340,84 @@ def model(self):
 **Gotcha:**  
 Before the fix, API keys weren't passed through the embedding pipeline, causing authentication failures. Now the formation explicitly passes `api_key` to memory constructors.
 
+### Knowledge Reasoning RAG (2026-07-09, Phase 1: Method A)
+
+**Location:** `src/muxi/runtime/formation/agents/knowledge/reasoning/`
+**PRD:** `engineering/prds/knowledge-reasoning-rag.md` (Phase 1 shipped; Method B,
+hybrid mode, and per-agent formation-level trees are later phases)
+
+Large knowledge files get a **hierarchical tree index navigated by an LLM at
+query time** instead of vector chunking. Gate is per-file at ingestion:
+
+```
+add_file -> file crosses knowledge.reasoning_threshold tokens (default 40000, 0 disables)
+         -> TreeBuilder (structure pass + LLM summary pass) -> TreeCache (disk)
+         -> handler._tree_indexes[abs_path] = TreeIndex     (NO vector chunks for this file)
+   else  -> vector pipeline, byte-identical to before this feature
+```
+
+**Modules:**
+- `types.py` — `TreeNode` / `TreeIndex` (compact tree JSON + separate node->raw
+  KV mapping) and `RetrievalResult`, the unified retrieval schema shared with
+  the Memory Revamp PRD (`source_type: vector|tree|agent_tree|kg|...`,
+  `node_path` breadcrumb). Handler converts to its legacy dict shape via
+  `to_dict()` so `search_unified` / `_inject_knowledge_into_memory` are unchanged.
+- `tree_builder.py` — pass 1 is deterministic (ATX headings -> hierarchy capped
+  at `tree.max_depth`, else fixed token windows; oversized leaves split into
+  part-windows under `tree.max_tokens_per_node`); pass 2 is batched LLM
+  summaries (40 nodes/call). Parents' KV raw is only their intro text —
+  descendants own their spans. `count_tokens` uses tiktoken with a `len//4`
+  fallback.
+- `tree_cache.py` — cache key `(file_path, file_md5)` ->
+  `<path_hash>_<md5>.tree.json` + `.tree.kv.jsonl` in the same cache dir as
+  the vector embedding caches. Same MD5 never rebuilds (zero LLM calls);
+  changed MD5 evicts stale entries; corrupt files are removed and treated as
+  a miss.
+- `tree_search_a.py` — Method A: ONE LLM call with the compressed tree
+  (titles + summaries only, never raw) + query -> `{"thinking", "node_list"}`;
+  selected node_ids resolve raw content from the KV. Hallucinated ids are
+  skipped; parent selections append children content up to a 6k-char cap.
+
+**Handler integration** (`knowledge/handler.py`): `_maybe_ingest_as_tree` in
+`add_file` (per-file inside directories too — tree-indexed files are excluded
+from the vector chunking pass), `_search_trees` in `search()` (tree results
+merged ahead of vector results, truncated to `top_k`), tree cleanup hooks in
+`remove_file` / `cleanup_deleted_sources`.
+
+**Model selection:** tree build + navigation use the agent's text model by
+default; `knowledge.tree.model` overrides via the hierarchical model-selection
+resolution (alias or `provider/model`, resolved in
+`agent._initialize_knowledge` through `overlord.resolve_model_override`).
+Validation is fail-fast at load (`config/validation.py`:
+`_validate_knowledge_reasoning_config`, `_validate_source_retrieval_mode`;
+per-source `retrieval:` accepts `vector`/`tree`, rejects the reserved
+`tree-vector`/`hybrid` until those phases ship).
+
+**Failure isolation (pinned by `tests/unit/test_knowledge_reasoning.py`):**
+- Build failure at ingestion -> vector pipeline + `KNOWLEDGE_TREE_BUILD_FAILED`
+  + `KNOWLEDGE_TREE_FALLBACK_TO_VECTOR` (also emitted for the
+  `tree.max_document_tokens` size cap and a missing tree model).
+- Navigation failure at query time -> vector results still serve the turn
+  (fallback event with `phase: query`); never a failed turn.
+- No tree model (`tree_llm=None`, e.g. handler used outside an agent) or
+  `reasoning_threshold: 0` -> fully inert, vector write sequence identical.
+
+**Gotchas (learned in e2e 6F1/6F2):**
+1. **LLM semantic cache poisons navigation.** Navigation prompts over the same
+   tree differ only by the short query, so OneLLM's semantic cache matches
+   them as "similar" and replays node selections from unrelated queries. Both
+   reasoning LLM calls pass `caching=False` (same class of bug as user-info
+   extraction above).
+2. **`temperature=0.0` is coerced to the instance default (0.7)** by
+   `LLM.chat`'s falsy check — the reasoning calls use `0.1`.
+3. **Summaries must carry identifiers verbatim** (part names, codes, values);
+   generic summaries make the navigator miss fact lookups.
+
+**E2E:** `e2e/tests/6_knowledge/test_6f1_tree_reasoning_large_doc.py`
+(tree indexing + Method A retrieval + chat grounding) and
+`test_6f2_tree_vector_coexistence.py` (tree + vector sources in one agent),
+both on `formations/formation-tree-reasoning/`.
+
 ---
 
 ## 4. LLM Layer

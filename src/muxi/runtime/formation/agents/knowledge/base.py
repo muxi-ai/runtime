@@ -158,6 +158,7 @@ class FileKnowledge(KnowledgeSource):
         max_files: int = 50,  # Limit files processed for performance
         max_file_size: int = 1024 * 1024,  # 1MB limit per file
         enable_markitdown: bool = True,  # Enable markitdown processing
+        retrieval: Optional[str] = None,  # None = automatic (token threshold)
     ):
         """
         Initialize a file-based knowledge source.
@@ -184,6 +185,11 @@ class FileKnowledge(KnowledgeSource):
         self.max_files = max_files
         self.max_file_size = max_file_size
         self.enable_markitdown = enable_markitdown
+        # Per-source retrieval mode for reasoning-based RAG:
+        # None (automatic token-threshold gate), "vector", or "tree".
+        # See formation/agents/knowledge/reasoning/ and the
+        # knowledge-reasoning-rag PRD.
+        self.retrieval = retrieval
 
         # Set default allowed extensions to include all supported formats
         if allowed_extensions is None:
@@ -368,6 +374,7 @@ class FileKnowledge(KnowledgeSource):
             max_files=config.get("max_files", 50),
             max_file_size=config.get("max_file_size", 1024 * 1024),
             enable_markitdown=config.get("enable_markitdown", True),
+            retrieval=config.get("retrieval"),
         )
 
     async def process_with_chunk_manager(

@@ -1,0 +1,25 @@
+schema: "1.0.0"
+id: "librarian"
+name: "Librarian Agent"
+description: "AI assistant answering questions about the SS Steadfast operations manual and fleet support FAQ"
+
+system_message: |
+  You are the ship librarian. Answer questions using the SS Steadfast
+  technical operations manual and the fleet support FAQ. Quote specific
+  values (intervals, codes, part names) exactly as documented.
+
+role: "assistant"
+specialties:
+  - "steadfast_manual"
+  - "fleet_support"
+
+knowledge:
+  enabled: true
+  # Low threshold so the ~9k-token manual tree-indexes while the small FAQ
+  # stays on the vector path (production default is 40000).
+  reasoning_threshold: 4000
+  sources:
+  - path: "knowledge/starship-manual.md"
+    description: "SS Steadfast technical operations manual"
+  - path: "knowledge/fleet-faq.md"
+    description: "Fleet support FAQ"

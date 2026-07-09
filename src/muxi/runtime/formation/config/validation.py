@@ -1092,6 +1092,21 @@ class FormationValidator:
                 if not full_path.exists():
                     self.result.add_warning(f"Knowledge source path does not exist: {path}")
 
+    # Reasoning-RAG per-source retrieval modes (fail-fast at load time).
+    # Mirror of formation/agents/knowledge/reasoning/types.py - kept literal
+    # here so config validation stays import-light.
+    _SUPPORTED_RETRIEVAL_MODES = ("vector", "tree")
+    _RESERVED_RETRIEVAL_MODES = ("tree-vector", "hybrid")
+
+    # Allowed keys and value validators for the ``knowledge.tree`` block.
+    _TREE_SETTING_KEYS = (
+        "model",
+        "max_depth",
+        "max_pages_per_node",
+        "max_tokens_per_node",
+        "max_document_tokens",
+    )
+
     def _validate_agent_knowledge_config(self, knowledge_config: Dict[str, Any]) -> None:
         """Validate agent-level knowledge configuration according to SCHEMA_GUIDE.md."""
         if not isinstance(knowledge_config, dict):
@@ -1103,6 +1118,9 @@ class FormationValidator:
             enabled = knowledge_config["enabled"]
             if not isinstance(enabled, bool):
                 self.result.add_error("Agent knowledge 'enabled' must be a boolean")
+
+        # Validate reasoning-RAG settings (reasoning_threshold + tree block)
+        self._validate_knowledge_reasoning_config(knowledge_config)
 
         # Validate sources array
         if "sources" in knowledge_config:
@@ -1143,7 +1161,71 @@ class FormationValidator:
                             f"Agent knowledge source {i} 'description' cannot be empty"
                         )
 
+                # Validate per-source retrieval mode (reasoning-RAG)
+                if "retrieval" in source:
+                    self._validate_source_retrieval_mode(source["retrieval"], i)
+
         # Allow any additional fields users might want to add for knowledge configuration
+
+    def _validate_source_retrieval_mode(self, retrieval: Any, source_index: int) -> None:
+        """Validate a knowledge source's ``retrieval:`` mode (fail fast)."""
+        where = f"Agent knowledge source {source_index}"
+        if not isinstance(retrieval, str) or not retrieval.strip():
+            self.result.add_error(f"{where} 'retrieval' must be a non-empty string")
+            return
+        retrieval = retrieval.strip()
+        if retrieval in self._RESERVED_RETRIEVAL_MODES:
+            self.result.add_error(
+                f"{where} 'retrieval' mode '{retrieval}' is not yet supported "
+                f"(supported modes: {', '.join(self._SUPPORTED_RETRIEVAL_MODES)}; "
+                "'tree-vector' and 'hybrid' ship in a later phase)"
+            )
+        elif retrieval not in self._SUPPORTED_RETRIEVAL_MODES:
+            self.result.add_error(
+                f"{where} 'retrieval' must be one of: "
+                f"{', '.join(self._SUPPORTED_RETRIEVAL_MODES)} (got '{retrieval}')"
+            )
+
+    def _validate_knowledge_reasoning_config(self, knowledge_config: Dict[str, Any]) -> None:
+        """Validate ``reasoning_threshold`` and the ``tree`` settings block."""
+        if "reasoning_threshold" in knowledge_config:
+            threshold = knowledge_config["reasoning_threshold"]
+            if isinstance(threshold, bool) or not isinstance(threshold, int) or threshold < 0:
+                self.result.add_error(
+                    "Agent knowledge 'reasoning_threshold' must be a non-negative "
+                    "integer (tokens; 0 disables reasoning-based indexing)"
+                )
+
+        if "tree" not in knowledge_config:
+            return
+
+        tree_config = knowledge_config["tree"]
+        if not isinstance(tree_config, dict):
+            self.result.add_error("Agent knowledge 'tree' must be a dictionary")
+            return
+
+        for key in tree_config:
+            if key not in self._TREE_SETTING_KEYS:
+                self.result.add_error(
+                    f"Agent knowledge tree setting '{key}' is not recognized "
+                    f"(allowed: {', '.join(self._TREE_SETTING_KEYS)})"
+                )
+
+        if tree_config.get("model") is not None:
+            self._validate_model_reference(tree_config["model"], "Agent knowledge tree")
+
+        for key in (
+            "max_depth",
+            "max_pages_per_node",
+            "max_tokens_per_node",
+            "max_document_tokens",
+        ):
+            if key in tree_config:
+                value = tree_config[key]
+                if isinstance(value, bool) or not isinstance(value, int) or value < 1:
+                    self.result.add_error(
+                        f"Agent knowledge tree '{key}' must be a positive integer"
+                    )
 
     def _validate_agent_mcp_servers(
         self, mcp_servers: List[Dict[str, Any]], agent_identifier: Union[str, int]

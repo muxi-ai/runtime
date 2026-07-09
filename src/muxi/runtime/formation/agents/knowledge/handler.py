@@ -120,6 +120,18 @@ from ....utils.user_dirs import get_knowledge_dir
 from ...documents.storage.chunk_manager import DocumentChunkManager
 from .base import FileKnowledge
 
+# Reasoning-based RAG (tree indexing + Method A retrieval). See
+# formation/agents/knowledge/reasoning/ and the knowledge-reasoning-rag PRD.
+from .reasoning import (
+    DEFAULT_REASONING_THRESHOLD,
+    DEFAULT_TREE_SETTINGS,
+    TreeBuilder,
+    TreeCache,
+    TreeSearchA,
+    count_tokens,
+    load_document_text,
+)
+
 # Document-specific namespace constants
 DOCUMENT_NAMESPACE = "knowledge"  # Changed from "documents" for clarity
 KNOWLEDGE_BUFFER_NAMESPACE = "knowledge_buffer"  # For injected knowledge into memory
@@ -149,6 +161,13 @@ class KnowledgeHandler:
         # Working memory integration
         working_memory: Optional[WorkingMemory] = None,
         auto_inject_knowledge: bool = True,
+        # Reasoning-based RAG (tree indexing). ``reasoning_config`` carries
+        # the agent knowledge block's ``reasoning_threshold`` and ``tree``
+        # keys; ``tree_llm`` is the LLM used for tree building/navigation.
+        # When ``tree_llm`` is None the reasoning path is fully inert and
+        # every source flows through the vector pipeline unchanged.
+        reasoning_config: Optional[Dict[str, Any]] = None,
+        tree_llm: Optional[Any] = None,
     ):
         """
         Initialize the knowledge handler with hybrid architecture components and memory integration.
@@ -167,6 +186,15 @@ class KnowledgeHandler:
         self.working_memory = working_memory
         self.auto_inject_knowledge = auto_inject_knowledge
         self._knowledge_buffer_enabled = working_memory is not None and auto_inject_knowledge
+
+        # Reasoning-based RAG state. ``_tree_indexes`` maps absolute file
+        # path -> TreeIndex for every tree-indexed document; the disk cache
+        # is created lazily on first tree operation so unconfigured
+        # handlers never touch it.
+        self.reasoning_config = reasoning_config or {}
+        self.tree_llm = tree_llm
+        self._tree_indexes: Dict[str, Any] = {}
+        self._tree_cache: Optional[TreeCache] = None
 
         # Store embedding function for later use
         self._generate_embeddings_fn = None
@@ -288,6 +316,271 @@ class KnowledgeHandler:
         self._embedding_dim_cache = await probe_dimension(model_slug)
         return self._embedding_dim_cache
 
+    # ------------------------------------------------------------------
+    # Reasoning-based RAG (tree indexing + Method A retrieval)
+    # ------------------------------------------------------------------
+
+    @property
+    def _reasoning_threshold(self) -> int:
+        """Effective ``reasoning_threshold`` in tokens (0 disables)."""
+        raw = self.reasoning_config.get("reasoning_threshold", DEFAULT_REASONING_THRESHOLD)
+        try:
+            return max(0, int(raw))
+        except (TypeError, ValueError):
+            return DEFAULT_REASONING_THRESHOLD
+
+    @property
+    def _tree_settings(self) -> Dict[str, Any]:
+        """Effective ``knowledge.tree`` settings (defaults merged in)."""
+        merged = dict(DEFAULT_TREE_SETTINGS)
+        merged.update(self.reasoning_config.get("tree") or {})
+        return merged
+
+    def _get_tree_cache(self) -> TreeCache:
+        if self._tree_cache is None:
+            self._tree_cache = TreeCache(self.cache_dir)
+        return self._tree_cache
+
+    def _reasoning_enabled_for(self, knowledge_source) -> bool:
+        """
+        Cheap gate: can tree ingestion possibly apply to this source?
+
+        Explicit ``retrieval: vector`` always wins; explicit ``retrieval:
+        tree`` always enters the tree path (which falls back with an event
+        when no tree model is available); otherwise the automatic threshold
+        gate requires a tree LLM and a non-zero threshold. When this
+        returns False the source flows through the vector pipeline exactly
+        as before this feature existed.
+        """
+        explicit = getattr(knowledge_source, "retrieval", None)
+        if explicit == "vector":
+            return False
+        if explicit == "tree":
+            return True
+        return self.tree_llm is not None and self._reasoning_threshold > 0
+
+    async def _maybe_ingest_as_tree(
+        self, knowledge_source, file_path: str, file_md5: str
+    ) -> Optional[int]:
+        """
+        Tree-index ``file_path`` when it qualifies; return node count.
+
+        Returns None when the file should flow through the vector pipeline
+        instead (under threshold, over the document size cap, no tree
+        model, or tree build failure). Never raises: every failure path
+        falls back to vector indexing with a
+        ``KNOWLEDGE_TREE_FALLBACK_TO_VECTOR`` event.
+        """
+        explicit = getattr(knowledge_source, "retrieval", None)
+        threshold = self._reasoning_threshold
+        tree_settings = self._tree_settings
+
+        if self.tree_llm is None:
+            # Only reachable for explicit ``retrieval: tree`` sources (the
+            # cheap gate filters the rest). No model to build with - fall
+            # back to vector so the source still loads.
+            observability.observe(
+                event_type=observability.SystemEvents.KNOWLEDGE_TREE_FALLBACK_TO_VECTOR,
+                level=observability.EventLevel.WARNING,
+                description="Tree retrieval requested but no tree model available",
+                data={"file_path": file_path, "cause": "no_tree_model", "phase": "ingestion"},
+            )
+            return None
+
+        # Cache first: same (path, md5) never rebuilds (no content load,
+        # no LLM calls).
+        cached = self._get_tree_cache().load(file_path, file_md5)
+        if cached is not None:
+            self._tree_indexes[file_path] = cached
+            observability.observe(
+                event_type=observability.SystemEvents.KNOWLEDGE_TREE_BUILD_COMPLETED,
+                level=observability.EventLevel.DEBUG,
+                description="Tree index loaded from disk cache",
+                data={
+                    "file_path": file_path,
+                    "content_hash": file_md5[:8],
+                    "node_count": cached.node_count,
+                    "from_cache": True,
+                },
+            )
+            return cached.node_count
+
+        # Cheap size pre-filter for auto-gated files: a file whose byte
+        # size is under ``threshold * 2`` cannot reach ``threshold`` tokens
+        # (~4 chars/token), so skip loading its content entirely.
+        if explicit != "tree":
+            try:
+                if os.path.getsize(file_path) < threshold * 2:
+                    return None
+            except OSError:
+                return None
+
+        text = load_document_text(file_path, knowledge_source)
+        if not text or not text.strip():
+            return None
+
+        token_count = count_tokens(text)
+        if explicit != "tree" and token_count < threshold:
+            return None
+
+        max_doc_tokens = int(tree_settings.get("max_document_tokens", 500000))
+        if token_count > max_doc_tokens:
+            observability.observe(
+                event_type=observability.SystemEvents.KNOWLEDGE_TREE_FALLBACK_TO_VECTOR,
+                level=observability.EventLevel.WARNING,
+                description="Document exceeds tree size cap - falling back to vector",
+                data={
+                    "file_path": file_path,
+                    "cause": "size_cap",
+                    "phase": "ingestion",
+                    "token_count": token_count,
+                    "max_document_tokens": max_doc_tokens,
+                },
+            )
+            return None
+
+        observability.observe(
+            event_type=observability.SystemEvents.KNOWLEDGE_TREE_BUILD_STARTED,
+            level=observability.EventLevel.INFO,
+            description="Building reasoning tree index for knowledge file",
+            data={
+                "file_path": file_path,
+                "token_count": token_count,
+                "reasoning_threshold": threshold,
+                "explicit_retrieval": explicit,
+            },
+        )
+        build_start = time.time()
+        try:
+            builder = TreeBuilder(llm=self.tree_llm, settings=tree_settings)
+            tree = await builder.build(text=text, document_name=os.path.basename(file_path))
+        except Exception as e:
+            observability.observe(
+                event_type=observability.SystemEvents.KNOWLEDGE_TREE_BUILD_FAILED,
+                level=observability.EventLevel.ERROR,
+                description="Tree index build failed",
+                data={
+                    "file_path": file_path,
+                    "error": str(e),
+                    "error_type": type(e).__name__,
+                },
+            )
+            observability.observe(
+                event_type=observability.SystemEvents.KNOWLEDGE_TREE_FALLBACK_TO_VECTOR,
+                level=observability.EventLevel.WARNING,
+                description="Tree build failed - falling back to vector indexing",
+                data={
+                    "file_path": file_path,
+                    "cause": "build_failure",
+                    "phase": "ingestion",
+                    "error": str(e),
+                },
+            )
+            return None
+
+        self._get_tree_cache().save(tree, file_path, file_md5)
+        self._tree_indexes[file_path] = tree
+        observability.observe(
+            event_type=observability.SystemEvents.KNOWLEDGE_TREE_BUILD_COMPLETED,
+            level=observability.EventLevel.INFO,
+            description="Tree index built and cached",
+            data={
+                "file_path": file_path,
+                "content_hash": file_md5[:8],
+                "node_count": tree.node_count,
+                "token_count": token_count,
+                "tree_token_count": tree.tree_token_count,
+                "build_seconds": round(time.time() - build_start, 2),
+                "from_cache": False,
+            },
+        )
+        return tree.node_count
+
+    async def _tree_ingest_directory(self, knowledge_source) -> int:
+        """
+        Apply the per-file tree gate to a directory source.
+
+        Files that get tree-indexed are excluded from the vector chunking
+        pass (by narrowing FileKnowledge's discovery cache) so no file is
+        double-indexed. Returns total tree nodes created.
+        """
+        total_nodes = 0
+        vector_files = []
+        files = knowledge_source.get_files()
+        for f in files:
+            file_md5 = self._calculate_file_md5(f)
+            nodes = None
+            if file_md5:
+                nodes = await self._maybe_ingest_as_tree(
+                    knowledge_source, os.path.abspath(f), file_md5
+                )
+            if nodes is None:
+                vector_files.append(f)
+            else:
+                total_nodes += nodes
+        # Narrow the discovery cache so process_with_chunk_manager only
+        # vector-chunks the files that were not tree-indexed.
+        knowledge_source._files = vector_files
+        return total_nodes
+
+    def _remove_tree_for(self, file_path: str) -> bool:
+        """Drop a file's tree from the registry and the disk cache."""
+        abs_path = os.path.abspath(file_path)
+        removed = self._tree_indexes.pop(abs_path, None) is not None
+        if removed or self.tree_llm is not None:
+            self._get_tree_cache().invalidate(abs_path)
+        return removed
+
+    async def _search_trees(self, query: str, top_k: int) -> List[Dict[str, Any]]:
+        """
+        Run Method A navigation over every tree-indexed document.
+
+        Never raises: a navigation failure on one tree logs a fallback
+        event and moves on, so the caller's vector results still serve the
+        turn (failure isolation per the reasoning-RAG PRD).
+        """
+        if not self._tree_indexes or self.tree_llm is None:
+            return []
+        searcher = TreeSearchA(self.tree_llm)
+        collected: List[Dict[str, Any]] = []
+        max_nodes = min(3, max(1, top_k))
+        for file_path, tree in list(self._tree_indexes.items()):
+            try:
+                node_results = await searcher.search(query=query, tree=tree, max_nodes=max_nodes)
+            except Exception as e:
+                observability.observe(
+                    event_type=observability.SystemEvents.KNOWLEDGE_TREE_FALLBACK_TO_VECTOR,
+                    level=observability.EventLevel.WARNING,
+                    description="Tree navigation failed - serving vector results only",
+                    data={
+                        "document": tree.document,
+                        "file_path": file_path,
+                        "cause": "navigation_failure",
+                        "phase": "query",
+                        "error": str(e),
+                        "error_type": type(e).__name__,
+                    },
+                )
+                continue
+            if node_results:
+                observability.observe(
+                    event_type=observability.ConversationEvents.CONTENT_RETRIEVED,
+                    level=observability.EventLevel.INFO,
+                    description="Tree navigation selected nodes",
+                    data={
+                        "document": tree.document,
+                        "method": "tree_a",
+                        "node_ids": [r.metadata.get("node_id") for r in node_results],
+                        "query": query[:100],
+                    },
+                )
+            for result in node_results:
+                result_dict = result.to_dict()
+                result_dict["metadata"].setdefault("source", file_path)
+                result_dict["metadata"].setdefault("knowledge_source", tree.document)
+                collected.append(result_dict)
+        return collected[:top_k]
+
     async def add_knowledge_source(self, source, generate_embeddings_fn: Optional[Callable] = None):
         """Add a knowledge source and process its content using hybrid architecture."""
         # Log knowledge source addition start
@@ -367,6 +660,28 @@ class KnowledgeHandler:
 
             # Step 1: Calculate hash for the source
             source_hash = self._calculate_file_md5(source_path)
+
+            # Reasoning-RAG gate: tree-index qualifying files instead of
+            # vector indexing (same gate as add_file). Falls through to the
+            # unchanged vector pipeline when the file does not qualify.
+            if (
+                source_hash
+                and not os.path.isdir(source_path)
+                and self._reasoning_enabled_for(source)
+            ):
+                tree_nodes = await self._maybe_ingest_as_tree(source, source_path, source_hash)
+                if tree_nodes is not None:
+                    observability.observe(
+                        event_type=observability.ConversationEvents.CONTENT_PROCESSED,
+                        level=observability.EventLevel.INFO,
+                        description="Knowledge source tree-indexed (reasoning RAG)",
+                        data={
+                            "source_path": source_path,
+                            "tree_nodes": tree_nodes,
+                            "total_sources": len(self.sources),
+                        },
+                    )
+                    return
 
             # Step 2: Check disk cache
             cached_data = self._load_cached_embeddings(source_path, source_hash)
@@ -632,6 +947,16 @@ class KnowledgeHandler:
                 if len(results) >= top_k:
                     break
 
+            # Reasoning-RAG dispatch: run Method A navigation over any
+            # tree-indexed sources and merge (tree results first - they
+            # exist because the document was too large for reliable vector
+            # retrieval). No trees registered -> this is a no-op and the
+            # vector results are returned exactly as before.
+            if self._tree_indexes:
+                tree_results = await self._search_trees(query, top_k)
+                if tree_results:
+                    results = (tree_results + results)[:top_k]
+
             # Inject knowledge results into working memory
             await self._inject_knowledge_into_memory(
                 knowledge_results=results, query=query, agent_id=str(self.agent_id_or_sources)
@@ -755,6 +1080,18 @@ class KnowledgeHandler:
                     model_slug = DEFAULT_EMBEDDING_MODEL
                 embedding_dim = await probe_dimension(model_slug)
 
+            # Reasoning-RAG configuration: the agent knowledge block's
+            # ``reasoning_threshold`` and ``tree`` keys, plus the tree LLM
+            # resolved by the caller (agent._initialize_knowledge). Both
+            # default to inert when absent.
+            reasoning_config = kwargs.get("reasoning_config")
+            if reasoning_config is None:
+                reasoning_config = {
+                    key: knowledge_config[key]
+                    for key in ("reasoning_threshold", "tree")
+                    if key in knowledge_config
+                }
+
             handler = cls(
                 agent_id_or_sources=agent_id,
                 formation_id=kwargs.get(
@@ -771,6 +1108,9 @@ class KnowledgeHandler:
                 # Working memory integration
                 working_memory=kwargs.get("working_memory"),
                 auto_inject_knowledge=kwargs.get("auto_inject_knowledge", True),
+                # Reasoning-based RAG (tree indexing)
+                reasoning_config=reasoning_config or None,
+                tree_llm=kwargs.get("tree_llm"),
             )
 
             # Apply reasonable file size limits to prevent memory issues
@@ -856,12 +1196,37 @@ class KnowledgeHandler:
         # Individual files will have their own content hashes
         if os.path.isdir(file_path):
             file_md5 = None  # Will calculate MD5 for individual files later
+
+            # Reasoning-RAG gate (per-file, inside the directory): files
+            # crossing the token threshold get tree-indexed and are
+            # excluded from the vector chunking pass below.
+            if self._reasoning_enabled_for(knowledge_source):
+                tree_nodes = await self._tree_ingest_directory(knowledge_source)
+                if tree_nodes and not knowledge_source.get_files():
+                    # Every file in the directory was tree-indexed; nothing
+                    # left for the vector pipeline.
+                    if knowledge_source not in self.sources:
+                        self.sources.append(knowledge_source)
+                    return tree_nodes
         else:
             # Calculate MD5 hash for content-based caching
             file_md5 = self._calculate_file_md5(file_path)
             if not file_md5:
                 # File not found or error reading file
                 return 0
+
+            # Reasoning-RAG gate: tree-index the file instead of vector
+            # indexing when it qualifies (threshold or explicit
+            # ``retrieval: tree``). Falls through to the unchanged vector
+            # pipeline when it does not qualify or the tree build fails.
+            if self._reasoning_enabled_for(knowledge_source):
+                tree_nodes = await self._maybe_ingest_as_tree(
+                    knowledge_source, os.path.abspath(file_path), file_md5
+                )
+                if tree_nodes is not None:
+                    if knowledge_source not in self.sources:
+                        self.sources.append(knowledge_source)
+                    return tree_nodes
 
             # Check if document already exists in WorkingMemory with same content hash
             existing_docs = self.working_memory.get_items_by_metadata(
@@ -1069,6 +1434,10 @@ class KnowledgeHandler:
                 metadata_filter={"source": file_path}, namespace=DOCUMENT_NAMESPACE
             )
 
+            # Drop any reasoning tree for this file (registry + disk cache)
+            if self._remove_tree_for(file_path):
+                removed_count += 1
+
             if removed_count > 0:
                 # Log successful file removal
                 observability.observe(
@@ -1154,6 +1523,17 @@ class KnowledgeHandler:
             if config.get("path")
         }
 
+        # Tree-indexed sources live in the tree registry, not WorkingMemory.
+        # Registry keys are per-file paths, so a tree belonging to a file
+        # inside a configured directory source is still "covered".
+        for tree_path in self._tree_indexes:
+            covered = any(
+                tree_path == cfg or tree_path.startswith(cfg.rstrip(os.sep) + os.sep)
+                for cfg in config_sources
+            )
+            if not covered:
+                loaded_sources.add(tree_path)
+
         # Find deleted sources
         deleted_sources = loaded_sources - config_sources
         cleanup_count = 0
@@ -1170,6 +1550,9 @@ class KnowledgeHandler:
             removed_count = self.working_memory.remove_by_metadata(
                 metadata_filter={"source": deleted_source}, namespace=DOCUMENT_NAMESPACE
             )
+
+            # 1b. Remove any reasoning tree (registry + disk cache)
+            self._remove_tree_for(deleted_source)
 
             # 2. Remove cache file
             cache_file = self._get_cache_file_path(deleted_source)
