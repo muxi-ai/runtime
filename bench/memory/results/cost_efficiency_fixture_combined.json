@@ -1,0 +1,165 @@
+{
+  "benchmark": "cost_efficiency",
+  "config": {
+    "concurrency": 8,
+    "fetch_limit": 25,
+    "formation_yaml": "bench/memory/formation/formation.yaml",
+    "max_embed_chars": 6000,
+    "mode": "combined",
+    "qa": true,
+    "queries": 200,
+    "text_model": "openai/gpt-4o-mini",
+    "warmup": 5,
+    "working_embedding_model": "local/nomic-ai/nomic-embed-text-v1.5"
+  },
+  "dataset": {
+    "cases": 3,
+    "fixture": true,
+    "path": "bench/memory/fixtures/structured_recall_sample.json",
+    "questions": 30,
+    "sessions": 36
+  },
+  "k": 5,
+  "metrics": {
+    "context_tokens": {
+      "estimated_avg_per_query": 154.0,
+      "k": 5,
+      "note": "chars/4 estimate over the top-5 excerpts"
+    },
+    "cost": {
+      "note": "list-price projection of the measured answer-call tokens; includes judge overhead in tokens_by_model but not in per-query cost when the judge shares the text model (they are averaged together - treat as an upper bound)",
+      "per_1000_queries_usd": 0.105,
+      "per_query_usd": 0.000105,
+      "scenarios": {
+        "heavy": {
+          "monthly_usd": 0.63,
+          "queries_per_day": 200,
+          "queries_per_month": 6000
+        },
+        "light": {
+          "monthly_usd": 0.0315,
+          "queries_per_day": 10,
+          "queries_per_month": 300
+        },
+        "moderate": {
+          "monthly_usd": 0.1575,
+          "queries_per_day": 50,
+          "queries_per_month": 1500
+        }
+      }
+    },
+    "footprint": {
+      "bytes_per_ingested_turn": 9778.2,
+      "embedding_dimension": 768,
+      "ingested_turns": 204,
+      "persistent_db_bytes": 1368064,
+      "working_memory_items": 204,
+      "working_memory_vector_bytes": 626688
+    },
+    "ingest": {
+      "seconds": 20.96,
+      "turns": 204,
+      "turns_per_second": 9.7
+    },
+    "latency": {
+      "retrieval": {
+        "max_ms": 893.58,
+        "mean_ms": 320.99,
+        "min_ms": 135.01,
+        "p50_ms": 302.6,
+        "p95_ms": 531.69,
+        "p99_ms": 654.85,
+        "samples": 200
+      }
+    },
+    "load": {
+      "concurrency": 8,
+      "errors": 0,
+      "queries": 200,
+      "queries_per_second": 24.7,
+      "seconds": 8.11,
+      "warmup_queries": 5
+    },
+    "pricing": {
+      "source": "bench/memory/pricing.json",
+      "usd_per_mtok": {
+        "anthropic/claude-3-5-haiku-20241022": {
+          "in": 0.8,
+          "out": 4.0
+        },
+        "openai/gpt-4.1-mini": {
+          "in": 0.4,
+          "out": 1.6
+        },
+        "openai/gpt-4.1-nano": {
+          "in": 0.1,
+          "out": 0.4
+        },
+        "openai/gpt-4o": {
+          "in": 2.5,
+          "out": 10.0
+        },
+        "openai/gpt-4o-mini": {
+          "in": 0.15,
+          "out": 0.6
+        },
+        "openai/text-embedding-3-large": {
+          "in": 0.13,
+          "out": 0.0
+        },
+        "openai/text-embedding-3-small": {
+          "in": 0.02,
+          "out": 0.0
+        }
+      }
+    },
+    "qa": {
+      "accuracy": 0.8,
+      "answer_tokens": 13741,
+      "correct": 24,
+      "errors": 0,
+      "note": "answer_tokens covers the answer calls of fully scored questions only (retrieval context + question + generation); judge calls are measurement overhead and excluded, and questions whose answer or judge call failed are excluded from every tally (see errors)",
+      "questions": 30,
+      "tokens_per_accurate_recall": 572.5
+    }
+  },
+  "mode": "combined",
+  "results": [],
+  "run": {
+    "git_commit": "01647a226d9fc4b44dc7931357188b1d0061f7d9",
+    "python": "3.11.13",
+    "started_at": "2026-07-09T22:01:59Z",
+    "wall_seconds": 102.41
+  },
+  "schema_version": "1.0",
+  "usage": {
+    "cost": {
+      "estimated_usd": 0.003166,
+      "note": "List-price estimate for reporting only; local/* models are free.",
+      "per_model_usd": {
+        "openai/gpt-4o-mini": 0.003166
+      },
+      "unpriced_models": []
+    },
+    "ingested_turns": 204,
+    "llm_requests": 60,
+    "searches": 235,
+    "tokens": {
+      "in": 18441,
+      "out": 666,
+      "total": 19107,
+      "total_cached": 0
+    },
+    "tokens_by_model": {
+      "openai/gpt-4o-mini": [
+        19107,
+        18441,
+        666,
+        0,
+        0,
+        0
+      ]
+    },
+    "truncated_turns": 0
+  }
+}

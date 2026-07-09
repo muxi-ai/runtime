@@ -60,7 +60,15 @@ class Session:
 
 @dataclass(frozen=True)
 class Question:
-    """A benchmark question with its ground-truth evidence."""
+    """A benchmark question with its ground-truth evidence.
+
+    The trailing optional fields are used by the Tier 2 structured
+    recall dataset: ``exact_strings`` (verbatim tokens - emails, codes,
+    ids - whose presence in retrieved context is scored separately) and
+    ``date_from``/``date_to`` (the date window for narrative questions,
+    used by the structured retrieval mode's Captain's-Log lookup).
+    Tier 1 loaders leave them at their defaults.
+    """
 
     question_id: str
     question: str
@@ -70,6 +78,9 @@ class Question:
     evidence_turn_ids: Tuple[str, ...] = ()
     question_date: Optional[str] = None
     is_abstention: bool = False
+    exact_strings: Tuple[str, ...] = ()
+    date_from: Optional[str] = None
+    date_to: Optional[str] = None
 
 
 @dataclass(frozen=True)
