@@ -1,6 +1,7 @@
 """Client route modules."""
 
 from . import (
+    artifacts,
     chat,
     credentials,
     events,
@@ -15,6 +16,7 @@ from . import (
 )
 
 __all__ = [
+    "artifacts",
     "chat",
     "credentials",
     "events",

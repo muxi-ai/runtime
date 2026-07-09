@@ -29,6 +29,7 @@ class TestParseDefaults:
         assert settings.encryption_enabled is True
         assert settings.retention_policy == "last_accessed"
         assert settings.retention_days == 0  # forever
+        assert settings.max_size_bytes == 50 * 1024 * 1024  # PRD default: 50MB
 
     def test_empty_block_matches_defaults(self):
         assert parse_artifacts_config({}) == parse_artifacts_config(None)
@@ -54,12 +55,14 @@ class TestParseCustomValues:
                 "storage": {"type": "local", "path": "./my-artifacts"},
                 "encryption": {"enabled": False},
                 "retention": {"policy": "last_updated", "duration": 90},
+                "max_size_mb": 10,
             }
         )
         assert settings.storage_path == Path("./my-artifacts")
         assert settings.encryption_enabled is False
         assert settings.retention_policy == "last_updated"
         assert settings.retention_days == 90
+        assert settings.max_size_bytes == 10 * 1024 * 1024
 
     def test_disabled(self):
         assert parse_artifacts_config({"enabled": False}).enabled is False
@@ -107,6 +110,18 @@ class TestParseRejections:
     def test_boolean_duration_rejected(self):
         with pytest.raises(ValueError, match="artifacts.retention.duration"):
             parse_artifacts_config({"retention": {"duration": True}})
+
+    def test_zero_max_size_rejected(self):
+        with pytest.raises(ValueError, match="artifacts.max_size_mb"):
+            parse_artifacts_config({"max_size_mb": 0})
+
+    def test_non_integer_max_size_rejected(self):
+        with pytest.raises(ValueError, match="artifacts.max_size_mb"):
+            parse_artifacts_config({"max_size_mb": "50"})
+
+    def test_boolean_max_size_rejected(self):
+        with pytest.raises(ValueError, match="artifacts.max_size_mb"):
+            parse_artifacts_config({"max_size_mb": True})
 
 
 class TestFormationValidatorIntegration:

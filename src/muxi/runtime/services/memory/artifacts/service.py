@@ -31,11 +31,18 @@
 # Default posture (PRD "Formation Schema"): artifact capture is ON for
 # any formation with persistent memory. No ``artifacts`` block means
 # local storage in ``./artifacts`` next to the formation, encryption
-# enabled with auto-derived keys, and no retention limit. ``generate_file``
-# behavior is unchanged apart from this persistence side effect.
+# enabled with auto-derived keys, no retention limit, and a 50MB
+# ``max_size_mb`` capture cap. ``generate_file`` behavior is unchanged
+# apart from this persistence side effect.
 #
-# Phase 2 (manifest injection, retrieval tools, semantic search) is NOT
-# built here -- it waits on the memory-revamp Knowledge Index layer.
+# Phase 2 (use the data) adds the retrieval surface on this service:
+# the manifest listing the Knowledge Index renders (list_manifest /
+# count_artifacts), metadata + version-chain reads backing the built-in
+# get_artifact / get_artifact_content / get_artifact_history tools and
+# the /v1/artifacts REST reads, and checksum dedup at capture (identical
+# re-captures of a chain head are skipped, not versioned). Semantic
+# search over artifact summaries stays deferred to the embedding-platform
+# phase -- capture-time summaries are deterministic and unembedded.
 # =============================================================================
 
 import asyncio
@@ -71,6 +78,10 @@ DEFAULT_STORAGE_PATH = "./artifacts"
 DEFAULT_RETENTION_POLICY = RETENTION_POLICY_LAST_ACCESSED
 DEFAULT_RETENTION_DAYS = 0  # forever
 
+# Maximum captured artifact size (PRD open question 1: configurable
+# ``max_size_mb``, default 50MB matching the existing max_file_size_bytes).
+DEFAULT_MAX_SIZE_MB = 50
+
 # Retention sweep cadence. Expiry is day-granular (duration is in days),
 # so an hourly sweep keeps deletion timely without meaningful load.
 RETENTION_SWEEP_INTERVAL_SECONDS = 3600.0
@@ -99,6 +110,7 @@ class ArtifactMemorySettings:
     encryption_enabled: bool
     retention_policy: str
     retention_days: int
+    max_size_bytes: int
 
 
 def parse_artifacts_config(
@@ -160,6 +172,12 @@ def parse_artifacts_config(
     if retention_days < 0:
         raise ValueError("artifacts.retention.duration must be >= 0 (0 = forever)")
 
+    max_size_mb = config.get("max_size_mb", DEFAULT_MAX_SIZE_MB)
+    if isinstance(max_size_mb, bool) or not isinstance(max_size_mb, int):
+        raise ValueError("artifacts.max_size_mb must be an integer (megabytes)")
+    if max_size_mb <= 0:
+        raise ValueError("artifacts.max_size_mb must be > 0")
+
     return ArtifactMemorySettings(
         enabled=enabled,
         storage_type=storage_type,
@@ -167,6 +185,7 @@ def parse_artifacts_config(
         encryption_enabled=encryption_enabled,
         retention_policy=retention_policy,
         retention_days=retention_days,
+        max_size_bytes=max_size_mb * 1024 * 1024,
     )
 
 
@@ -293,6 +312,11 @@ class ArtifactMemoryService:
         if raw is None or len(raw) == 0:
             return self._skip(user_id, name, "empty_content")
 
+        # Size guard (PRD open question 1): oversized content is skipped,
+        # not truncated -- a partial artifact would be worse than none.
+        if len(raw) > self.settings.max_size_bytes:
+            return self._skip(user_id, name, "exceeds_max_size")
+
         # Security guard (PRD): never persist content that carries secret
         # interpolation references.
         if content_type.startswith("text/") or content_type in (
@@ -306,17 +330,27 @@ class ArtifactMemoryService:
             except Exception:
                 pass
 
-        public_id = get_default_nanoid()
         key = await self._get_user_key(user_id)
-        blob, compressed_bytes = seal_content(raw, key)
-        storage_ref = self.blob_store.ref_for(user_id, public_id)
-        self.blob_store.write(storage_ref, blob)
 
-        try:
-            # Same-chain captures are serialized in-process so concurrent
-            # background tasks cannot both extend from the same head; the
-            # partial unique chain-head index backstops other processes.
-            async with self._chain_lock(user_id, name):
+        # Same-chain captures are serialized in-process so concurrent
+        # background tasks cannot both extend from the same head; the
+        # partial unique chain-head index backstops other processes. The
+        # dedup check and blob write sit inside the lock so a duplicate
+        # decision is always made against the settled chain head.
+        async with self._chain_lock(user_id, name):
+            # Dedup (PRD open question 2): an identical re-capture of the
+            # current head is skipped instead of minting a redundant
+            # version. Compared on raw content (the encrypted blob's
+            # checksum changes with every random nonce).
+            if await self._duplicates_chain_head(user_id, name, raw, key):
+                return self._skip(user_id, name, "duplicate_content")
+
+            public_id = get_default_nanoid()
+            blob, compressed_bytes = seal_content(raw, key)
+            storage_ref = self.blob_store.ref_for(user_id, public_id)
+            self.blob_store.write(storage_ref, blob)
+
+            try:
                 row = await self.storage.save_artifact(
                     user_id=user_id,
                     public_id=public_id,
@@ -332,30 +366,32 @@ class ArtifactMemoryService:
                     conversation_id=conversation_id,
                     expires_at=self._compute_expiry(),
                 )
-        except Exception:
-            # Compensating cleanup: without a metadata row the blob is
-            # unlocatable (random public_id) and invisible to the retention
-            # sweep, so remove it before surfacing the original failure.
-            # Best-effort -- a cleanup failure must not mask that error.
-            try:
-                self.blob_store.delete(storage_ref)
-            except Exception as cleanup_error:
-                observability.observe(
-                    event_type=observability.ConversationEvents.MEMORY_ARTIFACT_CAPTURE_FAILED,
-                    level=observability.EventLevel.WARNING,
-                    data={
-                        "user_id": user_id,
-                        "artifact_name": name,
-                        "storage_ref": storage_ref,
-                        "reason": "orphaned_blob_cleanup_failed",
-                        "error": str(cleanup_error),
-                        "error_type": type(cleanup_error).__name__,
-                    },
-                    description=(
-                        f"Could not remove orphaned artifact blob {storage_ref}: {cleanup_error}"
-                    ),
-                )
-            raise
+            except Exception:
+                # Compensating cleanup: without a metadata row the blob is
+                # unlocatable (random public_id) and invisible to the
+                # retention sweep, so remove it before surfacing the
+                # original failure. Best-effort -- a cleanup failure must
+                # not mask that error.
+                try:
+                    self.blob_store.delete(storage_ref)
+                except Exception as cleanup_error:
+                    observability.observe(
+                        event_type=observability.ConversationEvents.MEMORY_ARTIFACT_CAPTURE_FAILED,
+                        level=observability.EventLevel.WARNING,
+                        data={
+                            "user_id": user_id,
+                            "artifact_name": name,
+                            "storage_ref": storage_ref,
+                            "reason": "orphaned_blob_cleanup_failed",
+                            "error": str(cleanup_error),
+                            "error_type": type(cleanup_error).__name__,
+                        },
+                        description=(
+                            f"Could not remove orphaned artifact blob {storage_ref}: "
+                            f"{cleanup_error}"
+                        ),
+                    )
+                raise
 
         await self._record_saved_event(row)
 
@@ -375,6 +411,27 @@ class ArtifactMemoryService:
             description=f"Captured artifact {name!r} v{row['version']} into artifact memory",
         )
         return row
+
+    async def _duplicates_chain_head(
+        self, user_id: str, name: str, raw: bytes, key: Optional[bytes]
+    ) -> bool:
+        """Whether ``raw`` is byte-identical to the current chain head.
+
+        The stored checksum covers the *encrypted* blob (a fresh random
+        nonce changes it on every capture), so identity is decided on the
+        decrypted content -- gated on a size match first so the head blob
+        is only opened when a duplicate is actually plausible. Fails open:
+        any error (missing blob, corrupt head) means "not a duplicate" and
+        the capture proceeds.
+        """
+        try:
+            head = await self.storage.get_latest_by_name(user_id, name)
+            if head is None or head["size_bytes"] != len(raw):
+                return False
+            head_blob = self.blob_store.read(head["storage_ref"])
+            return open_content(head_blob, key) == raw
+        except Exception:
+            return False
 
     @asynccontextmanager
     async def _chain_lock(self, user_id: str, name: str):
@@ -522,12 +579,48 @@ class ArtifactMemoryService:
             await self.storage.set_derived_event(row["id"], event["id"])
 
     # ------------------------------------------------------------------
-    # Reads (round-trip verification / future retrieval surface)
+    # Reads (Phase 2 retrieval surface: manifest, tools, REST)
     # ------------------------------------------------------------------
 
     async def list_artifacts(self, user_id: Any, **kwargs) -> List[Dict[str, Any]]:
         """List a user's artifacts (see storage.list_artifacts)."""
         return await self.storage.list_artifacts(str(user_id), **kwargs)
+
+    async def count_artifacts(self, user_id: Any) -> int:
+        """Count a user's live latest artifacts (manifest total)."""
+        return await self.storage.count_artifacts(str(user_id))
+
+    async def list_manifest(self, user_id: Any, limit: int) -> List[Dict[str, Any]]:
+        """The manifest listing: latest artifacts, most recently accessed
+        first, capped at ``limit`` (PRD 2.1)."""
+        return await self.storage.list_artifacts(
+            str(user_id), limit=limit, order_by_last_accessed=True
+        )
+
+    async def get_metadata(self, user_id: Any, public_id: str) -> Optional[Dict[str, Any]]:
+        """One artifact's metadata row (user-scoped), or None. Does not
+        touch ``last_accessed_at`` -- only content reads count as access."""
+        return await self.storage.get_by_public_id(str(user_id), public_id)
+
+    async def get_history(self, user_id: Any, public_id: str) -> List[Dict[str, Any]]:
+        """The full version chain containing ``public_id`` (PRD 2.4),
+        newest version first. Empty when the id is unknown for this user."""
+        return await self.storage.get_version_chain(str(user_id), public_id)
+
+    async def resolve_version(
+        self, user_id: Any, public_id: str, version: Optional[int] = None
+    ) -> Optional[Dict[str, Any]]:
+        """Resolve ``public_id`` (any version in a chain) to one row.
+
+        ``version=None`` returns the row for the given id itself;
+        a numbered version walks the chain to that version (PRD 2.3:
+        ``get_artifact_content(id=..., version=2)``). None when the id or
+        the requested version does not exist for this user.
+        """
+        if version is None:
+            return await self.get_metadata(user_id, public_id)
+        chain = await self.get_history(user_id, public_id)
+        return next((row for row in chain if row["version"] == version), None)
 
     async def read_content(self, user_id: Any, public_id: str) -> bytes:
         """

@@ -395,6 +395,48 @@ class RequestAnalyzer:
         return True
 
     @staticmethod
+    def _heuristic_is_artifact_retrieval(user_message: str) -> bool:
+        """
+        Detect whether a request targets the user's OWN stored artifacts
+        (Artifact Memory Phase 2 retrieval).
+
+        Used as a defensive override for the LLM security classifier,
+        which occasionally flags legitimate artifact retrieval as
+        information extraction or credential fishing: artifact ids are
+        opaque Nano ID tokens ("read back artifact 'aB3xY9...'") that can
+        look like secrets, and "show me the exact contents of the stored
+        file" reads like extraction phrasing. The artifact tools are
+        user-scoped by construction (a caller can only ever read their
+        own artifacts), so retrieval requests cannot leak system or
+        cross-user state.
+
+        Precision-first: returns True only for explicit built-in tool
+        mentions (get_artifact / get_artifact_content /
+        get_artifact_history) or "artifact" combined with a retrieval or
+        history verb. Ambiguous messages leave the LLM classification
+        standing.
+        """
+        import re
+
+        if not user_message or not user_message.strip():
+            return False
+
+        msg = user_message.lower()
+
+        # Explicit built-in tool mentions are unambiguous.
+        if re.search(r"\bget_artifact(?:_content|_history)?\b", msg):
+            return True
+
+        # "artifact" + a retrieval / history anchor.
+        if "artifact" in msg and re.search(
+            r"\b(?:read|retrieve|fetch|show|open|display|list|contents?|versions?|history)\b",
+            msg,
+        ):
+            return True
+
+        return False
+
+    @staticmethod
     def _heuristic_detect_scheduler_query(message_lower: str) -> bool:
         """Detect scheduler query intent via keyword patterns."""
         import re
@@ -468,6 +510,33 @@ class RequestAnalyzer:
                     },
                     description=(
                         "LLM flagged user-self-recall as information_extraction; "
+                        "heuristic override downgraded to non-threat"
+                    ),
+                )
+                analysis.is_security_threat = False
+                analysis.threat_type = None
+
+            # Same defensive posture for artifact retrieval (Artifact
+            # Memory Phase 2): opaque artifact ids read like secrets and
+            # "show the stored file's exact contents" reads like
+            # extraction, so the classifier false-positives on the
+            # user-scoped artifact tools. Retrieval of one's own stored
+            # artifacts is normal memory access.
+            if (
+                analysis.is_security_threat
+                and analysis.threat_type in ("information_extraction", "credential_fishing")
+                and self._heuristic_is_artifact_retrieval(user_message)
+            ):
+                observability.observe(
+                    event_type=observability.ConversationEvents.WORKFLOW_ANALYSIS_FAILED,
+                    level=observability.EventLevel.INFO,
+                    data={
+                        "reason": "artifact_retrieval_override",
+                        "original_threat_type": analysis.threat_type,
+                        "message_preview": user_message[:120],
+                    },
+                    description=(
+                        "LLM flagged artifact retrieval as a security threat; "
                         "heuristic override downgraded to non-threat"
                     ),
                 )
