@@ -185,7 +185,7 @@
   "results": [
     {
       "category": "kg_relationship",
-      "elapsed_seconds": 2.376,
+      "elapsed_seconds": 1.556,
       "error": null,
       "evidence_session_ids": [
         "seq_personal_assistant_002_s02"
@@ -209,7 +209,7 @@
     },
     {
       "category": "kg_relationship",
-      "elapsed_seconds": 2.662,
+      "elapsed_seconds": 2.097,
       "error": null,
       "evidence_session_ids": [
         "seq_personal_assistant_002_s04"
@@ -241,7 +241,7 @@
     },
     {
       "category": "temporal_validity",
-      "elapsed_seconds": 3.535,
+      "elapsed_seconds": 2.452,
       "error": null,
       "evidence_session_ids": [
         "seq_personal_assistant_002_s01"
@@ -265,7 +265,7 @@
       ],
       "retrieved_turn_ids": [
         "seq_personal_assistant_002_s01:2",
-        "seq_personal_assistant_002_s01:log",
+        "seq_personal_assistant_002_s01:log:2026-01-27",
         "seq_personal_assistant_002_s07:4",
         "seq_personal_assistant_002_s10:4",
         "seq_personal_assistant_002_s02:2",
@@ -274,7 +274,7 @@
     },
     {
       "category": "temporal_validity",
-      "elapsed_seconds": 3.471,
+      "elapsed_seconds": 1.861,
       "error": null,
       "evidence_session_ids": [
         "seq_personal_assistant_002_s07"
@@ -306,7 +306,7 @@
     },
     {
       "category": "narrative_recall",
-      "elapsed_seconds": 2.967,
+      "elapsed_seconds": 2.246,
       "error": null,
       "evidence_session_ids": [
         "seq_personal_assistant_002_s04"
@@ -323,12 +323,12 @@
         "seq_personal_assistant_002_s04"
       ],
       "retrieved_turn_ids": [
-        "seq_personal_assistant_002_s04:log"
+        "seq_personal_assistant_002_s04:log:2026-02-02"
       ]
     },
     {
       "category": "narrative_recall",
-      "elapsed_seconds": 3.128,
+      "elapsed_seconds": 2.183,
       "error": null,
       "evidence_session_ids": [
         "seq_personal_assistant_002_s07"
@@ -345,12 +345,12 @@
         "seq_personal_assistant_002_s07"
       ],
       "retrieved_turn_ids": [
-        "seq_personal_assistant_002_s07:log"
+        "seq_personal_assistant_002_s07:log:2026-02-08"
       ]
     },
     {
       "category": "cross_agent",
-      "elapsed_seconds": 2.869,
+      "elapsed_seconds": 1.946,
       "error": null,
       "evidence_session_ids": [
         "seq_personal_assistant_002_s10"
@@ -374,7 +374,7 @@
     },
     {
       "category": "cross_agent",
-      "elapsed_seconds": 2.375,
+      "elapsed_seconds": 3.201,
       "error": null,
       "evidence_session_ids": [
         "seq_personal_assistant_002_s10"
@@ -400,7 +400,7 @@
     },
     {
       "category": "contradiction_detection",
-      "elapsed_seconds": 3.05,
+      "elapsed_seconds": 2.776,
       "error": null,
       "evidence_session_ids": [
         "seq_personal_assistant_002_s02",
@@ -429,7 +429,7 @@
     },
     {
       "category": "contradiction_detection",
-      "elapsed_seconds": 2.723,
+      "elapsed_seconds": 1.94,
       "error": null,
       "evidence_session_ids": [
         "seq_personal_assistant_002_s01",
@@ -461,7 +461,7 @@
     },
     {
       "category": "kg_relationship",
-      "elapsed_seconds": 2.426,
+      "elapsed_seconds": 1.943,
       "error": null,
       "evidence_session_ids": [
         "seq_sales_ops_001_s01"
@@ -491,7 +491,7 @@
     },
     {
       "category": "kg_relationship",
-      "elapsed_seconds": 2.344,
+      "elapsed_seconds": 1.416,
       "error": null,
       "evidence_session_ids": [
         "seq_sales_ops_001_s07"
@@ -515,7 +515,7 @@
     },
     {
       "category": "temporal_validity",
-      "elapsed_seconds": 2.699,
+      "elapsed_seconds": 1.598,
       "error": null,
       "evidence_session_ids": [
         "seq_sales_ops_001_s01"
@@ -539,7 +539,7 @@
       ],
       "retrieved_turn_ids": [
         "seq_sales_ops_001_s01:2",
-        "seq_sales_ops_001_s01:log",
+        "seq_sales_ops_001_s01:log:2026-03-04",
         "seq_sales_ops_001_s07:4",
         "seq_sales_ops_001_s10:4",
         "seq_sales_ops_001_s02:2",
@@ -548,7 +548,7 @@
     },
     {
       "category": "temporal_validity",
-      "elapsed_seconds": 2.217,
+      "elapsed_seconds": 1.576,
       "error": null,
       "evidence_session_ids": [
         "seq_sales_ops_001_s07"
@@ -580,7 +580,7 @@
     },
     {
       "category": "narrative_recall",
-      "elapsed_seconds": 2.28,
+      "elapsed_seconds": 1.402,
       "error": null,
       "evidence_session_ids": [
         "seq_sales_ops_001_s07"
@@ -597,12 +597,12 @@
         "seq_sales_ops_001_s07"
       ],
       "retrieved_turn_ids": [
-        "seq_sales_ops_001_s07:log"
+        "seq_sales_ops_001_s07:log:2026-03-16"
       ]
     },
     {
       "category": "narrative_recall",
-      "elapsed_seconds": 1.828,
+      "elapsed_seconds": 0.74,
       "error": null,
       "evidence_session_ids": [
         "seq_sales_ops_001_s07"
@@ -619,12 +619,12 @@
         "seq_sales_ops_001_s07"
       ],
       "retrieved_turn_ids": [
-        "seq_sales_ops_001_s07:log"
+        "seq_sales_ops_001_s07:log:2026-03-16"
       ]
     },
     {
       "category": "cross_agent",
-      "elapsed_seconds": 1.931,
+      "elapsed_seconds": 1.488,
       "error": null,
       "evidence_session_ids": [
         "seq_sales_ops_001_s03"
@@ -648,7 +648,7 @@
     },
     {
       "category": "cross_agent",
-      "elapsed_seconds": 1.985,
+      "elapsed_seconds": 1.68,
       "error": null,
       "evidence_session_ids": [
         "seq_sales_ops_001_s10"
@@ -674,7 +674,7 @@
     },
     {
       "category": "contradiction_detection",
-      "elapsed_seconds": 2.133,
+      "elapsed_seconds": 1.501,
       "error": null,
       "evidence_session_ids": [
         "seq_sales_ops_001_s01",
@@ -706,7 +706,7 @@
     },
     {
       "category": "contradiction_detection",
-      "elapsed_seconds": 2.469,
+      "elapsed_seconds": 2.044,
       "error": null,
       "evidence_session_ids": [
         "seq_sales_ops_001_s02",
@@ -735,7 +735,7 @@
     },
     {
       "category": "kg_relationship",
-      "elapsed_seconds": 2.687,
+      "elapsed_seconds": 2.582,
       "error": null,
       "evidence_session_ids": [
         "seq_software_team_000_s02"
@@ -764,7 +764,7 @@
     },
     {
       "category": "kg_relationship",
-      "elapsed_seconds": 2.144,
+      "elapsed_seconds": 1.401,
       "error": null,
       "evidence_session_ids": [
         "seq_software_team_000_s07"
@@ -788,7 +788,7 @@
     },
     {
       "category": "temporal_validity",
-      "elapsed_seconds": 2.458,
+      "elapsed_seconds": 1.915,
       "error": null,
       "evidence_session_ids": [
         "seq_software_team_000_s01"
@@ -812,7 +812,7 @@
       ],
       "retrieved_turn_ids": [
         "seq_software_team_000_s01:2",
-        "seq_software_team_000_s01:log",
+        "seq_software_team_000_s01:log:2026-02-27",
         "seq_software_team_000_s07:4",
         "seq_software_team_000_s10:4",
         "seq_software_team_000_s02:2",
@@ -821,7 +821,7 @@
     },
     {
       "category": "temporal_validity",
-      "elapsed_seconds": 3.138,
+      "elapsed_seconds": 1.65,
       "error": null,
       "evidence_session_ids": [
         "seq_software_team_000_s07"
@@ -853,7 +853,7 @@
     },
     {
       "category": "narrative_recall",
-      "elapsed_seconds": 2.349,
+      "elapsed_seconds": 1.898,
       "error": null,
       "evidence_session_ids": [
         "seq_software_team_000_s04"
@@ -870,12 +870,12 @@
         "seq_software_team_000_s04"
       ],
       "retrieved_turn_ids": [
-        "seq_software_team_000_s04:log"
+        "seq_software_team_000_s04:log:2026-03-05"
       ]
     },
     {
       "category": "narrative_recall",
-      "elapsed_seconds": 0.932,
+      "elapsed_seconds": 0.719,
       "error": null,
       "evidence_session_ids": [
         "seq_software_team_000_s04"
@@ -892,12 +892,12 @@
         "seq_software_team_000_s04"
       ],
       "retrieved_turn_ids": [
-        "seq_software_team_000_s04:log"
+        "seq_software_team_000_s04:log:2026-03-05"
       ]
     },
     {
       "category": "cross_agent",
-      "elapsed_seconds": 3.794,
+      "elapsed_seconds": 1.626,
       "error": null,
       "evidence_session_ids": [
         "seq_software_team_000_s06"
@@ -923,7 +923,7 @@
     },
     {
       "category": "cross_agent",
-      "elapsed_seconds": 1.792,
+      "elapsed_seconds": 3.735,
       "error": null,
       "evidence_session_ids": [
         "seq_software_team_000_s03"
@@ -947,7 +947,7 @@
     },
     {
       "category": "contradiction_detection",
-      "elapsed_seconds": 2.588,
+      "elapsed_seconds": 1.583,
       "error": null,
       "evidence_session_ids": [
         "seq_software_team_000_s02",
@@ -976,7 +976,7 @@
     },
     {
       "category": "contradiction_detection",
-      "elapsed_seconds": 2.181,
+      "elapsed_seconds": 1.517,
       "error": null,
       "evidence_session_ids": [
         "seq_software_team_000_s01",
@@ -1013,10 +1013,10 @@
       "failed": 0,
       "skipped": 0
     },
-    "git_commit": "9a8d5b2f3aa4cca3030a36f3db939484603b97a9",
+    "git_commit": "01647a226d9fc4b44dc7931357188b1d0061f7d9",
     "python": "3.11.13",
-    "started_at": "2026-07-09T17:57:53Z",
-    "wall_seconds": 104.78
+    "started_at": "2026-07-09T21:59:00Z",
+    "wall_seconds": 75.89
   },
   "schema_version": "1.0",
   "usage": {

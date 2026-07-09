@@ -59,7 +59,7 @@
           "questions": 6
         },
         "narrative_recall": {
-          "accuracy": 0.6666666666666666,
+          "accuracy": 0.5,
           "questions": 6
         },
         "temporal_validity": {
@@ -68,7 +68,7 @@
         }
       },
       "overall": {
-        "accuracy": 0.8333333333333334,
+        "accuracy": 0.8,
         "questions": 30
       }
     },
@@ -157,7 +157,7 @@
   "results": [
     {
       "category": "kg_relationship",
-      "elapsed_seconds": 3.963,
+      "elapsed_seconds": 2.942,
       "error": null,
       "evidence_session_ids": [
         "seq_personal_assistant_002_s02"
@@ -213,7 +213,7 @@
     },
     {
       "category": "kg_relationship",
-      "elapsed_seconds": 2.705,
+      "elapsed_seconds": 2.537,
       "error": null,
       "evidence_session_ids": [
         "seq_personal_assistant_002_s04"
@@ -269,7 +269,7 @@
     },
     {
       "category": "temporal_validity",
-      "elapsed_seconds": 2.599,
+      "elapsed_seconds": 2.504,
       "error": null,
       "evidence_session_ids": [
         "seq_personal_assistant_002_s01"
@@ -324,7 +324,7 @@
     },
     {
       "category": "temporal_validity",
-      "elapsed_seconds": 2.802,
+      "elapsed_seconds": 2.955,
       "error": null,
       "evidence_session_ids": [
         "seq_personal_assistant_002_s07"
@@ -378,7 +378,7 @@
     },
     {
       "category": "narrative_recall",
-      "elapsed_seconds": 2.41,
+      "elapsed_seconds": 3.875,
       "error": null,
       "evidence_session_ids": [
         "seq_personal_assistant_002_s04"
@@ -433,7 +433,7 @@
     },
     {
       "category": "narrative_recall",
-      "elapsed_seconds": 3.587,
+      "elapsed_seconds": 3.255,
       "error": null,
       "evidence_session_ids": [
         "seq_personal_assistant_002_s07"
@@ -442,7 +442,7 @@
       "exact_string_rank": null,
       "exact_strings": [],
       "is_abstention": false,
-      "qa_answer": "On 2026-02-08, the main decision made was to switch to Terraform for the conference trip, as recommended by Noor Silva, due to the simplicity of the migration path from the current stack.",
+      "qa_answer": "On 2026-02-08, the main decision made was to switch to Terraform for the conference trip, recommended by Noor Silva, due to the simplest migration path from the current stack.",
       "qa_correct": true,
       "question_id": "seq_personal_assistant_002_q006_narrative_recall",
       "question_type": "narrative_recall",
@@ -476,8 +476,8 @@
         "seq_personal_assistant_002_s10:1",
         "seq_personal_assistant_002_s03:3",
         "seq_personal_assistant_002_s04:4",
-        "seq_personal_assistant_002_s02:1",
         "seq_personal_assistant_002_s09:3",
+        "seq_personal_assistant_002_s02:1",
         "seq_personal_assistant_002_s06:3",
         "seq_personal_assistant_002_s10:3",
         "seq_personal_assistant_002_s09:1",
@@ -488,7 +488,7 @@
     },
     {
       "category": "cross_agent",
-      "elapsed_seconds": 4.848,
+      "elapsed_seconds": 2.31,
       "error": null,
       "evidence_session_ids": [
         "seq_personal_assistant_002_s10"
@@ -544,7 +544,7 @@
     },
     {
       "category": "cross_agent",
-      "elapsed_seconds": 3.719,
+      "elapsed_seconds": 2.886,
       "error": null,
       "evidence_session_ids": [
         "seq_personal_assistant_002_s10"
@@ -602,7 +602,7 @@
     },
     {
       "category": "contradiction_detection",
-      "elapsed_seconds": 3.716,
+      "elapsed_seconds": 3.29,
       "error": null,
       "evidence_session_ids": [
         "seq_personal_assistant_002_s02",
@@ -615,7 +615,7 @@
       "exact_string_rank": null,
       "exact_strings": [],
       "is_abstention": false,
-      "qa_answer": "There is conflicting information about Dario Alvarez's employment. You mentioned he is the engineering lead at Quill Software, but there was also a statement suggesting he works at Northwind Analytics.",
+      "qa_answer": "There is conflicting information about Dario Alvarez's employment. You mentioned he is the engineering lead at Quill Software, but there is also a claim that he works at Northwind Analytics.",
       "qa_correct": true,
       "question_id": "seq_personal_assistant_002_q009_contradiction_detection",
       "question_type": "contradiction_detection",
@@ -661,7 +661,7 @@
     },
     {
       "category": "contradiction_detection",
-      "elapsed_seconds": 2.679,
+      "elapsed_seconds": 2.715,
       "error": null,
       "evidence_session_ids": [
         "seq_personal_assistant_002_s01",
@@ -717,7 +717,7 @@
     },
     {
       "category": "kg_relationship",
-      "elapsed_seconds": 3.148,
+      "elapsed_seconds": 4.202,
       "error": null,
       "evidence_session_ids": [
         "seq_sales_ops_001_s01"
@@ -774,7 +774,7 @@
     },
     {
       "category": "kg_relationship",
-      "elapsed_seconds": 2.55,
+      "elapsed_seconds": 3.91,
       "error": null,
       "evidence_session_ids": [
         "seq_sales_ops_001_s07"
@@ -831,7 +831,7 @@
     },
     {
       "category": "temporal_validity",
-      "elapsed_seconds": 3.383,
+      "elapsed_seconds": 3.224,
       "error": null,
       "evidence_session_ids": [
         "seq_sales_ops_001_s01"
@@ -888,7 +888,7 @@
     },
     {
       "category": "temporal_validity",
-      "elapsed_seconds": 2.741,
+      "elapsed_seconds": 2.682,
       "error": null,
       "evidence_session_ids": [
         "seq_sales_ops_001_s07"
@@ -945,7 +945,7 @@
     },
     {
       "category": "narrative_recall",
-      "elapsed_seconds": 3.071,
+      "elapsed_seconds": 2.871,
       "error": null,
       "evidence_session_ids": [
         "seq_sales_ops_001_s07"
@@ -954,7 +954,7 @@
       "exact_string_rank": null,
       "exact_strings": [],
       "is_abstention": false,
-      "qa_answer": "On 2026-03-16, the projects that saw activity were the renewal campaign, where a decision was made to switch to Temporal based on Malik Petrov's recommendation, and the confirmation of Tomas Lindqvist working at Aster Dynamics.",
+      "qa_answer": "On 2026-03-16, the following projects saw activity: the renewal campaign, where a decision was made to switch to Temporal based on Malik Petrov's recommendation, and the confirmation of Tomas Lindqvist working at Aster Dynamics.",
       "qa_correct": true,
       "question_id": "seq_sales_ops_001_q005_narrative_recall",
       "question_type": "narrative_recall",
@@ -998,7 +998,7 @@
     },
     {
       "category": "narrative_recall",
-      "elapsed_seconds": 4.14,
+      "elapsed_seconds": 3.904,
       "error": null,
       "evidence_session_ids": [
         "seq_sales_ops_001_s07"
@@ -1007,8 +1007,8 @@
       "exact_string_rank": null,
       "exact_strings": [],
       "is_abstention": false,
-      "qa_answer": "On 2026-03-16, the main decisions made were to switch to Temporal for the renewal campaign, recommended by Malik Petrov, and it was noted that this option was the cheapest that met the latency budget. Additionally, a support ticket (TKT-2116-VB) related to the renewal campaign was saved, opened by Malik Petrov.",
-      "qa_correct": true,
+      "qa_answer": "On 2026-03-16, the main decisions made were to switch to Temporal for the renewal campaign, recommended by Malik Petrov, and to pin a meeting to 15:00 UTC, which shifts locally with daylight saving.",
+      "qa_correct": false,
       "question_id": "seq_sales_ops_001_q006_narrative_recall",
       "question_type": "narrative_recall",
       "retrieved_session_ids": [
@@ -1054,7 +1054,7 @@
     },
     {
       "category": "cross_agent",
-      "elapsed_seconds": 4.142,
+      "elapsed_seconds": 2.52,
       "error": null,
       "evidence_session_ids": [
         "seq_sales_ops_001_s03"
@@ -1110,7 +1110,7 @@
     },
     {
       "category": "cross_agent",
-      "elapsed_seconds": 2.982,
+      "elapsed_seconds": 3.514,
       "error": null,
       "evidence_session_ids": [
         "seq_sales_ops_001_s10"
@@ -1168,7 +1168,7 @@
     },
     {
       "category": "contradiction_detection",
-      "elapsed_seconds": 3.111,
+      "elapsed_seconds": 4.16,
       "error": null,
       "evidence_session_ids": [
         "seq_sales_ops_001_s01",
@@ -1227,7 +1227,7 @@
     },
     {
       "category": "contradiction_detection",
-      "elapsed_seconds": 4.392,
+      "elapsed_seconds": 3.136,
       "error": null,
       "evidence_session_ids": [
         "seq_sales_ops_001_s02",
@@ -1285,7 +1285,7 @@
     },
     {
       "category": "kg_relationship",
-      "elapsed_seconds": 2.873,
+      "elapsed_seconds": 1.825,
       "error": null,
       "evidence_session_ids": [
         "seq_software_team_000_s02"
@@ -1342,7 +1342,7 @@
     },
     {
       "category": "kg_relationship",
-      "elapsed_seconds": 3.628,
+      "elapsed_seconds": 2.082,
       "error": null,
       "evidence_session_ids": [
         "seq_software_team_000_s07"
@@ -1399,7 +1399,7 @@
     },
     {
       "category": "temporal_validity",
-      "elapsed_seconds": 3.035,
+      "elapsed_seconds": 2.011,
       "error": null,
       "evidence_session_ids": [
         "seq_software_team_000_s01"
@@ -1410,7 +1410,7 @@
       "exact_string_rank": null,
       "exact_strings": [],
       "is_abstention": false,
-      "qa_answer": "On 2026-02-27, Priya Haddad's role at Sundial Health was marketing strategist.",
+      "qa_answer": "On 2026-02-27, Priya Haddad was the marketing strategist at Sundial Health.",
       "qa_correct": true,
       "question_id": "seq_software_team_000_q003_temporal_validity",
       "question_type": "temporal_validity",
@@ -1456,7 +1456,7 @@
     },
     {
       "category": "temporal_validity",
-      "elapsed_seconds": 2.304,
+      "elapsed_seconds": 2.118,
       "error": null,
       "evidence_session_ids": [
         "seq_software_team_000_s07"
@@ -1513,7 +1513,7 @@
     },
     {
       "category": "narrative_recall",
-      "elapsed_seconds": 4.898,
+      "elapsed_seconds": 2.646,
       "error": null,
       "evidence_session_ids": [
         "seq_software_team_000_s04"
@@ -1569,7 +1569,7 @@
     },
     {
       "category": "narrative_recall",
-      "elapsed_seconds": 4.718,
+      "elapsed_seconds": 2.096,
       "error": null,
       "evidence_session_ids": [
         "seq_software_team_000_s04"
@@ -1625,7 +1625,7 @@
     },
     {
       "category": "cross_agent",
-      "elapsed_seconds": 3.241,
+      "elapsed_seconds": 2.826,
       "error": null,
       "evidence_session_ids": [
         "seq_software_team_000_s06"
@@ -1684,7 +1684,7 @@
     },
     {
       "category": "cross_agent",
-      "elapsed_seconds": 3.096,
+      "elapsed_seconds": 2.341,
       "error": null,
       "evidence_session_ids": [
         "seq_software_team_000_s03"
@@ -1740,7 +1740,7 @@
     },
     {
       "category": "contradiction_detection",
-      "elapsed_seconds": 3.241,
+      "elapsed_seconds": 3.078,
       "error": null,
       "evidence_session_ids": [
         "seq_software_team_000_s02",
@@ -1753,7 +1753,7 @@
       "exact_string_rank": null,
       "exact_strings": [],
       "is_abstention": false,
-      "qa_answer": "There is conflicting information about Noor Moreau's employment. You mentioned they work at Sundial Health, but also noted they might work at Bluepeak Media.",
+      "qa_answer": "There is conflicting information about Noor Moreau's employment. The user stated that Noor Moreau is a marketing strategist at Sundial Health, but later mentioned that Noor actually works at Bluepeak Media.",
       "qa_correct": true,
       "question_id": "seq_software_team_000_q009_contradiction_detection",
       "question_type": "contradiction_detection",
@@ -1797,7 +1797,7 @@
     },
     {
       "category": "contradiction_detection",
-      "elapsed_seconds": 2.978,
+      "elapsed_seconds": 1.899,
       "error": null,
       "evidence_session_ids": [
         "seq_software_team_000_s01",
@@ -1859,18 +1859,18 @@
       "failed": 0,
       "skipped": 0
     },
-    "git_commit": "9a8d5b2f3aa4cca3030a36f3db939484603b97a9",
+    "git_commit": "01647a226d9fc4b44dc7931357188b1d0061f7d9",
     "python": "3.11.13",
-    "started_at": "2026-07-09T17:54:43Z",
-    "wall_seconds": 168.93
+    "started_at": "2026-07-09T21:56:23Z",
+    "wall_seconds": 150.27
   },
   "schema_version": "1.0",
   "usage": {
     "cost": {
-      "estimated_usd": 0.00318,
+      "estimated_usd": 0.003165,
       "note": "List-price estimate for reporting only; local/* models are free.",
       "per_model_usd": {
-        "openai/gpt-4o-mini": 0.00318
+        "openai/gpt-4o-mini": 0.003165
       },
       "unpriced_models": []
     },
@@ -1878,16 +1878,16 @@
     "llm_requests": 60,
     "searches": 30,
     "tokens": {
-      "in": 18461,
-      "out": 685,
-      "total": 19146,
+      "in": 18440,
+      "out": 665,
+      "total": 19105,
       "total_cached": 0
     },
     "tokens_by_model": {
       "openai/gpt-4o-mini": [
-        19146,
-        18461,
-        685,
+        19105,
+        18440,
+        665,
         0,
         0,
         0

@@ -301,7 +301,13 @@ class StructuredMemoryAdapter(MuxiMemoryAdapter):
             for session_id in self._log_sources.get(entry_date, []):
                 items.append(
                     RetrievedItem(
-                        turn_id=f"{session_id}:log",
+                        # Date-qualified synthetic id: a session can source
+                        # log entries on multiple dates, and the RRF/dedup
+                        # key is the turn_id — a bare "{session_id}:log"
+                        # would collapse different dates' entries into
+                        # whichever came first. Never collides with real
+                        # evidence turn ids ("{session_id}:{index}").
+                        turn_id=f"{session_id}:log:{entry_date}",
                         session_id=session_id,
                         text=text,
                         score=1.0,

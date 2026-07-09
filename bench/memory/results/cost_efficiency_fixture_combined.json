@@ -28,21 +28,21 @@
     },
     "cost": {
       "note": "list-price projection of the measured answer-call tokens; includes judge overhead in tokens_by_model but not in per-query cost when the judge shares the text model (they are averaged together - treat as an upper bound)",
-      "per_1000_queries_usd": 0.106,
-      "per_query_usd": 0.000106,
+      "per_1000_queries_usd": 0.105,
+      "per_query_usd": 0.000105,
       "scenarios": {
         "heavy": {
-          "monthly_usd": 0.636,
+          "monthly_usd": 0.63,
           "queries_per_day": 200,
           "queries_per_month": 6000
         },
         "light": {
-          "monthly_usd": 0.0318,
+          "monthly_usd": 0.0315,
           "queries_per_day": 10,
           "queries_per_month": 300
         },
         "moderate": {
-          "monthly_usd": 0.159,
+          "monthly_usd": 0.1575,
           "queries_per_day": 50,
           "queries_per_month": 1500
         }
@@ -57,18 +57,18 @@
       "working_memory_vector_bytes": 626688
     },
     "ingest": {
-      "seconds": 75.48,
+      "seconds": 20.96,
       "turns": 204,
-      "turns_per_second": 2.7
+      "turns_per_second": 9.7
     },
     "latency": {
       "retrieval": {
-        "max_ms": 820.61,
-        "mean_ms": 435.53,
-        "min_ms": 221.72,
-        "p50_ms": 416.12,
-        "p95_ms": 667.95,
-        "p99_ms": 786.41,
+        "max_ms": 893.58,
+        "mean_ms": 320.99,
+        "min_ms": 135.01,
+        "p50_ms": 302.6,
+        "p95_ms": 531.69,
+        "p99_ms": 654.85,
         "samples": 200
       }
     },
@@ -76,8 +76,8 @@
       "concurrency": 8,
       "errors": 0,
       "queries": 200,
-      "queries_per_second": 18.1,
-      "seconds": 11.07,
+      "queries_per_second": 24.7,
+      "seconds": 8.11,
       "warmup_queries": 5
     },
     "pricing": {
@@ -114,30 +114,30 @@
       }
     },
     "qa": {
-      "accuracy": 0.8333,
-      "answer_tokens": 13765,
-      "correct": 25,
+      "accuracy": 0.8,
+      "answer_tokens": 13741,
+      "correct": 24,
       "errors": 0,
-      "note": "answer_tokens covers the answer calls only (retrieval context + question + generation); judge calls are measurement overhead and excluded",
+      "note": "answer_tokens covers the answer calls of fully scored questions only (retrieval context + question + generation); judge calls are measurement overhead and excluded, and questions whose answer or judge call failed are excluded from every tally (see errors)",
       "questions": 30,
-      "tokens_per_accurate_recall": 550.6
+      "tokens_per_accurate_recall": 572.5
     }
   },
   "mode": "combined",
   "results": [],
   "run": {
-    "git_commit": "9a8d5b2f3aa4cca3030a36f3db939484603b97a9",
+    "git_commit": "01647a226d9fc4b44dc7931357188b1d0061f7d9",
     "python": "3.11.13",
-    "started_at": "2026-07-09T18:01:52Z",
-    "wall_seconds": 215.72
+    "started_at": "2026-07-09T22:01:59Z",
+    "wall_seconds": 102.41
   },
   "schema_version": "1.0",
   "usage": {
     "cost": {
-      "estimated_usd": 0.003183,
+      "estimated_usd": 0.003166,
       "note": "List-price estimate for reporting only; local/* models are free.",
       "per_model_usd": {
-        "openai/gpt-4o-mini": 0.003183
+        "openai/gpt-4o-mini": 0.003166
       },
       "unpriced_models": []
     },
@@ -145,16 +145,16 @@
     "llm_requests": 60,
     "searches": 235,
     "tokens": {
-      "in": 18465,
-      "out": 689,
-      "total": 19154,
+      "in": 18441,
+      "out": 666,
+      "total": 19107,
       "total_cached": 0
     },
     "tokens_by_model": {
       "openai/gpt-4o-mini": [
-        19154,
-        18465,
-        689,
+        19107,
+        18441,
+        666,
         0,
         0,
         0

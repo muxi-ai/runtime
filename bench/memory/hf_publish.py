@@ -148,6 +148,12 @@ def render(dataset_path: Path, output_dir: Path) -> Path:
             f"Not a structured-recall dataset: name={dataset.get('name')!r} "
             f"(expected {DATASET_NAME!r})"
         )
+    if dataset.get("schema_version") != DATASET_SCHEMA_VERSION:
+        raise ValueError(
+            f"Dataset schema_version {dataset.get('schema_version')!r} does not match "
+            f"the current generator ({DATASET_SCHEMA_VERSION!r}); regenerate the dataset "
+            f"before publishing"
+        )
     if sorted(dataset.get("generator", {}).get("categories", [])) != sorted(CATEGORIES):
         raise ValueError("Dataset categories do not match the current generator schema")
 

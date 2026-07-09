@@ -178,6 +178,58 @@ async def _load_phase(
     return latencies, context_tokens, errors
 
 
+async def _qa_phase(
+    adapter: StructuredMemoryAdapter,
+    questions: List[Tuple[str, Question]],
+    fetch_limit: int,
+    qa_context: int,
+) -> Dict[str, Any]:
+    """Answer each distinct question once; returns the ``qa`` metrics block.
+
+    A question enters the tallies only when the full answer + judge
+    round-trip succeeds: the answer-call token delta is captured in a
+    local and committed together with the question count, so a judge
+    failure after a successful answer call cannot count tokens for a
+    question that is never scored (which would inflate
+    tokens-per-accurate-recall and skew the per-query average). Failed
+    questions — answer OR judge — are excluded from BOTH numerator and
+    denominator and surface under ``errors``.
+    """
+    qa_correct = 0
+    qa_total = 0
+    answer_tokens = 0
+    qa_errors = 0
+    for user_id, question in questions:
+        try:
+            items = await adapter.search_question(user_id, question, fetch_limit)
+            before = adapter.usage_snapshot()["tokens"]["total"]
+            predicted = await adapter.answer_question(question, items, context_limit=qa_context)
+            question_tokens = adapter.usage_snapshot()["tokens"]["total"] - before
+            correct = await adapter.judge_answer(question, predicted)
+        except Exception:
+            qa_errors += 1
+            continue
+        answer_tokens += question_tokens
+        qa_total += 1
+        qa_correct += correct
+    return {
+        "questions": qa_total,
+        "errors": qa_errors,
+        "correct": qa_correct,
+        "accuracy": round(qa_correct / qa_total, 4) if qa_total else None,
+        "answer_tokens": answer_tokens,
+        "tokens_per_accurate_recall": (
+            round(tokens_per_accurate_recall(answer_tokens, qa_correct), 1) if qa_correct else None
+        ),
+        "note": (
+            "answer_tokens covers the answer calls of fully scored questions "
+            "only (retrieval context + question + generation); judge calls are "
+            "measurement overhead and excluded, and questions whose answer or "
+            "judge call failed are excluded from every tally (see errors)"
+        ),
+    }
+
+
 async def run_benchmark(args: argparse.Namespace) -> int:
     """Execute one cost-efficiency run end-to-end; returns the exit code."""
     dataset_path = Path(args.dataset) if (args.dataset and not args.fixture) else fixture_path()
@@ -275,48 +327,17 @@ async def run_benchmark(args: argparse.Namespace) -> int:
 
         # -- QA phase (distinct questions once, sequential) ----------------
         if args.qa:
-            qa_correct = 0
-            qa_total = 0
-            answer_tokens = 0
-            qa_errors = 0
-            for user_id, question in questions:
-                try:
-                    items = await adapter.search_question(user_id, question, fetch_limit)
-                    before = adapter.usage_snapshot()["tokens"]["total"]
-                    predicted = await adapter.answer_question(
-                        question, items, context_limit=args.qa_context
-                    )
-                    answer_tokens += adapter.usage_snapshot()["tokens"]["total"] - before
-                    correct = await adapter.judge_answer(question, predicted)
-                except Exception:
-                    qa_errors += 1
-                    continue
-                qa_total += 1
-                qa_correct += correct
-            metrics["qa"] = {
-                "questions": qa_total,
-                "errors": qa_errors,
-                "correct": qa_correct,
-                "accuracy": round(qa_correct / qa_total, 4) if qa_total else None,
-                "answer_tokens": answer_tokens,
-                "tokens_per_accurate_recall": (
-                    round(tokens_per_accurate_recall(answer_tokens, qa_correct), 1)
-                    if qa_correct
-                    else None
-                ),
-                "note": (
-                    "answer_tokens covers the answer calls only (retrieval context "
-                    "+ question + generation); judge calls are measurement overhead "
-                    "and excluded"
-                ),
-            }
+            metrics["qa"] = await _qa_phase(
+                adapter, questions, fetch_limit, qa_context=args.qa_context
+            )
+            qa_total = metrics["qa"]["questions"]
 
             # Priced cost per query: answer-model tokens averaged over the
             # QA questions (retrieval itself is free with local embeddings).
             snapshot = adapter.usage_snapshot()
             per_query_breakdown = {}
             if qa_total:
-                text_model = (config or adapter.config_snapshot()).get("text_model")
+                text_model = adapter.config_snapshot().get("text_model")
                 for model, fields in snapshot["tokens_by_model"].items():
                     if text_model and model != text_model:
                         continue
