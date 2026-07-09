@@ -107,6 +107,7 @@ class TestTableCreation:
             "last_accessed_at",
             "expires_at",
             "deleted_at",
+            "derived_from_event_id",
         }
 
     def test_system_config_columns(self, engine):

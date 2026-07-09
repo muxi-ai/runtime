@@ -492,9 +492,14 @@ class ArtifactMemoryService:
             )
 
     async def _record_saved_event_inner(self, row: Dict[str, Any]) -> None:
-        await self.memory_events.record(
+        # v2 payload (Memory Substrate Phase 2b): carries the full
+        # metadata column set so the artifact-metadata projector can
+        # rebuild the row losslessly. The row is then stamped with its
+        # provenance bridge, marking it event-sourced (rebuildable).
+        event = await self.memory_events.record(
             user_id=row["user_id"],
             event_type=EVENT_ARTIFACT_SAVED,
+            event_version=2,
             payload={
                 "artifact_id": row["public_id"],
                 "name": row["name"],
@@ -504,12 +509,17 @@ class ArtifactMemoryService:
                 "size_bytes": row["size_bytes"],
                 "checksum_sha256": row["checksum_sha256"],
                 "storage_ref": row["storage_ref"],
+                "tags": row["tags"],
+                "summary": row["summary"],
+                "compressed_bytes": row["compressed_bytes"],
             },
             source=SOURCE_ARTIFACT_MEMORY,
             source_id=f"artifact/{row['public_id']}",
             agent_id=row["agent_id"],
             conversation_id=row["conversation_id"],
         )
+        if event is not None:
+            await self.storage.set_derived_event(row["id"], event["id"])
 
     # ------------------------------------------------------------------
     # Reads (round-trip verification / future retrieval surface)
