@@ -29,6 +29,7 @@ from ..handler import (
     ProtocolHandler,
     RemoteFile,
     RemoteSyncError,
+    atomic_download,
     hash_file_sha256,
 )
 
@@ -89,32 +90,38 @@ class HTTPHandler(ProtocolHandler):
 
     async def download_file(self, url: str, dest: Path) -> DownloadResult:
         max_size = self.config.max_file_size
-        dest.parent.mkdir(parents=True, exist_ok=True)
 
-        async with self._session() as session:
-            try:
-                async with session.get(url, allow_redirects=True) as response:
-                    if response.status >= 400:
-                        raise RemoteSyncError(
-                            f"HTTP {response.status} downloading remote knowledge file: {url}"
-                        )
-                    declared = _int_or_none(response.headers.get("Content-Length"))
-                    if declared is not None and declared > max_size:
-                        raise RemoteSyncError(
-                            f"Remote file exceeds max_file_size ({declared} > {max_size}): {url}"
-                        )
-                    written = 0
-                    with open(dest, "wb") as f:
-                        async for chunk in response.content.iter_chunked(65536):
-                            written += len(chunk)
-                            if written > max_size:
-                                raise RemoteSyncError(
-                                    f"Remote file exceeds max_file_size "
-                                    f"({written} > {max_size}): {url}"
-                                )
-                            f.write(chunk)
-            except aiohttp.ClientError as e:
-                raise RemoteSyncError(f"Failed to download remote knowledge file {url}: {e}") from e
+        # Stream into a temp file and atomically swap it in on success:
+        # a mid-stream failure must never truncate a previously synced
+        # good copy (see atomic_download in handler.py).
+        with atomic_download(dest) as tmp_path:
+            async with self._session() as session:
+                try:
+                    async with session.get(url, allow_redirects=True) as response:
+                        if response.status >= 400:
+                            raise RemoteSyncError(
+                                f"HTTP {response.status} downloading remote knowledge file: {url}"
+                            )
+                        declared = _int_or_none(response.headers.get("Content-Length"))
+                        if declared is not None and declared > max_size:
+                            raise RemoteSyncError(
+                                f"Remote file exceeds max_file_size "
+                                f"({declared} > {max_size}): {url}"
+                            )
+                        written = 0
+                        with open(tmp_path, "wb") as f:
+                            async for chunk in response.content.iter_chunked(65536):
+                                written += len(chunk)
+                                if written > max_size:
+                                    raise RemoteSyncError(
+                                        f"Remote file exceeds max_file_size "
+                                        f"({written} > {max_size}): {url}"
+                                    )
+                                f.write(chunk)
+                except aiohttp.ClientError as e:
+                    raise RemoteSyncError(
+                        f"Failed to download remote knowledge file {url}: {e}"
+                    ) from e
 
         return DownloadResult(
             path=dest.name,

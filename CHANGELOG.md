@@ -16,9 +16,14 @@ Agents can now declare url-based knowledge sources next to local paths
 - Remote content syncs at formation startup into a per-source local
   mirror under the runtime knowledge cache dir with manifest-based
   change detection (ETag / Last-Modified / size+mtime), then feeds the
-  unchanged local ingestion pipeline. ``include``/``exclude`` filters
-  and ``max_files`` / ``max_file_size`` / ``max_total_size`` /
-  ``timeout`` limits are enforced.
+  unchanged local ingestion pipeline. Downloads are atomic (temp file +
+  rename), so a mid-stream failure can never truncate a previously
+  synced good copy. ``include``/``exclude`` filters and ``max_files`` /
+  ``max_file_size`` / ``max_total_size`` / ``timeout`` limits are
+  enforced. For rsync+ssh, SSH host key checking is strict by default;
+  ``accept_new_host_keys: true`` is the explicit opt-in for
+  trust-on-first-use. S3 ``auth: {type: aws}`` without explicit keys
+  uses boto3's default credential chain.
 - Failure isolation: a failing sync never blocks formation startup or
   chat -- sources degrade to previously synced content (stale-wins); on
   a cold start with an unreachable source the formation still starts

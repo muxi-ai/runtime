@@ -27,6 +27,7 @@ from ..handler import (
     ProtocolHandler,
     RemoteFile,
     RemoteSyncError,
+    atomic_download,
     hash_file_sha256,
     matches_pattern,
 )
@@ -100,8 +101,11 @@ class FileHandler(ProtocolHandler):
             raise RemoteSyncError(
                 f"Remote file exceeds max_file_size ({size} > {self.config.max_file_size}): {src}"
             )
-        dest.parent.mkdir(parents=True, exist_ok=True)
-        shutil.copy2(src, dest)
+        # Copy into a temp file and atomically swap it in on success: a
+        # mid-copy failure must never truncate a previously synced good
+        # copy (see atomic_download in handler.py).
+        with atomic_download(dest) as tmp_path:
+            shutil.copy2(src, tmp_path)
         return DownloadResult(
             path=dest.name,
             local_path=dest,

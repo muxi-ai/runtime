@@ -158,6 +158,25 @@ class TestAuthBlocks:
         assert not result.is_valid
         assert any("secret_key" in e for e in result.errors)
 
+    def test_s3_aws_auth_secret_key_without_access_key(self, validator):
+        result = validate_sources(
+            validator, [remote("s3://bucket/x", auth={"type": "aws", "secret_key": "s"})]
+        )
+        assert not result.is_valid
+        assert any("access_key" in e for e in result.errors)
+
+    def test_s3_aws_auth_default_credential_chain(self, validator):
+        """No explicit keys: boto3's default credential chain applies."""
+        result = validate_sources(
+            validator,
+            [remote("s3://bucket/docs/*", auth={"type": "aws", "region": "us-east-1"})],
+        )
+        assert result.is_valid, result.errors
+
+    def test_s3_aws_auth_type_only(self, validator):
+        result = validate_sources(validator, [remote("s3://bucket/x", auth={"type": "aws"})])
+        assert result.is_valid, result.errors
+
     def test_auth_type_scheme_mismatch(self, validator):
         result = validate_sources(
             validator,
@@ -217,6 +236,26 @@ class TestOptions:
         assert not result.is_valid
         result2 = validate_sources(FormationValidator(), [remote("s3://bucket/x", **{key: "10"})])
         assert not result2.is_valid
+
+    def test_accept_new_host_keys_valid_for_rsync_ssh(self, validator):
+        result = validate_sources(
+            validator,
+            [remote("rsync+ssh://user@host/path/", accept_new_host_keys=True)],
+        )
+        assert result.is_valid, result.errors
+
+    def test_accept_new_host_keys_rejected_for_other_schemes(self, validator):
+        result = validate_sources(validator, [remote("s3://bucket/x", accept_new_host_keys=True)])
+        assert not result.is_valid
+        assert any("accept_new_host_keys" in e for e in result.errors)
+
+    def test_accept_new_host_keys_must_be_boolean(self, validator):
+        result = validate_sources(
+            validator,
+            [remote("rsync+ssh://user@host/path/", accept_new_host_keys="yes")],
+        )
+        assert not result.is_valid
+        assert any("boolean" in e for e in result.errors)
 
     def test_extract_rejected_in_phase_1(self, validator):
         result = validate_sources(validator, [remote("https://h/a.zip", extract=True)])

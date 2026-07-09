@@ -1292,12 +1292,28 @@ class FormationValidator:
             )
             return
 
-        required_fields = {
-            "basic": ["username", "password"],
-            "bearer": ["token"],
-            "aws": ["access_key", "secret_key"],
-            "ssh_key": ["key"],
-        }[auth_type]
+        if auth_type == "aws":
+            # Explicit credentials are optional: without them the handler
+            # falls through to boto3's default credential chain (env vars,
+            # instance profile, ...). But access_key and secret_key only
+            # make sense together - one without the other is a config bug.
+            has_access = "access_key" in auth
+            has_secret = "secret_key" in auth
+            if has_access != has_secret:
+                missing = "secret_key" if has_access else "access_key"
+                self.result.add_error(
+                    f"{subject} auth type 'aws' declares "
+                    f"'{'access_key' if has_access else 'secret_key'}' without "
+                    f"'{missing}' - provide both explicit credentials or neither "
+                    "(neither uses boto3's default credential chain)"
+                )
+            required_fields = ["access_key", "secret_key"] if has_access and has_secret else []
+        else:
+            required_fields = {
+                "basic": ["username", "password"],
+                "bearer": ["token"],
+                "ssh_key": ["key"],
+            }[auth_type]
         for auth_field in required_fields:
             value = auth.get(auth_field)
             if not isinstance(value, str) or not value.strip():
@@ -1341,6 +1357,20 @@ class FormationValidator:
             value = source[limit_key]
             if not isinstance(value, int) or isinstance(value, bool) or value <= 0:
                 self.result.add_error(f"{subject} '{limit_key}' must be a positive integer")
+
+        # accept_new_host_keys: rsync+ssh only. Opts into SSH's
+        # trust-on-first-use (StrictHostKeyChecking=accept-new) instead of
+        # the strict default that requires the host in known_hosts. TOFU
+        # means a MITM on FIRST contact could inject knowledge content -
+        # hence explicit opt-in, never the default.
+        if "accept_new_host_keys" in source:
+            value = source["accept_new_host_keys"]
+            if scheme != "rsync+ssh":
+                self.result.add_error(
+                    f"{subject} 'accept_new_host_keys' is only valid for " "rsync+ssh:// sources"
+                )
+            elif not isinstance(value, bool):
+                self.result.add_error(f"{subject} 'accept_new_host_keys' must be a boolean")
 
         # schedule: accepted and syntax-checked in Phase 1, but periodic
         # re-sync lands in a later phase — every remote source syncs at

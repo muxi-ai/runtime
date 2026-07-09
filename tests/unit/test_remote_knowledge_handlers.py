@@ -8,6 +8,7 @@ infrastructure is required.
 import hashlib
 import os
 import stat as stat_module
+import tempfile
 from pathlib import Path
 from unittest import mock
 
@@ -109,6 +110,30 @@ class TestFileHandler:
         with pytest.raises(RemoteSyncError, match="max_file_size"):
             await handler.download_file(src.as_uri(), tmp_path / "out.md")
 
+    async def test_mid_copy_failure_leaves_previous_file_intact(self, tmp_path):
+        """Atomicity: a failed copy must not clobber the previous good
+        copy or leak temp files."""
+        src = tmp_path / "src.md"
+        src.write_text("new content", encoding="utf-8")
+        dest_dir = tmp_path / "mirror"
+        dest_dir.mkdir()
+        dest = dest_dir / "src.md"
+        dest.write_bytes(b"previous good content")
+
+        def partial_then_fail(source, target, **kwargs):
+            Path(target).write_bytes(b"trunc")
+            raise OSError("disk error mid-copy")
+
+        handler = FileHandler(make_config(src.as_uri()))
+        with mock.patch(
+            "muxi.runtime.formation.agents.knowledge.remote.protocols.file.shutil.copy2",
+            side_effect=partial_then_fail,
+        ):
+            with pytest.raises(OSError, match="mid-copy"):
+                await handler.download_file(src.as_uri(), dest)
+        assert dest.read_bytes() == b"previous good content"
+        assert not list(dest_dir.glob("*.part")), "temp download file leaked"
+
     async def test_relative_file_url_rejected(self):
         handler = FileHandler(make_config("file://remote-host/path"))
         with pytest.raises(RemoteSyncError):
@@ -203,6 +228,19 @@ class TestHTTPHandler:
         with pytest.raises(RemoteSyncError, match="max_file_size"):
             await handler.download_file(url, tmp_path / "huge.txt")
 
+    async def test_mid_stream_failure_leaves_previous_file_intact(self, http_server, tmp_path):
+        """Atomicity: a failed download must never truncate the previous
+        good copy (which the manifest still records as valid)."""
+        server, _ = http_server
+        url = str(server.make_url("/huge.txt"))
+        dest = tmp_path / "huge.txt"
+        dest.write_bytes(b"previous good content")
+        handler = HTTPHandler(make_config(url, max_file_size=64))
+        with pytest.raises(RemoteSyncError, match="max_file_size"):
+            await handler.download_file(url, dest)
+        assert dest.read_bytes() == b"previous good content"
+        assert not list(tmp_path.glob("*.part")), "temp download file leaked"
+
     async def test_unreachable_host_raises(self, tmp_path):
         url = "http://127.0.0.1:59991/nope.md"
         handler = HTTPHandler(make_config(url, timeout=2))
@@ -264,6 +302,28 @@ class TestS3Handler:
         handler = self._handler_with_client("s3://bucket/a.md", client, max_file_size=10)
         with pytest.raises(RemoteSyncError, match="max_file_size"):
             await handler.download_file("s3://bucket/a.md", tmp_path / "a.md")
+
+    async def test_mid_transfer_failure_leaves_previous_file_intact(self, tmp_path):
+        """Atomicity: a partial transfer that errors must not clobber the
+        previous good copy or leak temp files."""
+        from botocore.exceptions import BotoCoreError
+
+        dest = tmp_path / "a.md"
+        dest.write_bytes(b"previous good content")
+
+        client = mock.Mock()
+        client.head_object.return_value = {"ContentLength": 5}
+
+        def partial_then_fail(bucket, key, path):
+            Path(path).write_bytes(b"trunc")
+            raise BotoCoreError()
+
+        client.download_file.side_effect = partial_then_fail
+        handler = self._handler_with_client("s3://bucket/a.md", client)
+        with pytest.raises(RemoteSyncError):
+            await handler.download_file("s3://bucket/a.md", dest)
+        assert dest.read_bytes() == b"previous good content"
+        assert not list(tmp_path.glob("*.part")), "temp download file leaked"
 
     async def test_missing_bucket_raises(self):
         handler = S3Handler(make_config("s3://bucket/x"))
@@ -343,6 +403,59 @@ class TestRsyncHandler:
             assert command[-2] == "deploy@server.example.com:/knowledge/"
         finally:
             os.remove(key_file)
+
+    def test_ssh_host_key_checking_strict_by_default(self, tmp_path):
+        """Security default: unknown host keys fail the sync (no TOFU)."""
+        handler = RsyncHandler(make_config("rsync+ssh://deploy@server/knowledge/"))
+        command, key_file = handler._build_command(
+            "/usr/bin/rsync", "rsync+ssh://deploy@server/knowledge/", tmp_path
+        )
+        assert key_file is None
+        ssh_command = command[command.index("-e") + 1]
+        assert "StrictHostKeyChecking=yes" in ssh_command
+        assert "accept-new" not in ssh_command
+
+    def test_ssh_host_key_tofu_requires_explicit_opt_in(self, tmp_path):
+        """accept_new_host_keys: true opts into trust-on-first-use."""
+        handler = RsyncHandler(
+            make_config("rsync+ssh://deploy@server/knowledge/", accept_new_host_keys=True)
+        )
+        command, _ = handler._build_command(
+            "/usr/bin/rsync", "rsync+ssh://deploy@server/knowledge/", tmp_path
+        )
+        ssh_command = command[command.index("-e") + 1]
+        assert "StrictHostKeyChecking=accept-new" in ssh_command
+
+    def test_chmod_failure_removes_key_material(self, tmp_path):
+        """Security: if chmod fails after the key is written, the temp key
+        file must be removed immediately (no orphaned key material)."""
+        handler = RsyncHandler(
+            make_config(
+                "rsync+ssh://deploy@server/knowledge/",
+                auth={"type": "ssh_key", "key": "PRIVATE KEY MATERIAL"},
+            )
+        )
+
+        real_mkstemp = tempfile.mkstemp
+
+        def mkstemp_in_tmp(*args, **kwargs):
+            kwargs["dir"] = str(tmp_path)
+            return real_mkstemp(*args, **kwargs)
+
+        with mock.patch(
+            "muxi.runtime.formation.agents.knowledge.remote.protocols.rsync.tempfile.mkstemp",
+            side_effect=mkstemp_in_tmp,
+        ):
+            with mock.patch(
+                "muxi.runtime.formation.agents.knowledge.remote.protocols.rsync.os.chmod",
+                side_effect=OSError("chmod denied"),
+            ):
+                with pytest.raises(OSError, match="chmod denied"):
+                    handler._build_command(
+                        "/usr/bin/rsync", "rsync+ssh://deploy@server/knowledge/", tmp_path / "m"
+                    )
+        leftovers = [p for p in tmp_path.iterdir() if p.name.startswith("muxi-rsync-key-")]
+        assert leftovers == [], f"SSH key material leaked: {leftovers}"
 
     async def test_sync_tree_success_with_fake_rsync(self, tmp_path):
         fake_rsync = tmp_path / "fake-rsync"

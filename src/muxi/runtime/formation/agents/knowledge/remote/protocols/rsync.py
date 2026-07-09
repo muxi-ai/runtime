@@ -126,19 +126,42 @@ class RsyncHandler(ProtocolHandler):
         path = unquote(parsed.path) or "/"
         source = f"{user_prefix}{host}:{path if path.endswith('/') else path + '/'}"
 
-        ssh_parts = ["ssh", "-o", "BatchMode=yes", "-o", "StrictHostKeyChecking=accept-new"]
+        # Host key policy: strict by default (the host must already be in
+        # known_hosts, or the sync fails) so a MITM on first contact
+        # cannot inject knowledge content. Operators can opt into SSH's
+        # trust-on-first-use with `accept_new_host_keys: true` on the
+        # source (accept-new still rejects CHANGED keys).
+        host_key_policy = "accept-new" if self.config.accept_new_host_keys else "yes"
+        ssh_parts = [
+            "ssh",
+            "-o",
+            "BatchMode=yes",
+            "-o",
+            f"StrictHostKeyChecking={host_key_policy}",
+        ]
         if parsed.port:
             ssh_parts.extend(["-p", str(parsed.port)])
 
         key_file: Optional[str] = None
         auth = self.config.auth or {}
         if (auth.get("type") or "").lower() == "ssh_key" and auth.get("key"):
+            # mkstemp already creates the file 0600; the explicit chmod is
+            # belt-and-braces. Any failure after creation (write, chmod)
+            # must remove the written key material immediately - the
+            # caller's finally only covers paths it has received.
             fd, key_file = tempfile.mkstemp(prefix="muxi-rsync-key-")
-            with os.fdopen(fd, "w", encoding="utf-8") as f:
-                f.write(auth["key"])
-                if not auth["key"].endswith("\n"):
-                    f.write("\n")
-            os.chmod(key_file, 0o600)
+            try:
+                with os.fdopen(fd, "w", encoding="utf-8") as f:
+                    f.write(auth["key"])
+                    if not auth["key"].endswith("\n"):
+                        f.write("\n")
+                os.chmod(key_file, 0o600)
+            except BaseException:
+                try:
+                    os.remove(key_file)
+                except OSError:
+                    pass
+                raise
             ssh_parts.extend(["-i", key_file])
 
         return source, " ".join(ssh_parts), key_file

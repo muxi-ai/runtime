@@ -12,6 +12,8 @@ from pathlib import Path
 from typing import Dict, List, Optional
 from unittest import mock
 
+import pytest
+
 from muxi.runtime.formation.agents.knowledge.remote.handler import (
     DownloadResult,
     ProtocolHandler,
@@ -314,6 +316,46 @@ class TestEnumeratedSync:
             result = await manager.sync_source(dict(SOURCE))
         assert result.status == "failed"
         assert not result.has_local_content
+
+    @pytest.mark.skipif(
+        hasattr(os, "geteuid") and os.geteuid() == 0,
+        reason="chmod-based unreadability does not apply to root",
+    )
+    async def test_stale_wins_serves_previous_good_content_end_to_end(self, tmp_path):
+        """Real handlers (no stubs): a mid-download failure after a remote
+        change must leave the previous good bytes on disk AND in the
+        manifest - atomic downloads are what make stale-wins trustworthy."""
+        src_dir = tmp_path / "served"
+        src_dir.mkdir()
+        (src_dir / "a.md").write_text("good v1", encoding="utf-8")
+        source = {
+            "url": src_dir.as_uri(),
+            "id": "file-src",
+            "description": "file source",
+        }
+        manager = SyncManager(agent_id="agent-x", root_dir=str(tmp_path / "root"))
+
+        first = await manager.sync_source(dict(source))
+        assert first.status == "success"
+
+        # File changes remotely (new stat token) but becomes unreadable,
+        # so the re-download fails mid-sync.
+        (src_dir / "a.md").write_text("corrupted v2", encoding="utf-8")
+        os.chmod(src_dir / "a.md", 0)
+        try:
+            second = await manager.sync_source(dict(source))
+        finally:
+            os.chmod(src_dir / "a.md", 0o644)
+
+        assert second.status == "partial"
+        assert second.files_failed == 1
+        mirrored = Path(second.content_dir) / "a.md"
+        assert mirrored.read_text(encoding="utf-8") == "good v1"
+        manifest = Manifest.load(
+            str(Path(second.content_dir).parent / MANIFEST_FILENAME), "file-src", source["url"]
+        )
+        assert manifest.files["a.md"].local_hash == hashlib.sha256(b"good v1").hexdigest()
+        assert not list(Path(second.content_dir).glob("*.part")), "temp download file leaked"
 
     async def test_path_traversal_files_never_written(self, tmp_path):
         files = {

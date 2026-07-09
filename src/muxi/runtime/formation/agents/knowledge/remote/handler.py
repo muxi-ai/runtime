@@ -18,13 +18,16 @@
 #    local tree afterwards.
 # =============================================================================
 
+import contextlib
 import fnmatch
 import hashlib
+import os
 import posixpath
+import tempfile
 from abc import ABC, abstractmethod
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, Iterator, List, Optional
 
 # Default per-source limits (PRD section 2). Kept conservative and
 # overridable per source via max_files / max_file_size / max_total_size.
@@ -89,6 +92,10 @@ class SourceConfig:
     max_file_size: int = DEFAULT_MAX_FILE_SIZE
     max_total_size: int = DEFAULT_MAX_TOTAL_SIZE
     timeout: int = DEFAULT_SYNC_TIMEOUT
+    # rsync+ssh only: opt into SSH's trust-on-first-use for unknown host
+    # keys (StrictHostKeyChecking=accept-new). Default is strict: the
+    # host must already be in known_hosts or the sync fails.
+    accept_new_host_keys: bool = False
 
     @classmethod
     def from_dict(cls, config: Dict[str, Any]) -> "SourceConfig":
@@ -106,6 +113,7 @@ class SourceConfig:
             max_file_size=int(config.get("max_file_size", DEFAULT_MAX_FILE_SIZE)),
             max_total_size=int(config.get("max_total_size", DEFAULT_MAX_TOTAL_SIZE)),
             timeout=int(config.get("timeout", DEFAULT_SYNC_TIMEOUT)),
+            accept_new_host_keys=bool(config.get("accept_new_host_keys", False)),
         )
 
 
@@ -168,6 +176,37 @@ class ProtocolHandler(ABC):
     async def close(self) -> None:
         """Release any connections/clients held by the handler."""
         return None
+
+
+@contextlib.contextmanager
+def atomic_download(dest: Path) -> Iterator[Path]:
+    """Yield a temp path that atomically replaces ``dest`` on success.
+
+    Guards the stale-wins guarantee: handlers must never write directly
+    to the destination, or a mid-stream failure leaves a truncated file
+    behind while the manifest still records the previous hash as valid
+    (silently serving corrupt content). The temp file is created in the
+    SAME directory as ``dest`` (same filesystem, so ``os.replace`` is
+    atomic), fsynced, then swapped in. On any failure the temp file is
+    removed and the previous good ``dest`` — if any — is left untouched.
+    """
+    dest.parent.mkdir(parents=True, exist_ok=True)
+    fd, tmp_path = tempfile.mkstemp(dir=str(dest.parent), prefix=f".{dest.name}.", suffix=".part")
+    os.close(fd)
+    try:
+        yield Path(tmp_path)
+        # Flush written data to disk before the atomic swap. fsync on a
+        # freshly opened fd flushes the file's pages regardless of which
+        # fd wrote them.
+        with open(tmp_path, "rb") as f:
+            os.fsync(f.fileno())
+        os.replace(tmp_path, dest)
+    except BaseException:
+        try:
+            os.remove(tmp_path)
+        except OSError:
+            pass
+        raise
 
 
 def hash_file_sha256(path: Path) -> str:

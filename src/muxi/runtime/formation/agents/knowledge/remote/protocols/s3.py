@@ -28,6 +28,7 @@ from ..handler import (
     RemoteFile,
     RemoteSyncError,
     SourceConfig,
+    atomic_download,
     hash_file_sha256,
     matches_pattern,
 )
@@ -115,18 +116,21 @@ class S3Handler(ProtocolHandler):
 
     def _download_sync(self, bucket: str, key: str, dest: Path) -> DownloadResult:
         client = self._get_client()
-        dest.parent.mkdir(parents=True, exist_ok=True)
-        try:
-            head = client.head_object(Bucket=bucket, Key=key)
-            size = int(head.get("ContentLength", 0))
-            if size > self.config.max_file_size:
-                raise RemoteSyncError(
-                    f"Remote file exceeds max_file_size "
-                    f"({size} > {self.config.max_file_size}): s3://{bucket}/{key}"
-                )
-            client.download_file(bucket, key, str(dest))
-        except (BotoCoreError, ClientError) as e:
-            raise RemoteSyncError(f"Failed to download s3://{bucket}/{key}: {e}") from e
+        # Download into a temp file and atomically swap it in on success:
+        # a mid-transfer failure must never truncate a previously synced
+        # good copy (see atomic_download in handler.py).
+        with atomic_download(dest) as tmp_path:
+            try:
+                head = client.head_object(Bucket=bucket, Key=key)
+                size = int(head.get("ContentLength", 0))
+                if size > self.config.max_file_size:
+                    raise RemoteSyncError(
+                        f"Remote file exceeds max_file_size "
+                        f"({size} > {self.config.max_file_size}): s3://{bucket}/{key}"
+                    )
+                client.download_file(bucket, key, str(tmp_path))
+            except (BotoCoreError, ClientError) as e:
+                raise RemoteSyncError(f"Failed to download s3://{bucket}/{key}: {e}") from e
         return DownloadResult(
             path=dest.name,
             local_path=dest,

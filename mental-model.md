@@ -629,17 +629,34 @@ different plan instead of returning the failure. Off by default; enable via
   ETag, file:// size+mtime composite, rsync native delta (`sync_tree`
   incremental path; the manifest is rebuilt from the local tree after).
   A missing remote hash forces a re-download (correctness > bandwidth).
+- **Downloads are atomic** (`atomic_download` in `remote/handler.py`):
+  HTTP/S3/file handlers stream into a `.part` temp file in the SAME
+  directory as the destination, fsync, then `os.replace`. A mid-stream
+  failure removes the temp and leaves the previous good copy untouched —
+  this is what makes stale-wins trustworthy (a truncated write would
+  otherwise be served under the manifest's old still-valid hash).
 - **Path safety.** Relative paths from handlers and manifests are
   untrusted: `safe_relative_path` rejects absolute/traversal/backslash
   paths and `resolve_within` re-verifies the resolved (symlink-aware)
   target stays inside the content dir. rsync runs with `--safe-links`.
+- **SSH host keys are strict by default** (rsync+ssh):
+  `StrictHostKeyChecking=yes` — the host must already be in known_hosts
+  or the sync fails, so a MITM on first contact cannot inject knowledge
+  content. `accept_new_host_keys: true` on the source is the explicit
+  opt-in for SSH's trust-on-first-use (`accept-new` still rejects
+  CHANGED keys). Mechanism not policy: safe default, loud escape hatch.
+  The temp file holding `ssh_key` material is 0600 and removed even
+  when setup fails mid-way (write/chmod) — never left behind.
 - **Validation is fail-fast** (`config/validation.py::
   _validate_remote_knowledge_source`): unsupported/planned schemes
   (`gs`, `az`, `ftp`, `sftp` are "planned"), glob on http(s)/rsync URLs,
   malformed auth blocks (`basic`/`bearer` for http, `aws` for s3,
-  `ssh_key` for rsync+ssh), and Phase 2 `extract`/`extract_pattern` keys
-  are load-time errors. Credentials flow through the standard
-  `${{ secrets.* }}` interpolation (resolved before handlers see config).
+  `ssh_key` for rsync+ssh), `accept_new_host_keys` outside rsync+ssh,
+  and Phase 2 `extract`/`extract_pattern` keys are load-time errors.
+  For `aws` auth, `access_key`/`secret_key` are both-or-neither —
+  neither means boto3's default credential chain (env vars, instance
+  profile). Credentials flow through the standard `${{ secrets.* }}`
+  interpolation (resolved before handlers see config).
 - **Phase 1 scope note:** `schedule` is accepted and syntax-validated
   (cron or `@startup`/`@hourly`/`@daily`/`@weekly`) but periodic re-sync
   is Phase 3 — every remote source syncs exactly once at formation
