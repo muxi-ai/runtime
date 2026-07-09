@@ -2,6 +2,42 @@
 
 ## [unreleased]
 
+### Memory benchmarking - Tier 2 structured recall + Tier 4 cost efficiency
+
+Extends the `bench/memory/` harness (memory-benchmarking PRD; Tier 1
+shipped in #220) with MUXI's differentiated benchmarks:
+
+- Tier 2 structured recall: a seeded, fully deterministic synthetic
+  corpus + Q&A generator (`structured_corpus.py`, no LLM calls) covering
+  the five PRD categories - KG relationship recall, temporal validity,
+  Captain's Log narrative recall, cross-agent knowledge, and
+  contradiction detection. Committed CI fixture (3 sequences / 30
+  questions) plus a `--preset full` PRD-scale dataset (50 sequences /
+  500 questions). New `structured_recall_runner.py` runs the Tier 1
+  vector modes as baselines plus a `structured` mode that exercises the
+  real Knowledge Graph + Captain's Log services (ground-truth manifest
+  ingestion via `apply_extraction`/`upsert_entry`; LLM-extraction replay
+  is the documented Tier 3 seam). Reports add two metric blocks:
+  exact-string recall (verbatim emails/codes/ids in top-K context - the
+  decision input for memory-revamp Phase 6 hybrid/BM25 search, with
+  misses listed by question id) and contradiction-detection
+  precision/recall against the injected ground truth.
+- Tier 4 cost efficiency: new `cost_runner.py` measures retrieval
+  latency percentiles (p50/p95/p99) under a bounded-concurrency load
+  pattern, estimated context tokens per query, measured
+  tokens-per-accurate-recall (with `--qa`), cost per 1,000 queries with
+  monthly projections for the PRD usage scenarios (10/50/200
+  queries/day), and storage footprint per ingested turn. Model pricing
+  moved to an updatable `bench/memory/pricing.json` table (report.py now
+  loads it; behavior unchanged).
+- HuggingFace publication prep: `hf_publish.py` renders the dataset
+  card (MIT) + flat JSONL views ready for `hf upload` (upload itself is
+  a documented owner-only manual step).
+- All runners keep the Tier 1 conventions: real formation, cheap-model
+  config ($0 retrieval-only runs), per-case failure isolation, reports
+  always written on partial failure, nonzero exit on incomplete runs,
+  committed fixture reports under `bench/memory/results/`.
+
 ### Knowledge reasoning RAG - Method A tree retrieval (Phase 1)
 
 Large knowledge files are now indexed as hierarchical trees navigated by an

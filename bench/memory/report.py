@@ -22,20 +22,18 @@ from .scoring import QuestionResult
 REPORT_SCHEMA_VERSION = "1.0"
 
 # Published list prices (USD per 1M tokens), used ONLY for the
-# estimated-cost line in reports. Estimates as of 2026-07; update as
-# providers change pricing. Unknown models report ``null`` cost.
-MODEL_PRICES_USD_PER_MTOK: Dict[str, Dict[str, float]] = {
-    "openai/gpt-4o-mini": {"in": 0.15, "out": 0.60},
-    "openai/gpt-4o": {"in": 2.50, "out": 10.00},
-    "openai/gpt-4.1-mini": {"in": 0.40, "out": 1.60},
-    "openai/gpt-4.1-nano": {"in": 0.10, "out": 0.40},
-    "openai/text-embedding-3-small": {"in": 0.02, "out": 0.0},
-    "openai/text-embedding-3-large": {"in": 0.13, "out": 0.0},
-    "anthropic/claude-3-5-haiku-20241022": {"in": 0.80, "out": 4.00},
-}
+# estimated-cost line in reports. Loaded from the updatable pricing
+# table (``bench/memory/pricing.json``); unknown models report
+# ``null`` cost.
+PRICING_JSON = Path(__file__).resolve().parent / "pricing.json"
 
-# Local (ONNX) embedding models run on-box and are free.
-_FREE_MODEL_PREFIX = "local/"
+with open(PRICING_JSON, "r", encoding="utf-8") as _handle:
+    _PRICING = json.load(_handle)
+
+MODEL_PRICES_USD_PER_MTOK: Dict[str, Dict[str, float]] = dict(_PRICING["models"])
+
+# Models under these prefixes run on-box and are free (local ONNX).
+_FREE_MODEL_PREFIXES = tuple(_PRICING.get("free_prefixes") or ["local/"])
 
 
 def estimate_cost_usd(model_breakdown: Dict[str, Sequence[int]]) -> Dict[str, Any]:
@@ -53,7 +51,7 @@ def estimate_cost_usd(model_breakdown: Dict[str, Sequence[int]]) -> Dict[str, An
     for model, fields in sorted(model_breakdown.items()):
         tokens_in = fields[1] if len(fields) > 1 else 0
         tokens_out = fields[2] if len(fields) > 2 else 0
-        if model.startswith(_FREE_MODEL_PREFIX):
+        if model.startswith(_FREE_MODEL_PREFIXES):
             per_model[model] = 0.0
             priced_any = True
             continue

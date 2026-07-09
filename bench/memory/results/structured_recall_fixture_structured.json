@@ -1,0 +1,1052 @@
+{
+  "benchmark": "structured_recall",
+  "config": {
+    "fetch_limit": 25,
+    "formation_yaml": "bench/memory/formation/formation.yaml",
+    "ground_truth_ingestion": "manifest via apply_extraction (no LLM extraction; see README Tier 3 seam)",
+    "max_embed_chars": 6000,
+    "mode": "structured",
+    "qa": true,
+    "structured_backends": [
+      "knowledge_graph",
+      "captains_log"
+    ],
+    "text_model": "openai/gpt-4o-mini",
+    "working_embedding_model": "local/nomic-ai/nomic-embed-text-v1.5"
+  },
+  "dataset": {
+    "cases": 3,
+    "fixture": true,
+    "path": "bench/memory/fixtures/structured_recall_sample.json",
+    "questions": 30,
+    "seed": 42,
+    "sessions": 36,
+    "split": "all"
+  },
+  "k": 5,
+  "metrics": {
+    "contradiction_detection": {
+      "by_case": {
+        "seq_personal_assistant_002": {
+          "detected": 2,
+          "expected": 2,
+          "true_positives": 2
+        },
+        "seq_sales_ops_001": {
+          "detected": 2,
+          "expected": 2,
+          "true_positives": 2
+        },
+        "seq_software_team_000": {
+          "detected": 2,
+          "expected": 2,
+          "true_positives": 2
+        }
+      },
+      "detected": 6,
+      "expected": 6,
+      "precision": 1.0,
+      "recall": 1.0,
+      "true_positives": 6
+    },
+    "exact_strings": {
+      "by_category": {
+        "cross_agent": {
+          "missed_question_ids": [],
+          "questions": 3,
+          "recall@5": 1.0,
+          "recall@fetch": 1.0
+        },
+        "kg_relationship": {
+          "missed_question_ids": [],
+          "questions": 3,
+          "recall@5": 1.0,
+          "recall@fetch": 1.0
+        }
+      },
+      "overall": {
+        "missed_question_ids": [],
+        "questions": 6,
+        "recall@5": 1.0,
+        "recall@fetch": 1.0
+      }
+    },
+    "k": 5,
+    "qa": {
+      "by_question_type": {
+        "contradiction_detection": {
+          "accuracy": 0.0,
+          "questions": 6
+        },
+        "cross_agent": {
+          "accuracy": 0.5,
+          "questions": 6
+        },
+        "kg_relationship": {
+          "accuracy": 1.0,
+          "questions": 6
+        },
+        "narrative_recall": {
+          "accuracy": 0.6666666666666666,
+          "questions": 6
+        },
+        "temporal_validity": {
+          "accuracy": 0.5,
+          "questions": 6
+        }
+      },
+      "overall": {
+        "accuracy": 0.5333333333333333,
+        "questions": 30
+      }
+    },
+    "questions_abstention": 0,
+    "questions_errored": 0,
+    "questions_scored": 30,
+    "questions_total": 30,
+    "retrieval": {
+      "session_level": {
+        "by_question_type": {
+          "contradiction_detection": {
+            "coverage@5": 1.0,
+            "mrr": 1.0,
+            "questions": 6,
+            "recall@5": 1.0
+          },
+          "cross_agent": {
+            "coverage@5": 1.0,
+            "mrr": 1.0,
+            "questions": 6,
+            "recall@5": 1.0
+          },
+          "kg_relationship": {
+            "coverage@5": 1.0,
+            "mrr": 0.9166666666666666,
+            "questions": 6,
+            "recall@5": 1.0
+          },
+          "narrative_recall": {
+            "coverage@5": 1.0,
+            "mrr": 1.0,
+            "questions": 6,
+            "recall@5": 1.0
+          },
+          "temporal_validity": {
+            "coverage@5": 1.0,
+            "mrr": 0.75,
+            "questions": 6,
+            "recall@5": 1.0
+          }
+        },
+        "overall": {
+          "coverage@5": 1.0,
+          "mrr": 0.9333333333333333,
+          "questions": 30,
+          "recall@5": 1.0
+        }
+      },
+      "turn_level": {
+        "by_question_type": {
+          "contradiction_detection": {
+            "coverage@5": 1.0,
+            "mrr": 1.0,
+            "questions": 6,
+            "recall@5": 1.0
+          },
+          "cross_agent": {
+            "coverage@5": 1.0,
+            "mrr": 1.0,
+            "questions": 6,
+            "recall@5": 1.0
+          },
+          "kg_relationship": {
+            "coverage@5": 1.0,
+            "mrr": 0.9166666666666666,
+            "questions": 6,
+            "recall@5": 1.0
+          },
+          "temporal_validity": {
+            "coverage@5": 1.0,
+            "mrr": 0.75,
+            "questions": 6,
+            "recall@5": 1.0
+          }
+        },
+        "overall": {
+          "coverage@5": 1.0,
+          "mrr": 0.9166666666666666,
+          "questions": 24,
+          "recall@5": 1.0
+        }
+      }
+    }
+  },
+  "mode": "structured",
+  "results": [
+    {
+      "category": "kg_relationship",
+      "elapsed_seconds": 2.376,
+      "error": null,
+      "evidence_session_ids": [
+        "seq_personal_assistant_002_s02"
+      ],
+      "evidence_turn_ids": [
+        "seq_personal_assistant_002_s02:4"
+      ],
+      "exact_string_rank": null,
+      "exact_strings": [],
+      "is_abstention": false,
+      "qa_answer": "Dario Alvarez recommended using Stripe for the family reunion.",
+      "qa_correct": true,
+      "question_id": "seq_personal_assistant_002_q001_kg_relationship",
+      "question_type": "kg_relationship",
+      "retrieved_session_ids": [
+        "seq_personal_assistant_002_s02"
+      ],
+      "retrieved_turn_ids": [
+        "seq_personal_assistant_002_s02:4"
+      ]
+    },
+    {
+      "category": "kg_relationship",
+      "elapsed_seconds": 2.662,
+      "error": null,
+      "evidence_session_ids": [
+        "seq_personal_assistant_002_s04"
+      ],
+      "evidence_turn_ids": [
+        "seq_personal_assistant_002_s04:2"
+      ],
+      "exact_string_rank": 1,
+      "exact_strings": [
+        "kai.bergstrom@quillsoftware.example.com"
+      ],
+      "is_abstention": false,
+      "qa_answer": "Kai Bergstrom's email address is kai.bergstrom@quillsoftware.example.com.",
+      "qa_correct": true,
+      "question_id": "seq_personal_assistant_002_q002_kg_relationship",
+      "question_type": "kg_relationship",
+      "retrieved_session_ids": [
+        "seq_personal_assistant_002_s01",
+        "seq_personal_assistant_002_s04",
+        "seq_personal_assistant_002_s09"
+      ],
+      "retrieved_turn_ids": [
+        "seq_personal_assistant_002_s01:4",
+        "seq_personal_assistant_002_s04:2",
+        "seq_personal_assistant_002_s04:4",
+        "seq_personal_assistant_002_s04:6",
+        "seq_personal_assistant_002_s09:4"
+      ]
+    },
+    {
+      "category": "temporal_validity",
+      "elapsed_seconds": 3.535,
+      "error": null,
+      "evidence_session_ids": [
+        "seq_personal_assistant_002_s01"
+      ],
+      "evidence_turn_ids": [
+        "seq_personal_assistant_002_s01:2"
+      ],
+      "exact_string_rank": null,
+      "exact_strings": [],
+      "is_abstention": false,
+      "qa_answer": "Malik Rao's role at Quill Software on 2026-01-27 was backend engineer.",
+      "qa_correct": false,
+      "question_id": "seq_personal_assistant_002_q003_temporal_validity",
+      "question_type": "temporal_validity",
+      "retrieved_session_ids": [
+        "seq_personal_assistant_002_s01",
+        "seq_personal_assistant_002_s07",
+        "seq_personal_assistant_002_s10",
+        "seq_personal_assistant_002_s02",
+        "seq_personal_assistant_002_s04"
+      ],
+      "retrieved_turn_ids": [
+        "seq_personal_assistant_002_s01:2",
+        "seq_personal_assistant_002_s01:log",
+        "seq_personal_assistant_002_s07:4",
+        "seq_personal_assistant_002_s10:4",
+        "seq_personal_assistant_002_s02:2",
+        "seq_personal_assistant_002_s04:2"
+      ]
+    },
+    {
+      "category": "temporal_validity",
+      "elapsed_seconds": 3.471,
+      "error": null,
+      "evidence_session_ids": [
+        "seq_personal_assistant_002_s07"
+      ],
+      "evidence_turn_ids": [
+        "seq_personal_assistant_002_s07:4"
+      ],
+      "exact_string_rank": null,
+      "exact_strings": [],
+      "is_abstention": false,
+      "qa_answer": "Malik Rao's current role at Quill Software is backend engineer.",
+      "qa_correct": true,
+      "question_id": "seq_personal_assistant_002_q004_temporal_validity",
+      "question_type": "temporal_validity",
+      "retrieved_session_ids": [
+        "seq_personal_assistant_002_s01",
+        "seq_personal_assistant_002_s07",
+        "seq_personal_assistant_002_s10",
+        "seq_personal_assistant_002_s02",
+        "seq_personal_assistant_002_s04"
+      ],
+      "retrieved_turn_ids": [
+        "seq_personal_assistant_002_s01:2",
+        "seq_personal_assistant_002_s07:4",
+        "seq_personal_assistant_002_s10:4",
+        "seq_personal_assistant_002_s02:2",
+        "seq_personal_assistant_002_s04:2"
+      ]
+    },
+    {
+      "category": "narrative_recall",
+      "elapsed_seconds": 2.967,
+      "error": null,
+      "evidence_session_ids": [
+        "seq_personal_assistant_002_s04"
+      ],
+      "evidence_turn_ids": [],
+      "exact_string_rank": null,
+      "exact_strings": [],
+      "is_abstention": false,
+      "qa_answer": "The project that saw activity on 2026-02-02 was the tax filing.",
+      "qa_correct": true,
+      "question_id": "seq_personal_assistant_002_q005_narrative_recall",
+      "question_type": "narrative_recall",
+      "retrieved_session_ids": [
+        "seq_personal_assistant_002_s04"
+      ],
+      "retrieved_turn_ids": [
+        "seq_personal_assistant_002_s04:log"
+      ]
+    },
+    {
+      "category": "narrative_recall",
+      "elapsed_seconds": 3.128,
+      "error": null,
+      "evidence_session_ids": [
+        "seq_personal_assistant_002_s07"
+      ],
+      "evidence_turn_ids": [],
+      "exact_string_rank": null,
+      "exact_strings": [],
+      "is_abstention": false,
+      "qa_answer": "The main decisions made on 2026-02-08 were to adopt Terraform for the conference trip, based on Noor Silva's recommendation, and to note that Malik Rao moved to a backend engineer position.",
+      "qa_correct": false,
+      "question_id": "seq_personal_assistant_002_q006_narrative_recall",
+      "question_type": "narrative_recall",
+      "retrieved_session_ids": [
+        "seq_personal_assistant_002_s07"
+      ],
+      "retrieved_turn_ids": [
+        "seq_personal_assistant_002_s07:log"
+      ]
+    },
+    {
+      "category": "cross_agent",
+      "elapsed_seconds": 2.869,
+      "error": null,
+      "evidence_session_ids": [
+        "seq_personal_assistant_002_s10"
+      ],
+      "evidence_turn_ids": [
+        "seq_personal_assistant_002_s10:2"
+      ],
+      "exact_string_rank": null,
+      "exact_strings": [],
+      "is_abstention": false,
+      "qa_answer": "I do not know.",
+      "qa_correct": false,
+      "question_id": "seq_personal_assistant_002_q007_cross_agent",
+      "question_type": "cross_agent",
+      "retrieved_session_ids": [
+        "seq_personal_assistant_002_s10"
+      ],
+      "retrieved_turn_ids": [
+        "seq_personal_assistant_002_s10:2"
+      ]
+    },
+    {
+      "category": "cross_agent",
+      "elapsed_seconds": 2.375,
+      "error": null,
+      "evidence_session_ids": [
+        "seq_personal_assistant_002_s10"
+      ],
+      "evidence_turn_ids": [
+        "seq_personal_assistant_002_s10:2"
+      ],
+      "exact_string_rank": 1,
+      "exact_strings": [
+        "DOC-4041-PR"
+      ],
+      "is_abstention": false,
+      "qa_answer": "The travel itinerary was filed under reference number DOC-4041-PR.",
+      "qa_correct": true,
+      "question_id": "seq_personal_assistant_002_q008_cross_agent",
+      "question_type": "cross_agent",
+      "retrieved_session_ids": [
+        "seq_personal_assistant_002_s10"
+      ],
+      "retrieved_turn_ids": [
+        "seq_personal_assistant_002_s10:2"
+      ]
+    },
+    {
+      "category": "contradiction_detection",
+      "elapsed_seconds": 3.05,
+      "error": null,
+      "evidence_session_ids": [
+        "seq_personal_assistant_002_s02",
+        "seq_personal_assistant_002_s08"
+      ],
+      "evidence_turn_ids": [
+        "seq_personal_assistant_002_s02:2",
+        "seq_personal_assistant_002_s08:2"
+      ],
+      "exact_string_rank": null,
+      "exact_strings": [],
+      "is_abstention": false,
+      "qa_answer": "Dario Alvarez works at Northwind Analytics.",
+      "qa_correct": false,
+      "question_id": "seq_personal_assistant_002_q009_contradiction_detection",
+      "question_type": "contradiction_detection",
+      "retrieved_session_ids": [
+        "seq_personal_assistant_002_s02",
+        "seq_personal_assistant_002_s08"
+      ],
+      "retrieved_turn_ids": [
+        "seq_personal_assistant_002_s02:2",
+        "seq_personal_assistant_002_s02:4",
+        "seq_personal_assistant_002_s08:2"
+      ]
+    },
+    {
+      "category": "contradiction_detection",
+      "elapsed_seconds": 2.723,
+      "error": null,
+      "evidence_session_ids": [
+        "seq_personal_assistant_002_s01",
+        "seq_personal_assistant_002_s09"
+      ],
+      "evidence_turn_ids": [
+        "seq_personal_assistant_002_s01:4",
+        "seq_personal_assistant_002_s09:4"
+      ],
+      "exact_string_rank": null,
+      "exact_strings": [],
+      "is_abstention": false,
+      "qa_answer": "Kai Bergstrom lives in Singapore.",
+      "qa_correct": false,
+      "question_id": "seq_personal_assistant_002_q010_contradiction_detection",
+      "question_type": "contradiction_detection",
+      "retrieved_session_ids": [
+        "seq_personal_assistant_002_s01",
+        "seq_personal_assistant_002_s04",
+        "seq_personal_assistant_002_s09"
+      ],
+      "retrieved_turn_ids": [
+        "seq_personal_assistant_002_s01:4",
+        "seq_personal_assistant_002_s04:2",
+        "seq_personal_assistant_002_s04:4",
+        "seq_personal_assistant_002_s04:6",
+        "seq_personal_assistant_002_s09:4"
+      ]
+    },
+    {
+      "category": "kg_relationship",
+      "elapsed_seconds": 2.426,
+      "error": null,
+      "evidence_session_ids": [
+        "seq_sales_ops_001_s01"
+      ],
+      "evidence_turn_ids": [
+        "seq_sales_ops_001_s01:2"
+      ],
+      "exact_string_rank": 1,
+      "exact_strings": [
+        "tomas.lindqvist@asterdynamics.example.com"
+      ],
+      "is_abstention": false,
+      "qa_answer": "Tomas Lindqvist's email address is tomas.lindqvist@asterdynamics.example.com.",
+      "qa_correct": true,
+      "question_id": "seq_sales_ops_001_q001_kg_relationship",
+      "question_type": "kg_relationship",
+      "retrieved_session_ids": [
+        "seq_sales_ops_001_s01",
+        "seq_sales_ops_001_s07",
+        "seq_sales_ops_001_s10"
+      ],
+      "retrieved_turn_ids": [
+        "seq_sales_ops_001_s01:2",
+        "seq_sales_ops_001_s07:4",
+        "seq_sales_ops_001_s10:4"
+      ]
+    },
+    {
+      "category": "kg_relationship",
+      "elapsed_seconds": 2.344,
+      "error": null,
+      "evidence_session_ids": [
+        "seq_sales_ops_001_s07"
+      ],
+      "evidence_turn_ids": [
+        "seq_sales_ops_001_s07:2"
+      ],
+      "exact_string_rank": null,
+      "exact_strings": [],
+      "is_abstention": false,
+      "qa_answer": "Malik Petrov recommended using Temporal for the renewal campaign.",
+      "qa_correct": true,
+      "question_id": "seq_sales_ops_001_q002_kg_relationship",
+      "question_type": "kg_relationship",
+      "retrieved_session_ids": [
+        "seq_sales_ops_001_s07"
+      ],
+      "retrieved_turn_ids": [
+        "seq_sales_ops_001_s07:2"
+      ]
+    },
+    {
+      "category": "temporal_validity",
+      "elapsed_seconds": 2.699,
+      "error": null,
+      "evidence_session_ids": [
+        "seq_sales_ops_001_s01"
+      ],
+      "evidence_turn_ids": [
+        "seq_sales_ops_001_s01:2"
+      ],
+      "exact_string_rank": null,
+      "exact_strings": [],
+      "is_abstention": false,
+      "qa_answer": "Tomas Lindqvist's role at Aster Dynamics on 2026-03-04 was backend engineer.",
+      "qa_correct": false,
+      "question_id": "seq_sales_ops_001_q003_temporal_validity",
+      "question_type": "temporal_validity",
+      "retrieved_session_ids": [
+        "seq_sales_ops_001_s01",
+        "seq_sales_ops_001_s07",
+        "seq_sales_ops_001_s10",
+        "seq_sales_ops_001_s02",
+        "seq_sales_ops_001_s04"
+      ],
+      "retrieved_turn_ids": [
+        "seq_sales_ops_001_s01:2",
+        "seq_sales_ops_001_s01:log",
+        "seq_sales_ops_001_s07:4",
+        "seq_sales_ops_001_s10:4",
+        "seq_sales_ops_001_s02:2",
+        "seq_sales_ops_001_s04:2"
+      ]
+    },
+    {
+      "category": "temporal_validity",
+      "elapsed_seconds": 2.217,
+      "error": null,
+      "evidence_session_ids": [
+        "seq_sales_ops_001_s07"
+      ],
+      "evidence_turn_ids": [
+        "seq_sales_ops_001_s07:4"
+      ],
+      "exact_string_rank": null,
+      "exact_strings": [],
+      "is_abstention": false,
+      "qa_answer": "Tomas Lindqvist's current role at Aster Dynamics is backend engineer.",
+      "qa_correct": true,
+      "question_id": "seq_sales_ops_001_q004_temporal_validity",
+      "question_type": "temporal_validity",
+      "retrieved_session_ids": [
+        "seq_sales_ops_001_s01",
+        "seq_sales_ops_001_s07",
+        "seq_sales_ops_001_s10",
+        "seq_sales_ops_001_s02",
+        "seq_sales_ops_001_s04"
+      ],
+      "retrieved_turn_ids": [
+        "seq_sales_ops_001_s01:2",
+        "seq_sales_ops_001_s07:4",
+        "seq_sales_ops_001_s10:4",
+        "seq_sales_ops_001_s02:2",
+        "seq_sales_ops_001_s04:2"
+      ]
+    },
+    {
+      "category": "narrative_recall",
+      "elapsed_seconds": 2.28,
+      "error": null,
+      "evidence_session_ids": [
+        "seq_sales_ops_001_s07"
+      ],
+      "evidence_turn_ids": [],
+      "exact_string_rank": null,
+      "exact_strings": [],
+      "is_abstention": false,
+      "qa_answer": "The project that saw activity on 2026-03-16 is the renewal campaign.",
+      "qa_correct": true,
+      "question_id": "seq_sales_ops_001_q005_narrative_recall",
+      "question_type": "narrative_recall",
+      "retrieved_session_ids": [
+        "seq_sales_ops_001_s07"
+      ],
+      "retrieved_turn_ids": [
+        "seq_sales_ops_001_s07:log"
+      ]
+    },
+    {
+      "category": "narrative_recall",
+      "elapsed_seconds": 1.828,
+      "error": null,
+      "evidence_session_ids": [
+        "seq_sales_ops_001_s07"
+      ],
+      "evidence_turn_ids": [],
+      "exact_string_rank": null,
+      "exact_strings": [],
+      "is_abstention": false,
+      "qa_answer": "The project that saw activity on 2026-03-16 is the renewal campaign.",
+      "qa_correct": false,
+      "question_id": "seq_sales_ops_001_q006_narrative_recall",
+      "question_type": "narrative_recall",
+      "retrieved_session_ids": [
+        "seq_sales_ops_001_s07"
+      ],
+      "retrieved_turn_ids": [
+        "seq_sales_ops_001_s07:log"
+      ]
+    },
+    {
+      "category": "cross_agent",
+      "elapsed_seconds": 1.931,
+      "error": null,
+      "evidence_session_ids": [
+        "seq_sales_ops_001_s03"
+      ],
+      "evidence_turn_ids": [
+        "seq_sales_ops_001_s03:2"
+      ],
+      "exact_string_rank": null,
+      "exact_strings": [],
+      "is_abstention": false,
+      "qa_answer": "I do not know.",
+      "qa_correct": false,
+      "question_id": "seq_sales_ops_001_q007_cross_agent",
+      "question_type": "cross_agent",
+      "retrieved_session_ids": [
+        "seq_sales_ops_001_s03"
+      ],
+      "retrieved_turn_ids": [
+        "seq_sales_ops_001_s03:2"
+      ]
+    },
+    {
+      "category": "cross_agent",
+      "elapsed_seconds": 1.985,
+      "error": null,
+      "evidence_session_ids": [
+        "seq_sales_ops_001_s10"
+      ],
+      "evidence_turn_ids": [
+        "seq_sales_ops_001_s10:2"
+      ],
+      "exact_string_rank": 1,
+      "exact_strings": [
+        "DOC-9458-JH"
+      ],
+      "is_abstention": false,
+      "qa_answer": "The finance-agent filed the pipeline health report under reference number DOC-9458-JH.",
+      "qa_correct": true,
+      "question_id": "seq_sales_ops_001_q008_cross_agent",
+      "question_type": "cross_agent",
+      "retrieved_session_ids": [
+        "seq_sales_ops_001_s10"
+      ],
+      "retrieved_turn_ids": [
+        "seq_sales_ops_001_s10:2"
+      ]
+    },
+    {
+      "category": "contradiction_detection",
+      "elapsed_seconds": 2.133,
+      "error": null,
+      "evidence_session_ids": [
+        "seq_sales_ops_001_s01",
+        "seq_sales_ops_001_s09"
+      ],
+      "evidence_turn_ids": [
+        "seq_sales_ops_001_s01:4",
+        "seq_sales_ops_001_s09:4"
+      ],
+      "exact_string_rank": null,
+      "exact_strings": [],
+      "is_abstention": false,
+      "qa_answer": "Sofia Moreau lives in Melbourne.",
+      "qa_correct": false,
+      "question_id": "seq_sales_ops_001_q009_contradiction_detection",
+      "question_type": "contradiction_detection",
+      "retrieved_session_ids": [
+        "seq_sales_ops_001_s01",
+        "seq_sales_ops_001_s04",
+        "seq_sales_ops_001_s09"
+      ],
+      "retrieved_turn_ids": [
+        "seq_sales_ops_001_s01:4",
+        "seq_sales_ops_001_s04:2",
+        "seq_sales_ops_001_s04:4",
+        "seq_sales_ops_001_s04:6",
+        "seq_sales_ops_001_s09:4"
+      ]
+    },
+    {
+      "category": "contradiction_detection",
+      "elapsed_seconds": 2.469,
+      "error": null,
+      "evidence_session_ids": [
+        "seq_sales_ops_001_s02",
+        "seq_sales_ops_001_s08"
+      ],
+      "evidence_turn_ids": [
+        "seq_sales_ops_001_s02:2",
+        "seq_sales_ops_001_s08:2"
+      ],
+      "exact_string_rank": null,
+      "exact_strings": [],
+      "is_abstention": false,
+      "qa_answer": "Ingrid Okafor works at Sundial Health.",
+      "qa_correct": false,
+      "question_id": "seq_sales_ops_001_q010_contradiction_detection",
+      "question_type": "contradiction_detection",
+      "retrieved_session_ids": [
+        "seq_sales_ops_001_s02",
+        "seq_sales_ops_001_s08"
+      ],
+      "retrieved_turn_ids": [
+        "seq_sales_ops_001_s02:2",
+        "seq_sales_ops_001_s02:4",
+        "seq_sales_ops_001_s08:2"
+      ]
+    },
+    {
+      "category": "kg_relationship",
+      "elapsed_seconds": 2.687,
+      "error": null,
+      "evidence_session_ids": [
+        "seq_software_team_000_s02"
+      ],
+      "evidence_turn_ids": [
+        "seq_software_team_000_s02:2"
+      ],
+      "exact_string_rank": 1,
+      "exact_strings": [
+        "noor.moreau@sundialhealth.example.com"
+      ],
+      "is_abstention": false,
+      "qa_answer": "Noor Moreau's email address is noor.moreau@sundialhealth.example.com.",
+      "qa_correct": true,
+      "question_id": "seq_software_team_000_q001_kg_relationship",
+      "question_type": "kg_relationship",
+      "retrieved_session_ids": [
+        "seq_software_team_000_s02",
+        "seq_software_team_000_s08"
+      ],
+      "retrieved_turn_ids": [
+        "seq_software_team_000_s02:2",
+        "seq_software_team_000_s02:4",
+        "seq_software_team_000_s08:2"
+      ]
+    },
+    {
+      "category": "kg_relationship",
+      "elapsed_seconds": 2.144,
+      "error": null,
+      "evidence_session_ids": [
+        "seq_software_team_000_s07"
+      ],
+      "evidence_turn_ids": [
+        "seq_software_team_000_s07:2"
+      ],
+      "exact_string_rank": null,
+      "exact_strings": [],
+      "is_abstention": false,
+      "qa_answer": "Kai Mensah recommended using Temporal for the payments integration.",
+      "qa_correct": true,
+      "question_id": "seq_software_team_000_q002_kg_relationship",
+      "question_type": "kg_relationship",
+      "retrieved_session_ids": [
+        "seq_software_team_000_s07"
+      ],
+      "retrieved_turn_ids": [
+        "seq_software_team_000_s07:2"
+      ]
+    },
+    {
+      "category": "temporal_validity",
+      "elapsed_seconds": 2.458,
+      "error": null,
+      "evidence_session_ids": [
+        "seq_software_team_000_s01"
+      ],
+      "evidence_turn_ids": [
+        "seq_software_team_000_s01:2"
+      ],
+      "exact_string_rank": null,
+      "exact_strings": [],
+      "is_abstention": false,
+      "qa_answer": "Priya Haddad's role at Sundial Health on 2026-02-27 was backend engineer.",
+      "qa_correct": false,
+      "question_id": "seq_software_team_000_q003_temporal_validity",
+      "question_type": "temporal_validity",
+      "retrieved_session_ids": [
+        "seq_software_team_000_s01",
+        "seq_software_team_000_s07",
+        "seq_software_team_000_s10",
+        "seq_software_team_000_s02",
+        "seq_software_team_000_s04"
+      ],
+      "retrieved_turn_ids": [
+        "seq_software_team_000_s01:2",
+        "seq_software_team_000_s01:log",
+        "seq_software_team_000_s07:4",
+        "seq_software_team_000_s10:4",
+        "seq_software_team_000_s02:2",
+        "seq_software_team_000_s04:2"
+      ]
+    },
+    {
+      "category": "temporal_validity",
+      "elapsed_seconds": 3.138,
+      "error": null,
+      "evidence_session_ids": [
+        "seq_software_team_000_s07"
+      ],
+      "evidence_turn_ids": [
+        "seq_software_team_000_s07:4"
+      ],
+      "exact_string_rank": null,
+      "exact_strings": [],
+      "is_abstention": false,
+      "qa_answer": "Priya Haddad's current role at Sundial Health is backend engineer.",
+      "qa_correct": true,
+      "question_id": "seq_software_team_000_q004_temporal_validity",
+      "question_type": "temporal_validity",
+      "retrieved_session_ids": [
+        "seq_software_team_000_s01",
+        "seq_software_team_000_s07",
+        "seq_software_team_000_s10",
+        "seq_software_team_000_s02",
+        "seq_software_team_000_s04"
+      ],
+      "retrieved_turn_ids": [
+        "seq_software_team_000_s01:2",
+        "seq_software_team_000_s07:4",
+        "seq_software_team_000_s10:4",
+        "seq_software_team_000_s02:2",
+        "seq_software_team_000_s04:2"
+      ]
+    },
+    {
+      "category": "narrative_recall",
+      "elapsed_seconds": 2.349,
+      "error": null,
+      "evidence_session_ids": [
+        "seq_software_team_000_s04"
+      ],
+      "evidence_turn_ids": [],
+      "exact_string_rank": null,
+      "exact_strings": [],
+      "is_abstention": false,
+      "qa_answer": "The main decision made on 2026-03-05 was to adopt PostgreSQL for the checkout service, based on Ravi Alvarez's recommendation.",
+      "qa_correct": true,
+      "question_id": "seq_software_team_000_q005_narrative_recall",
+      "question_type": "narrative_recall",
+      "retrieved_session_ids": [
+        "seq_software_team_000_s04"
+      ],
+      "retrieved_turn_ids": [
+        "seq_software_team_000_s04:log"
+      ]
+    },
+    {
+      "category": "narrative_recall",
+      "elapsed_seconds": 0.932,
+      "error": null,
+      "evidence_session_ids": [
+        "seq_software_team_000_s04"
+      ],
+      "evidence_turn_ids": [],
+      "exact_string_rank": null,
+      "exact_strings": [],
+      "is_abstention": false,
+      "qa_answer": "The main decision made on 2026-03-05 was to adopt PostgreSQL for the checkout service, based on Ravi Alvarez's recommendation.",
+      "qa_correct": true,
+      "question_id": "seq_software_team_000_q006_narrative_recall",
+      "question_type": "narrative_recall",
+      "retrieved_session_ids": [
+        "seq_software_team_000_s04"
+      ],
+      "retrieved_turn_ids": [
+        "seq_software_team_000_s04:log"
+      ]
+    },
+    {
+      "category": "cross_agent",
+      "elapsed_seconds": 3.794,
+      "error": null,
+      "evidence_session_ids": [
+        "seq_software_team_000_s06"
+      ],
+      "evidence_turn_ids": [
+        "seq_software_team_000_s06:2"
+      ],
+      "exact_string_rank": 1,
+      "exact_strings": [
+        "DOC-4784-NM"
+      ],
+      "is_abstention": false,
+      "qa_answer": "The load test report was filed under reference number DOC-4784-NM.",
+      "qa_correct": true,
+      "question_id": "seq_software_team_000_q007_cross_agent",
+      "question_type": "cross_agent",
+      "retrieved_session_ids": [
+        "seq_software_team_000_s06"
+      ],
+      "retrieved_turn_ids": [
+        "seq_software_team_000_s06:2"
+      ]
+    },
+    {
+      "category": "cross_agent",
+      "elapsed_seconds": 1.792,
+      "error": null,
+      "evidence_session_ids": [
+        "seq_software_team_000_s03"
+      ],
+      "evidence_turn_ids": [
+        "seq_software_team_000_s03:2"
+      ],
+      "exact_string_rank": null,
+      "exact_strings": [],
+      "is_abstention": false,
+      "qa_answer": "I do not know.",
+      "qa_correct": false,
+      "question_id": "seq_software_team_000_q008_cross_agent",
+      "question_type": "cross_agent",
+      "retrieved_session_ids": [
+        "seq_software_team_000_s03"
+      ],
+      "retrieved_turn_ids": [
+        "seq_software_team_000_s03:2"
+      ]
+    },
+    {
+      "category": "contradiction_detection",
+      "elapsed_seconds": 2.588,
+      "error": null,
+      "evidence_session_ids": [
+        "seq_software_team_000_s02",
+        "seq_software_team_000_s08"
+      ],
+      "evidence_turn_ids": [
+        "seq_software_team_000_s02:2",
+        "seq_software_team_000_s08:2"
+      ],
+      "exact_string_rank": null,
+      "exact_strings": [],
+      "is_abstention": false,
+      "qa_answer": "Noor Moreau works at Bluepeak Media.",
+      "qa_correct": false,
+      "question_id": "seq_software_team_000_q009_contradiction_detection",
+      "question_type": "contradiction_detection",
+      "retrieved_session_ids": [
+        "seq_software_team_000_s02",
+        "seq_software_team_000_s08"
+      ],
+      "retrieved_turn_ids": [
+        "seq_software_team_000_s02:2",
+        "seq_software_team_000_s02:4",
+        "seq_software_team_000_s08:2"
+      ]
+    },
+    {
+      "category": "contradiction_detection",
+      "elapsed_seconds": 2.181,
+      "error": null,
+      "evidence_session_ids": [
+        "seq_software_team_000_s01",
+        "seq_software_team_000_s09"
+      ],
+      "evidence_turn_ids": [
+        "seq_software_team_000_s01:4",
+        "seq_software_team_000_s09:4"
+      ],
+      "exact_string_rank": null,
+      "exact_strings": [],
+      "is_abstention": false,
+      "qa_answer": "Ravi Alvarez lives in Toronto.",
+      "qa_correct": false,
+      "question_id": "seq_software_team_000_q010_contradiction_detection",
+      "question_type": "contradiction_detection",
+      "retrieved_session_ids": [
+        "seq_software_team_000_s01",
+        "seq_software_team_000_s04",
+        "seq_software_team_000_s09"
+      ],
+      "retrieved_turn_ids": [
+        "seq_software_team_000_s01:4",
+        "seq_software_team_000_s04:2",
+        "seq_software_team_000_s04:4",
+        "seq_software_team_000_s04:6",
+        "seq_software_team_000_s09:4"
+      ]
+    }
+  ],
+  "run": {
+    "cases": {
+      "completed": 3,
+      "failed": 0,
+      "skipped": 0
+    },
+    "git_commit": "9a8d5b2f3aa4cca3030a36f3db939484603b97a9",
+    "python": "3.11.13",
+    "started_at": "2026-07-09T17:57:53Z",
+    "wall_seconds": 104.78
+  },
+  "schema_version": "1.0",
+  "usage": {
+    "cost": {
+      "estimated_usd": 0.00201,
+      "note": "List-price estimate for reporting only; local/* models are free.",
+      "per_model_usd": {
+        "openai/gpt-4o-mini": 0.00201
+      },
+      "unpriced_models": []
+    },
+    "ingested_turns": 27,
+    "llm_requests": 60,
+    "searches": 30,
+    "tokens": {
+      "in": 11209,
+      "out": 547,
+      "total": 11756,
+      "total_cached": 0
+    },
+    "tokens_by_model": {
+      "openai/gpt-4o-mini": [
+        11756,
+        11209,
+        547,
+        0,
+        0,
+        0
+      ]
+    },
+    "truncated_turns": 0
+  }
+}

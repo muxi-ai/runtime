@@ -1,0 +1,3427 @@
+{
+  "cases": [
+    {
+      "case_id": "seq_software_team_000",
+      "ground_truth": {
+        "contradictions": [
+          {
+            "new_object": "Bluepeak Media",
+            "new_turn_id": "seq_software_team_000_s08:2",
+            "old_object": "Sundial Health",
+            "old_turn_id": "seq_software_team_000_s02:2",
+            "predicate": "works_at",
+            "subject": "Noor Moreau"
+          },
+          {
+            "new_object": "Toronto",
+            "new_turn_id": "seq_software_team_000_s09:4",
+            "old_object": "Lisbon",
+            "old_turn_id": "seq_software_team_000_s01:4",
+            "predicate": "lives_in",
+            "subject": "Ravi Alvarez"
+          }
+        ],
+        "entities": [
+          {
+            "attributes": {
+              "email": "priya.haddad@sundialhealth.example.com",
+              "role": "marketing strategist"
+            },
+            "name": "Priya Haddad",
+            "session_id": "seq_software_team_000_s01",
+            "turn_id": "seq_software_team_000_s01:2",
+            "type": "person"
+          },
+          {
+            "attributes": {},
+            "name": "Sundial Health",
+            "session_id": "seq_software_team_000_s01",
+            "turn_id": "seq_software_team_000_s01:2",
+            "type": "company"
+          },
+          {
+            "attributes": {},
+            "name": "Ravi Alvarez",
+            "session_id": "seq_software_team_000_s01",
+            "turn_id": "seq_software_team_000_s01:4",
+            "type": "person"
+          },
+          {
+            "attributes": {},
+            "name": "Lisbon",
+            "session_id": "seq_software_team_000_s01",
+            "turn_id": "seq_software_team_000_s01:4",
+            "type": "location"
+          },
+          {
+            "attributes": {
+              "email": "noor.moreau@sundialhealth.example.com",
+              "role": "marketing strategist"
+            },
+            "name": "Noor Moreau",
+            "session_id": "seq_software_team_000_s02",
+            "turn_id": "seq_software_team_000_s02:2",
+            "type": "person"
+          },
+          {
+            "attributes": {},
+            "name": "Sundial Health",
+            "session_id": "seq_software_team_000_s02",
+            "turn_id": "seq_software_team_000_s02:2",
+            "type": "company"
+          },
+          {
+            "attributes": {},
+            "name": "Noor Moreau",
+            "session_id": "seq_software_team_000_s02",
+            "turn_id": "seq_software_team_000_s02:4",
+            "type": "person"
+          },
+          {
+            "attributes": {},
+            "name": "Snowflake",
+            "session_id": "seq_software_team_000_s02",
+            "turn_id": "seq_software_team_000_s02:4",
+            "type": "topic"
+          },
+          {
+            "attributes": {},
+            "name": "auth migration",
+            "session_id": "seq_software_team_000_s02",
+            "turn_id": "seq_software_team_000_s02:4",
+            "type": "project"
+          },
+          {
+            "attributes": {},
+            "name": "research-agent",
+            "session_id": "seq_software_team_000_s03",
+            "turn_id": "seq_software_team_000_s03:2",
+            "type": "agent"
+          },
+          {
+            "attributes": {
+              "reference": "DOC-5246-WT"
+            },
+            "name": "incident postmortem",
+            "session_id": "seq_software_team_000_s03",
+            "turn_id": "seq_software_team_000_s03:2",
+            "type": "artifact"
+          },
+          {
+            "attributes": {
+              "email": "ravi.alvarez@sundialhealth.example.com",
+              "role": "product manager"
+            },
+            "name": "Ravi Alvarez",
+            "session_id": "seq_software_team_000_s04",
+            "turn_id": "seq_software_team_000_s04:2",
+            "type": "person"
+          },
+          {
+            "attributes": {},
+            "name": "Sundial Health",
+            "session_id": "seq_software_team_000_s04",
+            "turn_id": "seq_software_team_000_s04:2",
+            "type": "company"
+          },
+          {
+            "attributes": {},
+            "name": "Ravi Alvarez",
+            "session_id": "seq_software_team_000_s04",
+            "turn_id": "seq_software_team_000_s04:4",
+            "type": "person"
+          },
+          {
+            "attributes": {},
+            "name": "PostgreSQL",
+            "session_id": "seq_software_team_000_s04",
+            "turn_id": "seq_software_team_000_s04:4",
+            "type": "topic"
+          },
+          {
+            "attributes": {},
+            "name": "checkout service",
+            "session_id": "seq_software_team_000_s04",
+            "turn_id": "seq_software_team_000_s04:4",
+            "type": "project"
+          },
+          {
+            "attributes": {},
+            "name": "Ravi Alvarez",
+            "session_id": "seq_software_team_000_s04",
+            "turn_id": "seq_software_team_000_s04:6",
+            "type": "person"
+          },
+          {
+            "attributes": {
+              "kind": "invoice",
+              "project": "checkout service"
+            },
+            "name": "INV-4936-FU",
+            "session_id": "seq_software_team_000_s04",
+            "turn_id": "seq_software_team_000_s04:6",
+            "type": "reference"
+          },
+          {
+            "attributes": {},
+            "name": "engineering-agent",
+            "session_id": "seq_software_team_000_s06",
+            "turn_id": "seq_software_team_000_s06:2",
+            "type": "agent"
+          },
+          {
+            "attributes": {
+              "reference": "DOC-4784-NM"
+            },
+            "name": "load test report",
+            "session_id": "seq_software_team_000_s06",
+            "turn_id": "seq_software_team_000_s06:2",
+            "type": "artifact"
+          },
+          {
+            "attributes": {},
+            "name": "Kai Mensah",
+            "session_id": "seq_software_team_000_s07",
+            "turn_id": "seq_software_team_000_s07:2",
+            "type": "person"
+          },
+          {
+            "attributes": {},
+            "name": "Temporal",
+            "session_id": "seq_software_team_000_s07",
+            "turn_id": "seq_software_team_000_s07:2",
+            "type": "topic"
+          },
+          {
+            "attributes": {},
+            "name": "payments integration",
+            "session_id": "seq_software_team_000_s07",
+            "turn_id": "seq_software_team_000_s07:2",
+            "type": "project"
+          },
+          {
+            "attributes": {
+              "role": "backend engineer"
+            },
+            "name": "Priya Haddad",
+            "session_id": "seq_software_team_000_s07",
+            "turn_id": "seq_software_team_000_s07:4",
+            "type": "person"
+          },
+          {
+            "attributes": {},
+            "name": "Bluepeak Media",
+            "session_id": "seq_software_team_000_s08",
+            "turn_id": "seq_software_team_000_s08:2",
+            "type": "company"
+          },
+          {
+            "attributes": {},
+            "name": "Kai Mensah",
+            "session_id": "seq_software_team_000_s09",
+            "turn_id": "seq_software_team_000_s09:2",
+            "type": "person"
+          },
+          {
+            "attributes": {
+              "kind": "support ticket",
+              "project": "payments integration"
+            },
+            "name": "TKT-7589-TA",
+            "session_id": "seq_software_team_000_s09",
+            "turn_id": "seq_software_team_000_s09:2",
+            "type": "reference"
+          },
+          {
+            "attributes": {},
+            "name": "Toronto",
+            "session_id": "seq_software_team_000_s09",
+            "turn_id": "seq_software_team_000_s09:4",
+            "type": "location"
+          },
+          {
+            "attributes": {},
+            "name": "reviewer-agent",
+            "session_id": "seq_software_team_000_s10",
+            "turn_id": "seq_software_team_000_s10:2",
+            "type": "agent"
+          },
+          {
+            "attributes": {
+              "reference": "DOC-5986-MB"
+            },
+            "name": "migration runbook",
+            "session_id": "seq_software_team_000_s10",
+            "turn_id": "seq_software_team_000_s10:2",
+            "type": "artifact"
+          }
+        ],
+        "log_entries": [
+          {
+            "date": "2026-02-27",
+            "decisions": [],
+            "projects": [],
+            "source_session_ids": [
+              "seq_software_team_000_s01"
+            ],
+            "summary": "Routine coordination on 2026-02-27."
+          },
+          {
+            "date": "2026-03-01",
+            "decisions": [
+              "Adopt Snowflake for the auth migration (Noor Moreau's recommendation)"
+            ],
+            "projects": [
+              "auth migration"
+            ],
+            "source_session_ids": [
+              "seq_software_team_000_s02"
+            ],
+            "summary": "Work on 2026-03-01: Noor Moreau recommended Snowflake for the auth migration"
+          },
+          {
+            "date": "2026-03-03",
+            "decisions": [],
+            "projects": [],
+            "source_session_ids": [
+              "seq_software_team_000_s03"
+            ],
+            "summary": "Work on 2026-03-03: the research-agent delivered the incident postmortem"
+          },
+          {
+            "date": "2026-03-05",
+            "decisions": [
+              "Adopt PostgreSQL for the checkout service (Ravi Alvarez's recommendation)"
+            ],
+            "projects": [
+              "checkout service"
+            ],
+            "source_session_ids": [
+              "seq_software_team_000_s04"
+            ],
+            "summary": "Work on 2026-03-05: Ravi Alvarez recommended PostgreSQL for the checkout service"
+          },
+          {
+            "date": "2026-03-09",
+            "decisions": [],
+            "projects": [],
+            "source_session_ids": [
+              "seq_software_team_000_s06"
+            ],
+            "summary": "Work on 2026-03-09: the engineering-agent delivered the load test report"
+          },
+          {
+            "date": "2026-03-11",
+            "decisions": [
+              "Adopt Temporal for the payments integration (Kai Mensah's recommendation)"
+            ],
+            "projects": [
+              "payments integration"
+            ],
+            "source_session_ids": [
+              "seq_software_team_000_s07"
+            ],
+            "summary": "Work on 2026-03-11: Kai Mensah recommended Temporal for the payments integration; Priya Haddad moved to backend engineer"
+          },
+          {
+            "date": "2026-03-13",
+            "decisions": [],
+            "projects": [],
+            "source_session_ids": [
+              "seq_software_team_000_s08"
+            ],
+            "summary": "Routine coordination on 2026-03-13."
+          },
+          {
+            "date": "2026-03-15",
+            "decisions": [],
+            "projects": [],
+            "source_session_ids": [
+              "seq_software_team_000_s09"
+            ],
+            "summary": "Routine coordination on 2026-03-15."
+          },
+          {
+            "date": "2026-03-17",
+            "decisions": [],
+            "projects": [],
+            "source_session_ids": [
+              "seq_software_team_000_s10"
+            ],
+            "summary": "Work on 2026-03-17: the reviewer-agent delivered the migration runbook"
+          }
+        ],
+        "relationships": [
+          {
+            "attributes": {
+              "role": "marketing strategist",
+              "stated_on": "2026-02-27",
+              "valid_from": "2026-02-27",
+              "valid_to": "2026-03-11"
+            },
+            "confidence": 0.85,
+            "from_name": "Priya Haddad",
+            "from_type": "person",
+            "session_id": "seq_software_team_000_s01",
+            "to_name": "Sundial Health",
+            "to_type": "company",
+            "turn_id": "seq_software_team_000_s01:2",
+            "type": "works_at"
+          },
+          {
+            "attributes": {
+              "stated_on": "2026-02-27"
+            },
+            "confidence": 0.85,
+            "from_name": "Ravi Alvarez",
+            "from_type": "person",
+            "session_id": "seq_software_team_000_s01",
+            "to_name": "Lisbon",
+            "to_type": "location",
+            "turn_id": "seq_software_team_000_s01:4",
+            "type": "lives_in"
+          },
+          {
+            "attributes": {
+              "role": "marketing strategist",
+              "stated_on": "2026-03-01",
+              "valid_from": "2026-03-01"
+            },
+            "confidence": 0.85,
+            "from_name": "Noor Moreau",
+            "from_type": "person",
+            "session_id": "seq_software_team_000_s02",
+            "to_name": "Sundial Health",
+            "to_type": "company",
+            "turn_id": "seq_software_team_000_s02:2",
+            "type": "works_at"
+          },
+          {
+            "attributes": {
+              "project": "auth migration",
+              "stated_on": "2026-03-01"
+            },
+            "confidence": 0.85,
+            "from_name": "Noor Moreau",
+            "from_type": "person",
+            "session_id": "seq_software_team_000_s02",
+            "to_name": "Snowflake",
+            "to_type": "topic",
+            "turn_id": "seq_software_team_000_s02:4",
+            "type": "recommended"
+          },
+          {
+            "attributes": {
+              "stated_on": "2026-03-01"
+            },
+            "confidence": 0.85,
+            "from_name": "auth migration",
+            "from_type": "project",
+            "session_id": "seq_software_team_000_s02",
+            "to_name": "Snowflake",
+            "to_type": "topic",
+            "turn_id": "seq_software_team_000_s02:4",
+            "type": "uses"
+          },
+          {
+            "attributes": {
+              "reference": "DOC-5246-WT",
+              "stated_on": "2026-03-03"
+            },
+            "confidence": 0.85,
+            "from_name": "research-agent",
+            "from_type": "agent",
+            "session_id": "seq_software_team_000_s03",
+            "to_name": "incident postmortem",
+            "to_type": "artifact",
+            "turn_id": "seq_software_team_000_s03:2",
+            "type": "produced"
+          },
+          {
+            "attributes": {
+              "role": "product manager",
+              "stated_on": "2026-03-05",
+              "valid_from": "2026-03-05"
+            },
+            "confidence": 0.85,
+            "from_name": "Ravi Alvarez",
+            "from_type": "person",
+            "session_id": "seq_software_team_000_s04",
+            "to_name": "Sundial Health",
+            "to_type": "company",
+            "turn_id": "seq_software_team_000_s04:2",
+            "type": "works_at"
+          },
+          {
+            "attributes": {
+              "project": "checkout service",
+              "stated_on": "2026-03-05"
+            },
+            "confidence": 0.85,
+            "from_name": "Ravi Alvarez",
+            "from_type": "person",
+            "session_id": "seq_software_team_000_s04",
+            "to_name": "PostgreSQL",
+            "to_type": "topic",
+            "turn_id": "seq_software_team_000_s04:4",
+            "type": "recommended"
+          },
+          {
+            "attributes": {
+              "stated_on": "2026-03-05"
+            },
+            "confidence": 0.85,
+            "from_name": "checkout service",
+            "from_type": "project",
+            "session_id": "seq_software_team_000_s04",
+            "to_name": "PostgreSQL",
+            "to_type": "topic",
+            "turn_id": "seq_software_team_000_s04:4",
+            "type": "uses"
+          },
+          {
+            "attributes": {
+              "kind": "invoice",
+              "project": "checkout service",
+              "stated_on": "2026-03-05"
+            },
+            "confidence": 0.85,
+            "from_name": "Ravi Alvarez",
+            "from_type": "person",
+            "session_id": "seq_software_team_000_s04",
+            "to_name": "INV-4936-FU",
+            "to_type": "reference",
+            "turn_id": "seq_software_team_000_s04:6",
+            "type": "opened"
+          },
+          {
+            "attributes": {
+              "reference": "DOC-4784-NM",
+              "stated_on": "2026-03-09"
+            },
+            "confidence": 0.85,
+            "from_name": "engineering-agent",
+            "from_type": "agent",
+            "session_id": "seq_software_team_000_s06",
+            "to_name": "load test report",
+            "to_type": "artifact",
+            "turn_id": "seq_software_team_000_s06:2",
+            "type": "produced"
+          },
+          {
+            "attributes": {
+              "project": "payments integration",
+              "stated_on": "2026-03-11"
+            },
+            "confidence": 0.85,
+            "from_name": "Kai Mensah",
+            "from_type": "person",
+            "session_id": "seq_software_team_000_s07",
+            "to_name": "Temporal",
+            "to_type": "topic",
+            "turn_id": "seq_software_team_000_s07:2",
+            "type": "recommended"
+          },
+          {
+            "attributes": {
+              "stated_on": "2026-03-11"
+            },
+            "confidence": 0.85,
+            "from_name": "payments integration",
+            "from_type": "project",
+            "session_id": "seq_software_team_000_s07",
+            "to_name": "Temporal",
+            "to_type": "topic",
+            "turn_id": "seq_software_team_000_s07:2",
+            "type": "uses"
+          },
+          {
+            "attributes": {
+              "role": "backend engineer",
+              "stated_on": "2026-03-11",
+              "valid_from": "2026-03-11"
+            },
+            "confidence": 0.9,
+            "from_name": "Priya Haddad",
+            "from_type": "person",
+            "session_id": "seq_software_team_000_s07",
+            "to_name": "Sundial Health",
+            "to_type": "company",
+            "turn_id": "seq_software_team_000_s07:4",
+            "type": "works_at"
+          },
+          {
+            "attributes": {
+              "stated_on": "2026-03-13"
+            },
+            "confidence": 0.85,
+            "from_name": "Noor Moreau",
+            "from_type": "person",
+            "session_id": "seq_software_team_000_s08",
+            "to_name": "Bluepeak Media",
+            "to_type": "company",
+            "turn_id": "seq_software_team_000_s08:2",
+            "type": "works_at"
+          },
+          {
+            "attributes": {
+              "kind": "support ticket",
+              "project": "payments integration",
+              "stated_on": "2026-03-15"
+            },
+            "confidence": 0.85,
+            "from_name": "Kai Mensah",
+            "from_type": "person",
+            "session_id": "seq_software_team_000_s09",
+            "to_name": "TKT-7589-TA",
+            "to_type": "reference",
+            "turn_id": "seq_software_team_000_s09:2",
+            "type": "opened"
+          },
+          {
+            "attributes": {
+              "stated_on": "2026-03-15"
+            },
+            "confidence": 0.85,
+            "from_name": "Ravi Alvarez",
+            "from_type": "person",
+            "session_id": "seq_software_team_000_s09",
+            "to_name": "Toronto",
+            "to_type": "location",
+            "turn_id": "seq_software_team_000_s09:4",
+            "type": "lives_in"
+          },
+          {
+            "attributes": {
+              "reference": "DOC-5986-MB",
+              "stated_on": "2026-03-17"
+            },
+            "confidence": 0.85,
+            "from_name": "reviewer-agent",
+            "from_type": "agent",
+            "session_id": "seq_software_team_000_s10",
+            "to_name": "migration runbook",
+            "to_type": "artifact",
+            "turn_id": "seq_software_team_000_s10:2",
+            "type": "produced"
+          },
+          {
+            "attributes": {
+              "stated_on": "2026-03-17"
+            },
+            "confidence": 0.85,
+            "from_name": "Priya Haddad",
+            "from_type": "person",
+            "session_id": "seq_software_team_000_s10",
+            "to_name": "Sundial Health",
+            "to_type": "company",
+            "turn_id": "seq_software_team_000_s10:4",
+            "type": "works_at"
+          }
+        ]
+      },
+      "questions": [
+        {
+          "answer": "noor.moreau@sundialhealth.example.com",
+          "category": "kg_relationship",
+          "date_from": null,
+          "date_to": null,
+          "evidence_session_ids": [
+            "seq_software_team_000_s02"
+          ],
+          "evidence_turn_ids": [
+            "seq_software_team_000_s02:2"
+          ],
+          "exact_strings": [
+            "noor.moreau@sundialhealth.example.com"
+          ],
+          "question": "What is Noor Moreau's email address?",
+          "question_id": "seq_software_team_000_q001_kg_relationship"
+        },
+        {
+          "answer": "Kai Mensah",
+          "category": "kg_relationship",
+          "date_from": null,
+          "date_to": null,
+          "evidence_session_ids": [
+            "seq_software_team_000_s07"
+          ],
+          "evidence_turn_ids": [
+            "seq_software_team_000_s07:2"
+          ],
+          "exact_strings": [],
+          "question": "Who recommended using Temporal for the payments integration?",
+          "question_id": "seq_software_team_000_q002_kg_relationship"
+        },
+        {
+          "answer": "marketing strategist",
+          "category": "temporal_validity",
+          "date_from": "2026-02-27",
+          "date_to": "2026-02-27",
+          "evidence_session_ids": [
+            "seq_software_team_000_s01"
+          ],
+          "evidence_turn_ids": [
+            "seq_software_team_000_s01:2"
+          ],
+          "exact_strings": [],
+          "question": "What was Priya Haddad's role at Sundial Health on 2026-02-27, before any later changes?",
+          "question_id": "seq_software_team_000_q003_temporal_validity"
+        },
+        {
+          "answer": "backend engineer",
+          "category": "temporal_validity",
+          "date_from": null,
+          "date_to": null,
+          "evidence_session_ids": [
+            "seq_software_team_000_s07"
+          ],
+          "evidence_turn_ids": [
+            "seq_software_team_000_s07:4"
+          ],
+          "exact_strings": [],
+          "question": "What is Priya Haddad's current role at Sundial Health?",
+          "question_id": "seq_software_team_000_q004_temporal_validity"
+        },
+        {
+          "answer": "Adopt PostgreSQL for the checkout service (Ravi Alvarez's recommendation)",
+          "category": "narrative_recall",
+          "date_from": "2026-03-05",
+          "date_to": "2026-03-05",
+          "evidence_session_ids": [
+            "seq_software_team_000_s04"
+          ],
+          "evidence_turn_ids": [],
+          "exact_strings": [],
+          "question": "What were the main decisions made on 2026-03-05?",
+          "question_id": "seq_software_team_000_q005_narrative_recall"
+        },
+        {
+          "answer": "checkout service",
+          "category": "narrative_recall",
+          "date_from": "2026-03-05",
+          "date_to": "2026-03-05",
+          "evidence_session_ids": [
+            "seq_software_team_000_s04"
+          ],
+          "evidence_turn_ids": [],
+          "exact_strings": [],
+          "question": "Which projects saw activity on 2026-03-05?",
+          "question_id": "seq_software_team_000_q006_narrative_recall"
+        },
+        {
+          "answer": "DOC-4784-NM",
+          "category": "cross_agent",
+          "date_from": null,
+          "date_to": null,
+          "evidence_session_ids": [
+            "seq_software_team_000_s06"
+          ],
+          "evidence_turn_ids": [
+            "seq_software_team_000_s06:2"
+          ],
+          "exact_strings": [
+            "DOC-4784-NM"
+          ],
+          "question": "Under what reference number did the engineering-agent file the load test report?",
+          "question_id": "seq_software_team_000_q007_cross_agent"
+        },
+        {
+          "answer": "research-agent",
+          "category": "cross_agent",
+          "date_from": null,
+          "date_to": null,
+          "evidence_session_ids": [
+            "seq_software_team_000_s03"
+          ],
+          "evidence_turn_ids": [
+            "seq_software_team_000_s03:2"
+          ],
+          "exact_strings": [],
+          "question": "Which agent produced the incident postmortem?",
+          "question_id": "seq_software_team_000_q008_cross_agent"
+        },
+        {
+          "answer": "Conflicting information: Sundial Health and Bluepeak Media were both stated; the conflict is unresolved.",
+          "category": "contradiction_detection",
+          "date_from": null,
+          "date_to": null,
+          "evidence_session_ids": [
+            "seq_software_team_000_s02",
+            "seq_software_team_000_s08"
+          ],
+          "evidence_turn_ids": [
+            "seq_software_team_000_s02:2",
+            "seq_software_team_000_s08:2"
+          ],
+          "exact_strings": [],
+          "question": "Which company does Noor Moreau work at?",
+          "question_id": "seq_software_team_000_q009_contradiction_detection"
+        },
+        {
+          "answer": "Conflicting information: Lisbon and Toronto were both stated; the conflict is unresolved.",
+          "category": "contradiction_detection",
+          "date_from": null,
+          "date_to": null,
+          "evidence_session_ids": [
+            "seq_software_team_000_s01",
+            "seq_software_team_000_s09"
+          ],
+          "evidence_turn_ids": [
+            "seq_software_team_000_s01:4",
+            "seq_software_team_000_s09:4"
+          ],
+          "exact_strings": [],
+          "question": "Which city does Ravi Alvarez live in?",
+          "question_id": "seq_software_team_000_q010_contradiction_detection"
+        }
+      ],
+      "scenario": "software_team",
+      "sessions": [
+        {
+          "agent_id": "research-agent",
+          "date": "2026-02-27",
+          "session_id": "seq_software_team_000_s01",
+          "turns": [
+            {
+              "content": "How do I make cold brew at home?",
+              "role": "user"
+            },
+            {
+              "content": "Steep coarse grounds in cold water for 16 hours, then strain twice.",
+              "role": "assistant"
+            },
+            {
+              "content": "For the record: Priya Haddad is our marketing strategist at Sundial Health. You can reach them at priya.haddad@sundialhealth.example.com.",
+              "role": "user"
+            },
+            {
+              "content": "Noted. Priya Haddad (marketing strategist, Sundial Health) with contact priya.haddad@sundialhealth.example.com.",
+              "role": "assistant"
+            },
+            {
+              "content": "Ravi Alvarez is based in Lisbon, so schedule calls in their morning.",
+              "role": "user"
+            },
+            {
+              "content": "Got it - Ravi Alvarez lives in Lisbon.",
+              "role": "assistant"
+            },
+            {
+              "content": "Can you suggest a quick lunch spot near the office?",
+              "role": "user"
+            },
+            {
+              "content": "The noodle bar on the corner is fast, and the salad place next door has a lunch deal.",
+              "role": "assistant"
+            }
+          ]
+        },
+        {
+          "agent_id": "engineering-agent",
+          "date": "2026-03-01",
+          "session_id": "seq_software_team_000_s02",
+          "turns": [
+            {
+              "content": "Can you recommend a stretch for wrist pain?",
+              "role": "user"
+            },
+            {
+              "content": "Gentle wrist extensor stretches, ten seconds each side, a few times a day.",
+              "role": "assistant"
+            },
+            {
+              "content": "For the record: Noor Moreau is our marketing strategist at Sundial Health. You can reach them at noor.moreau@sundialhealth.example.com.",
+              "role": "user"
+            },
+            {
+              "content": "Noted. Noor Moreau (marketing strategist, Sundial Health) with contact noor.moreau@sundialhealth.example.com.",
+              "role": "assistant"
+            },
+            {
+              "content": "Noor Moreau recommended switching to Snowflake for the auth migration because the team already knows it well. Let's go with that.",
+              "role": "user"
+            },
+            {
+              "content": "Decision recorded: Snowflake for the auth migration, recommended by Noor Moreau. Rationale: the team already knows it well.",
+              "role": "assistant"
+            }
+          ]
+        },
+        {
+          "agent_id": "reviewer-agent",
+          "date": "2026-03-03",
+          "session_id": "seq_software_team_000_s03",
+          "turns": [
+            {
+              "content": "What time zone is our Thursday sync in?",
+              "role": "user"
+            },
+            {
+              "content": "It is pinned to 15:00 UTC, which shifts locally with daylight saving.",
+              "role": "assistant"
+            },
+            {
+              "content": "For the record: the research-agent produced the incident postmortem today and filed it under reference DOC-5246-WT.",
+              "role": "user"
+            },
+            {
+              "content": "Logged - incident postmortem delivered by the research-agent, reference DOC-5246-WT.",
+              "role": "assistant"
+            },
+            {
+              "content": "Remind me how to write a good standup update.",
+              "role": "user"
+            },
+            {
+              "content": "Cover what you finished, what you're doing next, and anything blocking you.",
+              "role": "assistant"
+            }
+          ]
+        },
+        {
+          "agent_id": "research-agent",
+          "date": "2026-03-05",
+          "session_id": "seq_software_team_000_s04",
+          "turns": [
+            {
+              "content": "Can you suggest a quick lunch spot near the office?",
+              "role": "user"
+            },
+            {
+              "content": "The noodle bar on the corner is fast, and the salad place next door has a lunch deal.",
+              "role": "assistant"
+            },
+            {
+              "content": "For the record: Ravi Alvarez is our product manager at Sundial Health. You can reach them at ravi.alvarez@sundialhealth.example.com.",
+              "role": "user"
+            },
+            {
+              "content": "Noted. Ravi Alvarez (product manager, Sundial Health) with contact ravi.alvarez@sundialhealth.example.com.",
+              "role": "assistant"
+            },
+            {
+              "content": "Ravi Alvarez recommended switching to PostgreSQL for the checkout service because the team already knows it well. Let's go with that.",
+              "role": "user"
+            },
+            {
+              "content": "Decision recorded: PostgreSQL for the checkout service, recommended by Ravi Alvarez. Rationale: the team already knows it well.",
+              "role": "assistant"
+            },
+            {
+              "content": "Ravi Alvarez opened invoice INV-4936-FU for the checkout service. Keep that reference handy.",
+              "role": "user"
+            },
+            {
+              "content": "Saved: invoice INV-4936-FU (checkout service, opened by Ravi Alvarez).",
+              "role": "assistant"
+            }
+          ]
+        },
+        {
+          "agent_id": "engineering-agent",
+          "date": "2026-03-07",
+          "session_id": "seq_software_team_000_s05",
+          "turns": [
+            {
+              "content": "What's the weather looking like for the weekend?",
+              "role": "user"
+            },
+            {
+              "content": "Mostly sunny with a chance of showers on Sunday afternoon.",
+              "role": "assistant"
+            },
+            {
+              "content": "What's a good book on negotiation?",
+              "role": "user"
+            },
+            {
+              "content": "Never Split the Difference is a practical starting point.",
+              "role": "assistant"
+            }
+          ]
+        },
+        {
+          "agent_id": "reviewer-agent",
+          "date": "2026-03-09",
+          "session_id": "seq_software_team_000_s06",
+          "turns": [
+            {
+              "content": "Remind me how to write a good standup update.",
+              "role": "user"
+            },
+            {
+              "content": "Cover what you finished, what you're doing next, and anything blocking you.",
+              "role": "assistant"
+            },
+            {
+              "content": "For the record: the engineering-agent produced the load test report today and filed it under reference DOC-4784-NM.",
+              "role": "user"
+            },
+            {
+              "content": "Logged - load test report delivered by the engineering-agent, reference DOC-4784-NM.",
+              "role": "assistant"
+            }
+          ]
+        },
+        {
+          "agent_id": "research-agent",
+          "date": "2026-03-11",
+          "session_id": "seq_software_team_000_s07",
+          "turns": [
+            {
+              "content": "Any tips for staying focused during long meetings?",
+              "role": "user"
+            },
+            {
+              "content": "Take brief notes by hand and ask one clarifying question early to stay engaged.",
+              "role": "assistant"
+            },
+            {
+              "content": "Kai Mensah recommended switching to Temporal for the payments integration because it removes an entire class of operational work. Let's go with that.",
+              "role": "user"
+            },
+            {
+              "content": "Decision recorded: Temporal for the payments integration, recommended by Kai Mensah. Rationale: it removes an entire class of operational work.",
+              "role": "assistant"
+            },
+            {
+              "content": "Heads up: Priya Haddad moved from marketing strategist to backend engineer at Sundial Health this week.",
+              "role": "user"
+            },
+            {
+              "content": "Updated. Priya Haddad is now backend engineer at Sundial Health; previously marketing strategist.",
+              "role": "assistant"
+            },
+            {
+              "content": "Can you recommend a stretch for wrist pain?",
+              "role": "user"
+            },
+            {
+              "content": "Gentle wrist extensor stretches, ten seconds each side, a few times a day.",
+              "role": "assistant"
+            }
+          ]
+        },
+        {
+          "agent_id": "engineering-agent",
+          "date": "2026-03-13",
+          "session_id": "seq_software_team_000_s08",
+          "turns": [
+            {
+              "content": "What's a good book on negotiation?",
+              "role": "user"
+            },
+            {
+              "content": "Never Split the Difference is a practical starting point.",
+              "role": "assistant"
+            },
+            {
+              "content": "Wait - I heard Noor Moreau actually works at Bluepeak Media, not Sundial Health.",
+              "role": "user"
+            },
+            {
+              "content": "That conflicts with my earlier record of Noor Moreau at Sundial Health; flagging both until confirmed.",
+              "role": "assistant"
+            }
+          ]
+        },
+        {
+          "agent_id": "reviewer-agent",
+          "date": "2026-03-15",
+          "session_id": "seq_software_team_000_s09",
+          "turns": [
+            {
+              "content": "How do I make cold brew at home?",
+              "role": "user"
+            },
+            {
+              "content": "Steep coarse grounds in cold water for 16 hours, then strain twice.",
+              "role": "assistant"
+            },
+            {
+              "content": "Kai Mensah opened support ticket TKT-7589-TA for the payments integration. Keep that reference handy.",
+              "role": "user"
+            },
+            {
+              "content": "Saved: support ticket TKT-7589-TA (payments integration, opened by Kai Mensah).",
+              "role": "assistant"
+            },
+            {
+              "content": "Correction from HR: Ravi Alvarez lives in Toronto.",
+              "role": "user"
+            },
+            {
+              "content": "That contradicts the earlier note that Ravi Alvarez is based in Lisbon; flagging the conflict.",
+              "role": "assistant"
+            },
+            {
+              "content": "Can you suggest a quick lunch spot near the office?",
+              "role": "user"
+            },
+            {
+              "content": "The noodle bar on the corner is fast, and the salad place next door has a lunch deal.",
+              "role": "assistant"
+            }
+          ]
+        },
+        {
+          "agent_id": "research-agent",
+          "date": "2026-03-17",
+          "session_id": "seq_software_team_000_s10",
+          "turns": [
+            {
+              "content": "Can you recommend a stretch for wrist pain?",
+              "role": "user"
+            },
+            {
+              "content": "Gentle wrist extensor stretches, ten seconds each side, a few times a day.",
+              "role": "assistant"
+            },
+            {
+              "content": "For the record: the reviewer-agent produced the migration runbook today and filed it under reference DOC-5986-MB.",
+              "role": "user"
+            },
+            {
+              "content": "Logged - migration runbook delivered by the reviewer-agent, reference DOC-5986-MB.",
+              "role": "assistant"
+            },
+            {
+              "content": "Just double-checking: Priya Haddad is still at Sundial Health, right?",
+              "role": "user"
+            },
+            {
+              "content": "Correct, Priya Haddad works at Sundial Health.",
+              "role": "assistant"
+            }
+          ]
+        },
+        {
+          "agent_id": "engineering-agent",
+          "date": "2026-03-19",
+          "session_id": "seq_software_team_000_s11",
+          "turns": [
+            {
+              "content": "What time zone is our Thursday sync in?",
+              "role": "user"
+            },
+            {
+              "content": "It is pinned to 15:00 UTC, which shifts locally with daylight saving.",
+              "role": "assistant"
+            },
+            {
+              "content": "Remind me how to write a good standup update.",
+              "role": "user"
+            },
+            {
+              "content": "Cover what you finished, what you're doing next, and anything blocking you.",
+              "role": "assistant"
+            }
+          ]
+        },
+        {
+          "agent_id": "reviewer-agent",
+          "date": "2026-03-21",
+          "session_id": "seq_software_team_000_s12",
+          "turns": [
+            {
+              "content": "Can you suggest a quick lunch spot near the office?",
+              "role": "user"
+            },
+            {
+              "content": "The noodle bar on the corner is fast, and the salad place next door has a lunch deal.",
+              "role": "assistant"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "case_id": "seq_sales_ops_001",
+      "ground_truth": {
+        "contradictions": [
+          {
+            "new_object": "Sundial Health",
+            "new_turn_id": "seq_sales_ops_001_s08:2",
+            "old_object": "Aster Dynamics",
+            "old_turn_id": "seq_sales_ops_001_s02:2",
+            "predicate": "works_at",
+            "subject": "Ingrid Okafor"
+          },
+          {
+            "new_object": "Melbourne",
+            "new_turn_id": "seq_sales_ops_001_s09:4",
+            "old_object": "Amsterdam",
+            "old_turn_id": "seq_sales_ops_001_s01:4",
+            "predicate": "lives_in",
+            "subject": "Sofia Moreau"
+          }
+        ],
+        "entities": [
+          {
+            "attributes": {
+              "email": "tomas.lindqvist@asterdynamics.example.com",
+              "role": "account executive"
+            },
+            "name": "Tomas Lindqvist",
+            "session_id": "seq_sales_ops_001_s01",
+            "turn_id": "seq_sales_ops_001_s01:2",
+            "type": "person"
+          },
+          {
+            "attributes": {},
+            "name": "Aster Dynamics",
+            "session_id": "seq_sales_ops_001_s01",
+            "turn_id": "seq_sales_ops_001_s01:2",
+            "type": "company"
+          },
+          {
+            "attributes": {},
+            "name": "Sofia Moreau",
+            "session_id": "seq_sales_ops_001_s01",
+            "turn_id": "seq_sales_ops_001_s01:4",
+            "type": "person"
+          },
+          {
+            "attributes": {},
+            "name": "Amsterdam",
+            "session_id": "seq_sales_ops_001_s01",
+            "turn_id": "seq_sales_ops_001_s01:4",
+            "type": "location"
+          },
+          {
+            "attributes": {
+              "email": "ingrid.okafor@asterdynamics.example.com",
+              "role": "product manager"
+            },
+            "name": "Ingrid Okafor",
+            "session_id": "seq_sales_ops_001_s02",
+            "turn_id": "seq_sales_ops_001_s02:2",
+            "type": "person"
+          },
+          {
+            "attributes": {},
+            "name": "Aster Dynamics",
+            "session_id": "seq_sales_ops_001_s02",
+            "turn_id": "seq_sales_ops_001_s02:2",
+            "type": "company"
+          },
+          {
+            "attributes": {},
+            "name": "Ingrid Okafor",
+            "session_id": "seq_sales_ops_001_s02",
+            "turn_id": "seq_sales_ops_001_s02:4",
+            "type": "person"
+          },
+          {
+            "attributes": {},
+            "name": "Kafka",
+            "session_id": "seq_sales_ops_001_s02",
+            "turn_id": "seq_sales_ops_001_s02:4",
+            "type": "topic"
+          },
+          {
+            "attributes": {},
+            "name": "enterprise pipeline",
+            "session_id": "seq_sales_ops_001_s02",
+            "turn_id": "seq_sales_ops_001_s02:4",
+            "type": "project"
+          },
+          {
+            "attributes": {},
+            "name": "sales-agent",
+            "session_id": "seq_sales_ops_001_s03",
+            "turn_id": "seq_sales_ops_001_s03:2",
+            "type": "agent"
+          },
+          {
+            "attributes": {
+              "reference": "DOC-7918-FR"
+            },
+            "name": "pricing comparison sheet",
+            "session_id": "seq_sales_ops_001_s03",
+            "turn_id": "seq_sales_ops_001_s03:2",
+            "type": "artifact"
+          },
+          {
+            "attributes": {
+              "email": "sofia.moreau@asterdynamics.example.com",
+              "role": "support specialist"
+            },
+            "name": "Sofia Moreau",
+            "session_id": "seq_sales_ops_001_s04",
+            "turn_id": "seq_sales_ops_001_s04:2",
+            "type": "person"
+          },
+          {
+            "attributes": {},
+            "name": "Aster Dynamics",
+            "session_id": "seq_sales_ops_001_s04",
+            "turn_id": "seq_sales_ops_001_s04:2",
+            "type": "company"
+          },
+          {
+            "attributes": {},
+            "name": "Sofia Moreau",
+            "session_id": "seq_sales_ops_001_s04",
+            "turn_id": "seq_sales_ops_001_s04:4",
+            "type": "person"
+          },
+          {
+            "attributes": {},
+            "name": "Terraform",
+            "session_id": "seq_sales_ops_001_s04",
+            "turn_id": "seq_sales_ops_001_s04:4",
+            "type": "topic"
+          },
+          {
+            "attributes": {},
+            "name": "partner program",
+            "session_id": "seq_sales_ops_001_s04",
+            "turn_id": "seq_sales_ops_001_s04:4",
+            "type": "project"
+          },
+          {
+            "attributes": {},
+            "name": "Sofia Moreau",
+            "session_id": "seq_sales_ops_001_s04",
+            "turn_id": "seq_sales_ops_001_s04:6",
+            "type": "person"
+          },
+          {
+            "attributes": {
+              "kind": "invoice",
+              "project": "partner program"
+            },
+            "name": "INV-3607-ZA",
+            "session_id": "seq_sales_ops_001_s04",
+            "turn_id": "seq_sales_ops_001_s04:6",
+            "type": "reference"
+          },
+          {
+            "attributes": {},
+            "name": "marketing-agent",
+            "session_id": "seq_sales_ops_001_s06",
+            "turn_id": "seq_sales_ops_001_s06:2",
+            "type": "agent"
+          },
+          {
+            "attributes": {
+              "reference": "DOC-1994-SR"
+            },
+            "name": "renewal playbook",
+            "session_id": "seq_sales_ops_001_s06",
+            "turn_id": "seq_sales_ops_001_s06:2",
+            "type": "artifact"
+          },
+          {
+            "attributes": {},
+            "name": "Malik Petrov",
+            "session_id": "seq_sales_ops_001_s07",
+            "turn_id": "seq_sales_ops_001_s07:2",
+            "type": "person"
+          },
+          {
+            "attributes": {},
+            "name": "Temporal",
+            "session_id": "seq_sales_ops_001_s07",
+            "turn_id": "seq_sales_ops_001_s07:2",
+            "type": "topic"
+          },
+          {
+            "attributes": {},
+            "name": "renewal campaign",
+            "session_id": "seq_sales_ops_001_s07",
+            "turn_id": "seq_sales_ops_001_s07:2",
+            "type": "project"
+          },
+          {
+            "attributes": {
+              "role": "backend engineer"
+            },
+            "name": "Tomas Lindqvist",
+            "session_id": "seq_sales_ops_001_s07",
+            "turn_id": "seq_sales_ops_001_s07:4",
+            "type": "person"
+          },
+          {
+            "attributes": {},
+            "name": "Sundial Health",
+            "session_id": "seq_sales_ops_001_s08",
+            "turn_id": "seq_sales_ops_001_s08:2",
+            "type": "company"
+          },
+          {
+            "attributes": {},
+            "name": "Malik Petrov",
+            "session_id": "seq_sales_ops_001_s09",
+            "turn_id": "seq_sales_ops_001_s09:2",
+            "type": "person"
+          },
+          {
+            "attributes": {
+              "kind": "support ticket",
+              "project": "renewal campaign"
+            },
+            "name": "TKT-2116-VB",
+            "session_id": "seq_sales_ops_001_s09",
+            "turn_id": "seq_sales_ops_001_s09:2",
+            "type": "reference"
+          },
+          {
+            "attributes": {},
+            "name": "Melbourne",
+            "session_id": "seq_sales_ops_001_s09",
+            "turn_id": "seq_sales_ops_001_s09:4",
+            "type": "location"
+          },
+          {
+            "attributes": {},
+            "name": "finance-agent",
+            "session_id": "seq_sales_ops_001_s10",
+            "turn_id": "seq_sales_ops_001_s10:2",
+            "type": "agent"
+          },
+          {
+            "attributes": {
+              "reference": "DOC-9458-JH"
+            },
+            "name": "pipeline health report",
+            "session_id": "seq_sales_ops_001_s10",
+            "turn_id": "seq_sales_ops_001_s10:2",
+            "type": "artifact"
+          }
+        ],
+        "log_entries": [
+          {
+            "date": "2026-03-04",
+            "decisions": [],
+            "projects": [],
+            "source_session_ids": [
+              "seq_sales_ops_001_s01"
+            ],
+            "summary": "Routine coordination on 2026-03-04."
+          },
+          {
+            "date": "2026-03-06",
+            "decisions": [
+              "Adopt Kafka for the enterprise pipeline (Ingrid Okafor's recommendation)"
+            ],
+            "projects": [
+              "enterprise pipeline"
+            ],
+            "source_session_ids": [
+              "seq_sales_ops_001_s02"
+            ],
+            "summary": "Work on 2026-03-06: Ingrid Okafor recommended Kafka for the enterprise pipeline"
+          },
+          {
+            "date": "2026-03-08",
+            "decisions": [],
+            "projects": [],
+            "source_session_ids": [
+              "seq_sales_ops_001_s03"
+            ],
+            "summary": "Work on 2026-03-08: the sales-agent delivered the pricing comparison sheet"
+          },
+          {
+            "date": "2026-03-10",
+            "decisions": [
+              "Adopt Terraform for the partner program (Sofia Moreau's recommendation)"
+            ],
+            "projects": [
+              "partner program"
+            ],
+            "source_session_ids": [
+              "seq_sales_ops_001_s04"
+            ],
+            "summary": "Work on 2026-03-10: Sofia Moreau recommended Terraform for the partner program"
+          },
+          {
+            "date": "2026-03-14",
+            "decisions": [],
+            "projects": [],
+            "source_session_ids": [
+              "seq_sales_ops_001_s06"
+            ],
+            "summary": "Work on 2026-03-14: the marketing-agent delivered the renewal playbook"
+          },
+          {
+            "date": "2026-03-16",
+            "decisions": [
+              "Adopt Temporal for the renewal campaign (Malik Petrov's recommendation)"
+            ],
+            "projects": [
+              "renewal campaign"
+            ],
+            "source_session_ids": [
+              "seq_sales_ops_001_s07"
+            ],
+            "summary": "Work on 2026-03-16: Malik Petrov recommended Temporal for the renewal campaign; Tomas Lindqvist moved to backend engineer"
+          },
+          {
+            "date": "2026-03-18",
+            "decisions": [],
+            "projects": [],
+            "source_session_ids": [
+              "seq_sales_ops_001_s08"
+            ],
+            "summary": "Routine coordination on 2026-03-18."
+          },
+          {
+            "date": "2026-03-20",
+            "decisions": [],
+            "projects": [],
+            "source_session_ids": [
+              "seq_sales_ops_001_s09"
+            ],
+            "summary": "Routine coordination on 2026-03-20."
+          },
+          {
+            "date": "2026-03-22",
+            "decisions": [],
+            "projects": [],
+            "source_session_ids": [
+              "seq_sales_ops_001_s10"
+            ],
+            "summary": "Work on 2026-03-22: the finance-agent delivered the pipeline health report"
+          }
+        ],
+        "relationships": [
+          {
+            "attributes": {
+              "role": "account executive",
+              "stated_on": "2026-03-04",
+              "valid_from": "2026-03-04",
+              "valid_to": "2026-03-16"
+            },
+            "confidence": 0.85,
+            "from_name": "Tomas Lindqvist",
+            "from_type": "person",
+            "session_id": "seq_sales_ops_001_s01",
+            "to_name": "Aster Dynamics",
+            "to_type": "company",
+            "turn_id": "seq_sales_ops_001_s01:2",
+            "type": "works_at"
+          },
+          {
+            "attributes": {
+              "stated_on": "2026-03-04"
+            },
+            "confidence": 0.85,
+            "from_name": "Sofia Moreau",
+            "from_type": "person",
+            "session_id": "seq_sales_ops_001_s01",
+            "to_name": "Amsterdam",
+            "to_type": "location",
+            "turn_id": "seq_sales_ops_001_s01:4",
+            "type": "lives_in"
+          },
+          {
+            "attributes": {
+              "role": "product manager",
+              "stated_on": "2026-03-06",
+              "valid_from": "2026-03-06"
+            },
+            "confidence": 0.85,
+            "from_name": "Ingrid Okafor",
+            "from_type": "person",
+            "session_id": "seq_sales_ops_001_s02",
+            "to_name": "Aster Dynamics",
+            "to_type": "company",
+            "turn_id": "seq_sales_ops_001_s02:2",
+            "type": "works_at"
+          },
+          {
+            "attributes": {
+              "project": "enterprise pipeline",
+              "stated_on": "2026-03-06"
+            },
+            "confidence": 0.85,
+            "from_name": "Ingrid Okafor",
+            "from_type": "person",
+            "session_id": "seq_sales_ops_001_s02",
+            "to_name": "Kafka",
+            "to_type": "topic",
+            "turn_id": "seq_sales_ops_001_s02:4",
+            "type": "recommended"
+          },
+          {
+            "attributes": {
+              "stated_on": "2026-03-06"
+            },
+            "confidence": 0.85,
+            "from_name": "enterprise pipeline",
+            "from_type": "project",
+            "session_id": "seq_sales_ops_001_s02",
+            "to_name": "Kafka",
+            "to_type": "topic",
+            "turn_id": "seq_sales_ops_001_s02:4",
+            "type": "uses"
+          },
+          {
+            "attributes": {
+              "reference": "DOC-7918-FR",
+              "stated_on": "2026-03-08"
+            },
+            "confidence": 0.85,
+            "from_name": "sales-agent",
+            "from_type": "agent",
+            "session_id": "seq_sales_ops_001_s03",
+            "to_name": "pricing comparison sheet",
+            "to_type": "artifact",
+            "turn_id": "seq_sales_ops_001_s03:2",
+            "type": "produced"
+          },
+          {
+            "attributes": {
+              "role": "support specialist",
+              "stated_on": "2026-03-10",
+              "valid_from": "2026-03-10"
+            },
+            "confidence": 0.85,
+            "from_name": "Sofia Moreau",
+            "from_type": "person",
+            "session_id": "seq_sales_ops_001_s04",
+            "to_name": "Aster Dynamics",
+            "to_type": "company",
+            "turn_id": "seq_sales_ops_001_s04:2",
+            "type": "works_at"
+          },
+          {
+            "attributes": {
+              "project": "partner program",
+              "stated_on": "2026-03-10"
+            },
+            "confidence": 0.85,
+            "from_name": "Sofia Moreau",
+            "from_type": "person",
+            "session_id": "seq_sales_ops_001_s04",
+            "to_name": "Terraform",
+            "to_type": "topic",
+            "turn_id": "seq_sales_ops_001_s04:4",
+            "type": "recommended"
+          },
+          {
+            "attributes": {
+              "stated_on": "2026-03-10"
+            },
+            "confidence": 0.85,
+            "from_name": "partner program",
+            "from_type": "project",
+            "session_id": "seq_sales_ops_001_s04",
+            "to_name": "Terraform",
+            "to_type": "topic",
+            "turn_id": "seq_sales_ops_001_s04:4",
+            "type": "uses"
+          },
+          {
+            "attributes": {
+              "kind": "invoice",
+              "project": "partner program",
+              "stated_on": "2026-03-10"
+            },
+            "confidence": 0.85,
+            "from_name": "Sofia Moreau",
+            "from_type": "person",
+            "session_id": "seq_sales_ops_001_s04",
+            "to_name": "INV-3607-ZA",
+            "to_type": "reference",
+            "turn_id": "seq_sales_ops_001_s04:6",
+            "type": "opened"
+          },
+          {
+            "attributes": {
+              "reference": "DOC-1994-SR",
+              "stated_on": "2026-03-14"
+            },
+            "confidence": 0.85,
+            "from_name": "marketing-agent",
+            "from_type": "agent",
+            "session_id": "seq_sales_ops_001_s06",
+            "to_name": "renewal playbook",
+            "to_type": "artifact",
+            "turn_id": "seq_sales_ops_001_s06:2",
+            "type": "produced"
+          },
+          {
+            "attributes": {
+              "project": "renewal campaign",
+              "stated_on": "2026-03-16"
+            },
+            "confidence": 0.85,
+            "from_name": "Malik Petrov",
+            "from_type": "person",
+            "session_id": "seq_sales_ops_001_s07",
+            "to_name": "Temporal",
+            "to_type": "topic",
+            "turn_id": "seq_sales_ops_001_s07:2",
+            "type": "recommended"
+          },
+          {
+            "attributes": {
+              "stated_on": "2026-03-16"
+            },
+            "confidence": 0.85,
+            "from_name": "renewal campaign",
+            "from_type": "project",
+            "session_id": "seq_sales_ops_001_s07",
+            "to_name": "Temporal",
+            "to_type": "topic",
+            "turn_id": "seq_sales_ops_001_s07:2",
+            "type": "uses"
+          },
+          {
+            "attributes": {
+              "role": "backend engineer",
+              "stated_on": "2026-03-16",
+              "valid_from": "2026-03-16"
+            },
+            "confidence": 0.9,
+            "from_name": "Tomas Lindqvist",
+            "from_type": "person",
+            "session_id": "seq_sales_ops_001_s07",
+            "to_name": "Aster Dynamics",
+            "to_type": "company",
+            "turn_id": "seq_sales_ops_001_s07:4",
+            "type": "works_at"
+          },
+          {
+            "attributes": {
+              "stated_on": "2026-03-18"
+            },
+            "confidence": 0.85,
+            "from_name": "Ingrid Okafor",
+            "from_type": "person",
+            "session_id": "seq_sales_ops_001_s08",
+            "to_name": "Sundial Health",
+            "to_type": "company",
+            "turn_id": "seq_sales_ops_001_s08:2",
+            "type": "works_at"
+          },
+          {
+            "attributes": {
+              "kind": "support ticket",
+              "project": "renewal campaign",
+              "stated_on": "2026-03-20"
+            },
+            "confidence": 0.85,
+            "from_name": "Malik Petrov",
+            "from_type": "person",
+            "session_id": "seq_sales_ops_001_s09",
+            "to_name": "TKT-2116-VB",
+            "to_type": "reference",
+            "turn_id": "seq_sales_ops_001_s09:2",
+            "type": "opened"
+          },
+          {
+            "attributes": {
+              "stated_on": "2026-03-20"
+            },
+            "confidence": 0.85,
+            "from_name": "Sofia Moreau",
+            "from_type": "person",
+            "session_id": "seq_sales_ops_001_s09",
+            "to_name": "Melbourne",
+            "to_type": "location",
+            "turn_id": "seq_sales_ops_001_s09:4",
+            "type": "lives_in"
+          },
+          {
+            "attributes": {
+              "reference": "DOC-9458-JH",
+              "stated_on": "2026-03-22"
+            },
+            "confidence": 0.85,
+            "from_name": "finance-agent",
+            "from_type": "agent",
+            "session_id": "seq_sales_ops_001_s10",
+            "to_name": "pipeline health report",
+            "to_type": "artifact",
+            "turn_id": "seq_sales_ops_001_s10:2",
+            "type": "produced"
+          },
+          {
+            "attributes": {
+              "stated_on": "2026-03-22"
+            },
+            "confidence": 0.85,
+            "from_name": "Tomas Lindqvist",
+            "from_type": "person",
+            "session_id": "seq_sales_ops_001_s10",
+            "to_name": "Aster Dynamics",
+            "to_type": "company",
+            "turn_id": "seq_sales_ops_001_s10:4",
+            "type": "works_at"
+          }
+        ]
+      },
+      "questions": [
+        {
+          "answer": "tomas.lindqvist@asterdynamics.example.com",
+          "category": "kg_relationship",
+          "date_from": null,
+          "date_to": null,
+          "evidence_session_ids": [
+            "seq_sales_ops_001_s01"
+          ],
+          "evidence_turn_ids": [
+            "seq_sales_ops_001_s01:2"
+          ],
+          "exact_strings": [
+            "tomas.lindqvist@asterdynamics.example.com"
+          ],
+          "question": "What is Tomas Lindqvist's email address?",
+          "question_id": "seq_sales_ops_001_q001_kg_relationship"
+        },
+        {
+          "answer": "Malik Petrov",
+          "category": "kg_relationship",
+          "date_from": null,
+          "date_to": null,
+          "evidence_session_ids": [
+            "seq_sales_ops_001_s07"
+          ],
+          "evidence_turn_ids": [
+            "seq_sales_ops_001_s07:2"
+          ],
+          "exact_strings": [],
+          "question": "Who recommended using Temporal for the renewal campaign?",
+          "question_id": "seq_sales_ops_001_q002_kg_relationship"
+        },
+        {
+          "answer": "account executive",
+          "category": "temporal_validity",
+          "date_from": "2026-03-04",
+          "date_to": "2026-03-04",
+          "evidence_session_ids": [
+            "seq_sales_ops_001_s01"
+          ],
+          "evidence_turn_ids": [
+            "seq_sales_ops_001_s01:2"
+          ],
+          "exact_strings": [],
+          "question": "What was Tomas Lindqvist's role at Aster Dynamics on 2026-03-04, before any later changes?",
+          "question_id": "seq_sales_ops_001_q003_temporal_validity"
+        },
+        {
+          "answer": "backend engineer",
+          "category": "temporal_validity",
+          "date_from": null,
+          "date_to": null,
+          "evidence_session_ids": [
+            "seq_sales_ops_001_s07"
+          ],
+          "evidence_turn_ids": [
+            "seq_sales_ops_001_s07:4"
+          ],
+          "exact_strings": [],
+          "question": "What is Tomas Lindqvist's current role at Aster Dynamics?",
+          "question_id": "seq_sales_ops_001_q004_temporal_validity"
+        },
+        {
+          "answer": "renewal campaign",
+          "category": "narrative_recall",
+          "date_from": "2026-03-16",
+          "date_to": "2026-03-16",
+          "evidence_session_ids": [
+            "seq_sales_ops_001_s07"
+          ],
+          "evidence_turn_ids": [],
+          "exact_strings": [],
+          "question": "Which projects saw activity on 2026-03-16?",
+          "question_id": "seq_sales_ops_001_q005_narrative_recall"
+        },
+        {
+          "answer": "Adopt Temporal for the renewal campaign (Malik Petrov's recommendation)",
+          "category": "narrative_recall",
+          "date_from": "2026-03-16",
+          "date_to": "2026-03-16",
+          "evidence_session_ids": [
+            "seq_sales_ops_001_s07"
+          ],
+          "evidence_turn_ids": [],
+          "exact_strings": [],
+          "question": "What were the main decisions made on 2026-03-16?",
+          "question_id": "seq_sales_ops_001_q006_narrative_recall"
+        },
+        {
+          "answer": "sales-agent",
+          "category": "cross_agent",
+          "date_from": null,
+          "date_to": null,
+          "evidence_session_ids": [
+            "seq_sales_ops_001_s03"
+          ],
+          "evidence_turn_ids": [
+            "seq_sales_ops_001_s03:2"
+          ],
+          "exact_strings": [],
+          "question": "Which agent produced the pricing comparison sheet?",
+          "question_id": "seq_sales_ops_001_q007_cross_agent"
+        },
+        {
+          "answer": "DOC-9458-JH",
+          "category": "cross_agent",
+          "date_from": null,
+          "date_to": null,
+          "evidence_session_ids": [
+            "seq_sales_ops_001_s10"
+          ],
+          "evidence_turn_ids": [
+            "seq_sales_ops_001_s10:2"
+          ],
+          "exact_strings": [
+            "DOC-9458-JH"
+          ],
+          "question": "Under what reference number did the finance-agent file the pipeline health report?",
+          "question_id": "seq_sales_ops_001_q008_cross_agent"
+        },
+        {
+          "answer": "Conflicting information: Amsterdam and Melbourne were both stated; the conflict is unresolved.",
+          "category": "contradiction_detection",
+          "date_from": null,
+          "date_to": null,
+          "evidence_session_ids": [
+            "seq_sales_ops_001_s01",
+            "seq_sales_ops_001_s09"
+          ],
+          "evidence_turn_ids": [
+            "seq_sales_ops_001_s01:4",
+            "seq_sales_ops_001_s09:4"
+          ],
+          "exact_strings": [],
+          "question": "Which city does Sofia Moreau live in?",
+          "question_id": "seq_sales_ops_001_q009_contradiction_detection"
+        },
+        {
+          "answer": "Conflicting information: Aster Dynamics and Sundial Health were both stated; the conflict is unresolved.",
+          "category": "contradiction_detection",
+          "date_from": null,
+          "date_to": null,
+          "evidence_session_ids": [
+            "seq_sales_ops_001_s02",
+            "seq_sales_ops_001_s08"
+          ],
+          "evidence_turn_ids": [
+            "seq_sales_ops_001_s02:2",
+            "seq_sales_ops_001_s08:2"
+          ],
+          "exact_strings": [],
+          "question": "Which company does Ingrid Okafor work at?",
+          "question_id": "seq_sales_ops_001_q010_contradiction_detection"
+        }
+      ],
+      "scenario": "sales_ops",
+      "sessions": [
+        {
+          "agent_id": "sales-agent",
+          "date": "2026-03-04",
+          "session_id": "seq_sales_ops_001_s01",
+          "turns": [
+            {
+              "content": "What's the weather looking like for the weekend?",
+              "role": "user"
+            },
+            {
+              "content": "Mostly sunny with a chance of showers on Sunday afternoon.",
+              "role": "assistant"
+            },
+            {
+              "content": "For the record: Tomas Lindqvist is our account executive at Aster Dynamics. You can reach them at tomas.lindqvist@asterdynamics.example.com.",
+              "role": "user"
+            },
+            {
+              "content": "Noted. Tomas Lindqvist (account executive, Aster Dynamics) with contact tomas.lindqvist@asterdynamics.example.com.",
+              "role": "assistant"
+            },
+            {
+              "content": "Sofia Moreau is based in Amsterdam, so schedule calls in their morning.",
+              "role": "user"
+            },
+            {
+              "content": "Got it - Sofia Moreau lives in Amsterdam.",
+              "role": "assistant"
+            },
+            {
+              "content": "What's a good book on negotiation?",
+              "role": "user"
+            },
+            {
+              "content": "Never Split the Difference is a practical starting point.",
+              "role": "assistant"
+            }
+          ]
+        },
+        {
+          "agent_id": "marketing-agent",
+          "date": "2026-03-06",
+          "session_id": "seq_sales_ops_001_s02",
+          "turns": [
+            {
+              "content": "Remind me how to write a good standup update.",
+              "role": "user"
+            },
+            {
+              "content": "Cover what you finished, what you're doing next, and anything blocking you.",
+              "role": "assistant"
+            },
+            {
+              "content": "For the record: Ingrid Okafor is our product manager at Aster Dynamics. You can reach them at ingrid.okafor@asterdynamics.example.com.",
+              "role": "user"
+            },
+            {
+              "content": "Noted. Ingrid Okafor (product manager, Aster Dynamics) with contact ingrid.okafor@asterdynamics.example.com.",
+              "role": "assistant"
+            },
+            {
+              "content": "Ingrid Okafor recommended switching to Kafka for the enterprise pipeline because the migration path from the current stack is simplest. Let's go with that.",
+              "role": "user"
+            },
+            {
+              "content": "Decision recorded: Kafka for the enterprise pipeline, recommended by Ingrid Okafor. Rationale: the migration path from the current stack is simplest.",
+              "role": "assistant"
+            }
+          ]
+        },
+        {
+          "agent_id": "finance-agent",
+          "date": "2026-03-08",
+          "session_id": "seq_sales_ops_001_s03",
+          "turns": [
+            {
+              "content": "Any tips for staying focused during long meetings?",
+              "role": "user"
+            },
+            {
+              "content": "Take brief notes by hand and ask one clarifying question early to stay engaged.",
+              "role": "assistant"
+            },
+            {
+              "content": "For the record: the sales-agent produced the pricing comparison sheet today and filed it under reference DOC-7918-FR.",
+              "role": "user"
+            },
+            {
+              "content": "Logged - pricing comparison sheet delivered by the sales-agent, reference DOC-7918-FR.",
+              "role": "assistant"
+            },
+            {
+              "content": "Can you recommend a stretch for wrist pain?",
+              "role": "user"
+            },
+            {
+              "content": "Gentle wrist extensor stretches, ten seconds each side, a few times a day.",
+              "role": "assistant"
+            }
+          ]
+        },
+        {
+          "agent_id": "sales-agent",
+          "date": "2026-03-10",
+          "session_id": "seq_sales_ops_001_s04",
+          "turns": [
+            {
+              "content": "What's a good book on negotiation?",
+              "role": "user"
+            },
+            {
+              "content": "Never Split the Difference is a practical starting point.",
+              "role": "assistant"
+            },
+            {
+              "content": "For the record: Sofia Moreau is our support specialist at Aster Dynamics. You can reach them at sofia.moreau@asterdynamics.example.com.",
+              "role": "user"
+            },
+            {
+              "content": "Noted. Sofia Moreau (support specialist, Aster Dynamics) with contact sofia.moreau@asterdynamics.example.com.",
+              "role": "assistant"
+            },
+            {
+              "content": "Sofia Moreau recommended switching to Terraform for the partner program because the team already knows it well. Let's go with that.",
+              "role": "user"
+            },
+            {
+              "content": "Decision recorded: Terraform for the partner program, recommended by Sofia Moreau. Rationale: the team already knows it well.",
+              "role": "assistant"
+            },
+            {
+              "content": "Sofia Moreau opened invoice INV-3607-ZA for the partner program. Keep that reference handy.",
+              "role": "user"
+            },
+            {
+              "content": "Saved: invoice INV-3607-ZA (partner program, opened by Sofia Moreau).",
+              "role": "assistant"
+            }
+          ]
+        },
+        {
+          "agent_id": "marketing-agent",
+          "date": "2026-03-12",
+          "session_id": "seq_sales_ops_001_s05",
+          "turns": [
+            {
+              "content": "How do I make cold brew at home?",
+              "role": "user"
+            },
+            {
+              "content": "Steep coarse grounds in cold water for 16 hours, then strain twice.",
+              "role": "assistant"
+            },
+            {
+              "content": "Can you suggest a quick lunch spot near the office?",
+              "role": "user"
+            },
+            {
+              "content": "The noodle bar on the corner is fast, and the salad place next door has a lunch deal.",
+              "role": "assistant"
+            }
+          ]
+        },
+        {
+          "agent_id": "finance-agent",
+          "date": "2026-03-14",
+          "session_id": "seq_sales_ops_001_s06",
+          "turns": [
+            {
+              "content": "Can you recommend a stretch for wrist pain?",
+              "role": "user"
+            },
+            {
+              "content": "Gentle wrist extensor stretches, ten seconds each side, a few times a day.",
+              "role": "assistant"
+            },
+            {
+              "content": "For the record: the marketing-agent produced the renewal playbook today and filed it under reference DOC-1994-SR.",
+              "role": "user"
+            },
+            {
+              "content": "Logged - renewal playbook delivered by the marketing-agent, reference DOC-1994-SR.",
+              "role": "assistant"
+            }
+          ]
+        },
+        {
+          "agent_id": "sales-agent",
+          "date": "2026-03-16",
+          "session_id": "seq_sales_ops_001_s07",
+          "turns": [
+            {
+              "content": "What time zone is our Thursday sync in?",
+              "role": "user"
+            },
+            {
+              "content": "It is pinned to 15:00 UTC, which shifts locally with daylight saving.",
+              "role": "assistant"
+            },
+            {
+              "content": "Malik Petrov recommended switching to Temporal for the renewal campaign because it was the cheapest option that met the latency budget. Let's go with that.",
+              "role": "user"
+            },
+            {
+              "content": "Decision recorded: Temporal for the renewal campaign, recommended by Malik Petrov. Rationale: it was the cheapest option that met the latency budget.",
+              "role": "assistant"
+            },
+            {
+              "content": "Heads up: Tomas Lindqvist moved from account executive to backend engineer at Aster Dynamics this week.",
+              "role": "user"
+            },
+            {
+              "content": "Updated. Tomas Lindqvist is now backend engineer at Aster Dynamics; previously account executive.",
+              "role": "assistant"
+            },
+            {
+              "content": "Remind me how to write a good standup update.",
+              "role": "user"
+            },
+            {
+              "content": "Cover what you finished, what you're doing next, and anything blocking you.",
+              "role": "assistant"
+            }
+          ]
+        },
+        {
+          "agent_id": "marketing-agent",
+          "date": "2026-03-18",
+          "session_id": "seq_sales_ops_001_s08",
+          "turns": [
+            {
+              "content": "Can you suggest a quick lunch spot near the office?",
+              "role": "user"
+            },
+            {
+              "content": "The noodle bar on the corner is fast, and the salad place next door has a lunch deal.",
+              "role": "assistant"
+            },
+            {
+              "content": "Wait - I heard Ingrid Okafor actually works at Sundial Health, not Aster Dynamics.",
+              "role": "user"
+            },
+            {
+              "content": "That conflicts with my earlier record of Ingrid Okafor at Aster Dynamics; flagging both until confirmed.",
+              "role": "assistant"
+            }
+          ]
+        },
+        {
+          "agent_id": "finance-agent",
+          "date": "2026-03-20",
+          "session_id": "seq_sales_ops_001_s09",
+          "turns": [
+            {
+              "content": "What's the weather looking like for the weekend?",
+              "role": "user"
+            },
+            {
+              "content": "Mostly sunny with a chance of showers on Sunday afternoon.",
+              "role": "assistant"
+            },
+            {
+              "content": "Malik Petrov opened support ticket TKT-2116-VB for the renewal campaign. Keep that reference handy.",
+              "role": "user"
+            },
+            {
+              "content": "Saved: support ticket TKT-2116-VB (renewal campaign, opened by Malik Petrov).",
+              "role": "assistant"
+            },
+            {
+              "content": "Correction from HR: Sofia Moreau lives in Melbourne.",
+              "role": "user"
+            },
+            {
+              "content": "That contradicts the earlier note that Sofia Moreau is based in Amsterdam; flagging the conflict.",
+              "role": "assistant"
+            },
+            {
+              "content": "What's a good book on negotiation?",
+              "role": "user"
+            },
+            {
+              "content": "Never Split the Difference is a practical starting point.",
+              "role": "assistant"
+            }
+          ]
+        },
+        {
+          "agent_id": "sales-agent",
+          "date": "2026-03-22",
+          "session_id": "seq_sales_ops_001_s10",
+          "turns": [
+            {
+              "content": "Remind me how to write a good standup update.",
+              "role": "user"
+            },
+            {
+              "content": "Cover what you finished, what you're doing next, and anything blocking you.",
+              "role": "assistant"
+            },
+            {
+              "content": "For the record: the finance-agent produced the pipeline health report today and filed it under reference DOC-9458-JH.",
+              "role": "user"
+            },
+            {
+              "content": "Logged - pipeline health report delivered by the finance-agent, reference DOC-9458-JH.",
+              "role": "assistant"
+            },
+            {
+              "content": "Just double-checking: Tomas Lindqvist is still at Aster Dynamics, right?",
+              "role": "user"
+            },
+            {
+              "content": "Correct, Tomas Lindqvist works at Aster Dynamics.",
+              "role": "assistant"
+            }
+          ]
+        },
+        {
+          "agent_id": "marketing-agent",
+          "date": "2026-03-24",
+          "session_id": "seq_sales_ops_001_s11",
+          "turns": [
+            {
+              "content": "Any tips for staying focused during long meetings?",
+              "role": "user"
+            },
+            {
+              "content": "Take brief notes by hand and ask one clarifying question early to stay engaged.",
+              "role": "assistant"
+            },
+            {
+              "content": "Can you recommend a stretch for wrist pain?",
+              "role": "user"
+            },
+            {
+              "content": "Gentle wrist extensor stretches, ten seconds each side, a few times a day.",
+              "role": "assistant"
+            }
+          ]
+        },
+        {
+          "agent_id": "finance-agent",
+          "date": "2026-03-26",
+          "session_id": "seq_sales_ops_001_s12",
+          "turns": [
+            {
+              "content": "What's a good book on negotiation?",
+              "role": "user"
+            },
+            {
+              "content": "Never Split the Difference is a practical starting point.",
+              "role": "assistant"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "case_id": "seq_personal_assistant_002",
+      "ground_truth": {
+        "contradictions": [
+          {
+            "new_object": "Northwind Analytics",
+            "new_turn_id": "seq_personal_assistant_002_s08:2",
+            "old_object": "Quill Software",
+            "old_turn_id": "seq_personal_assistant_002_s02:2",
+            "predicate": "works_at",
+            "subject": "Dario Alvarez"
+          },
+          {
+            "new_object": "Singapore",
+            "new_turn_id": "seq_personal_assistant_002_s09:4",
+            "old_object": "Berlin",
+            "old_turn_id": "seq_personal_assistant_002_s01:4",
+            "predicate": "lives_in",
+            "subject": "Kai Bergstrom"
+          }
+        ],
+        "entities": [
+          {
+            "attributes": {
+              "email": "malik.rao@quillsoftware.example.com",
+              "role": "engineering lead"
+            },
+            "name": "Malik Rao",
+            "session_id": "seq_personal_assistant_002_s01",
+            "turn_id": "seq_personal_assistant_002_s01:2",
+            "type": "person"
+          },
+          {
+            "attributes": {},
+            "name": "Quill Software",
+            "session_id": "seq_personal_assistant_002_s01",
+            "turn_id": "seq_personal_assistant_002_s01:2",
+            "type": "company"
+          },
+          {
+            "attributes": {},
+            "name": "Kai Bergstrom",
+            "session_id": "seq_personal_assistant_002_s01",
+            "turn_id": "seq_personal_assistant_002_s01:4",
+            "type": "person"
+          },
+          {
+            "attributes": {},
+            "name": "Berlin",
+            "session_id": "seq_personal_assistant_002_s01",
+            "turn_id": "seq_personal_assistant_002_s01:4",
+            "type": "location"
+          },
+          {
+            "attributes": {
+              "email": "dario.alvarez@quillsoftware.example.com",
+              "role": "engineering lead"
+            },
+            "name": "Dario Alvarez",
+            "session_id": "seq_personal_assistant_002_s02",
+            "turn_id": "seq_personal_assistant_002_s02:2",
+            "type": "person"
+          },
+          {
+            "attributes": {},
+            "name": "Quill Software",
+            "session_id": "seq_personal_assistant_002_s02",
+            "turn_id": "seq_personal_assistant_002_s02:2",
+            "type": "company"
+          },
+          {
+            "attributes": {},
+            "name": "Dario Alvarez",
+            "session_id": "seq_personal_assistant_002_s02",
+            "turn_id": "seq_personal_assistant_002_s02:4",
+            "type": "person"
+          },
+          {
+            "attributes": {},
+            "name": "Stripe",
+            "session_id": "seq_personal_assistant_002_s02",
+            "turn_id": "seq_personal_assistant_002_s02:4",
+            "type": "topic"
+          },
+          {
+            "attributes": {},
+            "name": "family reunion",
+            "session_id": "seq_personal_assistant_002_s02",
+            "turn_id": "seq_personal_assistant_002_s02:4",
+            "type": "project"
+          },
+          {
+            "attributes": {},
+            "name": "planner-agent",
+            "session_id": "seq_personal_assistant_002_s03",
+            "turn_id": "seq_personal_assistant_002_s03:2",
+            "type": "agent"
+          },
+          {
+            "attributes": {
+              "reference": "DOC-1768-TJ"
+            },
+            "name": "renovation budget",
+            "session_id": "seq_personal_assistant_002_s03",
+            "turn_id": "seq_personal_assistant_002_s03:2",
+            "type": "artifact"
+          },
+          {
+            "attributes": {
+              "email": "kai.bergstrom@quillsoftware.example.com",
+              "role": "data analyst"
+            },
+            "name": "Kai Bergstrom",
+            "session_id": "seq_personal_assistant_002_s04",
+            "turn_id": "seq_personal_assistant_002_s04:2",
+            "type": "person"
+          },
+          {
+            "attributes": {},
+            "name": "Quill Software",
+            "session_id": "seq_personal_assistant_002_s04",
+            "turn_id": "seq_personal_assistant_002_s04:2",
+            "type": "company"
+          },
+          {
+            "attributes": {},
+            "name": "Kai Bergstrom",
+            "session_id": "seq_personal_assistant_002_s04",
+            "turn_id": "seq_personal_assistant_002_s04:4",
+            "type": "person"
+          },
+          {
+            "attributes": {},
+            "name": "Clerk",
+            "session_id": "seq_personal_assistant_002_s04",
+            "turn_id": "seq_personal_assistant_002_s04:4",
+            "type": "topic"
+          },
+          {
+            "attributes": {},
+            "name": "tax filing",
+            "session_id": "seq_personal_assistant_002_s04",
+            "turn_id": "seq_personal_assistant_002_s04:4",
+            "type": "project"
+          },
+          {
+            "attributes": {},
+            "name": "Kai Bergstrom",
+            "session_id": "seq_personal_assistant_002_s04",
+            "turn_id": "seq_personal_assistant_002_s04:6",
+            "type": "person"
+          },
+          {
+            "attributes": {
+              "kind": "invoice",
+              "project": "tax filing"
+            },
+            "name": "INV-7506-DE",
+            "session_id": "seq_personal_assistant_002_s04",
+            "turn_id": "seq_personal_assistant_002_s04:6",
+            "type": "reference"
+          },
+          {
+            "attributes": {},
+            "name": "travel-agent",
+            "session_id": "seq_personal_assistant_002_s06",
+            "turn_id": "seq_personal_assistant_002_s06:2",
+            "type": "agent"
+          },
+          {
+            "attributes": {
+              "reference": "DOC-3357-FB"
+            },
+            "name": "vendor shortlist",
+            "session_id": "seq_personal_assistant_002_s06",
+            "turn_id": "seq_personal_assistant_002_s06:2",
+            "type": "artifact"
+          },
+          {
+            "attributes": {},
+            "name": "Noor Silva",
+            "session_id": "seq_personal_assistant_002_s07",
+            "turn_id": "seq_personal_assistant_002_s07:2",
+            "type": "person"
+          },
+          {
+            "attributes": {},
+            "name": "Terraform",
+            "session_id": "seq_personal_assistant_002_s07",
+            "turn_id": "seq_personal_assistant_002_s07:2",
+            "type": "topic"
+          },
+          {
+            "attributes": {},
+            "name": "conference trip",
+            "session_id": "seq_personal_assistant_002_s07",
+            "turn_id": "seq_personal_assistant_002_s07:2",
+            "type": "project"
+          },
+          {
+            "attributes": {
+              "role": "backend engineer"
+            },
+            "name": "Malik Rao",
+            "session_id": "seq_personal_assistant_002_s07",
+            "turn_id": "seq_personal_assistant_002_s07:4",
+            "type": "person"
+          },
+          {
+            "attributes": {},
+            "name": "Northwind Analytics",
+            "session_id": "seq_personal_assistant_002_s08",
+            "turn_id": "seq_personal_assistant_002_s08:2",
+            "type": "company"
+          },
+          {
+            "attributes": {},
+            "name": "Noor Silva",
+            "session_id": "seq_personal_assistant_002_s09",
+            "turn_id": "seq_personal_assistant_002_s09:2",
+            "type": "person"
+          },
+          {
+            "attributes": {
+              "kind": "support ticket",
+              "project": "conference trip"
+            },
+            "name": "TKT-4267-NJ",
+            "session_id": "seq_personal_assistant_002_s09",
+            "turn_id": "seq_personal_assistant_002_s09:2",
+            "type": "reference"
+          },
+          {
+            "attributes": {},
+            "name": "Singapore",
+            "session_id": "seq_personal_assistant_002_s09",
+            "turn_id": "seq_personal_assistant_002_s09:4",
+            "type": "location"
+          },
+          {
+            "attributes": {},
+            "name": "inbox-agent",
+            "session_id": "seq_personal_assistant_002_s10",
+            "turn_id": "seq_personal_assistant_002_s10:2",
+            "type": "agent"
+          },
+          {
+            "attributes": {
+              "reference": "DOC-4041-PR"
+            },
+            "name": "travel itinerary",
+            "session_id": "seq_personal_assistant_002_s10",
+            "turn_id": "seq_personal_assistant_002_s10:2",
+            "type": "artifact"
+          }
+        ],
+        "log_entries": [
+          {
+            "date": "2026-01-27",
+            "decisions": [],
+            "projects": [],
+            "source_session_ids": [
+              "seq_personal_assistant_002_s01"
+            ],
+            "summary": "Routine coordination on 2026-01-27."
+          },
+          {
+            "date": "2026-01-29",
+            "decisions": [
+              "Adopt Stripe for the family reunion (Dario Alvarez's recommendation)"
+            ],
+            "projects": [
+              "family reunion"
+            ],
+            "source_session_ids": [
+              "seq_personal_assistant_002_s02"
+            ],
+            "summary": "Work on 2026-01-29: Dario Alvarez recommended Stripe for the family reunion"
+          },
+          {
+            "date": "2026-01-31",
+            "decisions": [],
+            "projects": [],
+            "source_session_ids": [
+              "seq_personal_assistant_002_s03"
+            ],
+            "summary": "Work on 2026-01-31: the planner-agent delivered the renovation budget"
+          },
+          {
+            "date": "2026-02-02",
+            "decisions": [
+              "Adopt Clerk for the tax filing (Kai Bergstrom's recommendation)"
+            ],
+            "projects": [
+              "tax filing"
+            ],
+            "source_session_ids": [
+              "seq_personal_assistant_002_s04"
+            ],
+            "summary": "Work on 2026-02-02: Kai Bergstrom recommended Clerk for the tax filing"
+          },
+          {
+            "date": "2026-02-06",
+            "decisions": [],
+            "projects": [],
+            "source_session_ids": [
+              "seq_personal_assistant_002_s06"
+            ],
+            "summary": "Work on 2026-02-06: the travel-agent delivered the vendor shortlist"
+          },
+          {
+            "date": "2026-02-08",
+            "decisions": [
+              "Adopt Terraform for the conference trip (Noor Silva's recommendation)"
+            ],
+            "projects": [
+              "conference trip"
+            ],
+            "source_session_ids": [
+              "seq_personal_assistant_002_s07"
+            ],
+            "summary": "Work on 2026-02-08: Noor Silva recommended Terraform for the conference trip; Malik Rao moved to backend engineer"
+          },
+          {
+            "date": "2026-02-10",
+            "decisions": [],
+            "projects": [],
+            "source_session_ids": [
+              "seq_personal_assistant_002_s08"
+            ],
+            "summary": "Routine coordination on 2026-02-10."
+          },
+          {
+            "date": "2026-02-12",
+            "decisions": [],
+            "projects": [],
+            "source_session_ids": [
+              "seq_personal_assistant_002_s09"
+            ],
+            "summary": "Routine coordination on 2026-02-12."
+          },
+          {
+            "date": "2026-02-14",
+            "decisions": [],
+            "projects": [],
+            "source_session_ids": [
+              "seq_personal_assistant_002_s10"
+            ],
+            "summary": "Work on 2026-02-14: the inbox-agent delivered the travel itinerary"
+          }
+        ],
+        "relationships": [
+          {
+            "attributes": {
+              "role": "engineering lead",
+              "stated_on": "2026-01-27",
+              "valid_from": "2026-01-27",
+              "valid_to": "2026-02-08"
+            },
+            "confidence": 0.85,
+            "from_name": "Malik Rao",
+            "from_type": "person",
+            "session_id": "seq_personal_assistant_002_s01",
+            "to_name": "Quill Software",
+            "to_type": "company",
+            "turn_id": "seq_personal_assistant_002_s01:2",
+            "type": "works_at"
+          },
+          {
+            "attributes": {
+              "stated_on": "2026-01-27"
+            },
+            "confidence": 0.85,
+            "from_name": "Kai Bergstrom",
+            "from_type": "person",
+            "session_id": "seq_personal_assistant_002_s01",
+            "to_name": "Berlin",
+            "to_type": "location",
+            "turn_id": "seq_personal_assistant_002_s01:4",
+            "type": "lives_in"
+          },
+          {
+            "attributes": {
+              "role": "engineering lead",
+              "stated_on": "2026-01-29",
+              "valid_from": "2026-01-29"
+            },
+            "confidence": 0.85,
+            "from_name": "Dario Alvarez",
+            "from_type": "person",
+            "session_id": "seq_personal_assistant_002_s02",
+            "to_name": "Quill Software",
+            "to_type": "company",
+            "turn_id": "seq_personal_assistant_002_s02:2",
+            "type": "works_at"
+          },
+          {
+            "attributes": {
+              "project": "family reunion",
+              "stated_on": "2026-01-29"
+            },
+            "confidence": 0.85,
+            "from_name": "Dario Alvarez",
+            "from_type": "person",
+            "session_id": "seq_personal_assistant_002_s02",
+            "to_name": "Stripe",
+            "to_type": "topic",
+            "turn_id": "seq_personal_assistant_002_s02:4",
+            "type": "recommended"
+          },
+          {
+            "attributes": {
+              "stated_on": "2026-01-29"
+            },
+            "confidence": 0.85,
+            "from_name": "family reunion",
+            "from_type": "project",
+            "session_id": "seq_personal_assistant_002_s02",
+            "to_name": "Stripe",
+            "to_type": "topic",
+            "turn_id": "seq_personal_assistant_002_s02:4",
+            "type": "uses"
+          },
+          {
+            "attributes": {
+              "reference": "DOC-1768-TJ",
+              "stated_on": "2026-01-31"
+            },
+            "confidence": 0.85,
+            "from_name": "planner-agent",
+            "from_type": "agent",
+            "session_id": "seq_personal_assistant_002_s03",
+            "to_name": "renovation budget",
+            "to_type": "artifact",
+            "turn_id": "seq_personal_assistant_002_s03:2",
+            "type": "produced"
+          },
+          {
+            "attributes": {
+              "role": "data analyst",
+              "stated_on": "2026-02-02",
+              "valid_from": "2026-02-02"
+            },
+            "confidence": 0.85,
+            "from_name": "Kai Bergstrom",
+            "from_type": "person",
+            "session_id": "seq_personal_assistant_002_s04",
+            "to_name": "Quill Software",
+            "to_type": "company",
+            "turn_id": "seq_personal_assistant_002_s04:2",
+            "type": "works_at"
+          },
+          {
+            "attributes": {
+              "project": "tax filing",
+              "stated_on": "2026-02-02"
+            },
+            "confidence": 0.85,
+            "from_name": "Kai Bergstrom",
+            "from_type": "person",
+            "session_id": "seq_personal_assistant_002_s04",
+            "to_name": "Clerk",
+            "to_type": "topic",
+            "turn_id": "seq_personal_assistant_002_s04:4",
+            "type": "recommended"
+          },
+          {
+            "attributes": {
+              "stated_on": "2026-02-02"
+            },
+            "confidence": 0.85,
+            "from_name": "tax filing",
+            "from_type": "project",
+            "session_id": "seq_personal_assistant_002_s04",
+            "to_name": "Clerk",
+            "to_type": "topic",
+            "turn_id": "seq_personal_assistant_002_s04:4",
+            "type": "uses"
+          },
+          {
+            "attributes": {
+              "kind": "invoice",
+              "project": "tax filing",
+              "stated_on": "2026-02-02"
+            },
+            "confidence": 0.85,
+            "from_name": "Kai Bergstrom",
+            "from_type": "person",
+            "session_id": "seq_personal_assistant_002_s04",
+            "to_name": "INV-7506-DE",
+            "to_type": "reference",
+            "turn_id": "seq_personal_assistant_002_s04:6",
+            "type": "opened"
+          },
+          {
+            "attributes": {
+              "reference": "DOC-3357-FB",
+              "stated_on": "2026-02-06"
+            },
+            "confidence": 0.85,
+            "from_name": "travel-agent",
+            "from_type": "agent",
+            "session_id": "seq_personal_assistant_002_s06",
+            "to_name": "vendor shortlist",
+            "to_type": "artifact",
+            "turn_id": "seq_personal_assistant_002_s06:2",
+            "type": "produced"
+          },
+          {
+            "attributes": {
+              "project": "conference trip",
+              "stated_on": "2026-02-08"
+            },
+            "confidence": 0.85,
+            "from_name": "Noor Silva",
+            "from_type": "person",
+            "session_id": "seq_personal_assistant_002_s07",
+            "to_name": "Terraform",
+            "to_type": "topic",
+            "turn_id": "seq_personal_assistant_002_s07:2",
+            "type": "recommended"
+          },
+          {
+            "attributes": {
+              "stated_on": "2026-02-08"
+            },
+            "confidence": 0.85,
+            "from_name": "conference trip",
+            "from_type": "project",
+            "session_id": "seq_personal_assistant_002_s07",
+            "to_name": "Terraform",
+            "to_type": "topic",
+            "turn_id": "seq_personal_assistant_002_s07:2",
+            "type": "uses"
+          },
+          {
+            "attributes": {
+              "role": "backend engineer",
+              "stated_on": "2026-02-08",
+              "valid_from": "2026-02-08"
+            },
+            "confidence": 0.9,
+            "from_name": "Malik Rao",
+            "from_type": "person",
+            "session_id": "seq_personal_assistant_002_s07",
+            "to_name": "Quill Software",
+            "to_type": "company",
+            "turn_id": "seq_personal_assistant_002_s07:4",
+            "type": "works_at"
+          },
+          {
+            "attributes": {
+              "stated_on": "2026-02-10"
+            },
+            "confidence": 0.85,
+            "from_name": "Dario Alvarez",
+            "from_type": "person",
+            "session_id": "seq_personal_assistant_002_s08",
+            "to_name": "Northwind Analytics",
+            "to_type": "company",
+            "turn_id": "seq_personal_assistant_002_s08:2",
+            "type": "works_at"
+          },
+          {
+            "attributes": {
+              "kind": "support ticket",
+              "project": "conference trip",
+              "stated_on": "2026-02-12"
+            },
+            "confidence": 0.85,
+            "from_name": "Noor Silva",
+            "from_type": "person",
+            "session_id": "seq_personal_assistant_002_s09",
+            "to_name": "TKT-4267-NJ",
+            "to_type": "reference",
+            "turn_id": "seq_personal_assistant_002_s09:2",
+            "type": "opened"
+          },
+          {
+            "attributes": {
+              "stated_on": "2026-02-12"
+            },
+            "confidence": 0.85,
+            "from_name": "Kai Bergstrom",
+            "from_type": "person",
+            "session_id": "seq_personal_assistant_002_s09",
+            "to_name": "Singapore",
+            "to_type": "location",
+            "turn_id": "seq_personal_assistant_002_s09:4",
+            "type": "lives_in"
+          },
+          {
+            "attributes": {
+              "reference": "DOC-4041-PR",
+              "stated_on": "2026-02-14"
+            },
+            "confidence": 0.85,
+            "from_name": "inbox-agent",
+            "from_type": "agent",
+            "session_id": "seq_personal_assistant_002_s10",
+            "to_name": "travel itinerary",
+            "to_type": "artifact",
+            "turn_id": "seq_personal_assistant_002_s10:2",
+            "type": "produced"
+          },
+          {
+            "attributes": {
+              "stated_on": "2026-02-14"
+            },
+            "confidence": 0.85,
+            "from_name": "Malik Rao",
+            "from_type": "person",
+            "session_id": "seq_personal_assistant_002_s10",
+            "to_name": "Quill Software",
+            "to_type": "company",
+            "turn_id": "seq_personal_assistant_002_s10:4",
+            "type": "works_at"
+          }
+        ]
+      },
+      "questions": [
+        {
+          "answer": "Dario Alvarez",
+          "category": "kg_relationship",
+          "date_from": null,
+          "date_to": null,
+          "evidence_session_ids": [
+            "seq_personal_assistant_002_s02"
+          ],
+          "evidence_turn_ids": [
+            "seq_personal_assistant_002_s02:4"
+          ],
+          "exact_strings": [],
+          "question": "Who recommended using Stripe for the family reunion?",
+          "question_id": "seq_personal_assistant_002_q001_kg_relationship"
+        },
+        {
+          "answer": "kai.bergstrom@quillsoftware.example.com",
+          "category": "kg_relationship",
+          "date_from": null,
+          "date_to": null,
+          "evidence_session_ids": [
+            "seq_personal_assistant_002_s04"
+          ],
+          "evidence_turn_ids": [
+            "seq_personal_assistant_002_s04:2"
+          ],
+          "exact_strings": [
+            "kai.bergstrom@quillsoftware.example.com"
+          ],
+          "question": "What is Kai Bergstrom's email address?",
+          "question_id": "seq_personal_assistant_002_q002_kg_relationship"
+        },
+        {
+          "answer": "engineering lead",
+          "category": "temporal_validity",
+          "date_from": "2026-01-27",
+          "date_to": "2026-01-27",
+          "evidence_session_ids": [
+            "seq_personal_assistant_002_s01"
+          ],
+          "evidence_turn_ids": [
+            "seq_personal_assistant_002_s01:2"
+          ],
+          "exact_strings": [],
+          "question": "What was Malik Rao's role at Quill Software on 2026-01-27, before any later changes?",
+          "question_id": "seq_personal_assistant_002_q003_temporal_validity"
+        },
+        {
+          "answer": "backend engineer",
+          "category": "temporal_validity",
+          "date_from": null,
+          "date_to": null,
+          "evidence_session_ids": [
+            "seq_personal_assistant_002_s07"
+          ],
+          "evidence_turn_ids": [
+            "seq_personal_assistant_002_s07:4"
+          ],
+          "exact_strings": [],
+          "question": "What is Malik Rao's current role at Quill Software?",
+          "question_id": "seq_personal_assistant_002_q004_temporal_validity"
+        },
+        {
+          "answer": "tax filing",
+          "category": "narrative_recall",
+          "date_from": "2026-02-02",
+          "date_to": "2026-02-02",
+          "evidence_session_ids": [
+            "seq_personal_assistant_002_s04"
+          ],
+          "evidence_turn_ids": [],
+          "exact_strings": [],
+          "question": "Which projects saw activity on 2026-02-02?",
+          "question_id": "seq_personal_assistant_002_q005_narrative_recall"
+        },
+        {
+          "answer": "Adopt Terraform for the conference trip (Noor Silva's recommendation)",
+          "category": "narrative_recall",
+          "date_from": "2026-02-08",
+          "date_to": "2026-02-08",
+          "evidence_session_ids": [
+            "seq_personal_assistant_002_s07"
+          ],
+          "evidence_turn_ids": [],
+          "exact_strings": [],
+          "question": "What were the main decisions made on 2026-02-08?",
+          "question_id": "seq_personal_assistant_002_q006_narrative_recall"
+        },
+        {
+          "answer": "inbox-agent",
+          "category": "cross_agent",
+          "date_from": null,
+          "date_to": null,
+          "evidence_session_ids": [
+            "seq_personal_assistant_002_s10"
+          ],
+          "evidence_turn_ids": [
+            "seq_personal_assistant_002_s10:2"
+          ],
+          "exact_strings": [],
+          "question": "Which agent produced the travel itinerary?",
+          "question_id": "seq_personal_assistant_002_q007_cross_agent"
+        },
+        {
+          "answer": "DOC-4041-PR",
+          "category": "cross_agent",
+          "date_from": null,
+          "date_to": null,
+          "evidence_session_ids": [
+            "seq_personal_assistant_002_s10"
+          ],
+          "evidence_turn_ids": [
+            "seq_personal_assistant_002_s10:2"
+          ],
+          "exact_strings": [
+            "DOC-4041-PR"
+          ],
+          "question": "Under what reference number did the inbox-agent file the travel itinerary?",
+          "question_id": "seq_personal_assistant_002_q008_cross_agent"
+        },
+        {
+          "answer": "Conflicting information: Quill Software and Northwind Analytics were both stated; the conflict is unresolved.",
+          "category": "contradiction_detection",
+          "date_from": null,
+          "date_to": null,
+          "evidence_session_ids": [
+            "seq_personal_assistant_002_s02",
+            "seq_personal_assistant_002_s08"
+          ],
+          "evidence_turn_ids": [
+            "seq_personal_assistant_002_s02:2",
+            "seq_personal_assistant_002_s08:2"
+          ],
+          "exact_strings": [],
+          "question": "Which company does Dario Alvarez work at?",
+          "question_id": "seq_personal_assistant_002_q009_contradiction_detection"
+        },
+        {
+          "answer": "Conflicting information: Berlin and Singapore were both stated; the conflict is unresolved.",
+          "category": "contradiction_detection",
+          "date_from": null,
+          "date_to": null,
+          "evidence_session_ids": [
+            "seq_personal_assistant_002_s01",
+            "seq_personal_assistant_002_s09"
+          ],
+          "evidence_turn_ids": [
+            "seq_personal_assistant_002_s01:4",
+            "seq_personal_assistant_002_s09:4"
+          ],
+          "exact_strings": [],
+          "question": "Which city does Kai Bergstrom live in?",
+          "question_id": "seq_personal_assistant_002_q010_contradiction_detection"
+        }
+      ],
+      "scenario": "personal_assistant",
+      "sessions": [
+        {
+          "agent_id": "planner-agent",
+          "date": "2026-01-27",
+          "session_id": "seq_personal_assistant_002_s01",
+          "turns": [
+            {
+              "content": "Remind me how to write a good standup update.",
+              "role": "user"
+            },
+            {
+              "content": "Cover what you finished, what you're doing next, and anything blocking you.",
+              "role": "assistant"
+            },
+            {
+              "content": "For the record: Malik Rao is our engineering lead at Quill Software. You can reach them at malik.rao@quillsoftware.example.com.",
+              "role": "user"
+            },
+            {
+              "content": "Noted. Malik Rao (engineering lead, Quill Software) with contact malik.rao@quillsoftware.example.com.",
+              "role": "assistant"
+            },
+            {
+              "content": "Kai Bergstrom is based in Berlin, so schedule calls in their morning.",
+              "role": "user"
+            },
+            {
+              "content": "Got it - Kai Bergstrom lives in Berlin.",
+              "role": "assistant"
+            },
+            {
+              "content": "How do I make cold brew at home?",
+              "role": "user"
+            },
+            {
+              "content": "Steep coarse grounds in cold water for 16 hours, then strain twice.",
+              "role": "assistant"
+            }
+          ]
+        },
+        {
+          "agent_id": "travel-agent",
+          "date": "2026-01-29",
+          "session_id": "seq_personal_assistant_002_s02",
+          "turns": [
+            {
+              "content": "Any tips for staying focused during long meetings?",
+              "role": "user"
+            },
+            {
+              "content": "Take brief notes by hand and ask one clarifying question early to stay engaged.",
+              "role": "assistant"
+            },
+            {
+              "content": "For the record: Dario Alvarez is our engineering lead at Quill Software. You can reach them at dario.alvarez@quillsoftware.example.com.",
+              "role": "user"
+            },
+            {
+              "content": "Noted. Dario Alvarez (engineering lead, Quill Software) with contact dario.alvarez@quillsoftware.example.com.",
+              "role": "assistant"
+            },
+            {
+              "content": "Dario Alvarez recommended switching to Stripe for the family reunion because the migration path from the current stack is simplest. Let's go with that.",
+              "role": "user"
+            },
+            {
+              "content": "Decision recorded: Stripe for the family reunion, recommended by Dario Alvarez. Rationale: the migration path from the current stack is simplest.",
+              "role": "assistant"
+            }
+          ]
+        },
+        {
+          "agent_id": "inbox-agent",
+          "date": "2026-01-31",
+          "session_id": "seq_personal_assistant_002_s03",
+          "turns": [
+            {
+              "content": "What's a good book on negotiation?",
+              "role": "user"
+            },
+            {
+              "content": "Never Split the Difference is a practical starting point.",
+              "role": "assistant"
+            },
+            {
+              "content": "For the record: the planner-agent produced the renovation budget today and filed it under reference DOC-1768-TJ.",
+              "role": "user"
+            },
+            {
+              "content": "Logged - renovation budget delivered by the planner-agent, reference DOC-1768-TJ.",
+              "role": "assistant"
+            },
+            {
+              "content": "What time zone is our Thursday sync in?",
+              "role": "user"
+            },
+            {
+              "content": "It is pinned to 15:00 UTC, which shifts locally with daylight saving.",
+              "role": "assistant"
+            }
+          ]
+        },
+        {
+          "agent_id": "planner-agent",
+          "date": "2026-02-02",
+          "session_id": "seq_personal_assistant_002_s04",
+          "turns": [
+            {
+              "content": "How do I make cold brew at home?",
+              "role": "user"
+            },
+            {
+              "content": "Steep coarse grounds in cold water for 16 hours, then strain twice.",
+              "role": "assistant"
+            },
+            {
+              "content": "For the record: Kai Bergstrom is our data analyst at Quill Software. You can reach them at kai.bergstrom@quillsoftware.example.com.",
+              "role": "user"
+            },
+            {
+              "content": "Noted. Kai Bergstrom (data analyst, Quill Software) with contact kai.bergstrom@quillsoftware.example.com.",
+              "role": "assistant"
+            },
+            {
+              "content": "Kai Bergstrom recommended switching to Clerk for the tax filing because it was the cheapest option that met the latency budget. Let's go with that.",
+              "role": "user"
+            },
+            {
+              "content": "Decision recorded: Clerk for the tax filing, recommended by Kai Bergstrom. Rationale: it was the cheapest option that met the latency budget.",
+              "role": "assistant"
+            },
+            {
+              "content": "Kai Bergstrom opened invoice INV-7506-DE for the tax filing. Keep that reference handy.",
+              "role": "user"
+            },
+            {
+              "content": "Saved: invoice INV-7506-DE (tax filing, opened by Kai Bergstrom).",
+              "role": "assistant"
+            }
+          ]
+        },
+        {
+          "agent_id": "travel-agent",
+          "date": "2026-02-04",
+          "session_id": "seq_personal_assistant_002_s05",
+          "turns": [
+            {
+              "content": "Can you recommend a stretch for wrist pain?",
+              "role": "user"
+            },
+            {
+              "content": "Gentle wrist extensor stretches, ten seconds each side, a few times a day.",
+              "role": "assistant"
+            },
+            {
+              "content": "What's the weather looking like for the weekend?",
+              "role": "user"
+            },
+            {
+              "content": "Mostly sunny with a chance of showers on Sunday afternoon.",
+              "role": "assistant"
+            }
+          ]
+        },
+        {
+          "agent_id": "inbox-agent",
+          "date": "2026-02-06",
+          "session_id": "seq_personal_assistant_002_s06",
+          "turns": [
+            {
+              "content": "What time zone is our Thursday sync in?",
+              "role": "user"
+            },
+            {
+              "content": "It is pinned to 15:00 UTC, which shifts locally with daylight saving.",
+              "role": "assistant"
+            },
+            {
+              "content": "For the record: the travel-agent produced the vendor shortlist today and filed it under reference DOC-3357-FB.",
+              "role": "user"
+            },
+            {
+              "content": "Logged - vendor shortlist delivered by the travel-agent, reference DOC-3357-FB.",
+              "role": "assistant"
+            }
+          ]
+        },
+        {
+          "agent_id": "planner-agent",
+          "date": "2026-02-08",
+          "session_id": "seq_personal_assistant_002_s07",
+          "turns": [
+            {
+              "content": "Can you suggest a quick lunch spot near the office?",
+              "role": "user"
+            },
+            {
+              "content": "The noodle bar on the corner is fast, and the salad place next door has a lunch deal.",
+              "role": "assistant"
+            },
+            {
+              "content": "Noor Silva recommended switching to Terraform for the conference trip because the migration path from the current stack is simplest. Let's go with that.",
+              "role": "user"
+            },
+            {
+              "content": "Decision recorded: Terraform for the conference trip, recommended by Noor Silva. Rationale: the migration path from the current stack is simplest.",
+              "role": "assistant"
+            },
+            {
+              "content": "Heads up: Malik Rao moved from engineering lead to backend engineer at Quill Software this week.",
+              "role": "user"
+            },
+            {
+              "content": "Updated. Malik Rao is now backend engineer at Quill Software; previously engineering lead.",
+              "role": "assistant"
+            },
+            {
+              "content": "Any tips for staying focused during long meetings?",
+              "role": "user"
+            },
+            {
+              "content": "Take brief notes by hand and ask one clarifying question early to stay engaged.",
+              "role": "assistant"
+            }
+          ]
+        },
+        {
+          "agent_id": "travel-agent",
+          "date": "2026-02-10",
+          "session_id": "seq_personal_assistant_002_s08",
+          "turns": [
+            {
+              "content": "What's the weather looking like for the weekend?",
+              "role": "user"
+            },
+            {
+              "content": "Mostly sunny with a chance of showers on Sunday afternoon.",
+              "role": "assistant"
+            },
+            {
+              "content": "Wait - I heard Dario Alvarez actually works at Northwind Analytics, not Quill Software.",
+              "role": "user"
+            },
+            {
+              "content": "That conflicts with my earlier record of Dario Alvarez at Quill Software; flagging both until confirmed.",
+              "role": "assistant"
+            }
+          ]
+        },
+        {
+          "agent_id": "inbox-agent",
+          "date": "2026-02-12",
+          "session_id": "seq_personal_assistant_002_s09",
+          "turns": [
+            {
+              "content": "Remind me how to write a good standup update.",
+              "role": "user"
+            },
+            {
+              "content": "Cover what you finished, what you're doing next, and anything blocking you.",
+              "role": "assistant"
+            },
+            {
+              "content": "Noor Silva opened support ticket TKT-4267-NJ for the conference trip. Keep that reference handy.",
+              "role": "user"
+            },
+            {
+              "content": "Saved: support ticket TKT-4267-NJ (conference trip, opened by Noor Silva).",
+              "role": "assistant"
+            },
+            {
+              "content": "Correction from HR: Kai Bergstrom lives in Singapore.",
+              "role": "user"
+            },
+            {
+              "content": "That contradicts the earlier note that Kai Bergstrom is based in Berlin; flagging the conflict.",
+              "role": "assistant"
+            },
+            {
+              "content": "How do I make cold brew at home?",
+              "role": "user"
+            },
+            {
+              "content": "Steep coarse grounds in cold water for 16 hours, then strain twice.",
+              "role": "assistant"
+            }
+          ]
+        },
+        {
+          "agent_id": "planner-agent",
+          "date": "2026-02-14",
+          "session_id": "seq_personal_assistant_002_s10",
+          "turns": [
+            {
+              "content": "Any tips for staying focused during long meetings?",
+              "role": "user"
+            },
+            {
+              "content": "Take brief notes by hand and ask one clarifying question early to stay engaged.",
+              "role": "assistant"
+            },
+            {
+              "content": "For the record: the inbox-agent produced the travel itinerary today and filed it under reference DOC-4041-PR.",
+              "role": "user"
+            },
+            {
+              "content": "Logged - travel itinerary delivered by the inbox-agent, reference DOC-4041-PR.",
+              "role": "assistant"
+            },
+            {
+              "content": "Just double-checking: Malik Rao is still at Quill Software, right?",
+              "role": "user"
+            },
+            {
+              "content": "Correct, Malik Rao works at Quill Software.",
+              "role": "assistant"
+            }
+          ]
+        },
+        {
+          "agent_id": "travel-agent",
+          "date": "2026-02-16",
+          "session_id": "seq_personal_assistant_002_s11",
+          "turns": [
+            {
+              "content": "What's a good book on negotiation?",
+              "role": "user"
+            },
+            {
+              "content": "Never Split the Difference is a practical starting point.",
+              "role": "assistant"
+            },
+            {
+              "content": "What time zone is our Thursday sync in?",
+              "role": "user"
+            },
+            {
+              "content": "It is pinned to 15:00 UTC, which shifts locally with daylight saving.",
+              "role": "assistant"
+            }
+          ]
+        },
+        {
+          "agent_id": "inbox-agent",
+          "date": "2026-02-18",
+          "session_id": "seq_personal_assistant_002_s12",
+          "turns": [
+            {
+              "content": "How do I make cold brew at home?",
+              "role": "user"
+            },
+            {
+              "content": "Steep coarse grounds in cold water for 16 hours, then strain twice.",
+              "role": "assistant"
+            }
+          ]
+        }
+      ]
+    }
+  ],
+  "generator": {
+    "categories": [
+      "kg_relationship",
+      "temporal_validity",
+      "narrative_recall",
+      "cross_agent",
+      "contradiction_detection"
+    ],
+    "questions_per_category": 2,
+    "seed": 42,
+    "sequences": 3,
+    "sessions_per_sequence": 12
+  },
+  "name": "muxi-structured-recall",
+  "schema_version": "1.0"
+}
