@@ -210,7 +210,12 @@ class KnowledgeGraphStorage:
         provenance list (idempotently).
 
         Returns:
-            Dict representation of the stored relationship.
+            Dict representation of the stored relationship. When the
+            write contradicted existing facts, the dict additionally
+            carries a ``contradictions`` list (one entry per affected
+            fact: detection kind + the public ids of both rows) so the
+            caller can record fact.contradicted audit events -- the
+            marking itself already happened in this transaction.
         """
         rel_type = normalize_type(rel_type)
         user_id = str(user_id)
@@ -265,19 +270,33 @@ class KnowledgeGraphStorage:
                 await session.flush()
 
                 conflicted_ids = []
+                contradictions = []
                 for old in conflicting:
                     if old.status == STATUS_SUPERSEDED:
                         old.superseded_by = relationship.id
+                        detection = "superseded"
                     else:
                         old.contradicted_by = relationship.id
                         conflicted_ids.append(old.id)
+                        detection = "conflicted"
+                    contradictions.append(
+                        {
+                            "relationship_type": rel_type,
+                            "detection": detection,
+                            "existing_relationship_public_id": old.public_id,
+                            "new_relationship_public_id": relationship.public_id,
+                        }
+                    )
                 if conflicted_ids:
                     # Deterministic back-link: point at the most recent
                     # conflicting fact rather than whichever row the loop
                     # happened to visit last.
                     relationship.contradicted_by = max(conflicted_ids)
                 await session.flush()
-                return relationship.to_dict()
+                stored = relationship.to_dict()
+                if contradictions:
+                    stored["contradictions"] = contradictions
+                return stored
 
             session.add(relationship)
             await session.flush()
@@ -294,6 +313,7 @@ class KnowledgeGraphStorage:
         user_id: str,
         rel_type: Optional[str] = None,
         from_entity_id: Optional[int] = None,
+        to_entity_id: Optional[int] = None,
         status: Optional[str] = STATUS_ACTIVE,
         limit: int = 200,
     ) -> List[Dict[str, Any]]:
@@ -306,6 +326,8 @@ class KnowledgeGraphStorage:
                 stmt = stmt.filter_by(type=normalize_type(rel_type))
             if from_entity_id is not None:
                 stmt = stmt.filter_by(from_entity_id=from_entity_id)
+            if to_entity_id is not None:
+                stmt = stmt.filter_by(to_entity_id=to_entity_id)
             if status:
                 stmt = stmt.filter_by(status=status)
             stmt = stmt.order_by(KGRelationship.confidence.desc(), KGRelationship.id.desc())

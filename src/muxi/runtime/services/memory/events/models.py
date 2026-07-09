@@ -79,10 +79,18 @@ EVENT_MEMORY_INGESTED = "memory.ingested"
 EVENT_INGESTION_FILTERED = "ingestion.filtered"
 
 # One artifact captured into artifact memory (Artifact Memory Phase 1).
-# Metadata-only audit event: the blob lives in artifact storage and is
-# not replayable from the log, so this event has no projector -- the
-# artifacts table is the system of record, not a projection.
+# The blob lives in artifact storage and never enters the log; the
+# metadata row IS a projection (Phase 2b): the artifact-metadata
+# projector rebuilds rows from these events (v2 carries the full
+# metadata; v1 events are reconstructed best-effort).
 EVENT_ARTIFACT_SAVED = "artifact.saved"
+
+# One contradiction detected by the knowledge graph writer (Phase 2c):
+# a new fact on an exclusive predicate conflicted with (or superseded)
+# an existing fact. Audit/provenance only -- the conflict marking itself
+# is part of the deterministic graph apply, so this event has no
+# projector and is never replayed into state.
+EVENT_FACT_CONTRADICTED = "fact.contradicted"
 
 # Versioned payload schemas. "required" keys must be present; keys outside
 # required + optional are rejected -- schema evolution happens by adding a
@@ -152,6 +160,39 @@ EVENT_SCHEMAS: Dict[str, Dict[int, Dict[str, tuple]]] = {
                 "storage_ref",
                 "tags",
             ),
+        },
+        # v2 (Phase 2b): carries the remaining metadata columns so the
+        # artifact-metadata projector can rebuild rows losslessly. The
+        # projector still applies v1 events (summary and compressed size
+        # are reconstructed deterministically) -- builders handle every
+        # historical version until events are hard-purged.
+        2: {
+            "required": ("artifact_id", "name", "version", "content_type"),
+            "optional": (
+                "category",
+                "size_bytes",
+                "checksum_sha256",
+                "storage_ref",
+                "tags",
+                "summary",
+                "compressed_bytes",
+            ),
+        },
+    },
+    EVENT_FACT_CONTRADICTED: {
+        1: {
+            # detection: 'superseded' (new fact auto-replaced the old one)
+            # or 'conflicted' (both retained, cross-referenced). The
+            # public ids point at kg_relationships rows as they existed
+            # when the contradiction was detected.
+            "required": ("relationship_type", "detection"),
+            "optional": (
+                "new_relationship_public_id",
+                "existing_relationship_public_id",
+                "from_entity",
+                "new_object",
+                "existing_object",
+            ),
         }
     },
 }
@@ -185,6 +226,7 @@ SOURCE_CAPTAINS_LOG = "captains_log"  # digest-derived writes (entries, lessons,
 SOURCE_TOOL = "tool"  # the record_lesson agent tool
 SOURCE_USER_EDIT = "user_edit"  # user-initiated corrections/deletions
 SOURCE_ARTIFACT_MEMORY = "artifact_memory"  # artifact capture audit events
+SOURCE_LEGACY = "legacy"  # synthetic events backfilled for pre-event-log rows (Phase B)
 
 # Scope shape recorded for forward compatibility with memory namespaces.
 from ..base import SCOPE_TYPE_USER  # noqa: E402 -- canonical scope constants

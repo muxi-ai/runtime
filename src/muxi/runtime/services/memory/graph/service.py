@@ -55,6 +55,7 @@ class KnowledgeGraphService:
         formation_id: str,
         config: Optional[Dict[str, Any]] = None,
         event_log=None,
+        decay=None,
     ):
         """
         Initialize the knowledge graph service.
@@ -67,7 +68,13 @@ class KnowledgeGraphService:
                 extraction batch is appended to the memory event log before
                 the projection write (dual-write; append failures are
                 isolated inside the event service and never block the
-                graph write).
+                graph write). With ``memory.events.event_first`` enabled
+                the direct write is skipped and the substrate's applier
+                projects the event instead.
+            decay: DecaySettings (or None). When present, context-block
+                ranking weights fact confidence by age at query time for
+                relationship types with a configured half-life
+                (memory.decay.half_lives).
         """
         config = config or {}
         extraction_config = config.get("extraction") or {}
@@ -90,6 +97,7 @@ class KnowledgeGraphService:
         self.storage = KnowledgeGraphStorage(db_manager, formation_id)
         self.extractor = KnowledgeGraphExtractor(confidence_threshold=self.realtime_confidence)
         self.event_log = event_log
+        self.decay = decay
 
         # Backend selection: pgRouting on PostgreSQL when the extension is
         # installable, NetworkX on SQLite and as the safe fallback when the
@@ -213,7 +221,13 @@ class KnowledgeGraphService:
         Captain's Log digest integration. Appends a ``graph.extracted``
         event to the memory event log first (failure-isolated inside the
         event service), then applies the same result through the upsert
-        path the replay rebuild uses.
+        path the replay rebuild uses. With ``memory.events.event_first``
+        enabled and the event durably appended, the direct apply is
+        skipped -- the substrate's applier projects the event (Phase C
+        cutover semantics, flag-gated, default off).
+
+        Contradictions detected during the apply are recorded as
+        ``fact.contradicted`` audit events linked to the extraction event.
         """
         event = None
         if self.event_log is not None and (result.get("entities") or result.get("relationships")):
@@ -227,7 +241,21 @@ class KnowledgeGraphService:
                 source=source,
                 caused_by=caused_by,
             )
-        return await self.apply_extraction(user_id, result, event_id=event["id"] if event else None)
+            if event is not None and self.event_log.event_first:
+                # Event-first cutover: the append is the write; the
+                # incremental applier derives the projection (and records
+                # the contradiction audit events) from the event.
+                await self.event_log.apply_event(event)
+                return {
+                    "entities": len(result.get("entities", [])),
+                    "relationships": len(result.get("relationships", [])),
+                }
+        stored = await self.apply_extraction(
+            user_id, result, event_id=event["id"] if event else None
+        )
+        if event is not None and stored.get("contradictions"):
+            await self.event_log.record_contradictions(event, stored)
+        return stored
 
     async def apply_extraction(
         self,
@@ -239,12 +267,17 @@ class KnowledgeGraphService:
 
         Deterministic projection write shared by the live dual-write path
         and the event-replay rebuild: given the same result batches in the
-        same order it converges to the same graph state.
+        same order it converges to the same graph state. Contradictions
+        detected by the storage layer are returned under the
+        ``contradictions`` key (only when any occurred) so the LIVE caller
+        can record fact.contradicted audit events -- this method itself
+        never writes to the event log, keeping replay pure.
         """
         user_id = str(user_id)
         entity_ids: Dict[Tuple[str, str], int] = {}
         stored_entities = 0
         stored_relationships = 0
+        contradictions: List[Dict[str, Any]] = []
 
         for item in result.get("entities", []):
             entity = await self.storage.upsert_entity(
@@ -272,7 +305,7 @@ class KnowledgeGraphService:
             )
             if from_id is None or to_id is None or from_id == to_id:
                 continue
-            await self.storage.upsert_relationship(
+            stored = await self.storage.upsert_relationship(
                 user_id=user_id,
                 from_entity_id=from_id,
                 to_entity_id=to_id,
@@ -281,12 +314,19 @@ class KnowledgeGraphService:
                 confidence=item["confidence"],
                 event_id=event_id,
             )
+            contradictions.extend(stored.get("contradictions") or [])
             stored_relationships += 1
 
         if stored_entities or stored_relationships:
             self.algorithms.invalidate(user_id)
 
-        return {"entities": stored_entities, "relationships": stored_relationships}
+        result_counts: Dict[str, Any] = {
+            "entities": stored_entities,
+            "relationships": stored_relationships,
+        }
+        if contradictions:
+            result_counts["contradictions"] = contradictions
+        return result_counts
 
     async def _resolve_endpoint(
         self,
@@ -439,6 +479,11 @@ class KnowledgeGraphService:
         query mentions a known entity, multi-hop exploration via the
         GraphAlgorithms backend appends the entities most strongly
         connected to it. Returns "" when the graph is empty or on error.
+
+        Decay (Memory Substrate Phase 2c): when the formation configures
+        half-lives (memory.decay.half_lives), facts are re-ranked by their
+        query-time effective confidence -- stale decaying facts sink below
+        fresh ones without any stored value changing.
         """
         if not self.enabled:
             return ""
@@ -447,6 +492,7 @@ class KnowledgeGraphService:
             relationships = await self.storage.list_relationships(user_id, limit=limit)
             if not relationships:
                 return ""
+            relationships = self._rank_with_decay(relationships)
 
             names = await self._entity_names(
                 {r["from_entity_id"] for r in relationships}
@@ -511,6 +557,23 @@ class KnowledgeGraphService:
                 relationship = await self.storage.get_relationship_by_id(edge_id)
                 parts.append(f"-[{relationship['type'] if relationship else '?'}]->")
         return " ".join(parts)
+
+    def _rank_with_decay(self, relationships: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
+        """Re-rank facts by query-time effective confidence.
+
+        A no-op (stable order) when decay is disabled or no relationship
+        type has a configured half-life -- the default posture, so the
+        hot read path pays nothing unless the formation opts in.
+        """
+        if self.decay is None or not self.decay.enabled or not self.decay.half_lives:
+            return relationships
+        from ..events.decay import effective_fact_confidence
+
+        return sorted(
+            relationships,
+            key=lambda rel: effective_fact_confidence(rel, self.decay),
+            reverse=True,
+        )
 
     async def _entity_names(self, entity_ids: set) -> Dict[int, str]:
         """Map entity ids to display names (single batched query)."""
