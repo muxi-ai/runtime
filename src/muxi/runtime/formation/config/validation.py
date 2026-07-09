@@ -1307,11 +1307,31 @@ class FormationValidator:
         elif not description.strip():
             self.result.add_error(f"{subject} 'description' cannot be empty")
 
-    # URL schemes accepted for remote knowledge sources in Phase 1, and
-    # schemes from the PRD roadmap that are recognized but not built yet.
-    REMOTE_KNOWLEDGE_SUPPORTED_SCHEMES = {"http", "https", "s3", "rsync", "rsync+ssh", "file"}
-    REMOTE_KNOWLEDGE_PLANNED_SCHEMES = {"gs", "az", "ftp", "sftp"}
+    # URL schemes accepted for remote knowledge sources (PRD Phases 1 + 4).
+    # Mirror of formation/agents/knowledge/remote/protocols SUPPORTED_SCHEMES
+    # - kept literal here so config validation stays import-light.
+    REMOTE_KNOWLEDGE_SUPPORTED_SCHEMES = {
+        "http",
+        "https",
+        "s3",
+        "gs",
+        "az",
+        "rsync",
+        "rsync+ssh",
+        "ftp",
+        "sftp",
+        "file",
+    }
     REMOTE_KNOWLEDGE_SCHEDULE_ALIASES = {"@startup", "@hourly", "@daily", "@weekly"}
+    # Schemes whose sources can never be a downloadable single archive
+    # (rsync syncs whole trees natively), so 'extract' is a config error.
+    REMOTE_KNOWLEDGE_NO_EXTRACT_SCHEMES = {"rsync", "rsync+ssh"}
+    # Schemes where glob patterns in the URL are meaningless: HTTP has no
+    # directory listing; rsync uses include/exclude filters instead.
+    REMOTE_KNOWLEDGE_NO_GLOB_SCHEMES = {"http", "https", "rsync", "rsync+ssh"}
+    # Schemes supporting SSH's trust-on-first-use opt-in
+    REMOTE_KNOWLEDGE_SSH_SCHEMES = {"rsync+ssh", "sftp"}
+    REMOTE_KNOWLEDGE_RETRY_KEYS = ("max_attempts", "initial_delay", "max_delay", "exponential_base")
 
     def _validate_remote_knowledge_source(
         self, source: Dict[str, Any], subject: str, seen_source_ids: set
@@ -1319,8 +1339,8 @@ class FormationValidator:
         """Validate a remote (url-based) knowledge source declaration.
 
         Fail-fast at load time: unsupported schemes, malformed URLs,
-        incomplete auth blocks, and Phase 2+ options (archive extraction)
-        are configuration errors. Credentials should be referenced via
+        incomplete auth blocks, and malformed extraction/retry options are
+        configuration errors. Credentials should be referenced via
         ``${{ secrets.* }}`` interpolation, which resolves before the
         handlers ever see the config.
         """
@@ -1334,13 +1354,6 @@ class FormationValidator:
         parsed = urlparse(url)
         scheme = parsed.scheme.lower()
 
-        if scheme in self.REMOTE_KNOWLEDGE_PLANNED_SCHEMES:
-            self.result.add_error(
-                f"{subject} scheme '{scheme}://' is not yet supported (planned). "
-                f"Supported schemes: "
-                f"{', '.join(sorted(self.REMOTE_KNOWLEDGE_SUPPORTED_SCHEMES))}"
-            )
-            return
         if scheme not in self.REMOTE_KNOWLEDGE_SUPPORTED_SCHEMES:
             self.result.add_error(
                 f"{subject} has unsupported URL scheme '{scheme or '(none)'}'. "
@@ -1362,6 +1375,19 @@ class FormationValidator:
         elif scheme == "s3":
             if not parsed.netloc:
                 self.result.add_error(f"{subject} 's3://' URL is missing a bucket name")
+        elif scheme == "gs":
+            if not parsed.netloc:
+                self.result.add_error(f"{subject} 'gs://' URL is missing a bucket name")
+        elif scheme == "az":
+            if not parsed.netloc:
+                self.result.add_error(f"{subject} 'az://' URL is missing a container name")
+            if "auth" not in source:
+                self.result.add_error(
+                    f"{subject} 'az://' sources require an 'auth' block "
+                    "(the storage account is not part of the URL): use "
+                    "auth type 'azure' with connection_string or "
+                    "account_name + account_key"
+                )
         elif scheme in ("rsync", "rsync+ssh"):
             if not parsed.netloc:
                 self.result.add_error(f"{subject} '{scheme}://' URL is missing a host")
@@ -1370,6 +1396,9 @@ class FormationValidator:
                     f"{subject} glob patterns are not supported for {scheme}:// sources; "
                     "use 'include'/'exclude' filters instead"
                 )
+        elif scheme in ("ftp", "sftp"):
+            if not parsed.netloc:
+                self.result.add_error(f"{subject} '{scheme}://' URL is missing a host")
         elif scheme == "file":
             if parsed.netloc not in ("", "localhost"):
                 self.result.add_error(
@@ -1390,16 +1419,81 @@ class FormationValidator:
             else:
                 seen_source_ids.add(source_id)
 
-        # Phase 2 surface: archive extraction is not implemented yet.
-        # Fail fast rather than silently ingesting the raw archive.
-        for phase2_key in ("extract", "extract_pattern"):
-            if phase2_key in source:
-                self.result.add_error(
-                    f"{subject} '{phase2_key}' (archive extraction) is not yet supported"
-                )
-
+        self._validate_remote_knowledge_extract(source, subject, scheme, has_glob)
+        self._validate_remote_knowledge_retry(source, subject)
         self._validate_remote_knowledge_auth(source, subject, scheme)
         self._validate_remote_knowledge_options(source, subject, scheme)
+
+    def _validate_remote_knowledge_extract(
+        self, source: Dict[str, Any], subject: str, scheme: str, has_glob: bool
+    ) -> None:
+        """Validate the archive extraction options of a remote source."""
+        extract = source.get("extract", False)
+        if "extract" in source and not isinstance(extract, bool):
+            self.result.add_error(f"{subject} 'extract' must be a boolean")
+            return
+
+        if extract:
+            if scheme in self.REMOTE_KNOWLEDGE_NO_EXTRACT_SCHEMES:
+                self.result.add_error(
+                    f"{subject} 'extract' is not valid for {scheme}:// sources "
+                    "(rsync syncs whole trees natively)"
+                )
+            if has_glob:
+                self.result.add_error(
+                    f"{subject} 'extract' requires a single archive URL "
+                    "(glob patterns are not supported with extraction)"
+                )
+
+        for extract_key in ("extract_pattern", "max_extracted_files", "max_extracted_size"):
+            if extract_key in source and not extract:
+                self.result.add_error(f"{subject} '{extract_key}' requires 'extract: true'")
+
+        if "extract_pattern" in source:
+            extract_pattern = source["extract_pattern"]
+            if not isinstance(extract_pattern, str) or not extract_pattern.strip():
+                self.result.add_error(
+                    f"{subject} 'extract_pattern' must be a non-empty glob string"
+                )
+
+        for limit_key in ("max_extracted_files", "max_extracted_size"):
+            if limit_key in source:
+                value = source[limit_key]
+                if not isinstance(value, int) or isinstance(value, bool) or value <= 0:
+                    self.result.add_error(f"{subject} '{limit_key}' must be a positive integer")
+
+    def _validate_remote_knowledge_retry(self, source: Dict[str, Any], subject: str) -> None:
+        """Validate the scheduled re-sync 'retry' block (PRD section 9)."""
+        if "retry" not in source:
+            return
+        retry = source["retry"]
+        if not isinstance(retry, dict):
+            self.result.add_error(
+                f"{subject} 'retry' must be a mapping "
+                f"(allowed keys: {', '.join(self.REMOTE_KNOWLEDGE_RETRY_KEYS)})"
+            )
+            return
+        for key in retry:
+            if key not in self.REMOTE_KNOWLEDGE_RETRY_KEYS:
+                self.result.add_error(
+                    f"{subject} retry setting '{key}' is not recognized "
+                    f"(allowed: {', '.join(self.REMOTE_KNOWLEDGE_RETRY_KEYS)})"
+                )
+        if "max_attempts" in retry:
+            value = retry["max_attempts"]
+            if not isinstance(value, int) or isinstance(value, bool) or value < 1:
+                self.result.add_error(f"{subject} retry 'max_attempts' must be a positive integer")
+        for delay_key in ("initial_delay", "max_delay"):
+            if delay_key in retry:
+                value = retry[delay_key]
+                if isinstance(value, bool) or not isinstance(value, (int, float)) or value <= 0:
+                    self.result.add_error(
+                        f"{subject} retry '{delay_key}' must be a positive number (seconds)"
+                    )
+        if "exponential_base" in retry:
+            value = retry["exponential_base"]
+            if isinstance(value, bool) or not isinstance(value, (int, float)) or value < 1:
+                self.result.add_error(f"{subject} retry 'exponential_base' must be a number >= 1")
 
     def _validate_remote_knowledge_auth(
         self, source: Dict[str, Any], subject: str, scheme: str
@@ -1422,8 +1516,12 @@ class FormationValidator:
             "http": {"basic", "bearer"},
             "https": {"basic", "bearer"},
             "s3": {"aws"},
+            "gs": {"gcp"},
+            "az": {"azure"},
             "rsync": set(),
             "rsync+ssh": {"ssh_key"},
+            "ftp": {"basic"},
+            "sftp": {"ssh_key", "basic"},
             "file": set(),
         }
         valid_types = valid_types_by_scheme.get(scheme, set())
@@ -1451,6 +1549,23 @@ class FormationValidator:
                     "(neither uses boto3's default credential chain)"
                 )
             required_fields = ["access_key", "secret_key"] if has_access and has_secret else []
+        elif auth_type == "gcp":
+            # credentials_json is optional: without it Google's Application
+            # Default Credentials chain applies. When present it must be a
+            # non-empty string (the service account JSON, secret-resolved).
+            required_fields = ["credentials_json"] if "credentials_json" in auth else []
+        elif auth_type == "azure":
+            # Either a connection string, or account_name + account_key.
+            if "connection_string" in auth:
+                required_fields = ["connection_string"]
+            elif "account_name" in auth or "account_key" in auth:
+                required_fields = ["account_name", "account_key"]
+            else:
+                self.result.add_error(
+                    f"{subject} auth type 'azure' requires 'connection_string' "
+                    "or 'account_name' + 'account_key'"
+                )
+                required_fields = []
         else:
             required_fields = {
                 "basic": ["username", "password"],
@@ -1501,23 +1616,24 @@ class FormationValidator:
             if not isinstance(value, int) or isinstance(value, bool) or value <= 0:
                 self.result.add_error(f"{subject} '{limit_key}' must be a positive integer")
 
-        # accept_new_host_keys: rsync+ssh only. Opts into SSH's
-        # trust-on-first-use (StrictHostKeyChecking=accept-new) instead of
-        # the strict default that requires the host in known_hosts. TOFU
-        # means a MITM on FIRST contact could inject knowledge content -
-        # hence explicit opt-in, never the default.
+        # accept_new_host_keys: SSH-based schemes only (rsync+ssh, sftp).
+        # Opts into SSH's trust-on-first-use instead of the strict default
+        # that requires the host in known_hosts. TOFU means a MITM on
+        # FIRST contact could inject knowledge content - hence explicit
+        # opt-in, never the default.
         if "accept_new_host_keys" in source:
             value = source["accept_new_host_keys"]
-            if scheme != "rsync+ssh":
+            if scheme not in self.REMOTE_KNOWLEDGE_SSH_SCHEMES:
                 self.result.add_error(
-                    f"{subject} 'accept_new_host_keys' is only valid for " "rsync+ssh:// sources"
+                    f"{subject} 'accept_new_host_keys' is only valid for "
+                    f"{' / '.join(sorted(self.REMOTE_KNOWLEDGE_SSH_SCHEMES))} sources"
                 )
             elif not isinstance(value, bool):
                 self.result.add_error(f"{subject} 'accept_new_host_keys' must be a boolean")
 
-        # schedule: accepted and syntax-checked in Phase 1, but periodic
-        # re-sync lands in a later phase — every remote source syncs at
-        # formation startup regardless of the declared schedule.
+        # schedule: cron expression or alias. Periodic re-sync (Phase 3)
+        # additionally requires the scheduler service; without it, sources
+        # sync at formation startup only (loud init warning).
         if "schedule" in source:
             schedule = source["schedule"]
             if not isinstance(schedule, str) or not schedule.strip():

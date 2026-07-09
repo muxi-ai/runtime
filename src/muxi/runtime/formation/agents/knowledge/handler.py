@@ -2332,6 +2332,93 @@ class KnowledgeHandler:
                 f"{len(knowledge_sources)} sources configured but failed"
             )
 
+    async def refresh_remote_source(
+        self,
+        source_config: Dict[str, Any],
+        changed_files: List[str],
+        deleted_files: List[str],
+    ) -> int:
+        """Re-embed only the files a remote re-sync changed (Phase 3).
+
+        The startup ingestion treats each synced mirror as one directory
+        source; scheduled re-syncs must not re-embed the whole mirror when
+        a single file changes. This removes the stale chunks for the
+        changed/deleted files (matched via per-chunk ``file_path``
+        metadata, which both directory and single-file ingestion record)
+        and re-ingests just the changed files through the standard
+        ``add_file`` pipeline (chunking, tree gate, MD5 dedupe, events).
+
+        Args:
+            source_config: The synthetic local source config of the mirror
+                (``SyncManager.synthetic_local_source``)
+            changed_files: Absolute paths of added/modified mirror files
+            deleted_files: Absolute paths of files removed from the mirror
+
+        Returns:
+            Number of chunks (or tree nodes) added for the changed files
+        """
+        if self.working_memory is None:
+            return 0
+
+        for file_path in {*changed_files, *deleted_files}:
+            abs_path = os.path.abspath(file_path)
+            # Directory-ingested chunks carry source=<mirror dir> but
+            # always record the per-file path; single-file re-ingests
+            # carry source=<file>. Clear both shapes.
+            self.working_memory.remove_by_metadata(
+                metadata_filter={"file_path": abs_path}, namespace=DOCUMENT_NAMESPACE
+            )
+            self.working_memory.remove_by_metadata(
+                metadata_filter={"source": abs_path}, namespace=DOCUMENT_NAMESPACE
+            )
+            self._remove_tree_for(abs_path)
+            cache_file = self._get_cache_file_path(abs_path)
+            if os.path.exists(cache_file):
+                try:
+                    os.remove(cache_file)
+                except OSError:
+                    pass
+
+        generate_embeddings_fn = self._generate_embeddings_fn
+        if generate_embeddings_fn is None:
+            observability.observe(
+                event_type=observability.SystemEvents.KNOWLEDGE_SOURCE_LOADED,
+                level=observability.EventLevel.WARNING,
+                description="Remote refresh has no embedding function - skipping re-embed",
+                data={"source_name": source_config.get("name", "")},
+            )
+            return 0
+
+        chunks_added = 0
+        for file_path in changed_files:
+            if not os.path.isfile(file_path):
+                continue
+            knowledge_source = FileKnowledge(
+                path=file_path,
+                description=source_config.get("description"),
+                name=source_config.get("name"),
+                max_file_size=source_config.get("max_file_size", 10 * 1024 * 1024),
+                recursive=False,
+            )
+            chunks_added += await self.add_file(knowledge_source, generate_embeddings_fn)
+            # Transient per-file source: keep the registered sources list
+            # stable across re-syncs (the mirror's directory source stays).
+            if knowledge_source in self.sources:
+                self.sources.remove(knowledge_source)
+
+        observability.observe(
+            event_type=observability.SystemEvents.KNOWLEDGE_SOURCE_LOADED,
+            level=observability.EventLevel.INFO,
+            description="Remote knowledge changes re-embedded",
+            data={
+                "source_name": source_config.get("name", ""),
+                "files_changed": len(changed_files),
+                "files_deleted": len(deleted_files),
+                "chunks_added": chunks_added,
+            },
+        )
+        return chunks_added
+
     async def _inject_knowledge_into_memory(
         self,
         knowledge_results: List[Dict[str, Any]],

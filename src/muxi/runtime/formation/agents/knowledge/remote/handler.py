@@ -36,6 +36,12 @@ DEFAULT_MAX_FILE_SIZE = 10 * 1024 * 1024  # 10MB
 DEFAULT_MAX_TOTAL_SIZE = 100 * 1024 * 1024  # 100MB
 DEFAULT_SYNC_TIMEOUT = 300  # seconds
 
+# Default retry policy for scheduled re-syncs (PRD section 9).
+DEFAULT_RETRY_MAX_ATTEMPTS = 3
+DEFAULT_RETRY_INITIAL_DELAY = 5.0  # seconds
+DEFAULT_RETRY_MAX_DELAY = 300.0  # seconds
+DEFAULT_RETRY_EXPONENTIAL_BASE = 2.0
+
 
 class RemoteSyncError(Exception):
     """Raised when a remote knowledge source operation fails."""
@@ -92,10 +98,20 @@ class SourceConfig:
     max_file_size: int = DEFAULT_MAX_FILE_SIZE
     max_total_size: int = DEFAULT_MAX_TOTAL_SIZE
     timeout: int = DEFAULT_SYNC_TIMEOUT
-    # rsync+ssh only: opt into SSH's trust-on-first-use for unknown host
-    # keys (StrictHostKeyChecking=accept-new). Default is strict: the
+    # rsync+ssh / sftp only: opt into SSH's trust-on-first-use for unknown
+    # host keys (StrictHostKeyChecking=accept-new). Default is strict: the
     # host must already be in known_hosts or the sync fails.
     accept_new_host_keys: bool = False
+    # Archive extraction (Phase 2). When True the source URL points at a
+    # single archive; its extracted contents (optionally filtered by
+    # extract_pattern) become the source's files. Extraction is bounded
+    # by max_extracted_files / max_extracted_size (decompression bombs).
+    extract: bool = False
+    extract_pattern: Optional[str] = None
+    max_extracted_files: int = 0  # 0 -> extractor default
+    max_extracted_size: int = 0  # 0 -> extractor default
+    # Scheduled re-sync retry policy (Phase 3, PRD section 9).
+    retry: Dict[str, Any] = field(default_factory=dict)
 
     @classmethod
     def from_dict(cls, config: Dict[str, Any]) -> "SourceConfig":
@@ -114,6 +130,11 @@ class SourceConfig:
             max_total_size=int(config.get("max_total_size", DEFAULT_MAX_TOTAL_SIZE)),
             timeout=int(config.get("timeout", DEFAULT_SYNC_TIMEOUT)),
             accept_new_host_keys=bool(config.get("accept_new_host_keys", False)),
+            extract=bool(config.get("extract", False)),
+            extract_pattern=config.get("extract_pattern") or None,
+            max_extracted_files=int(config.get("max_extracted_files", 0) or 0),
+            max_extracted_size=int(config.get("max_extracted_size", 0) or 0),
+            retry=config.get("retry") or {},
         )
 
 

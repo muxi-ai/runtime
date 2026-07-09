@@ -1,0 +1,3 @@
+These plain-text notes must NOT be ingested: the source declares
+extract_pattern "*.md", so .txt members are filtered out during
+extraction.

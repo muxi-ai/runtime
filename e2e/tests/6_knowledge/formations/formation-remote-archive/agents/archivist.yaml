@@ -1,0 +1,22 @@
+schema: "1.0.0"
+id: "archivist"
+name: "Archivist Agent"
+description: "AI assistant specialized in the Lumen Concordat archive"
+
+system_message: |
+  You are an AI assistant with knowledge about the Lumen Concordat.
+  Answer questions using your knowledge base.
+
+role: "assistant"
+specialties:
+  - "lumen_concordat"
+  - "archives"
+
+knowledge:
+  enabled: true
+  sources:
+    - url: "http://127.0.0.1:18932/kb/lumen-archive.zip"
+      id: lumen-archive
+      description: "Lumen Concordat reference archive (remote zip source)"
+      extract: true
+      extract_pattern: "*.md"

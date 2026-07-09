@@ -437,6 +437,10 @@ class SystemEvents(Enum):
     KNOWLEDGE_SYNC_COMPLETED = "knowledge.sync.completed"
     # When a remote knowledge source sync completes (includes partial syncs)
 
+    KNOWLEDGE_SYNC_SKIPPED = "knowledge.sync.skipped"
+    # When a scheduled/manual sync is skipped because a sync for the same
+    # source is still in flight (per-source lock, no overlapping syncs)
+
     # ===================================================================
     # INFRASTRUCTURE MONITORING (MOVED FROM CONVERSATIONEVENTs)
     # ===================================================================

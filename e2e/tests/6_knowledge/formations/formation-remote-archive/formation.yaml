@@ -1,0 +1,31 @@
+schema: "1.0.0"
+id: "remote-knowledge-archive-test"
+description: "Formation with an agent whose knowledge extracts from a remote zip archive"
+
+llm:
+  api_keys:
+    openai: "${{ secrets.OPENAI_API_KEY }}"
+    anthropic: "${{ secrets.ANTHROPIC_API_KEY }}"
+  models:
+    - text: "openai/gpt-4o-mini"
+    - embedding: "openai/text-embedding-3-small"
+
+agents:
+  - archivist
+
+memory:
+  buffer:
+    size: 50
+    multiplier: 10
+    vector_search: false
+
+logging:
+  system:
+    level: "debug"
+    destination: "stdout"
+  conversation:
+    enabled: true
+    streams:
+      - transport: "stdout"
+        level: "info"
+        format: "jsonl"
