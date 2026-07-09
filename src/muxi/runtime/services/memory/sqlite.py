@@ -740,7 +740,7 @@ class SQLiteMemory(BaseMemory):
         read_scopes = normalize_read_scopes(scopes)
         read_group_ids: Tuple[str, ...] = ()
         if SCOPE_TYPE_GROUP in read_scopes:
-            read_group_ids = await resolve_read_group_ids(self.formation_id, user_id, group_ids)
+            read_group_ids = await resolve_read_group_ids(group_ids)
 
         # Search with embedding (filter by collection if specified)
         results = self._search_internal(

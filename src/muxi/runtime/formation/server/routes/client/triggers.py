@@ -260,16 +260,60 @@ async def execute_trigger(
     if not formation.is_overlord_running():
         raise HTTPException(status_code=503, detail="Overlord not available")
 
-    # GBAC Phase 3: a trigger fires only when the requesting user's groups
-    # permit it. Per the PRD's channel table, API/webhook callers get a 403
-    # with a generic message. No-op when the formation has no groups/
-    # directory. The membership lookup is TTL-cached by the resolver.
+    # Request middleware + RBAC (request-middleware PRD): the pipeline runs
+    # here -- after client-key auth, before ANY processing (including
+    # template loading, so a denied caller cannot probe which triggers
+    # exist). The middleware attaches groups (the only membership source)
+    # and may rewrite the authenticated identity; the trigger then fires
+    # only when the resolved permissions allow it. Per the PRD's channel
+    # table, API/webhook callers get a 403 with a generic message.
+    from .....services import middleware as middleware_service
+    from .....services.gbac import enforcement as gbac_enforcement
+
+    user_id = str(user_id).lower().strip()
+    groups = None
+    request_middleware = getattr(formation, "request_middleware", None)
+    if request_middleware is not None:
+        payload = middleware_service.build_request_payload(
+            user_id=user_id,
+            message="",
+            metadata={
+                "trigger": trigger_name,
+                "session_id": trigger_request.session_id,
+                "data": trigger_request.data,
+            },
+            route_class="trigger",
+        )
+        try:
+            transformed, groups = await request_middleware.transform(payload, request_id=request_id)
+        except middleware_service.MiddlewareRejectedError:
+            # Fail closed; the error.middleware.failed event was emitted.
+            raise HTTPException(
+                status_code=403,
+                detail="Request rejected by the formation middleware",
+            )
+        user_id = str(transformed["user_id"]).lower().strip()
+    # Record the pipeline outcome for the overlord call below
+    # (middleware_applied=True): the chat pipeline must not run the
+    # middleware a second time for the same request.
+    gbac_enforcement.set_request_groups(groups if request_middleware is not None else None)
+
     resolver = formation.permission_resolver
     if resolver is not None:
-        from .....services.gbac import enforcement as gbac_enforcement
-
-        # Normalize the identifier the same way the overlord chat path does
-        permissions = await resolver.resolve(str(user_id).lower().strip())
+        try:
+            permissions = gbac_enforcement.resolve_request_permissions(
+                resolver,
+                groups,
+                user_id=user_id,
+                formation_id=formation_id,
+                route_class="trigger",
+            )
+        except gbac_enforcement.RbacRejectedError:
+            # No groups and rbac.fallback is false (event already emitted).
+            raise HTTPException(
+                status_code=403,
+                detail="Insufficient permissions to execute this trigger",
+            )
         if not permissions.is_allowed("triggers", trigger_name):
             gbac_enforcement.observe_denied(
                 "triggers",
@@ -436,6 +480,12 @@ async def execute_trigger(
         async def process_async() -> None:
             """Background task to process trigger."""
             try:
+                # Background tasks run outside the request's context copy:
+                # re-record the pipeline outcome so the chat path (called
+                # with middleware_applied=True) sees the same groups.
+                gbac_enforcement.set_request_groups(
+                    groups if request_middleware is not None else None
+                )
                 if transformer_config is not None:
                     # Transformer routing: run the request to completion here
                     # (forced sync, non-streaming) so the final content can be
@@ -451,6 +501,8 @@ async def execute_trigger(
                         model_override=trigger_model,
                         source_channel=source_channel,
                         source_context=parsed_request.get("context"),
+                        route_class="trigger",
+                        middleware_applied=True,
                     )
                 elif webhook_override is not None:
                     # Webhook routing: force async so the standard MUXI
@@ -466,6 +518,8 @@ async def execute_trigger(
                         model_override=trigger_model,
                         source_channel=source_channel,
                         source_context=parsed_request.get("context"),
+                        route_class="trigger",
+                        middleware_applied=True,
                     )
                 else:
                     # Default routing: unchanged trigger behavior
@@ -480,6 +534,8 @@ async def execute_trigger(
                         model_override=trigger_model,
                         source_channel=source_channel,
                         source_context=parsed_request.get("context"),
+                        route_class="trigger",
+                        middleware_applied=True,
                     )
 
                 observability.observe(
@@ -543,6 +599,8 @@ async def execute_trigger(
                 model_override=trigger_model,
                 source_channel=source_channel,
                 source_context=parsed_request.get("context"),
+                route_class="trigger",
+                middleware_applied=True,
             )
 
             # Extract content from response (handles async generators, MuxiResponse, strings, etc.)

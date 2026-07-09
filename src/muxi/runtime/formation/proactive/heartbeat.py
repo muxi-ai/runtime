@@ -206,6 +206,10 @@ class HeartbeatService:
         # from the SOP/instruction plus the user's memory, not from
         # prior tick chatter; the request id keeps the session
         # correlated with this run's observability events.
+        # Internally-originated request: traverses the formation
+        # middleware + RBAC pipeline exactly like external traffic,
+        # identified by route_class "heartbeat". A middleware failure or
+        # RBAC rejection raises and is isolated per user by run_once().
         response = await self.overlord.chat(
             message=prompt,
             user_id=user_id,
@@ -215,6 +219,7 @@ class HeartbeatService:
             stream=False,
             bypass_workflow_approval=True,
             is_scheduled_execution=True,
+            route_class="heartbeat",
         )
         content = self._extract_content(response)
 

@@ -2,6 +2,50 @@
 
 ## [unreleased]
 
+### RBAC membership via request middleware; server.auth and user_groups removed
+
+MUXI stops storing group memberships (request-middleware PRD). Breaking
+for pre-1.0 formations that used ``server.auth`` or seeded
+``user_groups``:
+
+- New top-level ``middleware:`` block: an actual MCP server (stdio
+  ``command``+``args`` or http ``url``+``headers``, plus ``timeout``)
+  exposing exactly one tool named ``middleware``. It receives the full
+  request payload (``user_id``, ``message``, ``attachments``,
+  ``metadata``, ``route_class`` -- never ``groups`` inbound) and returns
+  the same-shaped payload, possibly modified: attaching ``groups`` (the
+  ONLY membership source), rewriting identity, applying payload policy.
+  Connected at formation load with the existing MCP client; a missing or
+  non-conforming ``middleware`` tool fails the load. Fail-closed at
+  request time: error, timeout, or malformed response rejects the
+  request (403; ``error.middleware.failed``). No runtime-side caching --
+  ``timeout`` is the only knob.
+- New top-level ``rbac:`` block: ``active: auto|true|false`` (auto =
+  on iff ``groups/`` has files; true without groups fails the load;
+  false is a loud kill switch) and ``fallback: false|<group_name>``
+  (reject no-group requests, or proceed with the named group's
+  permissions -- validated against ``groups/``). Dead config (active +
+  ``fallback: false`` + no middleware) fails the load.
+- The pipeline runs after client-key auth and before any processing on
+  ALL authenticated inbound traffic (chat, audiochat, triggers, memory
+  routes) AND internally-originated requests -- heartbeat and scheduler
+  jobs synthesize the same payload (``route_class: "heartbeat"`` /
+  ``"scheduler"``) and traverse middleware + RBAC identically.
+- REMOVED: ``server.auth`` (the ``required|open`` key, the user auth
+  gate, and the open+groups load rule). The client key authenticates
+  the caller; user-level gating is ``rbac.fallback: false`` plus a
+  middleware that returns no groups for unknown users. Formations still
+  carrying the key fail the load with a migration error.
+- REMOVED: the ``user_groups`` table (creation and the resolver's DB
+  membership read). Existing deployed tables are left orphaned --
+  nothing destructive. The ``groups/`` YAML files, inheritance, the
+  four-level tools cascade, ``memory.write`` grants, and resource
+  filtering are all unchanged.
+- Shipped template: ``contributing/templates/middleware.py`` -- a
+  one-file stdio middleware (stdlib only) resolving groups from a
+  static map; doubles as the e2e fixture. Config reference:
+  ``contributing/request-middleware.md``.
+
 ### Unified tools vocabulary + attachment overrides (#251)
 
 Completes the GBAC tool-override cascade design.

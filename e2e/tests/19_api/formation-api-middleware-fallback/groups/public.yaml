@@ -1,0 +1,4 @@
+name: "Public"
+description: "Open tier for requests without groups (rbac.fallback)"
+agents:
+  - assistant

@@ -5931,20 +5931,22 @@ Agent response: {raw_response}"""
     async def _apply_permission_gate(
         self, user_id: Any, agent_name: Optional[str]
     ) -> Optional[MuxiResponse]:
-        """Resolve GBAC permissions once per request and gate agent access.
+        """Resolve RBAC permissions once per request and gate agent access.
 
-        GBAC Phase 3 (resource filtering). When the formation has a
-        ``groups/`` directory, the requesting user's effective permissions
-        are resolved ONCE here (Phase 2's TTL/LRU caches make this cheap)
-        and stored in the request context. Downstream enforcement sites --
-        agent routing, workflow decomposition/execution, SOP matching, and
-        the per-turn MCP tool surface -- read that context instead of
-        re-resolving. Without a resolver this is a strict no-op.
+        When RBAC is active, the request's effective permissions are
+        resolved ONCE here from the groups the formation middleware
+        attached (carried in the request context by ``Overlord.chat``;
+        the LRU combination cache makes this cheap) and stored in the
+        request context. Downstream enforcement sites -- agent routing,
+        workflow decomposition/execution, SOP matching, and the per-turn
+        MCP tool surface -- read that context instead of re-resolving.
+        Without a resolver this is a strict no-op.
 
         Returns:
-            A graceful MuxiResponse when the user's groups grant no agents
-            at all ("registered but inactive" -- PRD resolution rule 6),
-            otherwise None to continue normal processing.
+            A graceful MuxiResponse when the request must be rejected
+            (no groups, ``fallback: false`` -- normally caught earlier in
+            ``Overlord.chat``) or when the resolved groups grant no
+            agents at all, otherwise None to continue normal processing.
 
         Raises:
             ValueError: When a directly-addressed agent is denied. The
@@ -5956,7 +5958,7 @@ Agent response: {raw_response}"""
 
         resolver = self._configured_services.get("permission_resolver")
         if resolver is None:
-            # Feature inert (no groups/ directory). Nothing can have set
+            # Feature inert (RBAC inactive). Nothing can have set
             # permissions in this context, but clear defensively in case
             # the formation was reloaded without groups mid-process.
             gbac.set_current_permissions(None)
@@ -5971,10 +5973,32 @@ Agent response: {raw_response}"""
             # treated as a MuxiResponse by the caller.
             return None
 
-        # Match the orchestrator's user-id normalization so membership
-        # lookups behave identically across entry points.
+        # Match the orchestrator's user-id normalization so denial events
+        # carry identical identities across entry points.
         resolved_user = str(user_id).lower().strip()
-        permissions = await resolver.resolve(resolved_user)
+        try:
+            permissions = gbac.resolve_request_permissions(
+                resolver,
+                gbac.get_request_groups(),
+                user_id=resolved_user,
+                formation_id=self.formation_id,
+                route_class="chat",
+            )
+        except gbac.RbacRejectedError:
+            # Normally unreachable: Overlord.chat() pre-checks and rejects
+            # before any processing. Kept for execution paths that enter
+            # the orchestrator directly -- same graceful, non-leaking
+            # reply as the no-permitted-agents case below (the rejection
+            # event was already emitted).
+            return MuxiResponse(
+                role="assistant",
+                content="I'm sorry, but I'm not able to help with that request.",
+                metadata={
+                    "handled_by": "overlord_direct",
+                    "reason": "no_groups",
+                    "error_code": "AUTHORIZATION_FAILED",
+                },
+            )
         gbac.set_current_permissions(permissions)
 
         # A directly-addressed denied agent behaves exactly like an
@@ -6132,6 +6156,8 @@ Agent response: {raw_response}"""
         source_context: Optional[
             Dict[str, Any]
         ] = None,  # Addressing context captured from the inbound payload
+        route_class: str = "chat",  # Request origin for the middleware payload
+        middleware_applied: bool = False,  # Entry point already ran the request middleware
     ) -> Union[str, Dict[str, Any], AsyncGenerator[str, None]]:
         """
         Enhanced chat with async support for long-running agentic tasks and file attachments.
@@ -6165,6 +6191,15 @@ Agent response: {raw_response}"""
             bypass_workflow_approval: If True, skip manual approval for workflows
                 regardless of complexity threshold. Useful for automated triggers
                 and scenarios where manual approval doesn't make sense.
+            route_class: The request origin carried in the middleware
+                payload ("chat", "audiochat", "trigger", "api", and the
+                internal origins "heartbeat" / "scheduler"). Internal
+                callers set theirs so internally-originated requests
+                traverse the middleware + RBAC pipeline identically.
+            middleware_applied: True when the entry point already ran the
+                request middleware for this request (e.g. the trigger
+                route, which needs the groups for its own permission
+                check) -- the pipeline is not run twice.
 
         Returns:
             For sync processing: str with the agent's response content, or
@@ -6233,6 +6268,68 @@ Agent response: {raw_response}"""
         elif user_id is not None:
             # Normalize user_id - lowercase and strip whitespace
             user_id = str(user_id).lower().strip()
+
+        # ===================================================================
+        # REQUEST MIDDLEWARE + RBAC PRE-CHECK (request-middleware PRD)
+        # ===================================================================
+        # The formation middleware -- if declared -- transforms every
+        # request payload here: after the caller was authenticated
+        # (client-key auth for HTTP; internal origin otherwise) and
+        # before ANY processing. This is the only place group
+        # memberships can enter the pipeline; internal origins
+        # (heartbeat, scheduler) traverse it identically via their
+        # route_class. Fail-closed: middleware errors reject the
+        # request, and rbac.fallback never applies to them.
+        from ...services import middleware as middleware_service
+        from ...services.gbac import enforcement as gbac
+
+        request_middleware = self._configured_services.get("request_middleware")
+        if not middleware_applied:
+            if request_middleware is not None:
+                payload = middleware_service.build_request_payload(
+                    user_id=str(user_id) if user_id is not None else "0",
+                    message=message,
+                    attachments=middleware_service.encode_attachments(files),
+                    metadata={
+                        "session_id": session_id,
+                        "agent_name": agent_name,
+                        "source_channel": source_channel,
+                        "is_scheduled_execution": is_scheduled_execution,
+                    },
+                    route_class=route_class,
+                )
+                # MiddlewareRejectedError propagates: the request is
+                # rejected fail-closed (HTTP entry points map it to 403;
+                # the error.middleware.failed event was already emitted).
+                transformed, groups = await request_middleware.transform(
+                    payload, request_id=request_id
+                )
+                gbac.set_request_groups(groups)
+                # Continue processing with the returned payload: identity
+                # mapping, message policy, and attachment rewrites all
+                # take effect here.
+                user_id = str(transformed["user_id"]).lower().strip()
+                message = transformed["message"]
+                files = middleware_service.decode_attachments(transformed["attachments"]) or None
+            else:
+                # No middleware declared: make sure no stale groups from a
+                # previous request in this context can leak in.
+                gbac.set_request_groups(None)
+
+        # RBAC pre-check: a request that ends up with no groups is
+        # rejected (or remapped to the fallback group) BEFORE any
+        # processing. The permission gate downstream resolves the same
+        # groups again (LRU-cached) to set the request permissions.
+        resolver = self._configured_services.get("permission_resolver")
+        if resolver is not None and user_id is not None:
+            # Raises RbacRejectedError on no groups + fallback: false.
+            gbac.resolve_request_permissions(
+                resolver,
+                gbac.get_request_groups(),
+                user_id=user_id,
+                formation_id=self.formation_id,
+                route_class=route_class,
+            )
 
         # Conversation source tracking (Proactiveness Phase 1): remember the
         # channel this message arrived on so proactive notifications can
@@ -6410,6 +6507,7 @@ Agent response: {raw_response}"""
             webhook_url=webhook_url,
             threshold_seconds=threshold_seconds,
             stream=stream,
+            route_class="audiochat",
         )
 
     async def _execute_async_request(

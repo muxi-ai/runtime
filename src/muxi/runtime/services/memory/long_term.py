@@ -141,9 +141,12 @@ class Group(Base, AsyncModelMixin):
     """
     Group table for group-based access control.
 
-    Groups are policy data: membership rows in user_groups reference them,
-    and group_id matches the group YAML filename stem (permission resolution
-    is loaded from the formation's groups/ directory at runtime).
+    Groups are policy data: group_id matches the group YAML filename stem
+    (permission resolution is loaded from the formation's groups/
+    directory at runtime). Membership is NOT stored in MUXI -- group ids
+    reach the runtime per request via the formation middleware (request-
+    middleware PRD); the former user_groups table was removed (existing
+    deployed tables are left orphaned, nothing destructive).
     """
 
     __tablename__ = "groups"
@@ -158,29 +161,6 @@ class Group(Base, AsyncModelMixin):
 
     # Composite unique constraint to ensure group_id uniqueness per formation
     __table_args__ = (UniqueConstraint("group_id", "formation_id", name="uq_group_formation"),)
-
-
-class UserGroup(Base, AsyncModelMixin):
-    """
-    User-to-group membership table.
-
-    user_id stores the external user identifier (email, Slack ID, etc.) as
-    populated by operators; it is resolved through the user_identifiers table
-    at request time, mirroring how identities enter the runtime.
-    """
-
-    __tablename__ = "user_groups"
-
-    id = Column(Integer, primary_key=True, autoincrement=True)
-    user_id = Column(String(255), nullable=False, index=True)
-    group_id = Column(String(255), nullable=False, index=True)
-    formation_id = Column(String(255), nullable=False, index=True)
-    created_at = Column(DateTime, default=utc_now_naive)
-
-    # Composite unique constraint to prevent duplicate memberships per formation
-    __table_args__ = (
-        UniqueConstraint("user_id", "group_id", "formation_id", name="uq_user_group_formation"),
-    )
 
 
 # Dynamic Memory model factory — one ORM class per embedding dimension.
@@ -955,10 +935,10 @@ class LongTermMemory:
             scopes (Optional[List[str]]): Per-query narrowing for
                 privacy-sensitive callers -- e.g. ``["user"]`` restores the
                 exact Phase 1 user-only query. None = full cascade.
-            group_ids (Optional[List[str]]): Explicit group memberships for
-                the group-scope branch. Default: the per-request
-                ResolvedPermissions (GBAC ContextVar), falling back to the
-                formation's registered resolver by external user id.
+            group_ids (Optional[List[str]]): Explicit group ids for the
+                group-scope branch. Default: the per-request
+                ResolvedPermissions (GBAC ContextVar) set by the request
+                pipeline, or no group scopes.
 
         Returns:
             List[Dict[str, Any]]: A list of dictionaries containing memory IDs, text, metadata, and similarity scores,
@@ -1595,9 +1575,7 @@ class LongTermMemory:
         read_scopes = normalize_read_scopes(scopes)
         read_group_ids: Tuple[str, ...] = ()
         if SCOPE_TYPE_GROUP in read_scopes:
-            read_group_ids = await resolve_read_group_ids(
-                self.formation_id, external_user_id, group_ids
-            )
+            read_group_ids = await resolve_read_group_ids(group_ids)
 
         from sqlalchemy import and_, or_
 
@@ -1761,9 +1739,7 @@ class LongTermMemory:
         read_scopes = normalize_read_scopes(scopes)
         read_group_ids: Tuple[str, ...] = ()
         if SCOPE_TYPE_GROUP in read_scopes:
-            read_group_ids = await resolve_read_group_ids(
-                self.formation_id, external_user_id, group_ids
-            )
+            read_group_ids = await resolve_read_group_ids(group_ids)
 
         async with self.db_manager.get_async_session() as session:
             # For PostgreSQL with pgvector, we need to cast the query embedding

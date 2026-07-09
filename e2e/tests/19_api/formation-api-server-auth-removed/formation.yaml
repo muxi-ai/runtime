@@ -1,6 +1,6 @@
 schema: "1.0.0"
-id: api-test-authgate-open
-description: "Formation with default (open) auth for auth gate testing"
+id: api-test-server-auth-removed
+description: "Formation still carrying the removed server.auth key -- must FAIL to load with a migration error"
 
 llm:
   api_keys:
@@ -19,13 +19,14 @@ memory:
 
 agents:
   - id: assistant
-    name: "Auth Gate Test Assistant"
-    description: "A helpful assistant for testing the auth gate"
+    name: "Group Loading Test Assistant"
+    description: "A helpful assistant for testing group permission loading"
     system_message: "You are a helpful assistant. Be concise and direct."
 
 server:
   enabled: true
   port: 8271
+  auth: required  # REMOVED key carried on purpose -- the load must fail loudly
   api_keys:
     admin_key: test-admin-key-123
     client_key: test-client-key-456

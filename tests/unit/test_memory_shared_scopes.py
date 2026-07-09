@@ -39,7 +39,6 @@ from muxi.runtime.services.db import Base, DatabaseManager
 from muxi.runtime.services.gbac import enforcement as gbac_enforcement
 from muxi.runtime.services.gbac.loader import ResolvedGroup
 from muxi.runtime.services.gbac.resolver import ResolvedPermissions
-from muxi.runtime.services.memory import scopes as memory_scopes
 from muxi.runtime.services.memory.events.models import (
     EVENT_FACT_EXTRACTED,
     MemoryEvent,
@@ -54,7 +53,6 @@ from muxi.runtime.services.memory.events.storage import MemoryEventStorage
 from muxi.runtime.services.memory.scopes import (
     is_write_scope_allowed,
     normalize_read_scopes,
-    register_group_membership_resolver,
     resolve_read_group_ids,
     write_scope_target,
 )
@@ -137,46 +135,18 @@ class TestWriteGrants:
 class TestFanOutComposition:
     async def test_explicit_group_ids_win(self):
         gbac_enforcement.set_current_permissions(_permissions(group_ids=("ctx-group",)))
-        result = await resolve_read_group_ids(FORMATION_ID, "alice", group_ids=["explicit"])
+        result = await resolve_read_group_ids(group_ids=["explicit"])
         assert result == ("explicit",)
 
     async def test_context_permissions_supply_memberships(self):
         gbac_enforcement.set_current_permissions(_permissions(group_ids=("team-a", "team-b")))
-        result = await resolve_read_group_ids(FORMATION_ID, "alice")
+        result = await resolve_read_group_ids()
         assert result == ("team-a", "team-b")
 
-    async def test_resolver_fallback_by_external_user_id(self):
-        class FakeResolver:
-            def __init__(self):
-                self.seen = None
-
-            async def resolve(self, user_id):
-                self.seen = user_id
-                return _permissions(group_ids=("resolved-group",))
-
-        resolver = FakeResolver()
-        register_group_membership_resolver("fallback-formation", resolver)
-        try:
-            result = await resolve_read_group_ids("fallback-formation", "Alice@Example.com ")
-            assert result == ("resolved-group",)
-            # Same normalization as the overlord chat path.
-            assert resolver.seen == "alice@example.com"
-        finally:
-            register_group_membership_resolver("fallback-formation", None)
-
-    async def test_resolver_failure_degrades_to_no_groups(self):
-        class BrokenResolver:
-            async def resolve(self, user_id):
-                raise RuntimeError("db down")
-
-        register_group_membership_resolver("broken-formation", BrokenResolver())
-        try:
-            assert await resolve_read_group_ids("broken-formation", "alice") == ()
-        finally:
-            register_group_membership_resolver("broken-formation", None)
-
-    async def test_no_resolver_no_context_means_no_groups(self):
-        assert await resolve_read_group_ids("unknown-formation", "alice") == ()
+    async def test_no_context_means_no_groups(self):
+        # MUXI stores no memberships (request-middleware PRD): without
+        # per-request permissions the fan-out is user + formation only.
+        assert await resolve_read_group_ids() == ()
 
     def test_normalize_read_scopes(self):
         assert normalize_read_scopes(None) == ("user", "group", "formation")
@@ -597,31 +567,23 @@ class TestWorkingMemoryFanOut:
             assert "team-a shared note" in texts
             assert "team-b shared note" not in texts
 
-    async def test_session_fanout_uses_registered_resolver_fallback(self):
-        """No ContextVar permissions, but a registered resolver: working
-        memory resolves group memberships through the same shared helper
-        the long-term backends use, so internal callers (background jobs,
-        direct service calls) see the same group set as LTM."""
-
-        class FakeResolver:
-            async def resolve(self, user_id):
-                return _permissions(group_ids=("team-a",))
-
+    async def test_session_fanout_uses_context_permissions(self):
+        """Working memory resolves group memberships through the same
+        shared helper the long-term backends use (the per-request
+        permissions ContextVar set by the request pipeline), so every
+        caller sees the same group set as LTM."""
         probe_patch, embed_patch = _wm_patched()
         with probe_patch as mock_probe, embed_patch:
             mock_probe.return_value = WM_DIM
             mem = await self._seeded()
-            register_group_membership_resolver(FORMATION_ID, FakeResolver())
-            try:
-                results = await mem.search(
-                    "q",
-                    query_vector=_one_hot(0),
-                    limit=10,
-                    session_id="s1",
-                    filter_metadata={"user_id": "u1"},
-                )
-            finally:
-                register_group_membership_resolver(FORMATION_ID, None)
+            gbac_enforcement.set_current_permissions(_permissions(group_ids=("team-a",)))
+            results = await mem.search(
+                "q",
+                query_vector=_one_hot(0),
+                limit=10,
+                session_id="s1",
+                filter_metadata={"user_id": "u1"},
+            )
             texts = {r["text"] for r in results}
             assert "team-a shared note" in texts
             assert "team-b shared note" not in texts
@@ -743,16 +705,18 @@ class TestRouteScopeAuthorization:
 
         return MemoryCreate(content="fact", scope=scope, scope_id=scope_id)
 
-    async def _resolve(self, formation, memory):
+    async def _resolve(self, formation, memory, permissions=None):
         from muxi.runtime.formation.server.routes.client.memory import _resolve_write_scope
 
-        return await _resolve_write_scope(formation, "alice", memory, "req-1")
+        return await _resolve_write_scope(
+            formation, "alice", memory, "req-1", permissions=permissions
+        )
 
     async def test_user_scope_passes_without_resolver(self):
         scope, error = await self._resolve(self._formation(), self._memory())
         assert scope is None and error is None
 
-    async def test_shared_scope_without_resolver_is_403(self):
+    async def test_shared_scope_without_permissions_is_403(self):
         scope, error = await self._resolve(self._formation(), self._memory(scope="formation"))
         assert scope is None
         assert error is not None and error.status_code == 403
@@ -761,14 +725,12 @@ class TestRouteScopeAuthorization:
         class FakeResolver:
             group_ids = ("team-a",)
 
-            async def resolve(self, user_id):
-                return _permissions("group:team-a", "formation")
-
         formation = self._formation(FakeResolver())
-        scope, error = await self._resolve(formation, self._memory(scope="formation"))
+        permissions = _permissions("group:team-a", "formation")
+        scope, error = await self._resolve(formation, self._memory(scope="formation"), permissions)
         assert error is None and scope == ("formation", FORMATION_ID)
         scope, error = await self._resolve(
-            formation, self._memory(scope="group", scope_id="team-a")
+            formation, self._memory(scope="group", scope_id="team-a"), permissions
         )
         assert error is None and scope == ("group", "team-a")
 
@@ -776,12 +738,11 @@ class TestRouteScopeAuthorization:
         class FakeResolver:
             group_ids = ("team-a", "team-b")
 
-            async def resolve(self, user_id):
-                return _permissions("group:team-a")
-
         formation = self._formation(FakeResolver())
         scope, error = await self._resolve(
-            formation, self._memory(scope="group", scope_id="team-b")
+            formation,
+            self._memory(scope="group", scope_id="team-b"),
+            _permissions("group:team-a"),
         )
         assert scope is None
         assert error is not None and error.status_code == 403
@@ -790,12 +751,11 @@ class TestRouteScopeAuthorization:
         class FakeResolver:
             group_ids = ("team-a",)
 
-            async def resolve(self, user_id):
-                return _permissions("group:*")
-
         formation = self._formation(FakeResolver())
         scope, error = await self._resolve(
-            formation, self._memory(scope="group", scope_id="ghost-group")
+            formation,
+            self._memory(scope="group", scope_id="ghost-group"),
+            _permissions("group:*"),
         )
         assert scope is None
         assert error is not None and error.status_code == 422
@@ -809,51 +769,3 @@ class TestRouteScopeAuthorization:
         scope, error = await self._resolve(self._formation(), self._memory(scope="org"))
         assert scope is None
         assert error is not None and error.status_code == 422
-
-
-# ----------------------------------------------------------------------
-# Registry hygiene
-# ----------------------------------------------------------------------
-
-
-class TestResolverRegistry:
-    def test_register_and_unregister(self):
-        sentinel = object()
-        register_group_membership_resolver("f1", sentinel)
-        assert memory_scopes._membership_resolvers["f1"] is sentinel
-        register_group_membership_resolver("f1", None)
-        assert "f1" not in memory_scopes._membership_resolvers
-
-
-class TestWriteAuthResolutionFailure:
-    """A failing membership lookup returns a formatted 503, never a raw 500.
-
-    Review follow-up on #215: resolver.resolve() raising (transient DB
-    failure) must produce create_error_response formatting plus an
-    observability event, and must not fall through to an authorization
-    decision made without the user's actual permissions.
-    """
-
-    async def test_resolver_failure_yields_503(self, monkeypatch):
-        from types import SimpleNamespace
-
-        from muxi.runtime.formation.server.routes.client import memory as memory_route
-
-        class ExplodingResolver:
-            group_ids = ()
-
-            async def resolve(self, user_id):
-                raise RuntimeError("membership lookup failed")
-
-        formation = SimpleNamespace(
-            permission_resolver=ExplodingResolver(),
-            formation_id=FORMATION_ID,
-        )
-        payload = SimpleNamespace(scope="formation", scope_id=None)
-
-        result, error = await memory_route._resolve_write_scope(
-            formation, "alice", payload, "req-1"
-        )
-        assert result is None
-        assert error is not None
-        assert error.status_code == 503

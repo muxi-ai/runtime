@@ -18,8 +18,8 @@
 #   (Integer PK + String(21) ``public_id`` Nano ID for external exposure)
 #   instead of the UUID + BIGSERIAL pair sketched in the PRD -- same
 #   properties, portable across both backends.
-# - ``user_id`` stores the external user identifier as a string, following
-#   the ``user_groups`` table convention.
+# - ``user_id`` stores the external user identifier as a string (the same
+#   convention identities use throughout the runtime).
 # - ``status`` / ``contradicted_by`` / ``superseded_by`` implement the PRD's
 #   contradiction-detection model: conflicting facts are cross-referenced and
 #   retained, never silently overwritten.

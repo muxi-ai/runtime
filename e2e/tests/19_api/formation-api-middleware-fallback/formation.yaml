@@ -1,6 +1,6 @@
 schema: "1.0.0"
-id: api-test-authgate-required
-description: "Formation with server.auth required for auth gate testing"
+id: api-test-middleware-fallback
+description: "rbac.fallback path: requests without groups proceed with the public group"
 
 llm:
   api_keys:
@@ -19,14 +19,21 @@ memory:
 
 agents:
   - id: assistant
-    name: "Auth Gate Test Assistant"
-    description: "A helpful assistant for testing the auth gate"
+    name: "Middleware Pipeline Test Assistant"
+    description: "A helpful assistant for testing the request middleware pipeline"
     system_message: "You are a helpful assistant. Be concise and direct."
+
+middleware:
+  command: "./middleware.py"
+  args: ["--map", "groups.json"]
+  timeout: 5s
+
+rbac:
+  fallback: public
 
 server:
   enabled: true
   port: 8271
-  auth: required
   api_keys:
     admin_key: test-admin-key-123
     client_key: test-client-key-456

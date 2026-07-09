@@ -35,10 +35,19 @@ agents:
     description: "A helpful assistant for testing scoped memory recall"
     system_message: "You are a helpful assistant. Be concise and direct. Answer from the provided context when possible."
 
+# Request middleware: the only membership source (template example
+# reading a static user -> groups map).
+middleware:
+  command: "./middleware.py"
+  args: ["--map", "groups.json"]
+  timeout: 5s
+
+rbac:
+  fallback: false
+
 server:
   enabled: true
   port: 8272
-  auth: required # groups/ requires the auth gate
   api_keys:
     admin_key: test-admin-key-2u1
     client_key: test-client-key-2u1

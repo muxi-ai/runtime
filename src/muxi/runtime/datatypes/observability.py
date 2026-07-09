@@ -96,6 +96,17 @@ class SystemEvents(Enum):
     # SOPs, MCP tools) from a user's view (GBAC Phase 3)
 
     # ===================================================================
+    # REQUEST MIDDLEWARE EVENTS
+    # ===================================================================
+    MIDDLEWARE_CONNECTED = "middleware.server.connected"
+    # When the formation's request middleware MCP server is connected and
+    # its ``middleware`` tool passes the contract check at startup
+
+    MIDDLEWARE_APPLIED = "middleware.request.transformed"
+    # When the request middleware transformed a request payload (groups
+    # attached, identity rewritten, or payload passed through unchanged)
+
+    # ===================================================================
     # DOCUMENT CROSS-REFERENCE EVENTS
     # ===================================================================
     CROSS_REFERENCE_MANAGER_INITIALIZED = "cross_reference.manager.initialized"
@@ -1337,6 +1348,10 @@ class ErrorEvents(Enum):
 
     AUTHORIZATION_FAILED = "error.authorization.failed"
     # When user lacks permission for requested action
+
+    MIDDLEWARE_FAILED = "error.middleware.failed"
+    # When the request middleware errors, times out, or returns a
+    # malformed payload -- the request is rejected (fail-closed)
 
     TOKEN_EXPIRED = "error.token.expired"
     # When authentication token has expired

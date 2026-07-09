@@ -219,6 +219,18 @@ async def chat(
             if isinstance(e, HTTPException):
                 raise
 
+            # Request middleware / RBAC rejection (request-middleware PRD):
+            # fail-closed 403 with a generic message. The specific
+            # observability event was already emitted at the source.
+            from .....services.gbac import RbacRejectedError
+            from .....services.middleware import MiddlewareRejectedError
+
+            if isinstance(e, (MiddlewareRejectedError, RbacRejectedError)):
+                raise HTTPException(
+                    status_code=403,
+                    detail="Insufficient permissions to process this request",
+                ) from e
+
             # Log non-HTTP exceptions
             observability.observe(
                 event_type=observability.ConversationEvents.REQUEST_FAILED,
@@ -412,6 +424,17 @@ async def audiochat(
         except Exception as e:
             if isinstance(e, HTTPException):
                 raise
+
+            # Request middleware / RBAC rejection: fail-closed 403 with a
+            # generic message (rejection event emitted at the source).
+            from .....services.gbac import RbacRejectedError
+            from .....services.middleware import MiddlewareRejectedError
+
+            if isinstance(e, (MiddlewareRejectedError, RbacRejectedError)):
+                raise HTTPException(
+                    status_code=403,
+                    detail="Insufficient permissions to process this request",
+                ) from e
 
             observability.observe(
                 event_type=observability.ConversationEvents.REQUEST_FAILED,

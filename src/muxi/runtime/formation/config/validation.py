@@ -388,6 +388,14 @@ class FormationValidator:
         if "server" in config:
             self._validate_server_config(config["server"])
 
+        # Validate RBAC configuration
+        if "rbac" in config:
+            self._validate_rbac_config(config["rbac"])
+
+        # Validate request middleware configuration
+        if "middleware" in config:
+            self._validate_middleware_config(config["middleware"])
+
         # Validate LLM configuration
         if "llm" in config:
             self._validate_llm_config(config["llm"])
@@ -2994,6 +3002,53 @@ class FormationValidator:
                     "Runtime 'built_in_mcps' must be either a boolean or a list of MCP names"
                 )
 
+    def _validate_rbac_config(self, rbac_config: Any) -> None:
+        """Validate the top-level ``rbac`` block (request-middleware PRD).
+
+        Structural checks only -- the groups-dir-dependent rules
+        (active: true without group files, unknown fallback group, the
+        dead-config check) run in ``Formation._setup_rbac`` where the
+        groups/ directory is loaded.
+        """
+        if not isinstance(rbac_config, dict):
+            self.result.add_error(
+                "rbac configuration must be a dictionary with 'active' and/or 'fallback' keys"
+            )
+            return
+
+        unknown = sorted(set(rbac_config) - {"active", "fallback"})
+        if unknown:
+            self.result.add_error(
+                f"rbac has unknown key(s) {unknown}; supported keys are 'active' and 'fallback'"
+            )
+
+        if "active" in rbac_config and rbac_config["active"] not in ("auto", True, False):
+            self.result.add_error(
+                f"rbac.active must be 'auto', true, or false, got: {rbac_config['active']!r}"
+            )
+
+        if "fallback" in rbac_config:
+            fallback = rbac_config["fallback"]
+            if fallback is not False and (not isinstance(fallback, str) or not fallback.strip()):
+                self.result.add_error(
+                    f"rbac.fallback must be false or a group name, got: {fallback!r}"
+                )
+
+    def _validate_middleware_config(self, middleware_config: Any) -> None:
+        """Validate the top-level ``middleware`` block (request-middleware PRD).
+
+        Reuses the RequestMiddleware config parser so the validator and
+        the formation loader enforce identical rules: exactly one
+        transport (url + optional headers XOR command + optional args)
+        plus an optional timeout.
+        """
+        from ...services.middleware import MiddlewareConfigError, RequestMiddleware
+
+        try:
+            RequestMiddleware.from_config(middleware_config)
+        except MiddlewareConfigError as e:
+            self.result.add_error(str(e))
+
     def _validate_server_config(self, server_config: Dict[str, Any]) -> None:
         """Validate server configuration."""
         if not isinstance(server_config, dict):
@@ -3012,11 +3067,15 @@ class FormationValidator:
             if not isinstance(port, int) or port < 1 or port > 65535:
                 self.result.add_error("Server port must be an integer between 1 and 65535")
 
-        # Validate auth mode
+        # server.auth was removed (request-middleware PRD): user-level
+        # gating is expressed through rbac.fallback + middleware
         if "auth" in server_config:
-            auth = server_config["auth"]
-            if auth not in ("open", "required"):
-                self.result.add_error(f"Server auth must be 'open' or 'required', got: {auth!r}")
+            self.result.add_error(
+                "'server.auth' was removed and is no longer accepted; user-level "
+                "gating is now expressed through the top-level 'rbac' block "
+                "('fallback: false' admits only users the middleware attaches "
+                "groups to) plus a 'middleware' block"
+            )
 
         # Validate api_keys
         if "api_keys" in server_config:

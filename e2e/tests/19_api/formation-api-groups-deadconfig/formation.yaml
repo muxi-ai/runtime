@@ -1,6 +1,6 @@
 schema: "1.0.0"
-id: api-test-groups-open
-description: "Formation combining groups/ with default (open) auth -- must FAIL to load (2026-07-07 ruling)"
+id: api-test-groups-deadconfig
+description: "RBAC active + fallback false + no middleware: every request would be rejected -- must FAIL to load"
 
 llm:
   api_keys:
@@ -23,11 +23,12 @@ agents:
     description: "A helpful assistant for testing group permission loading"
     system_message: "You are a helpful assistant. Be concise and direct."
 
+# groups/ exists (rbac auto-activates), fallback defaults to false, and
+# no middleware block is declared: dead configuration, fail fast.
+
 server:
   enabled: true
   port: 8271
-  # auth deliberately absent (default: open) -- with groups/ present this
-  # formation must fail to load with a clear error
   api_keys:
     admin_key: test-admin-key-123
     client_key: test-client-key-456

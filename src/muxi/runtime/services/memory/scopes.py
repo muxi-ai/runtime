@@ -15,7 +15,8 @@
 # Scope model (memory-namespaces PRD, "The Scope Model"):
 #
 #   formation            the org boundary; visible to every user
-#    └── group           the SHARING unit -- membership via GBAC user_groups
+#    └── group           the SHARING unit -- membership via the formation
+#                         middleware (request-middleware PRD)
 #         └── user       memobase isolation (unchanged)
 #
 # Write-one-read-up: a memory is written to exactly one scope; retrieval for
@@ -39,13 +40,15 @@
 # SCOPE_WEIGHTS implements this as a multiplicative similarity weight with
 # user pinned at 1.0 so user-scope scores are byte-identical to Phase 1.
 #
-# Membership resolution for the read fan-out:
-#   1. The per-request ResolvedPermissions in the GBAC ContextVar (set once
-#      per request by the overlord's permission gate) -- the normal path.
-#   2. Fallback: the formation's PermissionResolver, registered here by
-#      Formation._setup_groups(), looked up by external user id. Covers
-#      API routes and direct service calls that never set the ContextVar.
-#   3. No resolver / no memberships -> no group scopes; the fan-out is
+# Membership resolution for the read fan-out (request-middleware PRD --
+# MUXI stores no memberships; groups arrive per request from the formation
+# middleware):
+#   1. An explicit ``group_ids`` argument (callers that resolved
+#      permissions themselves).
+#   2. The per-request ResolvedPermissions in the GBAC ContextVar, set by
+#      the pipeline (overlord permission gate for chat, the memory routes'
+#      request pipeline for the API path).
+#   3. No per-request permissions -> no group scopes; the fan-out is
 #      user + formation only.
 # =============================================================================
 
@@ -69,12 +72,6 @@ SCOPE_WEIGHTS: Dict[str, float] = {
     SCOPE_TYPE_GROUP: 0.95,
     SCOPE_TYPE_FORMATION: 0.9,
 }
-
-# Formation-id -> PermissionResolver used as the read fan-out membership
-# fallback when no per-request permissions are in the ContextVar. Keyed by
-# formation id so multi-formation processes cannot cross wires; re-loading
-# a formation simply overwrites its entry.
-_membership_resolvers: Dict[str, object] = {}
 
 
 def validate_scope(scope_type: str, scope_id: Optional[str]) -> None:
@@ -163,43 +160,19 @@ def current_group_ids() -> Tuple[str, ...]:
     return permissions.group_ids
 
 
-def register_group_membership_resolver(formation_id: str, resolver) -> None:
-    """Register a formation's PermissionResolver as the fan-out fallback.
-
-    Called by ``Formation._setup_groups()``. ``None`` unregisters.
-    """
-    if resolver is None:
-        _membership_resolvers.pop(formation_id, None)
-    else:
-        _membership_resolvers[formation_id] = resolver
-
-
 async def resolve_read_group_ids(
-    formation_id: str,
-    external_user_id: Optional[str] = None,
     group_ids: Optional[Sequence[str]] = None,
 ) -> Tuple[str, ...]:
     """Compose the group ids for a user-context read fan-out.
 
     Resolution order: an explicit ``group_ids`` argument (callers that
-    resolved permissions themselves) -> the per-request ContextVar ->
-    the registered PermissionResolver looked up by external user id ->
-    (). Failures in the fallback resolver degrade to no group scopes
-    (the fan-out is then user + formation only) -- retrieval must never
-    hard-fail because a membership lookup did.
+    resolved permissions themselves) -> the per-request ContextVar
+    (set by the request pipeline) -> (). MUXI stores no memberships
+    (request-middleware PRD), so there is nothing to look up outside
+    the request context; without per-request permissions the fan-out
+    is user + formation only.
     """
     if group_ids is not None:
         return tuple(group_ids)
 
-    from_context = current_group_ids()
-    if from_context:
-        return from_context
-
-    resolver = _membership_resolvers.get(formation_id)
-    if resolver is None or not external_user_id:
-        return ()
-    try:
-        permissions = await resolver.resolve(str(external_user_id).lower().strip())
-        return permissions.group_ids
-    except Exception:
-        return ()
+    return current_group_ids()

@@ -216,10 +216,12 @@ class Formation:
         # Registry of MCP servers that use user credentials
         self._mcp_servers_with_user_credentials: Dict[str, Dict[str, Any]] = {}
 
-        # Group-based access control (populated by _setup_groups when a
-        # groups/ directory is present in the formation)
+        # RBAC + request middleware (populated by _setup_rbac from the
+        # top-level rbac:/middleware: blocks and the groups/ directory)
         self._group_permissions: Dict[str, Any] = {}
         self._permission_resolver = None
+        self._request_middleware = None
+        self._rbac_prepared = False
 
     def set_secrets_manager(self, secrets_manager: SecretsManager) -> None:
         """
@@ -1097,8 +1099,9 @@ class Formation:
         # Generate API keys
         self._setup_auth()
 
-        # Load group permission files (GBAC) if a groups/ directory exists
-        self._setup_groups()
+        # RBAC + request middleware (top-level rbac:/middleware: blocks
+        # plus the auto-discovered groups/ directory)
+        self._setup_rbac()
 
         # Prepare and validate service configurations
         self._setup_llm_config()
@@ -1244,6 +1247,7 @@ class Formation:
                 "runtime_config": self._runtime_config,
                 "agents_config": self._agents_config,
                 "permission_resolver": self._permission_resolver,
+                "request_middleware": self._request_middleware,
             }
         )
 
@@ -1313,6 +1317,13 @@ class Formation:
 
         # 8. Initialize MCP services (now async to register servers immediately)
         await initialize_mcp_services(self)
+
+        # 8b. Connect the request middleware and enforce the tool contract.
+        # Fails fast: a formation that declares a middleware it cannot
+        # reach -- or whose 'middleware' tool violates the contract --
+        # must not start.
+        if self._request_middleware is not None:
+            await self._request_middleware.start()
 
         # 9. Initialize clarification configuration
         initialize_clarification_config(self)
@@ -1391,16 +1402,22 @@ class Formation:
         # Store generated keys for later display
         self._generated_api_keys = generated_keys
 
-        # Auth mode: "open" (default) accepts any user identity;
-        # "required" rejects users not present in the user_identifiers table
-        auth_mode = server_config.get("auth", "open")
-        if auth_mode not in ("open", "required"):
+        # server.auth was removed (request-middleware PRD): the client key
+        # authenticates the caller; user-level gating is expressed through
+        # rbac.fallback: false plus middleware. Loud, actionable failure
+        # for formations still carrying the removed key.
+        if "auth" in server_config:
             raise ConfigurationValidationError(
-                [f"Server auth must be 'open' or 'required', got: {auth_mode!r}"],
+                ["'server.auth' was removed and is no longer accepted"],
                 {
-                    "current_value": auth_mode,
-                    "suggestion": "Set 'server.auth' to 'open' or 'required' in your formation.afs",
-                    "example": {"server": {"auth": "required"}},
+                    "current_value": server_config.get("auth"),
+                    "suggestion": (
+                        "Remove 'server.auth' from your formation.afs. User-level "
+                        "gating is now expressed through the top-level 'rbac' block "
+                        "('fallback: false' admits only users the middleware "
+                        "attaches groups to) plus a 'middleware' block"
+                    ),
+                    "example": {"rbac": {"active": True, "fallback": False}},
                 },
             )
 
@@ -1409,121 +1426,233 @@ class Formation:
             "host": server_config.get("host", "127.0.0.1"),
             "port": server_config.get("port", 8271),
             "access_log": server_config.get("access_log", False),
-            "auth": auth_mode,
             "api_keys": self._api_keys,
         }
 
-    def _setup_groups(self) -> None:
+    def _setup_rbac(self) -> None:
         """
-        Auto-discover and load group permission files (GBAC Phase 2).
+        Prepare RBAC and the request middleware (request-middleware PRD).
 
-        A ``groups/`` directory next to the formation file activates
-        permission loading -- groups are intentionally auto-discovered
-        (policy data, not architecture; no manifest declaration). Without
-        the directory the feature is inert and nothing changes.
+        Reads the top-level ``rbac:`` and ``middleware:`` blocks plus the
+        auto-discovered ``groups/`` directory:
+
+        - ``rbac.active: auto`` (default) -- RBAC is on iff ``groups/``
+          contains group files (one source of truth, as shipped).
+        - ``rbac.active: true`` -- explicit intent; no group files is a
+          fail-fast load error.
+        - ``rbac.active: false`` -- kill switch; ``groups/`` may exist but
+          filtering is disabled, logged loudly after load.
+        - ``rbac.fallback`` -- ``false`` (default) rejects requests that
+          end up with no groups; ``<group_name>`` (validated against
+          ``groups/``) proceeds with that group's permissions instead.
+        - Dead-config check: RBAC active + ``fallback: false`` + no
+          ``middleware`` block would reject every request -- fail fast.
+        - ``middleware:`` -- an MCP server declaration (exactly one
+          transport) parsed and validated here; the connection + tool
+          contract check happens in _initialize_services() (fail fast).
 
         Malformed group files, unknown inheritance parents, and circular
-        inheritance fail the formation load with a precise error. Group
-        files also require ``server.auth: required`` (2026-07-07 ruling):
-        with open auth, unknown users would bypass the very restrictions
-        registered users are subject to, so that combination fails the
-        load too. An empty ``groups/`` directory stays inert.
+        inheritance fail the formation load with a precise error.
 
         This method is idempotent -- _prepare_services() may run more than
-        once (load() and start_overlord()); the resolver is built once so
-        its membership/resolution caches survive.
+        once (load() and start_overlord()); the resolver and middleware
+        are built once so their caches and connections survive.
         """
-        if self._permission_resolver is not None:
+        if self._rbac_prepared:
             return
 
         formation_dir = self._formation_path
         if formation_dir and os.path.isfile(formation_dir):
             formation_dir = os.path.dirname(formation_dir)
-        if not formation_dir:
-            return
 
-        groups_dir = os.path.join(formation_dir, "groups")
-        if not os.path.isdir(groups_dir):
-            # No groups/ directory: no restrictions, feature inert.
-            return
+        config = self.config or {}
 
+        # ------------------------------------------------------------------
+        # Parse the rbac block
+        # ------------------------------------------------------------------
+        rbac_config = config.get("rbac", {}) or {}
+        if not isinstance(rbac_config, dict):
+            raise ConfigurationValidationError(
+                ["'rbac' must be a mapping with 'active' and/or 'fallback' keys"],
+                {
+                    "current_type": type(rbac_config).__name__,
+                    "example": {"rbac": {"active": "auto", "fallback": False}},
+                },
+            )
+        unknown_keys = sorted(set(rbac_config) - {"active", "fallback"})
+        if unknown_keys:
+            raise ConfigurationValidationError(
+                [f"'rbac' has unknown key(s) {unknown_keys}"],
+                {"suggestion": "Supported keys are 'active' and 'fallback'"},
+            )
+
+        active = rbac_config.get("active", "auto")
+        if active not in ("auto", True, False):
+            raise ConfigurationValidationError(
+                [f"rbac.active must be 'auto', true, or false, got: {active!r}"],
+                {"example": {"rbac": {"active": "auto"}}},
+            )
+
+        fallback = rbac_config.get("fallback", False)
+        if fallback is not False and (not isinstance(fallback, str) or not fallback.strip()):
+            raise ConfigurationValidationError(
+                [f"rbac.fallback must be false or a group name, got: {fallback!r}"],
+                {"example": {"rbac": {"fallback": "public"}}},
+            )
+
+        # ------------------------------------------------------------------
+        # Parse the middleware block (connection happens at startup)
+        # ------------------------------------------------------------------
+        middleware_config = config.get("middleware")
+        if middleware_config is not None and self._request_middleware is None:
+            from ..services.middleware import MiddlewareConfigError, RequestMiddleware
+
+            try:
+                self._request_middleware = RequestMiddleware.from_config(
+                    middleware_config,
+                    base_dir=formation_dir or None,
+                    formation_id=self.formation_id,
+                )
+            except MiddlewareConfigError as e:
+                raise ConfigurationValidationError(
+                    [f"Invalid middleware configuration: {e}"],
+                    {
+                        "suggestion": (
+                            "Declare exactly one transport: 'url' (+ optional "
+                            "'headers') or 'command' (+ optional 'args'), plus an "
+                            "optional 'timeout'"
+                        ),
+                        "example": {"middleware": {"command": "./middleware.py", "timeout": "2s"}},
+                    },
+                ) from e
+
+        # ------------------------------------------------------------------
+        # Load group permission files (auto-discovered policy data)
+        # ------------------------------------------------------------------
         from ..services.gbac import GroupPermissionError, PermissionResolver, load_groups
 
-        try:
-            groups = load_groups(groups_dir)
-        except GroupPermissionError as e:
-            raise ConfigurationValidationError(
-                [f"Invalid group permission configuration: {e}"],
-                {
-                    "groups_dir": groups_dir,
-                    "suggestion": (
-                        "Fix the group file named in the error; see the group "
-                        "definition format in the group-based-access-control PRD"
-                    ),
-                },
-            ) from e
+        groups: Dict[str, Any] = {}
+        groups_dir = os.path.join(formation_dir, "groups") if formation_dir else None
+        if groups_dir and os.path.isdir(groups_dir):
+            try:
+                groups = load_groups(groups_dir)
+            except GroupPermissionError as e:
+                raise ConfigurationValidationError(
+                    [f"Invalid group permission configuration: {e}"],
+                    {
+                        "groups_dir": groups_dir,
+                        "suggestion": (
+                            "Fix the group file named in the error; see the group "
+                            "definition format in the group-based-access-control PRD"
+                        ),
+                    },
+                ) from e
 
-        if not groups:
-            # An empty groups/ directory can express no policy; treat it as
-            # inert (same as absent) rather than locking every user out.
-            observability.observe(
-                event_type=observability.ErrorEvents.CONFIGURATION_ERROR,
-                level=observability.EventLevel.WARNING,
-                data={
-                    "service": "formation",
-                    "groups_dir": groups_dir,
-                    "formation_id": self.formation_id,
-                },
-                description=(
-                    f"groups/ directory at {groups_dir} contains no group files; "
-                    "group permission filtering stays inactive"
-                ),
-            )
-            return
-
-        # Group permission filtering only makes sense behind the auth gate:
-        # with open auth, unknown users would bypass the very restrictions
-        # registered users are subject to (inverted trust). Fail the load.
-        auth_mode = (getattr(self, "_server_config", None) or {}).get("auth", "open")
-        if auth_mode != "required":
+        # ------------------------------------------------------------------
+        # Resolve the activation state
+        # ------------------------------------------------------------------
+        if active is True and not groups:
             raise ConfigurationValidationError(
                 [
-                    f"groups/ directory at {groups_dir} requires server.auth: 'required' "
-                    f"(current auth: {auth_mode!r})"
+                    "rbac.active is true but no group files were found"
+                    + (f" in {groups_dir}" if groups_dir and os.path.isdir(groups_dir) else "")
                 ],
                 {
                     "groups_dir": groups_dir,
-                    "current_value": auth_mode,
                     "suggestion": (
-                        "Group permission filtering requires 'server.auth: required'. "
-                        "Set 'server.auth: required' in your formation.afs, or remove "
-                        "the groups/ directory"
+                        "Add group YAML files to the formation's groups/ directory, "
+                        "or set rbac.active to 'auto' (on iff groups exist) or false"
                     ),
-                    "example": {"server": {"auth": "required"}},
                 },
             )
 
-        runtime_config = self.config.get("runtime", {}) if self.config else {}
-        membership_ttl = 60.0
-        if isinstance(runtime_config, dict):
-            membership_ttl = float(runtime_config.get("group_membership_ttl", 60.0))
+        rbac_active = bool(groups) if active == "auto" else active
+
+        self._rbac_deferred_events = []
+        if active is False and groups:
+            # Kill switch: groups exist but filtering is disabled. Loud.
+            self._rbac_deferred_events.append(
+                {
+                    "event_type": observability.ErrorEvents.CONFIGURATION_ERROR,
+                    "level": observability.EventLevel.WARNING,
+                    "data": {
+                        "service": "formation",
+                        "formation_id": self.formation_id,
+                        "groups_dir": groups_dir,
+                        "group_count": len(groups),
+                    },
+                    "description": (
+                        f"rbac.active is false: {len(groups)} group file(s) in "
+                        f"{groups_dir} are loaded but PERMISSION FILTERING IS "
+                        "DISABLED (kill switch)"
+                    ),
+                }
+            )
+        elif groups_dir and os.path.isdir(groups_dir) and not groups:
+            # An empty groups/ directory can express no policy; treat it as
+            # inert (same as absent) rather than locking every user out.
+            self._rbac_deferred_events.append(
+                {
+                    "event_type": observability.ErrorEvents.CONFIGURATION_ERROR,
+                    "level": observability.EventLevel.WARNING,
+                    "data": {
+                        "service": "formation",
+                        "formation_id": self.formation_id,
+                        "groups_dir": groups_dir,
+                    },
+                    "description": (
+                        f"groups/ directory at {groups_dir} contains no group files; "
+                        "group permission filtering stays inactive"
+                    ),
+                }
+            )
+
+        if not rbac_active:
+            self._rbac_prepared = True
+            return
+
+        # ------------------------------------------------------------------
+        # RBAC is active: validate fallback + dead-config, build resolver
+        # ------------------------------------------------------------------
+        if isinstance(fallback, str) and fallback not in groups:
+            raise ConfigurationValidationError(
+                [
+                    f"rbac.fallback names group {fallback!r} but no "
+                    f"groups/{fallback}.yaml exists"
+                ],
+                {
+                    "groups_dir": groups_dir,
+                    "known_groups": sorted(groups),
+                    "suggestion": (
+                        "Point rbac.fallback at an existing group file, or set it "
+                        "to false to reject requests without groups"
+                    ),
+                },
+            )
+
+        if fallback is False and self._request_middleware is None:
+            raise ConfigurationValidationError(
+                [
+                    "Dead configuration: RBAC is active with fallback: false but "
+                    "no middleware block is declared -- every request would be "
+                    "rejected (groups can only be attached by a middleware)"
+                ],
+                {
+                    "suggestion": (
+                        "Declare a 'middleware' block (the only source of group "
+                        "memberships), set 'rbac.fallback' to a group name to give "
+                        "every request that group's permissions, or disable RBAC"
+                    ),
+                    "example": {"middleware": {"command": "./middleware.py", "timeout": "2s"}},
+                },
+            )
 
         self._group_permissions = groups
         self._permission_resolver = PermissionResolver(
             groups=groups,
             formation_id=self.formation_id,
-            db_manager_getter=lambda: getattr(self, "_db_manager", None),
-            membership_ttl=membership_ttl,
+            fallback_group=fallback if isinstance(fallback, str) else None,
         )
-
-        # Memory namespaces (Phases 2+3): register the resolver as the
-        # membership fallback for the shared-scope read fan-out. Call
-        # sites inside a chat request read the per-request permissions
-        # ContextVar; API routes and direct service calls that never set
-        # it fall back to this registry, keyed by formation id.
-        from ..services.memory.scopes import register_group_membership_resolver
-
-        register_group_membership_resolver(self.formation_id, self._permission_resolver)
 
         # Observability is disabled during load(), so emitting here would be
         # a silent no-op. Stash the event payload and emit it after
@@ -1534,13 +1663,20 @@ class Formation:
             "groups_dir": groups_dir,
             "group_count": len(groups),
             "group_ids": sorted(groups),
-            "membership_ttl_seconds": membership_ttl,
+            "fallback": fallback,
+            "middleware_declared": self._request_middleware is not None,
         }
+        self._rbac_prepared = True
 
     @property
     def permission_resolver(self):
         """The formation's GBAC PermissionResolver, or None when inactive."""
         return self._permission_resolver
+
+    @property
+    def request_middleware(self):
+        """The formation's RequestMiddleware, or None when not declared."""
+        return self._request_middleware
 
     def _setup_llm_config(self) -> None:
         """Setup and validate LLM configuration."""
@@ -2990,8 +3126,8 @@ class Formation:
             # This starts the flow of JSON observability events for runtime monitoring
             observability.enable()
 
-            # Deferred from _setup_groups(): the event is built during load()
-            # while observability is disabled, so it is emitted here instead
+            # Deferred from _setup_rbac(): the events are built during load()
+            # while observability is disabled, so they are emitted here instead
             groups_event = getattr(self, "_groups_loaded_event", None)
             if groups_event is not None:
                 observability.observe(
@@ -3004,6 +3140,15 @@ class Formation:
                     ),
                 )
                 self._groups_loaded_event = None
+
+            for deferred in getattr(self, "_rbac_deferred_events", []) or []:
+                observability.observe(
+                    event_type=deferred["event_type"],
+                    level=deferred["level"],
+                    data=deferred["data"],
+                    description=deferred["description"],
+                )
+            self._rbac_deferred_events = []
 
             return self._overlord
 
@@ -3129,6 +3274,10 @@ class Formation:
                         f"forcing termination after {timeout_seconds} seconds",
                     )
                 )
+
+            # Disconnect the request middleware before cleanup (best effort)
+            if self._request_middleware is not None:
+                await self._request_middleware.stop()
 
             # Disconnect MCP servers before cleanup
             if hasattr(self, "_mcp_service") and self._mcp_service:

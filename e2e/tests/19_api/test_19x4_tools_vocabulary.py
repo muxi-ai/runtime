@@ -37,9 +37,7 @@ sys.path.insert(0, str(Path(__file__).parent.parent))
 from common import BaseE2ETest, TestOutputFormatter  # noqa: E402
 
 from muxi.runtime.services.gbac import enforcement as gbac_enforcement  # noqa: E402
-from muxi.runtime.services.memory.long_term import UserGroup  # noqa: E402
 
-ANALYST_USER = "alice@example.com"
 FORMATION_ID = "api-test-tools-vocab"
 
 # What each cascade level should leave visible (see formation.yaml/groups/)
@@ -55,26 +53,6 @@ class TestToolsVocabulary(BaseE2ETest):
             test_description="Test allow/deny tools vocabulary across the override cascade",
             test_area="19_api",
         )
-
-    async def _seed_membership(self, user_id: str, group_id: str):
-        from sqlalchemy import delete
-
-        async with self.formation._db_manager.get_async_session() as session:
-            # Idempotent across runs: the formation SQLite DB persists
-            await session.execute(
-                delete(UserGroup).where(
-                    UserGroup.user_id == user_id,
-                    UserGroup.formation_id == FORMATION_ID,
-                )
-            )
-            await UserGroup.create(
-                session,
-                user_id=user_id,
-                group_id=group_id,
-                formation_id=FORMATION_ID,
-            )
-            await session.commit()
-        self.formation.permission_resolver.invalidate_memberships(user_id)
 
     async def test_19x4_tools_vocabulary(self):
         formatter, start_time = TestOutputFormatter(), time.time()
@@ -107,11 +85,10 @@ class TestToolsVocabulary(BaseE2ETest):
             print(f"✅ Agent view: {sorted(agent_view)} (blacklist alias removed create_record)")
             checks.append("{id, tools} attachment override narrows agent registry")
 
-            print("\n4. Seeding analyst membership and resolving the cascade...")
-            await self._seed_membership(ANALYST_USER, "analyst")
+            print("\n4. Resolving the cascade for the analyst group...")
             resolver = self.formation.permission_resolver
             assert resolver is not None, "permission_resolver not constructed"
-            perms = await resolver.resolve(ANALYST_USER)
+            perms = resolver.resolve_groups(("analyst",))
             effective = perms.effective_tools(
                 "assistant",
                 "records-mcp",

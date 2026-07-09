@@ -1,16 +1,16 @@
 """
 Authentication utilities for the Formation server.
 
-Provides dependency injection classes for validating API keys
-and formation user identities in incoming requests.
+Provides dependency injection classes for validating API keys in
+incoming requests. The client key authenticates the caller
+(application); user-level gating is the request middleware + RBAC
+pipeline's job (request-middleware PRD).
 """
 
 import secrets
 
 from fastapi import HTTPException, Request
 from starlette.status import HTTP_401_UNAUTHORIZED, HTTP_500_INTERNAL_SERVER_ERROR
-
-from ...services import observability
 
 
 class AdminKeyAuth:
@@ -173,109 +173,3 @@ class DualKeyAuth:
             detail="A valid API key is required. Provide either 'X-Muxi-Admin-Key' or 'X-Muxi-Client-Key' header.",
             headers={"WWW-Authenticate": "ApiKey"},
         )
-
-
-class UserAuthGate:
-    """
-    Formation user auth gate dependency (server.auth: required).
-
-    When the formation config sets ``server.auth: required``, the user
-    identity carried by the request must resolve to a known user via the
-    user_identifiers table for this formation; unknown users receive 401.
-    With the default ``server.auth: open`` this dependency is a no-op.
-
-    Runs after API key validation: the key authenticates the caller
-    (application), this gate authorizes the end user it acts for.
-    """
-
-    # Endpoints whose deprecated JSON body ``user_id`` field participates in
-    # identity resolution (mirrors the chat routes' header-then-body order).
-    _BODY_FALLBACK_PATHS = frozenset({"/v1/chat", "/v1/audiochat"})
-
-    async def __call__(self, request: Request) -> None:
-        """
-        Reject the request if auth is required and the user is unknown.
-
-        Args:
-            request: The FastAPI request object
-
-        Raises:
-            HTTPException: 401 if the user identity is not in the database,
-                500 if auth is required but no database is configured
-        """
-        formation = getattr(request.app.state, "formation", None)
-        if formation is None:
-            return
-
-        server_config = getattr(formation, "_server_config", None) or {}
-        if server_config.get("auth", "open") != "required":
-            return
-
-        # Check the DB before resolving identity so a misconfigured
-        # formation fails fast without consuming the request body
-        db_manager = getattr(formation, "_db_manager", None)
-        if db_manager is None:
-            raise HTTPException(
-                status_code=HTTP_500_INTERNAL_SERVER_ERROR,
-                detail="server.auth is 'required' but no persistent database is configured",
-            )
-
-        identity = await self._resolve_identity(request)
-
-        from ...utils.user_resolution import resolve_user_identifier
-
-        resolved = await resolve_user_identifier(
-            identifier=identity,
-            formation_id=formation.formation_id,
-            db_manager=db_manager,
-            kv_cache=None,
-            create_if_missing=False,
-        )
-
-        if resolved is None:
-            observability.observe(
-                event_type=observability.ErrorEvents.AUTHENTICATION_FAILED,
-                level=observability.EventLevel.WARNING,
-                data={
-                    "service": "formation_api_server",
-                    "auth_gate": "user",
-                    "auth_mode": "required",
-                    "path": request.url.path,
-                    "user_id": identity,
-                    "formation_id": formation.formation_id,
-                },
-                description=f"Auth gate rejected unknown user {identity!r}",
-            )
-            raise HTTPException(
-                status_code=HTTP_401_UNAUTHORIZED,
-                detail=(
-                    f"Unknown user {identity!r}. This formation requires registered "
-                    "users (server.auth: required)."
-                ),
-            )
-
-    async def _resolve_identity(self, request: Request) -> str:
-        """
-        Resolve the user identity the way the gated routes do.
-
-        Order: X-Muxi-User-Id header, then (chat endpoints only) the
-        deprecated ``user_id`` body field, then the default user "0".
-        """
-        identity = request.headers.get("x-muxi-user-id")
-
-        if not identity and request.url.path in self._BODY_FALLBACK_PATHS:
-            try:
-                body = await request.json()
-            except (ValueError, UnicodeDecodeError):
-                # Malformed body falls through to the default identity,
-                # matching the gated routes' own parsing behavior.
-                # Transport-level errors (client disconnect, upstream
-                # middleware failures) propagate instead of silently
-                # masquerading as user "0".
-                body = None
-            if isinstance(body, dict):
-                body_user_id = body.get("user_id")
-                if isinstance(body_user_id, str):
-                    identity = body_user_id
-
-        return identity or "0"

@@ -664,7 +664,7 @@ class FormationServer:
         """Register client interaction endpoints."""
         from fastapi import Depends
 
-        from .auth import ClientKeyAuth, DualKeyAuth, UserAuthGate
+        from .auth import ClientKeyAuth, DualKeyAuth
 
         # Import scheduler from admin routes (has dual-auth endpoint GET /scheduler/jobs)
         from .routes.admin import scheduler
@@ -688,18 +688,14 @@ class FormationServer:
         # Create auth dependencies
         client_auth = ClientKeyAuth(self.client_key)
         dual_auth = DualKeyAuth(self.admin_key, self.client_key)
-        user_auth_gate = UserAuthGate()
 
-        # Routers that accept only ClientKey and carry a formation user
-        # identity, so they additionally pass the user auth gate
-        # (server.auth: required rejects unknown users with 401)
-        user_gated_routers = [
+        # Routers that accept only ClientKey. The client key authenticates
+        # the caller; user-level gating is the request middleware + RBAC
+        # pipeline's job (request-middleware PRD; the former server.auth
+        # user gate was removed).
+        client_only_routers = [
             chat.router,
             triggers.router,
-        ]
-
-        # Routers that accept only ClientKey
-        client_only_routers = [
             users.router,
             notifications.router,
             sessions.router,
@@ -720,13 +716,6 @@ class FormationServer:
             scheduler.router,  # GET /scheduler/jobs needs both keys
         ]
 
-        for router in user_gated_routers:
-            app.include_router(
-                router,
-                prefix="/v1",
-                dependencies=[Depends(client_auth), Depends(user_auth_gate)],
-            )
-
         for router in client_only_routers:
             app.include_router(router, prefix="/v1", dependencies=[Depends(client_auth)])
 
@@ -736,7 +725,7 @@ class FormationServer:
         # Record routes with explicit operation_id for MCP tool exposure.
         # Collected from the source routers because app.routes no longer
         # flattens included routers (FastAPI 0.137+ lazy inclusion).
-        for router in (*user_gated_routers, *client_only_routers, *dual_auth_routers):
+        for router in (*client_only_routers, *dual_auth_routers):
             for route in router.routes:
                 if getattr(route, "operation_id", None) and getattr(route, "path", ""):
                     self._mcp_tool_paths.add(f"/v1{route.path}")

@@ -44,10 +44,15 @@ agents:
         tools:
           blacklist: ["create_record"]
 
+# Membership arrives via middleware in production; this test resolves
+# group combinations directly, so a fallback group keeps the dead-config
+# check satisfied without declaring a middleware.
+rbac:
+  fallback: analyst
+
 server:
   enabled: true
   port: 8271
-  auth: required  # groups/ requires the auth gate (2026-07-07 ruling)
   api_keys:
     admin_key: test-admin-key-123
     client_key: test-client-key-456

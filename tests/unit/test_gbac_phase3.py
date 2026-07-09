@@ -57,23 +57,33 @@ def make_perms(tmp_path, files: dict, *group_ids: str) -> ResolvedPermissions:
 
 @pytest.fixture(autouse=True)
 def clean_permission_context():
-    """Every test starts and ends with no request-scoped permissions."""
+    """Every test starts and ends with no request-scoped permissions/groups."""
     token = enforcement.set_current_permissions(None)
+    groups_token = enforcement.set_request_groups(None)
     yield
+    enforcement.reset_request_groups(groups_token)
     enforcement.reset_current_permissions(token)
 
 
 class FakeResolver:
-    """Counts resolve() calls and returns a fixed ResolvedPermissions."""
+    """Counts resolve_request() calls and returns fixed permissions.
 
-    def __init__(self, permissions: ResolvedPermissions):
+    Mimics PermissionResolver's request-resolution surface: groups arrive
+    from the middleware (via the request context); ``None`` from
+    resolve_request means "reject" (no groups + fallback: false).
+    """
+
+    def __init__(self, permissions: ResolvedPermissions, reject_without_groups: bool = False):
         self.permissions = permissions
+        self.reject_without_groups = reject_without_groups
         self.calls = 0
-        self.resolved_user_ids: list = []
+        self.seen_groups: list = []
 
-    async def resolve(self, user_id: str) -> ResolvedPermissions:
+    def resolve_request(self, groups) -> ResolvedPermissions:
         self.calls += 1
-        self.resolved_user_ids.append(user_id)
+        self.seen_groups.append(tuple(groups) if groups else ())
+        if not groups and self.reject_without_groups:
+            return None
         return self.permissions
 
 
@@ -254,15 +264,28 @@ class TestPermissionGate:
         resolver = FakeResolver(perms)
         overlord = make_overlord_stub(resolver, {"a": object(), "b": object()})
 
+        # Middleware attached groups earlier in the pipeline
+        enforcement.set_request_groups(("g",))
         assert await overlord._apply_permission_gate("Alice@Example.COM ", None) is None
         assert resolver.calls == 1
-        assert resolver.resolved_user_ids == ["alice@example.com"]
+        assert resolver.seen_groups == [("g",)]
         assert enforcement.get_current_permissions() is perms
 
-        # Enforcement sites read the context -- no further resolve() calls
+        # Enforcement sites read the context -- no further resolve calls
         assert enforcement.filter_ids("agents", ["a", "b"]) == ["a"]
         assert enforcement.is_allowed("agents", "a")
         assert resolver.calls == 1
+
+    async def test_no_groups_without_fallback_returns_rejection(self, tmp_path):
+        """No middleware-attached groups + fallback: false = rejected."""
+        perms = make_perms(tmp_path, {"g.yaml": "agents: [a]\n"}, "g")
+        resolver = FakeResolver(perms, reject_without_groups=True)
+        overlord = make_overlord_stub(resolver, {"a": object()})
+
+        response = await overlord._apply_permission_gate("alice", None)
+        assert isinstance(response, MuxiResponse)
+        assert response.metadata["reason"] == "no_groups"
+        assert response.metadata["error_code"] == "AUTHORIZATION_FAILED"
 
     async def test_denied_direct_address_matches_unknown_agent_error(self, tmp_path):
         """Denied agent raises the exact error get_agent uses for unknown ids."""
