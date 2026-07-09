@@ -2,6 +2,53 @@
 
 ## [unreleased]
 
+### Memory revamp phases 3-5 - context optimization, knowledge index, lint
+
+The memory system's read-path and lifecycle layers on top of the Phase 1-2
+knowledge graph and captain's log (memory-revamp PRD; Phase 6 hybrid search
+stays deferred pending benchmark evidence):
+
+- Pre-compaction flush (Phase 3): working-memory FIFO eviction no longer
+  silently loses conversational context. A new eviction listener hook on
+  `WorkingMemory` hands at-risk buffer items to a silent LLM turn - at the
+  `memory.compaction.flush_threshold` (default 0.80) crossing and again as
+  an eviction-time safety net - which digests them through the captain's
+  log pipeline (entry + source lineage + lessons + graph facts) before the
+  buffer drops them. Best-effort and failure-isolated: a failed flush never
+  blocks eviction or a chat turn. `flush_enabled: false` is byte-identical
+  to the previous behavior (pinned by unit test).
+- Cache-TTL context pruning (Phase 3): when a session resumes after the
+  provider prompt-cache window (`memory.pruning.mode: cache-ttl`, default
+  TTL 300s), stale tool results and oversized turns are soft-trimmed
+  (first/last 1500 chars) or hard-cleared from the assembled history; the
+  newest `keep_last_n_tool_results` stay intact. Inert when unconfigured:
+  no `memory.pruning` block means no pruner is constructed.
+- Knowledge index (Phase 4): a <=300-token navigable catalog of what exists
+  in memory (entities, captain's log span, artifact manifest via the
+  artifact memory service - the seam artifact-memory Phase 2 rides - and
+  lint-flagged knowledge gaps), cached per user, persisted in
+  `system_config` (`memory_index:{user_id}`), and injected at retrieval
+  start in both context representations. Regenerates on log entries,
+  artifact saves, entity-count jumps past `entity_count_threshold`, lint
+  runs, and 24h staleness; truncates per section with `[+N more]` under the
+  `max_tokens` cap. Index failures never break a turn.
+- Memory lint (Phase 5): a background audit (weekly by default, on demand
+  via `run_lint` / admin `POST /memory/lint`) following the shared
+  background-loop lifecycle (started beside the scheduler, cancelled on
+  shutdown, failure-isolated per run and per user). Flags conflicted facts
+  unresolved past `conflict_resolution_days` and captain's log gaps > 7
+  days, hard-deletes superseded facts past the retention window, removes
+  orphaned relationships (`orphan_cleanup`), flags artifacts unaccessed for
+  `stale_artifact_days`, and force-regenerates a stale index. Findings feed
+  back into the knowledge index as knowledge gaps. Inert when unconfigured:
+  only constructed when the formation declares a `memory.lint` block.
+- All four new config sections (`memory.compaction`, `memory.pruning`,
+  `memory.index`, `memory.lint`) fail-fast validate at load time. New
+  observability events: `MEMORY_PRECOMPACTION_FLUSH_*`,
+  `MEMORY_CONTEXT_PRUNED`, `MEMORY_INDEX_*`, `MEMORY_LINT_*` (event
+  validation stays 100%). New e2e: `test_2x1_memory_revamp_phases_3_5.py`
+  (flush surviving real eviction, index injection observable in a real
+  turn, on-demand lint).
 ### Memory event substrate - projections, provenance, rebuild (Phases 2b-2d)
 
 The immutable memory event log (memory-event-substrate PRD) now covers the

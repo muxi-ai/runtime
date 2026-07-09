@@ -1389,20 +1389,45 @@ class ChatOrchestrator:
                     pass
             return None
 
+        async def _fetch_memory_index_block():
+            # Knowledge index injection (Memory Revamp Phase 4): the
+            # navigable catalog of what exists in memory, read at the start
+            # of the retrieval pass. Failure-safe by contract (returns ""
+            # on any error or when there is nothing to index).
+            memory_index = getattr(self.overlord, "memory_index", None)
+            if memory_index and user_id is not None:
+                try:
+                    return await memory_index.get_index_block(user_id)
+                except Exception:
+                    pass
+            return ""
+
         if is_profile_recall_request:
-            user_profile_text, profile_memory_facts, context_messages_list = await asyncio.gather(
+            (
+                user_profile_text,
+                profile_memory_facts,
+                context_messages_list,
+                memory_index_block,
+            ) = await asyncio.gather(
                 _fetch_user_synopsis(),
                 _fetch_profile_memory_facts(),
                 _fetch_buffer_context(),
+                _fetch_memory_index_block(),
             )
             long_term_memories = profile_memory_facts
             if not user_profile_text and not long_term_memories:
                 long_term_memories = await _fetch_long_term_memories()
         else:
-            user_profile_text, long_term_memories, context_messages_list = await asyncio.gather(
+            (
+                user_profile_text,
+                long_term_memories,
+                context_messages_list,
+                memory_index_block,
+            ) = await asyncio.gather(
                 _fetch_user_synopsis(),
                 _fetch_long_term_memories(),
                 _fetch_buffer_context(),
+                _fetch_memory_index_block(),
             )
 
         # Format buffer context results
@@ -1422,6 +1447,7 @@ class ChatOrchestrator:
                         "=== USER PROFILE ===",
                         "=== FILE PROCESSING RESULTS ===",
                         "=== RELEVANT MEMORIES ===",
+                        "=== MEMORY INDEX ===",
                     ]
                 ):
                     if "=== CURRENT REQUEST ===" in content and "User:" in content:
@@ -1459,13 +1485,21 @@ class ChatOrchestrator:
         enhanced_parts.append(f"User: {display_message}")
         enhanced_parts.append("")
 
-        # 2. User profile (high priority - provides context about the user)
+        # 2. Memory index (Memory Revamp Phase 4) - the retrieval pass
+        # starts by orienting on what exists in memory before any of the
+        # semantic sections below.
+        if memory_index_block:
+            enhanced_parts.append("=== MEMORY INDEX ===")
+            enhanced_parts.append(memory_index_block)
+            enhanced_parts.append("")
+
+        # 3. User profile (high priority - provides context about the user)
         if user_profile_text:
             enhanced_parts.append("=== USER PROFILE ===")
             enhanced_parts.append(user_profile_text)
             enhanced_parts.append("")
 
-        # 3. File processing results (high priority)
+        # 4. File processing results (high priority)
         # Include a unique request marker to prevent semantic cache matching
         # with previous requests that had similar text but no files
         if file_results:
@@ -1476,7 +1510,7 @@ class ChatOrchestrator:
             enhanced_parts.append(file_results)
             enhanced_parts.append("")
 
-        # 4. Relevant long-term memories (medium priority)
+        # 5. Relevant long-term memories (medium priority)
         # IMPORTANT: Put memories BEFORE the protocol so LLM sees the data first
         if long_term_memories:
             # Add memories section FIRST - before instructions
@@ -1500,7 +1534,7 @@ class ChatOrchestrator:
                 )
                 enhanced_parts.append("")
 
-        # 5. Conversation context (lowest priority - truncated first if needed)
+        # 6. Conversation context (lowest priority - truncated first if needed)
         if context_text:
             # Load conversation awareness protocol from prompts
             from ..prompts.loader import PromptLoader
@@ -1710,19 +1744,44 @@ class ChatOrchestrator:
                     pass
             return ""
 
+        async def _fetch_memory_index() -> str:
+            # Knowledge index injection (Memory Revamp Phase 4): the
+            # navigable catalog of what exists in memory, injected at the
+            # start of the retrieval pass so agents can orient before any
+            # semantic search. Failure-safe by contract (returns "" on any
+            # error or when there is nothing to index).
+            memory_index = getattr(self.overlord, "memory_index", None)
+            if memory_index and user_id is not None:
+                try:
+                    return await memory_index.get_index_block(user_id)
+                except Exception:
+                    pass
+            return ""
+
         (
             user_profile_text,
             long_term_memories,
             buffer_turns,
             graph_context,
             captains_log_context,
+            memory_index_block,
         ) = await asyncio.gather(
             _fetch_user_synopsis(),
             _fetch_long_term_memories(),
             _fetch_buffer_role_turns(),
             _fetch_graph_context(),
             _fetch_captains_log_context(),
+            _fetch_memory_index(),
         )
+
+        # Cache-TTL pruning (Memory Revamp Phase 3): trim stale tool
+        # results / oversized turns from the history when the session
+        # resumes after the provider's prompt-cache window. Inert when
+        # memory.pruning is not configured; failure-isolated inside the
+        # pruner (returns the original turns on any error).
+        context_pruner = getattr(self.overlord, "context_pruner", None)
+        if context_pruner is not None:
+            buffer_turns = context_pruner.prune_turns(user_id, session_id, buffer_turns)
 
         if graph_context:
             graph_block = f"Known entity relationships:\n{graph_context}"
@@ -1734,6 +1793,15 @@ class ChatOrchestrator:
             log_block = f"Recent activity log:\n{captains_log_context}"
             user_profile_text = (
                 f"{user_profile_text}\n\n{log_block}" if user_profile_text else log_block
+            )
+
+        # The knowledge index leads the memory addendum (PRD retrieval
+        # flow: "1. Read memory index <- orient: what exists?").
+        if memory_index_block:
+            user_profile_text = (
+                f"{memory_index_block}\n\n{user_profile_text}"
+                if user_profile_text
+                else memory_index_block
             )
 
         # Apply the scheduled-execution marker only at the agent's

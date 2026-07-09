@@ -257,6 +257,38 @@ class CaptainsLogService:
                 )
         return totals
 
+    async def digest_turns(
+        self, user_id: Any, turns: List[Tuple[str, str]], model
+    ) -> Dict[str, int]:
+        """
+        Digest an explicit batch of turns immediately (silent-turn path).
+
+        Public entry point for the Phase 3 pre-compaction flush: the items
+        leaving the working memory buffer are digested through the same
+        pipeline the periodic pass uses (entry + lineage + lessons + graph
+        facts). Failure-isolated and best-effort -- unlike the periodic
+        pass there is no re-queue on failure, because the source items are
+        leaving the buffer regardless. Returns stored counts.
+        """
+        totals = {"entries": 0, "sources": 0, "lessons": 0}
+        if not self.enabled or model is None or not turns:
+            return totals
+        try:
+            return await self._digest_user(str(user_id), list(turns), model)
+        except Exception as e:
+            observability.observe(
+                event_type=observability.ConversationEvents.MEMORY_CAPTAINS_LOG_FAILED,
+                level=observability.EventLevel.WARNING,
+                data={
+                    "user_id": str(user_id),
+                    "error": str(e),
+                    "error_type": type(e).__name__,
+                    "pass": "precompaction_flush",
+                },
+                description=f"Pre-compaction flush digest failed: {e}",
+            )
+            return totals
+
     def _requeue_turns(self, user_id: str, turns: List[Tuple[str, str]]) -> None:
         """Restore a failed digest's turn snapshot for the next run.
 
