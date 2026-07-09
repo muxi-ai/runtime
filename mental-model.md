@@ -595,13 +595,16 @@ different plan instead of returning the failure. Off by default; enable via
   the for-loop to `asyncio.gather`. There's a `TODO(perf-round-2)`
   comment in `load_sources_from_config` flagging this.
 
-**Remote Knowledge Sources (Phase 1 core sync, 2026-07-09):**
+**Remote Knowledge Sources (Phases 1-4 complete, 2026-07-09):**
 - Agents can declare url-based knowledge sources alongside local paths:
-  `knowledge.sources[*].url` with schemes `http(s)://`, `s3://`,
-  `rsync://`, `rsync+ssh://`, `file://` (bind mounts). Everything lives in
+  `knowledge.sources[*].url` with schemes `http(s)://`, `s3://`, `gs://`,
+  `az://`, `rsync://`, `rsync+ssh://`, `ftp://`, `sftp://`, `file://`
+  (bind mounts). Everything lives in
   `formation/agents/knowledge/remote/`: `handler.py` (ProtocolHandler ABC
-  + `SourceConfig`), `protocols/{http,s3,rsync,file}.py`, `manifest.py`
-  (per-source sync state), `sync.py` (SyncManager orchestration).
+  + `SourceConfig`), `protocols/{http,s3,gcs,azure,rsync,ftp,sftp,file}.py`,
+  `manifest.py` (per-source sync state), `sync.py` (SyncManager
+  orchestration), `extractor.py` (Phase 2 archive extraction),
+  `scheduler.py` (Phase 3 KnowledgeSyncService).
 - **Architecture: mirror-then-ingest.** `KnowledgeHandler.from_agent_config`
   partitions sources; remote ones sync into a local mirror at
   `<get_knowledge_dir()>/remote/<agent_id>/<source_id>/content/` (i.e.
@@ -626,9 +629,74 @@ different plan instead of returning the failure. Off by default; enable via
   `KNOWLEDGE_SYNC_FAILED` event (WARNING-level when stale content
   exists). E2E: `6_knowledge/test_6f2_remote_source_failure_isolation.py`.
 - **Change detection** is protocol-native: HTTP ETag/Last-Modified, S3
-  ETag, file:// size+mtime composite, rsync native delta (`sync_tree`
-  incremental path; the manifest is rebuilt from the local tree after).
-  A missing remote hash forces a re-download (correctness > bandwidth).
+  ETag, GCS Content-MD5, Azure Content-MD5/ETag, ftp/sftp/file://
+  size+mtime composites, rsync native delta (`sync_tree` incremental
+  path; the manifest is rebuilt from the local tree after). A missing
+  remote hash forces a re-download (correctness > bandwidth).
+- **Optional protocol SDKs** ship as pip extras — `muxi-runtime[gcs]`
+  (google-cloud-storage, usually already present via the core
+  google-cloud-aiplatform dependency), `[azure]` (azure-storage-blob),
+  `[sftp]` (paramiko); ftp uses the stdlib. Missing SDKs raise a clear
+  `RemoteSyncError` naming the extra at handler creation (config time),
+  mirroring the boto3/kafka optional-dep pattern. All SDK calls run in
+  `asyncio.to_thread` (they are sync clients).
+- **Archive extraction (Phase 2, `extract: true`).** The source URL must
+  be a single archive (`.zip`, `.tar`, `.tar.gz`/`.tgz`, `.tar.bz2`,
+  `.tar.xz`); `SyncManager._sync_archive` downloads it into a hidden
+  temp dir NEXT TO the mirror (same fs, never ingested, always cleaned
+  up), extracts via `extractor.py::ArchiveExtractor`, then updates the
+  mirror file-by-file (`os.replace`) and diffs against the manifest for
+  per-file change detection (manifest also stores `archive_hash`/`size`
+  so an unchanged archive skips download AND extraction). Security:
+  member names go through the same `safe_relative_path`/`resolve_within`
+  guards as the manifest, symlink/hardlink/device members are rejected,
+  and decompression bombs are bounded by `max_extracted_files` (1000)
+  and `max_extracted_size` (500MB) counted on the DECOMPRESSED stream —
+  a violation aborts the whole extraction, leaving the previous mirror
+  intact (stale-wins). `extract_pattern` filters members; skipped
+  members are never decompressed (don't count against bounds).
+- **Scheduling (Phase 3, `scheduler.py::KnowledgeSyncService`).** NOT a
+  second loop: the overlord (`_initialize_knowledge_sync_service`, right
+  after proactive services) registers the service with
+  `SchedulerService.register_periodic_task` — the same extension point
+  as the proactive heartbeat — when any source has a periodic schedule
+  (cron or `@hourly`/`@daily`/`@weekly`; `@startup`/no schedule =
+  startup-only). `tick()` never raises; croniter computes per-source
+  `next_fire`. Per-source `asyncio.Lock`s skip overlapping syncs
+  (`knowledge.sync.skipped` SystemEvent), shared by scheduled AND manual
+  triggers. Total sync failure retries with exponential backoff (source
+  `retry:` block — max_attempts/initial_delay/max_delay/exponential_base,
+  defaults 3/5s/300s/2), then falls back to the next cron fire; partial
+  syncs don't retry (stale-wins already applied). Schedules declared
+  without a running scheduler degrade to startup-only + init warning
+  (never a startup failure — backward compatible with Phase 1
+  formations).
+- **Incremental re-embedding.** `SyncResult` carries
+  `changed_paths`/`deleted_paths`; after a sync with changes the service
+  calls `KnowledgeHandler.refresh_remote_source`, which removes stale
+  chunks by per-chunk `file_path` metadata (directory-ingested chunks
+  carry it) and re-ingests ONLY the changed files through `add_file`
+  (transient per-file FileKnowledge, popped from `handler.sources`
+  after). The whole mirror is never re-embedded on a one-file change.
+  Re-embed failure is isolated (event + stale embeddings served).
+- **Manual sync trigger**: `POST /v1/agents/{agent_id}/knowledge/sync`
+  (admin routes, `routes/admin/agents.py`; optional `{"source_id": ...}`
+  body) calls `KnowledgeSyncService.sync_now` — same locks, same
+  re-embed path; a source with a sync in flight reports status
+  `skipped`. Works even without the scheduler (the service is created
+  whenever remote sources exist). E2E:
+  `6_knowledge/test_6f4_manual_sync_trigger.py` (also proves the
+  re-embed end-to-end: the agent answers from post-startup content).
+- **WorkingMemory partition-dim fix (found by Phase 3).** FAISS
+  partitions used to be created/rebuilt at the memory-wide `dimension`;
+  knowledge chunks arrive via `add_with_embedding` with PRE-COMPUTED
+  vectors whose dim can differ (e.g. 1536 openai doc embeddings in the
+  768 nomic buffer memory) — writes were silently dropped
+  (`index_count == 0` recency fallback masked it) and the first
+  `_rebuild_index` after a `remove_by_metadata` shape-crashed every
+  vector search. Partitions are now created at the dim of the vectors
+  they store (`_get_partition(dimension=...)`, `_rebuild_index` groups
+  by actual embedding length).
 - **Downloads are atomic** (`atomic_download` in `remote/handler.py`):
   HTTP/S3/file handlers stream into a `.part` temp file in the SAME
   directory as the destination, fsync, then `os.replace`. A mid-stream
@@ -639,31 +707,35 @@ different plan instead of returning the failure. Off by default; enable via
   untrusted: `safe_relative_path` rejects absolute/traversal/backslash
   paths and `resolve_within` re-verifies the resolved (symlink-aware)
   target stays inside the content dir. rsync runs with `--safe-links`.
-- **SSH host keys are strict by default** (rsync+ssh):
-  `StrictHostKeyChecking=yes` — the host must already be in known_hosts
-  or the sync fails, so a MITM on first contact cannot inject knowledge
-  content. `accept_new_host_keys: true` on the source is the explicit
-  opt-in for SSH's trust-on-first-use (`accept-new` still rejects
-  CHANGED keys). Mechanism not policy: safe default, loud escape hatch.
-  The temp file holding `ssh_key` material is 0600 and removed even
-  when setup fails mid-way (write/chmod) — never left behind.
+- **SSH host keys are strict by default** (rsync+ssh AND sftp):
+  `StrictHostKeyChecking=yes` / paramiko `RejectPolicy` — the host must
+  already be in known_hosts or the sync fails, so a MITM on first
+  contact cannot inject knowledge content. `accept_new_host_keys: true`
+  on the source is the explicit opt-in for SSH's trust-on-first-use.
+  Mechanism not policy: safe default, loud escape hatch. The temp file
+  holding rsync `ssh_key` material is 0600 and removed even when setup
+  fails mid-way (write/chmod) — never left behind.
 - **Validation is fail-fast** (`config/validation.py::
-  _validate_remote_knowledge_source`): unsupported/planned schemes
-  (`gs`, `az`, `ftp`, `sftp` are "planned"), glob on http(s)/rsync URLs,
-  malformed auth blocks (`basic`/`bearer` for http, `aws` for s3,
-  `ssh_key` for rsync+ssh), `accept_new_host_keys` outside rsync+ssh,
-  and Phase 2 `extract`/`extract_pattern` keys are load-time errors.
-  For `aws` auth, `access_key`/`secret_key` are both-or-neither —
-  neither means boto3's default credential chain (env vars, instance
-  profile). Credentials flow through the standard `${{ secrets.* }}`
+  _validate_remote_knowledge_source`): unknown schemes, glob on
+  http(s)/rsync URLs (and with `extract`), malformed auth blocks
+  (`basic`/`bearer` for http, `aws` for s3, `gcp` for gs, `azure` for
+  az — REQUIRED for az since the account is not in the URL, `basic` for
+  ftp, `ssh_key`/`basic` for sftp, `ssh_key` for rsync+ssh),
+  `accept_new_host_keys` outside rsync+ssh/sftp, extract options
+  (`extract` boolean, not for rsync; `extract_pattern`/bounds require
+  `extract: true`), and the `retry:` block (allowed keys + ranges) are
+  load-time errors. For `aws` auth, `access_key`/`secret_key` are
+  both-or-neither; `gcp` `credentials_json` is optional (ADC chain).
+  Credentials flow through the standard `${{ secrets.* }}`
   interpolation (resolved before handlers see config).
-- **Phase 1 scope note:** `schedule` is accepted and syntax-validated
-  (cron or `@startup`/`@hourly`/`@daily`/`@weekly`) but periodic re-sync
-  is Phase 3 — every remote source syncs exactly once at formation
-  startup. Archive extraction is Phase 2. HTTP sources are single-file
-  only (no directory listing protocol).
-- Events: `knowledge.sync.started` / `knowledge.sync.completed`
-  (SystemEvents) and `error.knowledge.sync.failed` (ErrorEvents).
+- HTTP sources are single-file only (no directory listing protocol) —
+  which is exactly what archive sources want (`extract: true` over one
+  zip export URL).
+- Events: `knowledge.sync.started` / `knowledge.sync.completed` /
+  `knowledge.sync.skipped` (SystemEvents) and
+  `error.knowledge.sync.failed` (ErrorEvents; also used with
+  `phase: retry_scheduled|retries_exhausted|reingest|tick` data by the
+  Phase 3 scheduler).
 
 **Pre-routing gate ordering (current state, 2026-04-26):**
 ```

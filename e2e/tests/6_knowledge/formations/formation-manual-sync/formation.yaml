@@ -1,0 +1,38 @@
+schema: "1.0.0"
+id: "remote-knowledge-manual-sync-test"
+description: "Formation exercising the manual remote-knowledge sync trigger endpoint"
+
+llm:
+  api_keys:
+    openai: "${{ secrets.OPENAI_API_KEY }}"
+    anthropic: "${{ secrets.ANTHROPIC_API_KEY }}"
+  models:
+    - text: "openai/gpt-4o-mini"
+    - embedding: "openai/text-embedding-3-small"
+
+agents:
+  - chronicler
+
+memory:
+  buffer:
+    size: 50
+    multiplier: 10
+    vector_search: false
+
+server:
+  enabled: true
+  port: 8273
+  api_keys:
+    admin_key: test-admin-key-6f4
+    client_key: test-client-key-6f4
+
+logging:
+  system:
+    level: "debug"
+    destination: "stdout"
+  conversation:
+    enabled: true
+    streams:
+      - transport: "stdout"
+        level: "info"
+        format: "jsonl"

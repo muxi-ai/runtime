@@ -235,6 +235,15 @@ class AgentCreate(BaseModel):
     a2a: Optional[Dict[str, Any]] = Field(default=None, description="A2A settings")
 
 
+class KnowledgeSyncTrigger(BaseModel):
+    """Model for manually triggering a remote knowledge source sync."""
+
+    source_id: Optional[str] = Field(
+        default=None,
+        description="Remote knowledge source id to sync; omit to sync all of the agent's sources",
+    )
+
+
 class AgentUpdate(BaseModel):
     """Model for updating an agent."""
 
@@ -355,6 +364,68 @@ async def get_agent(request: Request, agent_id: str) -> JSONResponse:
 
     response = create_success_response(
         APIObjectType.AGENT, APIEventType.AGENT_RETRIEVED, agent, request_id
+    )
+    return JSONResponse(content=response.model_dump(), status_code=200)
+
+
+@router.post("/agents/{agent_id}/knowledge/sync", response_model=APIResponse)
+async def sync_agent_knowledge(
+    request: Request, agent_id: str, trigger: Optional[KnowledgeSyncTrigger] = None
+) -> JSONResponse:
+    """
+    Manually trigger a re-sync of an agent's remote knowledge sources.
+
+    Syncs run through the same per-source locks as scheduled re-syncs, so
+    a source with a sync already in flight reports status "skipped"
+    instead of overlapping. Changed files are re-embedded incrementally.
+
+    Args:
+        agent_id: ID of the agent whose remote sources to sync
+        trigger: Optional body with a single source_id to sync
+
+    Returns:
+        Per-source sync results (status, file counts, duration)
+    """
+    formation = request.app.state.formation
+    request_id: Optional[str] = getattr(request.state, "request_id", None)
+
+    overlord = getattr(formation, "_overlord", None)
+    if overlord is None or agent_id not in getattr(overlord, "agents", {}):
+        response = create_error_response(
+            AGENT_NOT_FOUND_ERROR, f"Agent '{agent_id}' not found", None, request_id
+        )
+        return JSONResponse(content=response.model_dump(), status_code=404)
+
+    sync_service = getattr(overlord, "knowledge_sync_service", None)
+    if sync_service is None or not sync_service.sources_for_agent(agent_id):
+        response = create_error_response(
+            INVALID_REQUEST_ERROR,
+            f"Agent '{agent_id}' has no remote knowledge sources",
+            None,
+            request_id,
+        )
+        return JSONResponse(content=response.model_dump(), status_code=400)
+
+    source_id = trigger.source_id if trigger else None
+    try:
+        results = await sync_service.sync_now(agent_id, source_id=source_id, trigger="manual")
+    except KeyError as e:
+        response = create_error_response(
+            "RESOURCE_NOT_FOUND", str(e).strip("'\""), None, request_id
+        )
+        return JSONResponse(content=response.model_dump(), status_code=404)
+    except Exception as e:
+        logger.error("Manual knowledge sync failed for '%s': %s", agent_id, e, exc_info=True)
+        response = create_error_response(
+            INTERNAL_ERROR, f"Knowledge sync failed: {str(e)}", None, request_id
+        )
+        return JSONResponse(content=response.model_dump(), status_code=500)
+
+    response = create_success_response(
+        APIObjectType.AGENT,
+        APIEventType.AGENT_KNOWLEDGE_SYNCED,
+        {"agent_id": agent_id, "results": results},
+        request_id,
     )
     return JSONResponse(content=response.model_dump(), status_code=200)
 
