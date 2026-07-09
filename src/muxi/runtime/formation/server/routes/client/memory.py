@@ -16,7 +16,6 @@ from fastapi.responses import JSONResponse
 from pydantic import BaseModel
 
 from .....datatypes.api import APIEventType, APIObjectType
-from .....services import observability
 from .....services.memory.base import SCOPE_TYPE_GROUP, SCOPE_TYPE_USER
 from .....services.memory.ingest import (
     STATUS_ACCEPTED,
@@ -171,17 +170,95 @@ def _check_auth_and_user_id(
     return x_user_id, is_admin, None
 
 
+async def _run_request_pipeline(
+    formation,
+    user_id: str,
+    request_id: Optional[str],
+    endpoint: str,
+) -> Tuple[str, Optional[object], Optional[JSONResponse]]:
+    """Run the request middleware + RBAC pipeline for a memory endpoint.
+
+    Memory routes are authenticated inbound traffic, so they traverse the
+    same pipeline as chat (request-middleware PRD): the middleware may
+    attach groups (the only membership source) and rewrite the identity;
+    RBAC then resolves permissions (applying ``rbac.fallback``) or
+    rejects. The resolved permissions are stored in the request context
+    so the shared-scope read fan-out (``resolve_read_group_ids``) sees
+    the caller's groups.
+
+    Returns:
+        ``(user_id, permissions, error_response)`` -- the (possibly
+        rewritten) identity, the resolved permissions (None when RBAC is
+        inactive), and a formatted error response on rejection.
+    """
+    from .....services import middleware as middleware_service
+    from .....services.gbac import enforcement as gbac_enforcement
+
+    user_id = str(user_id).lower().strip()
+    groups = None
+    request_middleware = getattr(formation, "request_middleware", None)
+    if request_middleware is not None:
+        payload = middleware_service.build_request_payload(
+            user_id=user_id,
+            message="",
+            metadata={"endpoint": endpoint},
+            route_class="api",
+        )
+        try:
+            transformed, groups = await request_middleware.transform(payload, request_id=request_id)
+        except middleware_service.MiddlewareRejectedError:
+            # Fail closed; the error.middleware.failed event was emitted.
+            response = create_error_response(
+                "FORBIDDEN",
+                "Request rejected by the formation middleware",
+                None,
+                request_id,
+            )
+            return user_id, None, JSONResponse(content=response.model_dump(), status_code=403)
+        user_id = str(transformed["user_id"]).lower().strip()
+    gbac_enforcement.set_request_groups(groups if request_middleware is not None else None)
+
+    permissions = None
+    resolver = getattr(formation, "permission_resolver", None)
+    if resolver is not None:
+        try:
+            permissions = gbac_enforcement.resolve_request_permissions(
+                resolver,
+                groups,
+                user_id=user_id,
+                formation_id=formation.formation_id,
+                route_class="api",
+            )
+        except gbac_enforcement.RbacRejectedError:
+            response = create_error_response(
+                "FORBIDDEN",
+                "Insufficient permissions to access this resource",
+                None,
+                request_id,
+            )
+            return user_id, None, JSONResponse(content=response.model_dump(), status_code=403)
+        # Make the caller's groups visible to the shared-scope read
+        # fan-out for the remainder of this request context.
+        gbac_enforcement.set_current_permissions(permissions)
+
+    return user_id, permissions, None
+
+
 async def _resolve_write_scope(
     formation,
     user_id: str,
     memory: MemoryCreate,
     request_id: Optional[str],
+    permissions=None,
 ) -> Tuple[Optional[Tuple[str, str]], Optional[JSONResponse]]:
     """Validate and authorize the requested memory write scope.
 
     Returns ``(scope, error_response)``: scope is None for user-scope
     writes (today's ungated path, byte-identical to Phase 1) and a
     ``(scope_type, scope_id)`` tuple for authorized shared-scope writes.
+
+    ``permissions`` is the caller's ResolvedPermissions from the request
+    pipeline (``_run_request_pipeline``), or None when RBAC is inactive.
 
     Shared scopes (memory namespaces PRD, "Interaction with GBAC"):
     writing group or formation scope requires a ``memory.write`` grant in
@@ -215,38 +292,6 @@ async def _resolve_write_scope(
     scope_id = memory.scope_id.strip() if scope_type == SCOPE_TYPE_GROUP else formation.formation_id
 
     resolver = getattr(formation, "permission_resolver", None)
-    permissions = None
-    if resolver is not None:
-        try:
-            # Normalize the identifier the same way the overlord chat path does
-            permissions = await resolver.resolve(str(user_id).lower().strip())
-        except Exception as exc:
-            # A transient membership-lookup failure (e.g. DB hiccup) must
-            # produce a formatted 503 and an observability event, not a raw
-            # 500 -- and it must never fall through to an authorization
-            # decision made without the user's actual permissions.
-            observability.observe(
-                event_type=observability.ErrorEvents.AUTHORIZATION_FAILED,
-                level=observability.EventLevel.ERROR,
-                data={
-                    "service": "formation_api_server",
-                    "kind": "memory_scopes",
-                    "resource_id": write_scope_target(scope_type, scope_id),
-                    "user_id": user_id,
-                    "formation_id": formation.formation_id,
-                    "channel": "api",
-                    "error": str(exc),
-                    "error_type": type(exc).__name__,
-                },
-                description="Shared-memory write authorization could not be resolved",
-            )
-            response = create_error_response(
-                "SERVICE_UNAVAILABLE",
-                "Could not resolve write permissions; try again shortly",
-                None,
-                request_id,
-            )
-            return None, JSONResponse(content=response.model_dump(), status_code=503)
 
     if not is_write_scope_allowed(permissions, scope_type, scope_id):
         from .....services.gbac import enforcement as gbac_enforcement
@@ -554,11 +599,20 @@ async def get_user_memories(
         response = memory_list_response([], request_id)
         return JSONResponse(content=response.model_dump(), status_code=200)
 
+    # Request middleware + RBAC pipeline (request-middleware PRD): the
+    # middleware attaches the caller's groups and may rewrite the
+    # identity; the resolved permissions land in the request context so
+    # the shared-scope read fan-out below sees them.
+    user_id, _permissions, error_response = await _run_request_pipeline(
+        formation, user_id, request_id, "/v1/memories"
+    )
+    if error_response:
+        return error_response
+
     try:
         # List memories visible to this user (no vector search required).
-        # Default fans out to the shared scopes the user can read; the
-        # membership lookup falls back to the formation's registered
-        # resolver when no per-request permissions are set (API path).
+        # Default fans out to the shared scopes the user can read, taken
+        # from the per-request permissions set by the pipeline above.
         memories = await overlord.long_term_memory.list_memories(
             limit=limit,
             offset=offset,
@@ -647,9 +701,19 @@ async def create_user_memory(
         )
         return JSONResponse(content=response.model_dump(), status_code=422)
 
+    # Request middleware + RBAC pipeline (request-middleware PRD): groups
+    # arrive from the middleware; the identity may be rewritten.
+    user_id, permissions, error_response = await _run_request_pipeline(
+        formation, user_id, request_id, "/v1/memories"
+    )
+    if error_response:
+        return error_response
+
     # Memory namespaces: validate + authorize the requested scope (user
     # scope returns scope=None and stays on the exact pre-namespaces path).
-    scope, error_response = await _resolve_write_scope(formation, user_id, memory, request_id)
+    scope, error_response = await _resolve_write_scope(
+        formation, user_id, memory, request_id, permissions=permissions
+    )
     if error_response:
         return error_response
 

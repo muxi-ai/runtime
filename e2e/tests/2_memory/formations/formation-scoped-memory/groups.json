@@ -1,0 +1,4 @@
+{
+  "alice@scoped.test": ["team-a"],
+  "bob@scoped.test": ["team-b"]
+}

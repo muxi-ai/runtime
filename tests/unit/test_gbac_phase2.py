@@ -1,7 +1,9 @@
 """Unit tests for GBAC Phase 2: group loading and the permission resolution engine.
 
 Covers the Phase 2 surfaces of the group-based access control PRD
-(2026-07-06 revision):
+(2026-07-06 revision), updated for the request-middleware PRD (groups
+arrive per request from the formation middleware; MUXI stores no
+memberships):
 
 1. Parsing -- the simplified group file format: plain-list shorthand, "*",
    long form {allow, deny}, agent grant+override entries, mcp_servers
@@ -10,29 +12,26 @@ Covers the Phase 2 surfaces of the group-based access control PRD
    deny overrides parent allow, tool override blocks supersede per key,
    circular and unknown parents are load-time errors.
 3. Resolution -- multi-group union of allows, any-deny-wins, fnmatch globs,
-   the four-level tool override cascade, and empty-membership behavior.
-4. Resolver -- membership TTL cache, LRU resolution cache, unknown
-   membership group ids, and formation wiring (auto-discovery).
+   the four-level tool override cascade, and empty-groups behavior.
+4. Resolver -- resolution from middleware-attached group ids, the
+   rbac.fallback semantics, the LRU resolution cache, unknown group ids,
+   and formation wiring (rbac activation + fail-fast config rules).
 """
 
 from __future__ import annotations
 
-import asyncio
 from types import SimpleNamespace
 
 import pytest
-from sqlalchemy.orm import sessionmaker
 
 from muxi.runtime.datatypes.exceptions import ConfigurationValidationError
 from muxi.runtime.formation.formation import Formation
-from muxi.runtime.services.db import Base, DatabaseManager
 from muxi.runtime.services.gbac import (
     GroupPermissionError,
     PermissionResolver,
     ResolvedPermissions,
     load_groups,
 )
-from muxi.runtime.services.memory.long_term import UserGroup
 
 FORMATION_ID = "gbac-phase2-test"
 
@@ -668,153 +667,123 @@ class TestToolOverrideCascade:
         assert perms.effective_tools("db-assistant", "db", INHERITED) == set()
 
 
-@pytest.fixture
-def membership_db(tmp_path):
-    """File-backed SQLite DatabaseManager with the user_groups table."""
-    db_manager = DatabaseManager(f"sqlite:///{tmp_path}/gbac.db")
-    Base.metadata.create_all(db_manager.engine, tables=[UserGroup.__table__])
-    yield db_manager
-    db_manager.engine.dispose()
-
-
-def add_membership(db_manager, user_id: str, group_id: str) -> None:
-    Session = sessionmaker(bind=db_manager.engine)
-    with Session() as session:
-        session.add(UserGroup(user_id=user_id, group_id=group_id, formation_id=FORMATION_ID))
-        session.commit()
-
-
-def make_resolver(groups: dict, db_manager, **kwargs) -> PermissionResolver:
-    return PermissionResolver(
-        groups=groups,
-        formation_id=FORMATION_ID,
-        db_manager_getter=lambda: db_manager,
-        **kwargs,
-    )
+def make_resolver(groups: dict, **kwargs) -> PermissionResolver:
+    return PermissionResolver(groups=groups, formation_id=FORMATION_ID, **kwargs)
 
 
 class TestPermissionResolver:
-    """Resolver: membership lookup, TTL cache, LRU resolution cache."""
+    """Resolver: middleware-attached groups, fallback, LRU resolution cache."""
 
-    async def test_resolve_user_with_memberships(self, tmp_path, membership_db):
+    def test_resolve_groups_single(self, tmp_path):
         groups = make_groups(
             tmp_path,
             {"hr.yaml": "agents: [hr-assistant]\n", "eng.yaml": "agents: [code-assistant]\n"},
         )
-        add_membership(membership_db, "alice@example.com", "hr")
-        resolver = make_resolver(groups, membership_db)
+        resolver = make_resolver(groups)
 
-        perms = await resolver.resolve("alice@example.com")
+        perms = resolver.resolve_groups(("hr",))
         assert perms.group_ids == ("hr",)
         assert perms.is_allowed("agents", "hr-assistant")
         assert not perms.is_allowed("agents", "code-assistant")
 
-    async def test_resolve_multi_group_user(self, tmp_path, membership_db):
+    def test_resolve_groups_multi(self, tmp_path):
         groups = make_groups(
             tmp_path,
             {"eng.yaml": "agents: [code-assistant]\n", "atlas.yaml": "agents: [atlas-bot]\n"},
         )
-        add_membership(membership_db, "dave@example.com", "eng")
-        add_membership(membership_db, "dave@example.com", "atlas")
-        resolver = make_resolver(groups, membership_db)
+        resolver = make_resolver(groups)
 
-        perms = await resolver.resolve("dave@example.com")
+        perms = resolver.resolve_groups(("eng", "atlas"))
         assert perms.group_ids == ("atlas", "eng")
         assert perms.is_allowed("agents", "code-assistant")
         assert perms.is_allowed("agents", "atlas-bot")
 
-    async def test_empty_membership_resolves_to_empty_permissions(self, tmp_path, membership_db):
+    def test_empty_groups_resolve_to_empty_permissions(self, tmp_path):
         groups = make_groups(tmp_path, {"g.yaml": 'agents: "*"\n'})
-        resolver = make_resolver(groups, membership_db)
+        resolver = make_resolver(groups)
 
-        perms = await resolver.resolve("nobody@example.com")
+        perms = resolver.resolve_groups(())
         assert perms.group_ids == ()
         assert not perms.has_groups
         assert not perms.is_allowed("agents", "anything")
 
-    async def test_unknown_membership_group_grants_nothing(self, tmp_path, membership_db):
+    def test_unknown_group_grants_nothing(self, tmp_path):
         groups = make_groups(tmp_path, {"real.yaml": "agents: [a]\n"})
-        add_membership(membership_db, "bob@example.com", "real")
-        add_membership(membership_db, "bob@example.com", "ghost")  # no ghost.yaml
-        resolver = make_resolver(groups, membership_db)
+        resolver = make_resolver(groups)
 
-        perms = await resolver.resolve("bob@example.com")
+        perms = resolver.resolve_groups(("real", "ghost"))  # no ghost.yaml
         assert perms.group_ids == ("real",)
 
-    async def test_membership_ttl_caches_within_window(self, tmp_path, membership_db):
-        groups = make_groups(tmp_path, {"a.yaml": "agents: [x]\n", "b.yaml": "agents: [y]\n"})
-        add_membership(membership_db, "carol@example.com", "a")
-        resolver = make_resolver(groups, membership_db, membership_ttl=60.0)
+    def test_duplicate_group_ids_deduplicate(self, tmp_path):
+        groups = make_groups(tmp_path, {"a.yaml": "agents: [x]\n"})
+        resolver = make_resolver(groups)
 
-        perms = await resolver.resolve("carol@example.com")
+        perms = resolver.resolve_groups(("a", "a"))
         assert perms.group_ids == ("a",)
 
-        # New membership is invisible while the TTL cache is warm
-        add_membership(membership_db, "carol@example.com", "b")
-        perms = await resolver.resolve("carol@example.com")
-        assert perms.group_ids == ("a",)
-
-        # Invalidation forces a fresh lookup
-        resolver.invalidate_memberships("carol@example.com")
-        perms = await resolver.resolve("carol@example.com")
-        assert perms.group_ids == ("a", "b")
-
-    async def test_membership_ttl_expires(self, tmp_path, membership_db):
+    def test_resolution_cached_per_group_combination(self, tmp_path):
         groups = make_groups(tmp_path, {"a.yaml": "agents: [x]\n", "b.yaml": "agents: [y]\n"})
-        add_membership(membership_db, "erin@example.com", "a")
-        resolver = make_resolver(groups, membership_db, membership_ttl=0.05)
+        resolver = make_resolver(groups)
 
-        perms = await resolver.resolve("erin@example.com")
-        assert perms.group_ids == ("a",)
-
-        add_membership(membership_db, "erin@example.com", "b")
-        await asyncio.sleep(0.06)
-        perms = await resolver.resolve("erin@example.com")
-        assert perms.group_ids == ("a", "b")
-
-    async def test_resolution_cached_per_group_combination(self, tmp_path, membership_db):
-        groups = make_groups(tmp_path, {"a.yaml": "agents: [x]\n", "b.yaml": "agents: [y]\n"})
-        add_membership(membership_db, "u1@example.com", "a")
-        add_membership(membership_db, "u2@example.com", "a")
-        add_membership(membership_db, "u3@example.com", "b")
-        resolver = make_resolver(groups, membership_db)
-
-        p1 = await resolver.resolve("u1@example.com")
-        p2 = await resolver.resolve("u2@example.com")
-        p3 = await resolver.resolve("u3@example.com")
+        p1 = resolver.resolve_groups(("a",))
+        p2 = resolver.resolve_groups(("a",))
+        p3 = resolver.resolve_groups(("b",))
         assert p1 is p2  # same combination -> same cached object
         assert p1 is not p3
 
-    async def test_resolve_without_database_raises(self, tmp_path):
-        groups = make_groups(tmp_path, {"g.yaml": "agents: [a]\n"})
-        resolver = PermissionResolver(
-            groups=groups,
-            formation_id=FORMATION_ID,
-            db_manager_getter=lambda: None,
-        )
-        with pytest.raises(RuntimeError, match="no persistent database"):
-            await resolver.resolve("alice@example.com")
+    def test_resolve_request_with_groups_ignores_fallback(self, tmp_path):
+        groups = make_groups(tmp_path, {"a.yaml": "agents: [x]\n", "pub.yaml": "agents: [p]\n"})
+        resolver = make_resolver(groups, fallback_group="pub")
+
+        perms = resolver.resolve_request(("a",))
+        assert perms is not None
+        assert perms.group_ids == ("a",)
+
+    def test_resolve_request_no_groups_uses_fallback(self, tmp_path):
+        groups = make_groups(tmp_path, {"pub.yaml": "agents: [p]\n"})
+        resolver = make_resolver(groups, fallback_group="pub")
+
+        for empty in (None, ()):
+            perms = resolver.resolve_request(empty)
+            assert perms is not None
+            assert perms.group_ids == ("pub",)
+
+    def test_resolve_request_no_groups_no_fallback_rejects(self, tmp_path):
+        groups = make_groups(tmp_path, {"a.yaml": "agents: [x]\n"})
+        resolver = make_resolver(groups)  # fallback: false
+
+        assert resolver.resolve_request(None) is None
+        assert resolver.resolve_request(()) is None
+
+    def test_fallback_group_property(self, tmp_path):
+        groups = make_groups(tmp_path, {"pub.yaml": "agents: [p]\n"})
+        assert make_resolver(groups).fallback_group is None
+        assert make_resolver(groups, fallback_group="pub").fallback_group == "pub"
 
 
 class TestFormationWiring:
-    """Auto-discovery: _setup_groups activates iff groups/ exists."""
+    """_setup_rbac: activation states + fail-fast config rules."""
 
     @staticmethod
-    def _formation_stub(tmp_path) -> SimpleNamespace:
+    def _formation_stub(tmp_path, config=None) -> SimpleNamespace:
         return SimpleNamespace(
             _formation_path=str(tmp_path),
             _permission_resolver=None,
+            _request_middleware=None,
+            _rbac_prepared=False,
             _group_permissions={},
             formation_id=FORMATION_ID,
-            config={"runtime": {}},
-            # Group files require the auth gate (see
-            # test_gbac_auth_groups_validation.py for the rule itself)
-            _server_config={"auth": "required"},
+            config=config
+            or {
+                # Groups without a middleware need a fallback group, or
+                # the dead-config check fails the load (by design).
+                "rbac": {"fallback": "analyst"},
+            },
         )
 
     def test_no_groups_dir_is_inert(self, tmp_path):
-        stub = self._formation_stub(tmp_path)
-        Formation._setup_groups(stub)
+        stub = self._formation_stub(tmp_path, config={})
+        Formation._setup_rbac(stub)
         assert stub._permission_resolver is None
         assert stub._group_permissions == {}
 
@@ -822,25 +791,26 @@ class TestFormationWiring:
         (tmp_path / "groups").mkdir()
         (tmp_path / "groups" / "analyst.yaml").write_text("agents: [researcher]\n")
         stub = self._formation_stub(tmp_path)
-        Formation._setup_groups(stub)
+        Formation._setup_rbac(stub)
         assert stub._permission_resolver is not None
         assert stub._permission_resolver.group_ids == ("analyst",)
+        assert stub._permission_resolver.fallback_group == "analyst"
 
     def test_groups_dir_next_to_formation_file(self, tmp_path):
         """When the formation path is a file, groups/ sits in its directory."""
         formation_file = tmp_path / "formation.afs"
         formation_file.write_text("id: test\n")
         (tmp_path / "groups").mkdir()
-        (tmp_path / "groups" / "g.yaml").write_text("agents: [a]\n")
+        (tmp_path / "groups" / "analyst.yaml").write_text("agents: [a]\n")
         stub = self._formation_stub(tmp_path)
         stub._formation_path = str(formation_file)
-        Formation._setup_groups(stub)
+        Formation._setup_rbac(stub)
         assert stub._permission_resolver is not None
 
     def test_empty_groups_dir_is_inert(self, tmp_path):
         (tmp_path / "groups").mkdir()
-        stub = self._formation_stub(tmp_path)
-        Formation._setup_groups(stub)
+        stub = self._formation_stub(tmp_path, config={})
+        Formation._setup_rbac(stub)
         assert stub._permission_resolver is None
 
     def test_malformed_group_file_fails_load(self, tmp_path):
@@ -848,34 +818,126 @@ class TestFormationWiring:
         (tmp_path / "groups" / "bad.yaml").write_text("agent: [typo]\n")
         stub = self._formation_stub(tmp_path)
         with pytest.raises(ConfigurationValidationError) as exc_info:
-            Formation._setup_groups(stub)
+            Formation._setup_rbac(stub)
         assert "bad.yaml" in str(exc_info.value)
 
     def test_circular_inheritance_fails_load(self, tmp_path):
         (tmp_path / "groups").mkdir()
         (tmp_path / "groups" / "a.yaml").write_text("inherits: b\n")
         (tmp_path / "groups" / "b.yaml").write_text("inherits: a\n")
-        stub = self._formation_stub(tmp_path)
+        stub = self._formation_stub(tmp_path, config={"rbac": {"fallback": "a"}})
         with pytest.raises(ConfigurationValidationError) as exc_info:
-            Formation._setup_groups(stub)
+            Formation._setup_rbac(stub)
         assert "Circular" in str(exc_info.value)
 
-    def test_setup_groups_is_idempotent(self, tmp_path):
+    def test_setup_rbac_is_idempotent(self, tmp_path):
         (tmp_path / "groups").mkdir()
-        (tmp_path / "groups" / "g.yaml").write_text("agents: [a]\n")
+        (tmp_path / "groups" / "analyst.yaml").write_text("agents: [a]\n")
         stub = self._formation_stub(tmp_path)
-        Formation._setup_groups(stub)
+        Formation._setup_rbac(stub)
         resolver = stub._permission_resolver
-        Formation._setup_groups(stub)
+        Formation._setup_rbac(stub)
         assert stub._permission_resolver is resolver
 
-    def test_membership_ttl_configurable_via_runtime(self, tmp_path):
+
+class TestRbacConfigRules:
+    """The rbac block's fail-fast rules (request-middleware PRD)."""
+
+    @staticmethod
+    def _stub(tmp_path, config) -> SimpleNamespace:
+        return SimpleNamespace(
+            _formation_path=str(tmp_path),
+            _permission_resolver=None,
+            _request_middleware=None,
+            _rbac_prepared=False,
+            _group_permissions={},
+            formation_id=FORMATION_ID,
+            config=config,
+        )
+
+    @staticmethod
+    def _write_group(tmp_path, name="analyst"):
+        (tmp_path / "groups").mkdir(exist_ok=True)
+        (tmp_path / "groups" / f"{name}.yaml").write_text("agents: [researcher]\n")
+
+    def test_active_true_without_groups_fails(self, tmp_path):
+        stub = self._stub(tmp_path, {"rbac": {"active": True}})
+        with pytest.raises(ConfigurationValidationError) as exc_info:
+            Formation._setup_rbac(stub)
+        assert "no group files" in str(exc_info.value)
+
+    def test_active_true_with_empty_groups_dir_fails(self, tmp_path):
         (tmp_path / "groups").mkdir()
-        (tmp_path / "groups" / "g.yaml").write_text("agents: [a]\n")
-        stub = self._formation_stub(tmp_path)
-        stub.config = {"runtime": {"group_membership_ttl": 5}}
-        Formation._setup_groups(stub)
-        assert stub._permission_resolver._membership_ttl == 5.0
+        stub = self._stub(tmp_path, {"rbac": {"active": True}})
+        with pytest.raises(ConfigurationValidationError):
+            Formation._setup_rbac(stub)
+
+    def test_active_true_with_groups_and_fallback_activates(self, tmp_path):
+        self._write_group(tmp_path)
+        stub = self._stub(tmp_path, {"rbac": {"active": True, "fallback": "analyst"}})
+        Formation._setup_rbac(stub)
+        assert stub._permission_resolver is not None
+
+    def test_active_false_is_kill_switch(self, tmp_path):
+        self._write_group(tmp_path)
+        stub = self._stub(tmp_path, {"rbac": {"active": False}})
+        Formation._setup_rbac(stub)
+        assert stub._permission_resolver is None
+        # Logged loudly: a deferred warning event is stashed for start_overlord
+        assert stub._rbac_deferred_events
+        assert "DISABLED" in stub._rbac_deferred_events[0]["description"]
+
+    def test_invalid_active_value_fails(self, tmp_path):
+        stub = self._stub(tmp_path, {"rbac": {"active": "yes"}})
+        with pytest.raises(ConfigurationValidationError) as exc_info:
+            Formation._setup_rbac(stub)
+        assert "rbac.active" in str(exc_info.value)
+
+    def test_unknown_rbac_key_fails(self, tmp_path):
+        stub = self._stub(tmp_path, {"rbac": {"enabled": True}})
+        with pytest.raises(ConfigurationValidationError) as exc_info:
+            Formation._setup_rbac(stub)
+        assert "unknown key" in str(exc_info.value)
+
+    def test_invalid_fallback_value_fails(self, tmp_path):
+        stub = self._stub(tmp_path, {"rbac": {"fallback": True}})
+        with pytest.raises(ConfigurationValidationError) as exc_info:
+            Formation._setup_rbac(stub)
+        assert "rbac.fallback" in str(exc_info.value)
+
+    def test_fallback_group_must_exist(self, tmp_path):
+        self._write_group(tmp_path)
+        stub = self._stub(tmp_path, {"rbac": {"fallback": "ghost"}})
+        with pytest.raises(ConfigurationValidationError) as exc_info:
+            Formation._setup_rbac(stub)
+        assert "ghost" in str(exc_info.value)
+
+    def test_dead_config_rejected(self, tmp_path):
+        """Active rbac + fallback: false + no middleware = every request dies."""
+        self._write_group(tmp_path)
+        stub = self._stub(tmp_path, {})  # auto-active, default fallback: false
+        with pytest.raises(ConfigurationValidationError) as exc_info:
+            Formation._setup_rbac(stub)
+        assert "Dead configuration" in str(exc_info.value)
+
+    def test_dead_config_ok_with_middleware(self, tmp_path):
+        self._write_group(tmp_path)
+        stub = self._stub(tmp_path, {"middleware": {"command": "./middleware.py"}})
+        Formation._setup_rbac(stub)
+        assert stub._permission_resolver is not None
+        assert stub._request_middleware is not None
+
+    def test_dead_config_ok_with_fallback_group(self, tmp_path):
+        self._write_group(tmp_path)
+        stub = self._stub(tmp_path, {"rbac": {"fallback": "analyst"}})
+        Formation._setup_rbac(stub)
+        assert stub._permission_resolver is not None
+
+    def test_invalid_middleware_block_fails(self, tmp_path):
+        stub = self._stub(tmp_path, {"middleware": {"url": "http://x", "command": "./y"}})
+        with pytest.raises(ConfigurationValidationError) as exc_info:
+            Formation._setup_rbac(stub)
+        assert "middleware" in str(exc_info.value)
 
 
 class TestSlackMotivatingExample:
@@ -957,23 +1019,25 @@ class TestCrossGroupAgentDenialInEffectiveTools:
 class TestGroupsLoadedEventDeferral:
     """GROUPS_LOADED must not be swallowed by the load-time observability gate.
 
-    _setup_groups() runs during load() while observability is disabled, so
+    _setup_rbac() runs during load() while observability is disabled, so
     it stashes the event payload; start_overlord() emits it after enable().
     """
 
-    def test_setup_groups_stashes_event_instead_of_emitting(self, tmp_path):
+    def test_setup_rbac_stashes_event_instead_of_emitting(self, tmp_path):
         (tmp_path / "groups").mkdir()
         (tmp_path / "groups" / "analyst.yaml").write_text("agents: [researcher]\n")
         stub = SimpleNamespace(
             _formation_path=str(tmp_path),
             _permission_resolver=None,
+            _request_middleware=None,
+            _rbac_prepared=False,
             _group_permissions={},
             formation_id=FORMATION_ID,
-            config={"runtime": {}},
-            _server_config={"auth": "required"},
+            config={"rbac": {"fallback": "analyst"}},
         )
-        Formation._setup_groups(stub)
+        Formation._setup_rbac(stub)
         event = stub._groups_loaded_event
         assert event is not None
         assert event["group_count"] == 1
         assert event["group_ids"] == ["analyst"]
+        assert event["fallback"] == "analyst"

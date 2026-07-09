@@ -2300,6 +2300,104 @@ async def auth_middleware(request: Request, call_next):
     return await call_next(request)
 ```
 
+**User-level gating** is NOT the API keys' job: the client key
+authenticates the calling application. Which *user* may do what is the
+request middleware + RBAC pipeline's job (next section). The former
+`server.auth: required|open` user gate was removed (2026-07-09,
+request-middleware PRD) -- formations still carrying the key fail the
+load with a migration error.
+
+### GBAC + Request Middleware (2026-07-09)
+
+**Paths:** `services/gbac/` (loader, resolver, enforcement),
+`services/middleware/` (contract, client), wiring in
+`formation.py::_setup_rbac` and `overlord.py::chat` /
+`_apply_permission_gate`.
+
+**The model.** MUXI stores no group memberships. Groups reach the
+runtime exactly ONE way: a formation-declared **request middleware** --
+an actual MCP server (stdio or http) exposing exactly one tool named
+``middleware`` -- transforms every request payload after client-key auth
+and before any processing, attaching ``groups`` on the way out. The
+`user_groups` table is gone (pre-existing deployed tables are left
+orphaned; the `groups` registry table remains). Everything downstream of
+membership is unchanged: `groups/` YAML files, inheritance, the
+four-level tools cascade, `memory.write` grants, resource filtering.
+
+**Formation surface (top-level blocks, NOT under `server:`):**
+
+```yaml
+rbac:
+  active: auto            # auto (default: on iff groups/ has files) | true | false
+  fallback: false         # false (reject no-group requests) | <group_name>
+
+middleware:
+  # Exactly one transport:
+  url: "${{ secrets.RESOLVER_URL }}"    # http (+ optional headers:)
+  # command: "./middleware.py"          # stdio (+ optional args:)
+  timeout: 2s                           # the ONLY runtime knob
+```
+
+Fail-fast load rules (all in `_setup_rbac` + `_initialize_services`):
+`active: true` without group files; `fallback` naming a group with no
+YAML file; dead config (rbac active + `fallback: false` + no
+middleware = every request rejected); malformed middleware block;
+middleware unreachable at startup; discovered tool catalog without a
+contract-compliant `middleware` tool. `active: false` is a loud kill
+switch (groups load, filtering disabled, WARNING event).
+
+**Tool contract** (`services/middleware/contract.py` is the single
+source of truth): `tools/call middleware` receives the full request
+payload -- `user_id`, `message`, `attachments`, `metadata`,
+`route_class` -- and returns the same-shaped payload, possibly modified,
+plus an optional `groups` list. `groups` is NEVER accepted inbound (a
+middleware declaring it as an input property fails the load), so it can
+never arrive as a caller's claim. Identity rewriting (`user_id`) and
+message policy are allowed; `route_class` must be echoed unchanged.
+Binary attachment content is base64-round-tripped.
+
+**Fail-closed:** middleware error, timeout, or malformed/schema-invalid
+response REJECTS the request (`error.middleware.failed` event; HTTP
+entry points map to 403). `rbac.fallback` never applies to errors -- a
+fallback on error would let an identity-provider outage silently
+reassign users to the fallback group. **No runtime-side caching**: the
+middleware is called on every request; caching is its own business.
+
+**Pipeline (identical for external and internal origins):**
+
+```
+client-key auth (HTTP) / internal origin (heartbeat, scheduler)
+   └─ middleware (if declared)      payload -> payload (+ groups)
+        └─ rbac (if active)
+             groups attached?  -> PermissionResolver.resolve_groups()
+             no groups?        -> fallback group | reject (403)
+                  └─ process request (filtered context)
+```
+
+Entry points: `Overlord.chat()` runs the middleware for chat/audiochat
+and everything that flows through it -- including `overlord.chat(...)`
+in embedded use, the heartbeat (`route_class: "heartbeat"`), and
+scheduled jobs (`route_class: "scheduler"`). The trigger route and the
+memory routes run the pipeline themselves (they need groups for their
+own permission checks) and pass `middleware_applied=True` /
+set the request-groups ContextVar so the middleware is never run twice
+for one request. The permission gate (`_apply_permission_gate`) resolves
+the ContextVar groups to `ResolvedPermissions` once per request; every
+enforcement site reads the permissions ContextVar as before.
+
+**Shipped template:** `contributing/templates/middleware.py` -- a
+one-file stdio MCP middleware (stdlib only, newline-delimited JSON-RPC)
+reading a static user->groups map, optionally from a `--map groups.json`
+file it re-reads per call. It doubles as the e2e fixture
+(19_api/formation-api-groups and friends, 2_memory scoped-memory,
+23_proactive heartbeat-middleware).
+
+**Observability:** `middleware.server.connected` (startup),
+`middleware.request.transformed` (per request, DEBUG),
+`error.middleware.failed` (fail-closed rejection),
+`error.authorization.failed` with `reason: no_groups` (rbac rejection),
+plus the existing `gbac.*` events.
+
 ### Streaming Responses
 
 **Path:** `server/routes/client.py` → `POST /chat/stream`

@@ -1,0 +1,5 @@
+name: "Staff"
+description: "Users the middleware recognizes; full agent access"
+agents: "*"
+triggers: "*"
+sops: "*"

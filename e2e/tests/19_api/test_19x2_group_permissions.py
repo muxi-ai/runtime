@@ -1,21 +1,24 @@
 #!/usr/bin/env python3
-"""Test 19x2: GBAC group permission loading (groups/ auto-discovery).
+"""Test 19x2: RBAC group permissions via the request middleware.
 
-Covers GBAC Phase 2 end to end:
-- a formation with a groups/ directory (including inheritance) loads and
-  serves a chat request -- zero behavior regression while groups are loaded
-- the PermissionResolver resolves seeded user_groups memberships with
-  inheritance, deny-overrides, and empty-membership semantics
-- a formation with circular group inheritance FAILS to load with a clear error
-- a formation combining groups/ with open (default) auth FAILS to load
-  (2026-07-07 ruling: group files require server.auth: required)
-
-Formations with group files run with server.auth: required, so HTTP users
-are seeded into users/user_identifiers before chatting (same pattern as
-the 19x1 auth gate test).
+Covers the request-middleware PRD end to end:
+- a formation declaring a stdio ``middleware:`` (the shipped template
+  example reading a static user -> groups map) + a ``groups/`` directory
+  loads, connects the middleware, verifies the tool contract, and serves
+  a chat request -- the middleware-attached groups drive resource
+  filtering through the existing PermissionResolver
+- resolver semantics survive the rewiring: inheritance, deny overrides,
+  and memory.write resolve from middleware-attached group ids
+- NO runtime-side caching: editing the map file takes effect on the very
+  next request (fallback: false then rejects the un-mapped user with 403)
+- a formation with circular group inheritance FAILS to load
+- RBAC active + fallback false + no middleware (dead config) FAILS to load
+- a formation still carrying the removed ``server.auth`` key FAILS to
+  load with an actionable migration error
 """
 
 import asyncio
+import json
 import os
 import sys
 import time
@@ -29,19 +32,18 @@ from common import BaseE2ETest, TestOutputFormatter  # noqa: E402
 
 from muxi.runtime.datatypes.exceptions import ConfigurationValidationError  # noqa: E402
 from muxi.runtime.formation import Formation  # noqa: E402
-from muxi.runtime.services.memory.long_term import UserGroup  # noqa: E402
-from muxi.runtime.utils.user_resolution import resolve_user_identifier  # noqa: E402
 
-ANALYST_USER = "alice@example.com"
-UNGROUPED_USER = "stranger@example.com"
+CHAT_USER = "0"  # SQLite backend: chat requests execute as user "0"
 FORMATION_ID = "api-test-groups"
+FORMATION_DIR = Path(__file__).parent / "formation-api-groups"
+GROUPS_MAP = FORMATION_DIR / "groups.json"
 
 
 class TestGroupPermissions(BaseE2ETest):
     def __init__(self):
         super().__init__(
             test_name="test_19x2_group_permissions",
-            test_description="Test GBAC group permission loading and resolution",
+            test_description="Test RBAC group permissions via the request middleware",
             test_area="19_api",
         )
         self.base_url = "http://127.0.0.1:8271/v1"
@@ -50,80 +52,60 @@ class TestGroupPermissions(BaseE2ETest):
             "Content-Type": "application/json",
         }
 
-    async def _seed_membership(self, user_id: str, group_id: str):
-        from sqlalchemy import delete
+    @staticmethod
+    def _write_map(mapping: dict) -> None:
+        """Point the fixture middleware's map at ``mapping``.
 
-        async with self.formation._db_manager.get_async_session() as session:
-            # Idempotent across runs: the formation SQLite DB persists
-            await session.execute(
-                delete(UserGroup).where(
-                    UserGroup.user_id == user_id,
-                    UserGroup.formation_id == FORMATION_ID,
-                )
-            )
-            await UserGroup.create(
-                session,
-                user_id=user_id,
-                group_id=group_id,
-                formation_id=FORMATION_ID,
-            )
-            await session.commit()
+        The template middleware re-reads the file on every call, so the
+        change is live immediately -- the runtime never caches answers.
+        """
+        GROUPS_MAP.write_text(json.dumps(mapping, indent=2) + "\n")
 
     async def test_19x2_group_permissions(self):
         formatter, start_time = TestOutputFormatter(), time.time()
         formatter.print_test_header(
             test_name="test_19x2_group_permissions",
-            description="Test GBAC group permission loading and resolution",
+            description="Test RBAC group permissions via the request middleware",
         )
         checks = []
         try:
-            # Phase A: formation with groups/ loads and serves requests
-            print("\n1. Starting formation with a groups/ directory...")
-            await self.setup_formation(
-                formation_path=Path(__file__).parent / "formation-api-groups"
-            )
+            # Baseline map: chat user "0" is an analyst
+            self._write_map({CHAT_USER: ["analyst"], "alice@example.com": ["analyst"]})
+
+            # Phase A: formation with groups/ + middleware loads and serves
+            print("\n1. Starting formation with groups/ + stdio middleware...")
+            await self.setup_formation(formation_path=FORMATION_DIR)
             await self.formation.start_server(block=False)
             await asyncio.sleep(2)
-            print("✅ Formation with groups/ loaded and server started")
-            checks.append("formation with groups/ loads")
+            print("✅ Formation loaded; middleware connected and contract verified")
+            checks.append("formation with groups/ + middleware loads (contract verified)")
 
-            print("\n2. Verifying group auto-discovery...")
+            print("\n2. Verifying group auto-discovery + rbac wiring...")
             resolver = self.formation.permission_resolver
             assert resolver is not None, "permission_resolver not constructed"
             assert resolver.group_ids == ("admin", "analyst", "base"), resolver.group_ids
+            assert resolver.fallback_group is None, "fallback: false expected"
+            assert self.formation.request_middleware is not None, "middleware not constructed"
             print(f"✅ Auto-discovered groups: {', '.join(resolver.group_ids)}")
-            checks.append("groups auto-discovered from groups/ directory")
+            checks.append("groups auto-discovered; rbac + middleware wired")
 
-            print("\n3. Testing chat with groups loaded (zero behavior regression)...")
-            # groups/ requires server.auth: required, so register the user
-            # with the auth gate first (identity only -- no group membership)
-            await resolve_user_identifier(
-                identifier=UNGROUPED_USER,
-                formation_id=FORMATION_ID,
-                db_manager=self.formation._db_manager,
-                kv_cache=None,
-                create_if_missing=True,
-            )
+            print("\n3. Chat with middleware-attached groups (analyst)...")
             async with httpx.AsyncClient(timeout=90.0) as client:
                 r = await client.post(
                     f"{self.base_url}/chat",
-                    headers={**self.headers, "X-Muxi-User-Id": UNGROUPED_USER},
+                    headers={**self.headers, "X-Muxi-User-Id": CHAT_USER},
                     json={"message": "Reply with the single word OK", "stream": False},
                 )
                 assert r.status_code == 200, f"Expected 200, got {r.status_code}: {r.text}"
-            print("✅ Chat request served with groups loaded")
-            checks.append("chat works while groups are loaded (no regression)")
+            print("✅ Analyst chat served: middleware groups admitted the request")
+            checks.append("middleware-attached groups drive access (chat 200)")
 
-            print("\n4. Seeding analyst group membership...")
-            await self._seed_membership(ANALYST_USER, "analyst")
-            print(f"✅ Seeded {ANALYST_USER} into group 'analyst'")
-
-            print("\n5. Resolving analyst permissions (with inheritance)...")
-            perms = await resolver.resolve(ANALYST_USER)
+            print("\n4. Resolving analyst permissions (with inheritance)...")
+            perms = resolver.resolve_groups(("analyst",))
             assert perms.group_ids == ("analyst",), perms.group_ids
             assert perms.is_allowed("agents", "assistant"), "inherited grant missing"
             assert perms.is_allowed("agents", "researcher"), "own grant missing"
-            assert not perms.is_allowed("agents", "hr-assistant"), "ungrated agent allowed"
+            assert not perms.is_allowed("agents", "hr-assistant"), "ungranted agent allowed"
             effective = perms.effective_tools(
                 "assistant", "database-mcp", ["get_records", "delete_records"]
             )
@@ -132,12 +114,17 @@ class TestGroupPermissions(BaseE2ETest):
             print("✅ Inheritance, deny override, and memory.write resolved correctly")
             checks.append("analyst resolves with inherited grants and tool deny")
 
-            print("\n6. Resolving user with no memberships...")
-            perms = await resolver.resolve(UNGROUPED_USER)
-            assert perms.group_ids == ()
-            assert not perms.is_allowed("agents", "assistant")
-            print("✅ Empty membership resolves to empty permissions")
-            checks.append("empty membership resolves to empty permissions")
+            print("\n5. Un-mapping the user: next request is rejected (no caching)...")
+            self._write_map({"alice@example.com": ["analyst"]})
+            async with httpx.AsyncClient(timeout=90.0) as client:
+                r = await client.post(
+                    f"{self.base_url}/chat",
+                    headers={**self.headers, "X-Muxi-User-Id": CHAT_USER},
+                    json={"message": "Reply with the single word OK", "stream": False},
+                )
+                assert r.status_code == 403, f"Expected 403, got {r.status_code}: {r.text}"
+            print("✅ fallback: false rejected the ungrouped user with 403, immediately")
+            checks.append("no groups + fallback false rejects with 403 (no runtime caching)")
 
             await self.cleanup_formation()
             self.formation = None
@@ -145,7 +132,7 @@ class TestGroupPermissions(BaseE2ETest):
             await asyncio.sleep(2)  # let the port fully release
 
             # Phase B: circular inheritance fails formation load
-            print("\n7. Loading formation with circular group inheritance...")
+            print("\n6. Loading formation with circular group inheritance...")
             failed = False
             try:
                 bad_formation = Formation()
@@ -160,21 +147,38 @@ class TestGroupPermissions(BaseE2ETest):
                 checks.append("circular inheritance fails formation load")
             assert failed, "circular-inheritance formation loaded but should have failed"
 
-            # Phase C: groups/ with open (default) auth fails formation load
-            print("\n8. Loading formation combining groups/ with open auth...")
+            # Phase C: dead config (rbac active + fallback false + no middleware)
+            print("\n7. Loading dead-config formation (no middleware, fallback false)...")
             failed = False
             try:
                 bad_formation = Formation()
-                await bad_formation.load(str(Path(__file__).parent / "formation-api-groups-open"))
+                await bad_formation.load(
+                    str(Path(__file__).parent / "formation-api-groups-deadconfig")
+                )
             except ConfigurationValidationError as e:
                 failed = True
                 message = str(e)
-                assert "server.auth" in message, message
-                assert "required" in message, message
-                assert "groups" in message, message
-                print("✅ Formation load failed: groups/ requires server.auth: required")
-                checks.append("groups/ with open auth fails formation load")
-            assert failed, "open-auth groups formation loaded but should have failed"
+                assert "Dead configuration" in message, message
+                assert "middleware" in message, message
+                print("✅ Formation load failed: dead configuration detected")
+                checks.append("rbac active + fallback false + no middleware fails load")
+            assert failed, "dead-config formation loaded but should have failed"
+
+            # Phase D: the removed server.auth key fails the load loudly
+            print("\n8. Loading formation still carrying server.auth...")
+            failed = False
+            try:
+                bad_formation = Formation()
+                await bad_formation.load(
+                    str(Path(__file__).parent / "formation-api-server-auth-removed")
+                )
+            except ConfigurationValidationError as e:
+                failed = True
+                message = str(e)
+                assert "server.auth" in message and "removed" in message, message
+                print("✅ Formation load failed with the server.auth migration error")
+                checks.append("removed server.auth key fails load with migration error")
+            assert failed, "server.auth formation loaded but should have failed"
 
             formatter.print_test_result(
                 test_name="test_19x2_group_permissions",
@@ -196,6 +200,8 @@ class TestGroupPermissions(BaseE2ETest):
             traceback.print_exc()
             raise
         finally:
+            # Restore the baseline map for the next run
+            self._write_map({CHAT_USER: ["analyst"], "alice@example.com": ["analyst"]})
             if self.formation:
                 await self.cleanup_formation()
 

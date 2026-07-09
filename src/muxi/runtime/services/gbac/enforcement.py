@@ -32,7 +32,7 @@
 from __future__ import annotations
 
 from contextvars import ContextVar, Token
-from typing import Any, Dict, List, Optional, Sequence
+from typing import Any, Dict, List, Optional, Sequence, Tuple
 
 from .. import observability
 from .resolver import ResolvedPermissions
@@ -42,6 +42,90 @@ from .resolver import ResolvedPermissions
 _current_permissions: ContextVar[Optional[ResolvedPermissions]] = ContextVar(
     "gbac_current_permissions", default=None
 )
+
+# Request-scoped group ids attached by the formation middleware -- the
+# ONLY way groups enter the pipeline (request-middleware PRD). None means
+# the middleware has not run in this request context (no middleware
+# declared, or an entry point that bypasses it); a tuple (possibly empty)
+# means it ran and this is its answer. Entry points that run the
+# middleware themselves (e.g. the trigger route) set this before calling
+# into the overlord so the pipeline does not run it twice.
+_request_groups: ContextVar[Optional[Tuple[str, ...]]] = ContextVar(
+    "middleware_request_groups", default=None
+)
+
+
+class RbacRejectedError(Exception):
+    """A request ended up with no groups and ``rbac.fallback`` is false.
+
+    Raised before any processing; HTTP entry points map it to 403.
+    Distinct from middleware failures (MiddlewareRejectedError), to
+    which ``rbac.fallback`` never applies.
+    """
+
+
+def resolve_request_permissions(
+    resolver,
+    groups: Optional[Sequence[str]],
+    *,
+    user_id: Any,
+    formation_id: str,
+    route_class: str,
+) -> ResolvedPermissions:
+    """Resolve middleware-attached groups to permissions or reject.
+
+    Applies ``rbac.fallback`` for requests with no groups; emits the
+    AUTHORIZATION_FAILED rejection event and raises when ``fallback``
+    is false. Shared by every pipeline entry point (overlord chat,
+    trigger route, memory routes) so rejection semantics and
+    observability stay identical.
+
+    Raises:
+        RbacRejectedError: The request must be rejected.
+    """
+    permissions = resolver.resolve_request(groups)
+    if permissions is None:
+        observability.observe(
+            event_type=observability.ErrorEvents.AUTHORIZATION_FAILED,
+            level=observability.EventLevel.WARNING,
+            data={
+                "service": "gbac_enforcement",
+                "kind": "requests",
+                "reason": "no_groups",
+                "user_id": user_id,
+                "formation_id": formation_id,
+                "route_class": route_class,
+            },
+            description=(
+                f"RBAC rejected a {route_class!r} request for user {user_id!r}: "
+                "no groups attached and rbac.fallback is false"
+            ),
+        )
+        raise RbacRejectedError(
+            f"Request rejected: user {user_id!r} has no groups and rbac.fallback is false"
+        )
+    return permissions
+
+
+def set_request_groups(
+    groups: Optional[Tuple[str, ...]],
+) -> "Token[Optional[Tuple[str, ...]]]":
+    """Record the middleware-attached groups for the current request.
+
+    Pass a tuple (possibly empty) after the middleware ran; None resets
+    to the "middleware has not run" state.
+    """
+    return _request_groups.set(tuple(groups) if groups is not None else None)
+
+
+def get_request_groups() -> Optional[Tuple[str, ...]]:
+    """The middleware-attached groups, or None when it has not run."""
+    return _request_groups.get()
+
+
+def reset_request_groups(token: "Token[Optional[Tuple[str, ...]]]") -> None:
+    """Restore the groups saved by a previous ``set_request_groups``."""
+    _request_groups.reset(token)
 
 
 def set_current_permissions(

@@ -1,6 +1,6 @@
 schema: "1.0.0"
 id: api-test-groups
-description: "Formation with a groups/ directory for GBAC group loading testing"
+description: "Formation with a groups/ directory + request middleware for RBAC testing"
 
 llm:
   api_keys:
@@ -23,10 +23,21 @@ agents:
     description: "A helpful assistant for testing group permission loading"
     system_message: "You are a helpful assistant. Be concise and direct."
 
+# Request middleware (request-middleware PRD): the only way group
+# memberships enter the runtime. The stdio script is the shipped
+# template example reading a static user -> groups map.
+middleware:
+  command: "./middleware.py"
+  args: ["--map", "groups.json"]
+  timeout: 5s
+
+rbac:
+  active: auto        # on iff groups/ exists (the default)
+  fallback: false     # requests without groups are rejected
+
 server:
   enabled: true
   port: 8271
-  auth: required  # groups/ requires the auth gate (2026-07-07 ruling)
   api_keys:
     admin_key: test-admin-key-123
     client_key: test-client-key-456

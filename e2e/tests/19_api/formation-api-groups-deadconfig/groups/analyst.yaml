@@ -1,0 +1,11 @@
+name: "Business Analyst"
+description: "Analysis and reporting"
+inherits: base
+agents:
+  - researcher
+mcp_servers:
+  database-mcp:
+    tools:
+      deny: ["delete_*"]
+memory:
+  write: ["group:analyst"]

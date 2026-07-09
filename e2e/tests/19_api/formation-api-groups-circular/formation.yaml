@@ -26,7 +26,6 @@ agents:
 server:
   enabled: true
   port: 8271
-  auth: required  # groups/ requires the auth gate (2026-07-07 ruling)
   api_keys:
     admin_key: test-admin-key-123
     client_key: test-client-key-456

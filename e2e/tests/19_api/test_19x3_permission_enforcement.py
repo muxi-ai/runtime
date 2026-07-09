@@ -12,18 +12,18 @@ Reproduces the PRD's Slack example with two groups and two agents:
 
 Note on identity: this local e2e runs on the SQLite backend, which is
 single-user by MUXI convention -- every chat request executes as user "0".
-The test therefore moves user "0" between groups across phases (with an
-explicit membership-cache invalidation, mirroring the 60s TTL expiry a
-multi-user Postgres deployment would see). The trigger channel resolves
-the caller's header identity directly (same pattern as the Phase 1 auth
-gate), so it exercises two distinct users in a single phase.
+The test therefore moves user "0" between groups across phases by editing
+the middleware's map file (the template middleware re-reads it on every
+call; the runtime never caches middleware answers -- request-middleware
+PRD). The trigger channel runs the middleware with the caller's header
+identity, so it exercises two distinct users in a single phase.
 
-The formation runs with server.auth: required (groups/ demands it as of
-the 2026-07-07 ruling), so every HTTP identity is seeded into
-users/user_identifiers before the requests fire.
+Memberships come EXCLUSIVELY from the formation middleware: there is no
+user_groups table and no server.auth gate anymore.
 """
 
 import asyncio
+import json
 import os
 import sys
 import time
@@ -35,14 +35,12 @@ sys.path.insert(0, str(Path(__file__).parent.parent.parent.parent / "src"))
 sys.path.insert(0, str(Path(__file__).parent.parent))
 from common import BaseE2ETest, TestOutputFormatter  # noqa: E402
 
-from muxi.runtime.services.memory.long_term import UserGroup  # noqa: E402
-from muxi.runtime.utils.user_resolution import resolve_user_identifier  # noqa: E402
-
 CHAT_USER = "0"  # SQLite backend: all chat requests execute as user "0"
 HR_USER = "alice@example.com"
 ENG_USER = "carol@example.com"
 NO_GROUPS_USER = "stranger@example.com"
 FORMATION_ID = "api-test-enforcement"
+GROUPS_MAP = Path(__file__).parent / "formation-api-enforcement" / "groups.json"
 
 
 class TestPermissionEnforcement(BaseE2ETest):
@@ -61,28 +59,19 @@ class TestPermissionEnforcement(BaseE2ETest):
     def _user_headers(self, user_id: str) -> dict:
         return {**self.headers, "X-Muxi-User-Id": user_id}
 
-    async def _set_memberships(self, user_id: str, *group_ids: str):
-        """Replace a user's memberships and invalidate the resolver cache."""
-        from sqlalchemy import delete
+    def _set_memberships(self, user_id: str, *group_ids: str):
+        """Replace a user's groups in the middleware's map file.
 
-        async with self.formation._db_manager.get_async_session() as session:
-            # Idempotent across runs: the formation SQLite DB persists
-            await session.execute(
-                delete(UserGroup).where(
-                    UserGroup.user_id == user_id,
-                    UserGroup.formation_id == FORMATION_ID,
-                )
-            )
-            for group_id in group_ids:
-                await UserGroup.create(
-                    session,
-                    user_id=user_id,
-                    group_id=group_id,
-                    formation_id=FORMATION_ID,
-                )
-            await session.commit()
-        # Equivalent to waiting out the 60s membership TTL
-        self.formation.permission_resolver.invalidate_memberships(user_id)
+        The template middleware re-reads the map on every call, so the
+        change is live on the next request -- the runtime never caches
+        middleware answers (request-middleware PRD).
+        """
+        mapping = json.loads(GROUPS_MAP.read_text())
+        if group_ids:
+            mapping[user_id] = list(group_ids)
+        else:
+            mapping.pop(user_id, None)
+        GROUPS_MAP.write_text(json.dumps(mapping, indent=2) + "\n")
 
     async def test_19x3_permission_enforcement(self):
         formatter, start_time = TestOutputFormatter(), time.time()
@@ -104,24 +93,11 @@ class TestPermissionEnforcement(BaseE2ETest):
             print("✅ Formation loaded with groups: engineering, hr")
             checks.append("formation with enforcement groups loads")
 
-            print("\n2. Registering HTTP identities with the auth gate...")
-            # groups/ requires server.auth: required, so every header
-            # identity must exist in users/user_identifiers to chat at all
-            for identity in (HR_USER, ENG_USER, NO_GROUPS_USER):
-                await resolve_user_identifier(
-                    identifier=identity,
-                    formation_id=FORMATION_ID,
-                    db_manager=self.formation._db_manager,
-                    kv_cache=None,
-                    create_if_missing=True,
-                )
-            print("✅ Identities registered (auth gate)")
-
-            print("\n3. Seeding memberships (chat user→hr, alice→hr, carol→engineering)...")
-            await self._set_memberships(CHAT_USER, "hr")
-            await self._set_memberships(HR_USER, "hr")
-            await self._set_memberships(ENG_USER, "engineering")
-            print("✅ Memberships seeded")
+            print("\n2-3. Mapping memberships (chat user→hr, alice→hr, carol→engineering)...")
+            self._set_memberships(CHAT_USER, "hr")
+            self._set_memberships(HR_USER, "hr")
+            self._set_memberships(ENG_USER, "engineering")
+            print("✅ Middleware map written (memberships live immediately)")
 
             async with httpx.AsyncClient(timeout=120.0) as client:
                 print("\n4. HR-group user directly addresses hr-assistant (permitted)...")
@@ -159,7 +135,7 @@ class TestPermissionEnforcement(BaseE2ETest):
                 checks.append("denied trigger returns 403")
 
                 print("\n6. Switching chat user to group engineering...")
-                await self._set_memberships(CHAT_USER, "engineering")
+                self._set_memberships(CHAT_USER, "engineering")
 
                 print("\n7. Engineering user directly addresses hr-assistant (denied)...")
                 r_denied = await client.post(
@@ -216,19 +192,18 @@ class TestPermissionEnforcement(BaseE2ETest):
                 print(f"✅ hr-assistant never selected (selected: {selected or 'overlord-direct'})")
                 checks.append("denied agent never selected for group-B user")
 
-                print("\n9. User with no group memberships chats (graceful response)...")
-                await self._set_memberships(CHAT_USER)  # clear all memberships
+                print("\n9. User with no group memberships chats (rejected: 403)...")
+                self._set_memberships(CHAT_USER)  # clear all memberships
                 r = await client.post(
                     f"{self.base_url}/chat",
                     headers=self._user_headers(NO_GROUPS_USER),
                     json={"message": "What is Dave's salary?", "stream": False},
                 )
-                assert r.status_code == 200, f"Expected 200, got {r.status_code}: {r.text}"
-                assert (
-                    "no_capabilities" in r.text
-                ), f"Expected graceful no-capabilities response, got: {r.text[:300]}"
-                print("✅ No-groups user gets a graceful response (no crash)")
-                checks.append("no-groups user gets graceful response")
+                # rbac.fallback is false: a request with no groups is
+                # REJECTED before any processing (request-middleware PRD)
+                assert r.status_code == 403, f"Expected 403, got {r.status_code}: {r.text}"
+                print("✅ No-groups user rejected with 403 (fallback: false)")
+                checks.append("no-groups user rejected with 403 (fallback: false)")
 
             formatter.print_test_result(
                 test_name="test_19x3_permission_enforcement",
@@ -251,6 +226,18 @@ class TestPermissionEnforcement(BaseE2ETest):
             traceback.print_exc()
             raise
         finally:
+            # Restore the baseline map for the next run
+            GROUPS_MAP.write_text(
+                json.dumps(
+                    {
+                        CHAT_USER: ["hr"],
+                        HR_USER: ["hr"],
+                        ENG_USER: ["engineering"],
+                    },
+                    indent=2,
+                )
+                + "\n"
+            )
             if self.formation:
                 await self.cleanup_formation()
 

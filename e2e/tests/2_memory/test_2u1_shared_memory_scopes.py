@@ -1,7 +1,9 @@
 #!/usr/bin/env python3
 """Test 2U1: Memory Namespaces Phases 2+3 - Shared Scopes
 
-Two users in different GBAC groups on a PostgreSQL formation:
+Two users in different GBAC groups on a PostgreSQL formation (groups
+attached per request by the formation's stdio middleware -- the
+request-middleware PRD's fixture template; MUXI stores no memberships):
 
 1. Write grants: a member of team-a (grants: group:team-a + formation)
    shares a formation fact and a group fact; a member of team-b (grant:
@@ -34,7 +36,6 @@ sys.path.insert(0, str(Path(__file__).parent.parent))
 
 from base_memory_test import BaseMemoryTest  # noqa: E402
 
-from muxi.runtime.services.memory.long_term import UserGroup  # noqa: E402
 from muxi.runtime.utils.user_resolution import resolve_user_identifier  # noqa: E402
 
 FORMATION_ID = "scoped-memory-test"
@@ -66,10 +67,6 @@ class TestSharedMemoryScopes(BaseMemoryTest):
                 sql_text("DELETE FROM memory_events WHERE formation_id = :f"),
                 {"f": FORMATION_ID},
             )
-            await session.execute(
-                sql_text("DELETE FROM user_groups WHERE formation_id = :f"),
-                {"f": FORMATION_ID},
-            )
             try:
                 await session.execute(
                     sql_text(
@@ -80,16 +77,6 @@ class TestSharedMemoryScopes(BaseMemoryTest):
                 )
             except Exception:
                 pass  # table may not exist on a fresh database yet
-            await session.commit()
-
-    async def _seed_membership(self, user_id: str, group_id: str):
-        async with self.formation._db_manager.get_async_session() as session:
-            await UserGroup.create(
-                session,
-                user_id=user_id,
-                group_id=group_id,
-                formation_id=FORMATION_ID,
-            )
             await session.commit()
 
     async def _memory_rows(self):
@@ -130,7 +117,9 @@ class TestSharedMemoryScopes(BaseMemoryTest):
 
             await self._wipe_previous_run()
 
-            # Register both users with the auth gate and seed memberships.
+            # Register both users so DB joins in the assertions below can
+            # resolve them. Memberships come from the formation middleware
+            # (groups.json next to formation.yaml) -- MUXI stores none.
             for user in (ALICE, BOB):
                 await resolve_user_identifier(
                     identifier=user,
@@ -139,9 +128,7 @@ class TestSharedMemoryScopes(BaseMemoryTest):
                     kv_cache=None,
                     create_if_missing=True,
                 )
-            await self._seed_membership(ALICE, "team-a")
-            await self._seed_membership(BOB, "team-b")
-            print(f"  ✓ Seeded {ALICE} -> team-a, {BOB} -> team-b")
+            print(f"  ✓ Middleware map: {ALICE} -> team-a, {BOB} -> team-b")
 
             print("\n🔐 Phase 2: Write grants (403 without a memory.write grant)...")
             async with httpx.AsyncClient(timeout=90.0) as client:
@@ -261,22 +248,35 @@ class TestSharedMemoryScopes(BaseMemoryTest):
             checks_passed.append("Listing fan-out with group isolation")
             checks_passed.append("Per-query narrowing")
 
-            # Vector retrieval probe through the persistent memory manager
-            # (no request permissions set -> exercises the registered
-            # resolver fallback for membership lookup).
-            probe = await self.overlord.persistent_memory_manager.search_long_term_memory(
-                query="When does the team ship releases?", k=5, user_id=ALICE
-            )
+            # Vector retrieval probe through the persistent memory manager.
+            # Direct service calls read the per-request permissions context
+            # (request-middleware PRD: there is no membership store to fall
+            # back to), so the probe resolves each caller's groups the way
+            # the pipeline would and sets them for the call.
+            from muxi.runtime.services.gbac import enforcement as gbac_enforcement
+
+            resolver = self.formation.permission_resolver
+            token = gbac_enforcement.set_current_permissions(resolver.resolve_groups(("team-a",)))
+            try:
+                probe = await self.overlord.persistent_memory_manager.search_long_term_memory(
+                    query="When does the team ship releases?", k=5, user_id=ALICE
+                )
+            finally:
+                gbac_enforcement.reset_current_permissions(token)
             probe_texts = [p.get("text", "") for p in probe]
             assert any(TEAM_A_FACT in t for t in probe_texts), probe_texts
             assert not any(TEAM_B_FACT in t for t in probe_texts), probe_texts
-            probe = await self.overlord.persistent_memory_manager.search_long_term_memory(
-                query="What is the refund policy?", k=5, user_id=BOB
-            )
+            token = gbac_enforcement.set_current_permissions(resolver.resolve_groups(("team-b",)))
+            try:
+                probe = await self.overlord.persistent_memory_manager.search_long_term_memory(
+                    query="What is the refund policy?", k=5, user_id=BOB
+                )
+            finally:
+                gbac_enforcement.reset_current_permissions(token)
             probe_texts = [p.get("text", "") for p in probe]
             assert any(FORMATION_FACT in t for t in probe_texts), probe_texts
             assert not any(TEAM_A_FACT in t for t in probe_texts), probe_texts
-            print("  ✓ Vector retrieval fans out per member (resolver-fallback membership)")
+            print("  ✓ Vector retrieval fans out per member (context permissions)")
             checks_passed.append("Vector fan-out with group isolation")
 
             print("\n💬 Phase 5: Chat recall of shared facts...")

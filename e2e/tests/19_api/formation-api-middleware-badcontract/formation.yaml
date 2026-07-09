@@ -1,0 +1,44 @@
+schema: "1.0.0"
+id: api-test-middleware-badcontract
+description: "middleware exposes the wrong tool: the formation must FAIL to load"
+
+llm:
+  api_keys:
+    openai: "${{ secrets.OPENAI_API_KEY }}"
+  models:
+    - text: "openai/gpt-4o-mini"
+    - embedding: "openai/text-embedding-3-small"
+
+runtime:
+  built_in_mcps: false
+
+memory:
+  buffer:
+    size: 100
+    vector_search: false
+
+agents:
+  - id: assistant
+    name: "Middleware Pipeline Test Assistant"
+    description: "A helpful assistant for testing the request middleware pipeline"
+    system_message: "You are a helpful assistant. Be concise and direct."
+
+middleware:
+  command: "./broken_middleware.py"
+  args: ["--bad-tool"]
+  timeout: 5s
+
+rbac:
+  fallback: analyst
+
+server:
+  enabled: true
+  port: 8271
+  api_keys:
+    admin_key: test-admin-key-123
+    client_key: test-client-key-456
+
+logging:
+  system:
+    level: "error"
+    destination: "stdout"

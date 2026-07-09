@@ -830,6 +830,9 @@ class SchedulerService:
                 # because the webhook path never triggers.
                 has_webhook = bool(webhook_url)
 
+                # Internally-originated request: traverses the formation
+                # middleware + RBAC pipeline exactly like external traffic,
+                # identified by route_class "scheduler".
                 response = await self.overlord.chat(
                     message=execution_prompt,
                     user_id=job["user_id"],
@@ -838,6 +841,7 @@ class SchedulerService:
                     webhook_url=webhook_url,
                     stream=False,  # No streaming needed for scheduled jobs
                     is_scheduled_execution=True,  # Bypass scheduler-intent classifier
+                    route_class="scheduler",
                 )
 
                 if has_webhook:

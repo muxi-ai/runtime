@@ -36,17 +36,35 @@ class ApiKeyAuth(httpx.Auth):
         yield request
 
 
+class HeadersAuth(httpx.Auth):
+    """Static request headers authentication for httpx.
+
+    Injects a fixed set of headers into every request. Used by the
+    formation ``middleware:`` block, whose http transport declares raw
+    ``headers:`` rather than a typed auth scheme.
+    """
+
+    def __init__(self, headers: Dict[str, str]):
+        self.headers = dict(headers)
+
+    def auth_flow(self, request):
+        for name, value in self.headers.items():
+            request.headers[name] = value
+        yield request
+
+
 def create_httpx_auth(auth_config: Optional[Dict[str, Any]]) -> Optional[httpx.Auth]:
     """
     Convert auth config dictionary to httpx.Auth object.
 
     Args:
         auth_config: Authentication configuration dictionary with:
-            - type: Auth type (bearer, basic, api_key)
+            - type: Auth type (bearer, basic, api_key, headers)
             - token: Bearer token (for bearer auth)
             - username/password: Credentials (for basic auth)
             - key: API key (for api_key auth)
             - header_name: Optional header name for API key
+            - headers: Header name/value mapping (for headers auth)
 
     Returns:
         httpx.Auth object or None if no auth config provided
@@ -64,7 +82,7 @@ def create_httpx_auth(auth_config: Optional[Dict[str, Any]]) -> Optional[httpx.A
     auth_type = auth_config.get("type", "bearer").lower()
 
     # Validate auth type
-    valid_auth_types = {"bearer", "basic", "api_key"}
+    valid_auth_types = {"bearer", "basic", "api_key", "headers"}
     if auth_type not in valid_auth_types:
         raise ValueError(
             f"Invalid auth type '{auth_type}'. Must be one of: {', '.join(valid_auth_types)}"
@@ -97,6 +115,17 @@ def create_httpx_auth(auth_config: Optional[Dict[str, Any]]) -> Optional[httpx.A
             raise ValueError("API key 'header_name' must be a string if provided")
 
         return ApiKeyAuth(key, header_name)
+
+    elif auth_type == "headers":
+        headers = auth_config.get("headers")
+        if not headers or not isinstance(headers, dict):
+            raise ValueError("Headers auth requires a non-empty 'headers' mapping")
+        for name, value in headers.items():
+            if not isinstance(name, str) or not name.strip():
+                raise ValueError(f"Headers auth header names must be non-empty strings: {name!r}")
+            if not isinstance(value, str):
+                raise ValueError(f"Headers auth header {name!r} must have a string value")
+        return HeadersAuth(headers)
 
     # This should never be reached due to earlier validation
     raise ValueError(f"Unhandled auth type: {auth_type}")

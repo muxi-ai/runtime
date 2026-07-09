@@ -1,20 +1,23 @@
 # =============================================================================
 # FRONTMATTER
 # =============================================================================
-# Title:        GBAC Permission Resolver - membership lookup + resolution engine
-# Description:  Resolves a user's effective permissions from their group
-#               memberships (user_groups table) and the formation's loaded
-#               group definitions. Request-time half of GBAC Phase 2.
-# Role:         Exposes the API Phase 3 (resource filtering) consumes:
-#               ``PermissionResolver.resolve(user_id) -> ResolvedPermissions``
-#               with ``is_allowed`` / ``filter`` / ``effective_tools`` /
-#               ``memory_write_scopes``. Nothing here enforces anything --
-#               enforcement is Phase 3.
-# Usage:        Constructed by Formation._setup_groups() when a groups/
-#               directory is present. Membership rows are read by external
-#               user identifier + formation_id (per GBAC Phase 1's design)
-#               with a TTL cache (default 60s); resolution per group
-#               combination is cached in a small LRU.
+# Title:        GBAC Permission Resolver - group-combination resolution engine
+# Description:  Resolves a request's effective permissions from the group ids
+#               the formation middleware attached and the formation's loaded
+#               group definitions. MUXI stores no memberships (request-
+#               middleware PRD): groups reach the runtime exclusively via the
+#               ``middleware:`` request transformer.
+# Role:         Exposes the API enforcement (resource filtering) consumes:
+#               ``PermissionResolver.resolve_groups(group_ids)`` returns
+#               ``ResolvedPermissions`` with ``is_allowed`` / ``filter`` /
+#               ``effective_tools`` / ``memory_write_scopes``. Nothing here
+#               enforces anything -- enforcement lives in enforcement.py.
+# Usage:        Constructed by Formation._setup_rbac() when RBAC is active.
+#               Group ids arrive per request from the middleware (via the
+#               request context); resolution per group combination is cached
+#               in a small LRU. ``fallback_group`` (rbac.fallback) applies
+#               when a request carries no groups -- never to middleware
+#               errors, which reject fail-closed upstream.
 # Author:       MUXI Framework Team
 #
 # Resolution semantics (PRD "Permission Resolution Rules"):
@@ -37,16 +40,14 @@
 
 from __future__ import annotations
 
-import time
 from collections import OrderedDict
 from fnmatch import fnmatchcase
-from typing import Callable, Dict, Iterable, List, Optional, Sequence, Set, Tuple
+from typing import Dict, Iterable, List, Optional, Sequence, Set, Tuple
 
 from .. import observability
 from .loader import LIST_SECTIONS, ResolvedGroup, ToolRules
 
-# Defaults from the PRD's performance section.
-DEFAULT_MEMBERSHIP_TTL_SECONDS = 60.0
+# Default from the PRD's performance section.
 DEFAULT_RESOLUTION_CACHE_SIZE = 512
 
 
@@ -181,19 +182,19 @@ class ResolvedPermissions:
 
 
 class PermissionResolver:
-    """Resolves users to effective permissions from group memberships.
+    """Resolves middleware-attached group ids to effective permissions.
 
-    Membership rows are read from the ``user_groups`` table by external
-    user identifier + formation id, cached with a TTL (default 60s).
-    Permission resolution per group combination is cached in an LRU.
+    MUXI stores no memberships: group ids arrive per request from the
+    formation middleware (the only way groups enter the pipeline).
+    Permission resolution per group combination is cached in an LRU --
+    this caches pure YAML-derived computation, never middleware answers.
     """
 
     def __init__(
         self,
         groups: Dict[str, ResolvedGroup],
         formation_id: str,
-        db_manager_getter: Callable[[], Optional[object]],
-        membership_ttl: float = DEFAULT_MEMBERSHIP_TTL_SECONDS,
+        fallback_group: Optional[str] = None,
         resolution_cache_size: int = DEFAULT_RESOLUTION_CACHE_SIZE,
     ):
         """
@@ -201,17 +202,15 @@ class PermissionResolver:
             groups: Inheritance-resolved group definitions from
                 :func:`muxi.runtime.services.gbac.loader.load_groups`.
             formation_id: Formation id for multi-formation isolation.
-            db_manager_getter: Callable returning the formation's database
-                manager (or None before memory initialization). Deferred so
-                the resolver can be constructed during config preparation.
-            membership_ttl: Seconds a user's membership lookup stays cached.
+            fallback_group: The ``rbac.fallback`` group applied when a
+                request carries no groups, or None (``fallback: false``:
+                such requests are rejected). Validated against ``groups``
+                at formation load.
             resolution_cache_size: Max cached group combinations (LRU).
         """
         self._groups = groups
         self._formation_id = formation_id
-        self._db_manager_getter = db_manager_getter
-        self._membership_ttl = membership_ttl
-        self._membership_cache: Dict[str, Tuple[float, Tuple[str, ...]]] = {}
+        self._fallback_group = fallback_group
         self._resolution_cache: "OrderedDict[Tuple[str, ...], ResolvedPermissions]" = OrderedDict()
         self._resolution_cache_size = resolution_cache_size
         self._warned_unknown_groups: Set[str] = set()
@@ -226,37 +225,40 @@ class PermissionResolver:
         """All loaded group ids, sorted."""
         return tuple(sorted(self._groups))
 
-    async def resolve(self, user_id: str) -> ResolvedPermissions:
-        """Resolve ``user_id`` (external identifier) to effective permissions.
+    @property
+    def fallback_group(self) -> Optional[str]:
+        """The ``rbac.fallback`` group name, or None (reject on no groups)."""
+        return self._fallback_group
 
-        A user with no memberships resolves to empty permissions
-        ("registered but inactive"). Membership rows referencing group ids
-        without a matching group file grant nothing and are reported once
-        per group id via observability.
+    def resolve_request(self, group_ids: Optional[Sequence[str]]) -> Optional[ResolvedPermissions]:
+        """Resolve a request's groups to permissions, applying ``rbac.fallback``.
 
-        Raises:
-            Exception: Database errors propagate after a resolution-failure
-                event is emitted -- the caller (Phase 3) decides how to fail.
+        Args:
+            group_ids: The middleware-attached groups; None or empty when
+                the request ended up with no groups (no middleware
+                declared, or the middleware cleanly answered "none").
+
+        Returns:
+            ResolvedPermissions, or None when the request must be
+            rejected (no groups and ``fallback: false``). The caller
+            emits the rejection event -- it has the request context.
         """
-        try:
-            member_group_ids = await self._get_memberships(user_id)
-        except Exception as e:
-            observability.observe(
-                event_type=observability.ErrorEvents.PROCESSING_ERROR,
-                level=observability.EventLevel.ERROR,
-                data={
-                    "service": "gbac_permission_resolver",
-                    "operation": "membership_lookup",
-                    "user_id": user_id,
-                    "formation_id": self._formation_id,
-                    "error": str(e),
-                },
-                description=f"GBAC permission resolution failed for user {user_id!r}: {e}",
-            )
-            raise
+        effective = tuple(group_ids) if group_ids else ()
+        if not effective:
+            if self._fallback_group is None:
+                return None
+            effective = (self._fallback_group,)
+        return self.resolve_groups(effective)
 
-        known = tuple(sorted(g for g in member_group_ids if g in self._groups))
-        unknown = sorted(set(member_group_ids) - set(known))
+    def resolve_groups(self, group_ids: Sequence[str]) -> ResolvedPermissions:
+        """Resolve a set of middleware-attached group ids to permissions.
+
+        An empty sequence resolves to empty permissions (nothing granted).
+        Group ids without a matching group file grant nothing and are
+        reported once per group id via observability.
+        """
+        known = tuple(sorted({g for g in group_ids if g in self._groups}))
+        unknown = sorted(set(group_ids) - set(known))
         for group_id in unknown:
             if group_id in self._warned_unknown_groups:
                 continue
@@ -266,13 +268,13 @@ class PermissionResolver:
                 level=observability.EventLevel.WARNING,
                 data={
                     "service": "gbac_permission_resolver",
-                    "operation": "membership_resolution",
+                    "operation": "group_resolution",
                     "group_id": group_id,
                     "formation_id": self._formation_id,
                 },
                 description=(
-                    f"user_groups references group {group_id!r} but no "
-                    f"groups/{group_id}.yaml exists; membership grants nothing"
+                    f"middleware attached group {group_id!r} but no "
+                    f"groups/{group_id}.yaml exists; the group grants nothing"
                 ),
             )
 
@@ -293,40 +295,3 @@ class PermissionResolver:
         if len(self._resolution_cache) > self._resolution_cache_size:
             self._resolution_cache.popitem(last=False)
         return permissions
-
-    async def _get_memberships(self, user_id: str) -> Tuple[str, ...]:
-        """Read the user's group ids from user_groups, with TTL caching."""
-        now = time.monotonic()
-        cached = self._membership_cache.get(user_id)
-        if cached is not None and now - cached[0] < self._membership_ttl:
-            return cached[1]
-
-        db_manager = self._db_manager_getter()
-        if db_manager is None:
-            raise RuntimeError(
-                "Group permissions are configured but no persistent database "
-                "is available for membership lookup"
-            )
-
-        from sqlalchemy import select
-
-        from ..memory.long_term import UserGroup
-
-        async with db_manager.get_async_session() as session:
-            result = await session.execute(
-                select(UserGroup.group_id).where(
-                    UserGroup.user_id == user_id,
-                    UserGroup.formation_id == self._formation_id,
-                )
-            )
-            group_ids = tuple(row[0] for row in result.all())
-
-        self._membership_cache[user_id] = (now, group_ids)
-        return group_ids
-
-    def invalidate_memberships(self, user_id: Optional[str] = None) -> None:
-        """Drop cached memberships for one user (or all users)."""
-        if user_id is None:
-            self._membership_cache.clear()
-        else:
-            self._membership_cache.pop(user_id, None)

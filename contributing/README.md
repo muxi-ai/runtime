@@ -143,6 +143,7 @@ runtime/
 | [channel-templates.md](channel-templates.md) | Slack/Telegram/Discord/email channel templates and transformer/webhook composition |
 | [proactiveness-config.md](proactiveness-config.md) | Formation config reference: `proactive:`, `commands:` |
 | [soul-documents.md](soul-documents.md) | Overlord soul document guide and starter template |
+| [request-middleware.md](request-middleware.md) | Formation config reference: `rbac:`, `middleware:` (group memberships via MCP middleware) |
 
 ## Key Concepts for Contributors
 

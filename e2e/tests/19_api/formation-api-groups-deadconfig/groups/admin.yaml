@@ -1,0 +1,4 @@
+name: "Administrator"
+agents: "*"
+triggers: "*"
+sops: "*"

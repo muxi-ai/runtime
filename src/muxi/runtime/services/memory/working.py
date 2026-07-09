@@ -915,17 +915,17 @@ class WorkingMemory:
             requester_user_id = (filter_metadata or {}).get("user_id")
             fanout_keys: set = set()
             if session_id:
-                # Same three-level membership resolution as the long-term
-                # backends: per-request permissions ContextVar, then the
-                # formation's registered resolver by user id, then none.
-                group_ids = await resolve_read_group_ids(self.formation_id, requester_user_id)
+                # Same membership resolution as the long-term backends:
+                # the per-request permissions ContextVar set by the
+                # request pipeline, or no group scopes.
+                group_ids = await resolve_read_group_ids()
                 partition_keys = [f"{SESSION_PARTITION_PREFIX}{session_id}"]
                 fanout_keys = set(self._fanout_partition_keys(requester_user_id, group_ids))
                 partition_keys.extend(key for key in fanout_keys if key in self.partitions)
             elif namespace and namespace != "buffer":
                 partition_keys = [FORMATION_PARTITION]
             else:
-                group_ids = await resolve_read_group_ids(self.formation_id, requester_user_id)
+                group_ids = await resolve_read_group_ids()
                 allowed_groups = {f"{GROUP_PARTITION_PREFIX}{group_id}" for group_id in group_ids}
                 partition_keys = [
                     key
