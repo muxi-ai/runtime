@@ -35,6 +35,8 @@ import os
 import re
 from typing import Any, Dict, Optional, Tuple
 
+import httpx
+
 from .. import observability
 from ..mcp.handler import MCPServerClient
 from ..mcp.transports.protocol_features import ModernProtocolFeatures
@@ -152,8 +154,7 @@ class RequestMiddleware:
             if raw_headers is not None:
                 if not isinstance(raw_headers, dict) or not raw_headers:
                     raise MiddlewareConfigError(
-                        "middleware headers must be a non-empty mapping of "
-                        "header name to value"
+                        "middleware headers must be a non-empty mapping of " "header name to value"
                     )
                 for name, value in raw_headers.items():
                     if not isinstance(name, str) or not name.strip():
@@ -174,12 +175,8 @@ class RequestMiddleware:
                 )
             raw_args = config.get("args")
             if raw_args is not None:
-                if not isinstance(raw_args, list) or any(
-                    not isinstance(a, str) for a in raw_args
-                ):
-                    raise MiddlewareConfigError(
-                        "middleware args must be a list of strings"
-                    )
+                if not isinstance(raw_args, list) or any(not isinstance(a, str) for a in raw_args):
+                    raise MiddlewareConfigError("middleware args must be a list of strings")
                 args = tuple(raw_args)
             # A stdio middleware is typically a one-file script in the
             # formation directory (command: ./middleware.py); resolve
@@ -252,11 +249,32 @@ class RequestMiddleware:
             except Exception:
                 pass
 
+    @property
+    def _inner_timeout(self) -> int:
+        """The MCP client's own timeout, padded past the outer wait_for.
+
+        The outer ``asyncio.wait_for(self.timeout_seconds)`` must always
+        fire first so timeouts surface as asyncio.TimeoutError and get
+        labeled ``reason: "timeout"`` -- on exact integer timeouts the
+        transport's own deadline could otherwise race it and surface as
+        a transport-specific exception instead.
+        """
+        return max(1, math.ceil(self.timeout_seconds)) + 1
+
     async def _connect(self) -> MCPServerClient:
         """Return a connected client, (re)connecting when needed."""
         async with self._connect_lock:
             if self._client is not None and self._client.connected:
                 return self._client
+            if self._client is not None:
+                # Tear down the stale client before replacing it so stdio
+                # pipes / background tasks don't linger until GC on flaky
+                # connections. Best effort, like stop().
+                stale, self._client = self._client, None
+                try:
+                    await stale.disconnect()
+                except Exception:
+                    pass
             credentials = None
             if self.headers:
                 credentials = {"type": "headers", "headers": dict(self.headers)}
@@ -266,7 +284,7 @@ class RequestMiddleware:
                 command=self.command,
                 args=list(self.args) if self.args else None,
                 credentials=credentials,
-                request_timeout=max(1, math.ceil(self.timeout_seconds)),
+                request_timeout=self._inner_timeout,
             )
             await client.connect()
             self._client = client
@@ -325,18 +343,21 @@ class RequestMiddleware:
         """The un-instrumented transform body (see :meth:`transform`)."""
         try:
             client = await self._connect()
+            # The outer wait_for owns the timeout; the per-call transport
+            # deadline is padded (_inner_timeout) so it can never fire
+            # first and mislabel a timeout as a transport error.
             response = await asyncio.wait_for(
                 client.execute_tool(
                     MIDDLEWARE_TOOL_NAME,
                     payload,
                     request_id=request_id,
-                    timeout=self.timeout_seconds,
+                    timeout=self._inner_timeout,
                 ),
                 timeout=self.timeout_seconds,
             )
         except MiddlewareRejectedError:
             raise
-        except asyncio.TimeoutError as e:
+        except (asyncio.TimeoutError, TimeoutError, httpx.TimeoutException) as e:
             raise MiddlewareRejectedError(
                 "timeout", f"middleware did not answer within {self.timeout_seconds}s"
             ) from e
@@ -428,6 +449,4 @@ class RequestMiddleware:
                     "malformed_response",
                     f"middleware returned non-JSON content: {e}",
                 ) from e
-        raise MiddlewareRejectedError(
-            "malformed_response", "middleware returned an empty result"
-        )
+        raise MiddlewareRejectedError("malformed_response", "middleware returned an empty result")

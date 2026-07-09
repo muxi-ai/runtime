@@ -67,9 +67,7 @@ class TestMiddlewareConfig:
     def test_stdio_relative_command_resolves_against_base_dir(self, tmp_path):
         script = tmp_path / "middleware.py"
         script.write_text("#!/usr/bin/env python3\n")
-        mw = RequestMiddleware.from_config(
-            {"command": "./middleware.py"}, base_dir=str(tmp_path)
-        )
+        mw = RequestMiddleware.from_config({"command": "./middleware.py"}, base_dir=str(tmp_path))
         assert mw.command == str(script)
 
     def test_both_transports_rejected(self):
@@ -311,20 +309,28 @@ class TestAttachmentRoundTrip:
 class FakeClient:
     """Stands in for MCPServerClient in transform tests."""
 
-    def __init__(self, response=None, exc=None, delay=0.0):
-        self.connected = True
+    def __init__(self, response=None, exc=None, delay=0.0, connected=True):
+        self.connected = connected
         self.response = response
         self.exc = exc
         self.delay = delay
         self.calls = []
+        self.seen_timeouts = []
+        self.disconnected = False
 
     async def execute_tool(self, tool_name, params, request_id=None, timeout=None):
         self.calls.append((tool_name, params))
+        self.seen_timeouts.append(timeout)
         if self.delay:
             await asyncio.sleep(self.delay)
         if self.exc is not None:
             raise self.exc
         return self.response
+
+    async def disconnect(self):
+        self.disconnected = True
+        self.connected = False
+        return True
 
 
 def middleware_with(client) -> RequestMiddleware:
@@ -389,6 +395,41 @@ class TestTransform:
             await mw.transform(sent_payload())
         assert exc_info.value.reason == "timeout"
 
+    async def test_transport_timeout_exception_labeled_timeout(self):
+        """On exact integer timeouts the transport deadline can surface as
+        an httpx timeout instead of asyncio.TimeoutError -- it must still
+        be labeled reason="timeout", never a generic error."""
+        import httpx
+
+        mw = middleware_with(FakeClient(exc=httpx.ReadTimeout("read timed out")))
+        mw.timeout_seconds = 2.0  # exact integer boundary
+        with pytest.raises(MiddlewareRejectedError) as exc_info:
+            await mw.transform(sent_payload())
+        assert exc_info.value.reason == "timeout"
+
+    async def test_inner_transport_timeout_is_padded(self):
+        """The per-call transport deadline sits past the outer wait_for so
+        the outer timeout always fires first (no mislabeled races)."""
+        client = FakeClient(response=tool_success(sent_payload()))
+        mw = middleware_with(client)
+        mw.timeout_seconds = 2.0
+        assert mw._inner_timeout == 3
+        await mw.transform(sent_payload())
+        assert client.seen_timeouts == [3]
+
+    async def test_stale_client_torn_down_on_reconnect(self):
+        """A disconnected client is disconnected (best effort) before its
+        replacement is constructed -- no leaked stdio pipes."""
+        from muxi.runtime.services.mcp.transports import MCPConnectionError
+
+        stale = FakeClient(connected=False)
+        mw = RequestMiddleware(command="/nonexistent/middleware-fixture", formation_id=FORMATION_ID)
+        mw._client = stale
+        with pytest.raises(MCPConnectionError):
+            await mw._connect()  # replacement spawn fails; teardown already ran
+        assert stale.disconnected is True
+        assert mw._client is not stale
+
     async def test_tool_error_rejects(self):
         response = {
             "status": "success",
@@ -433,5 +474,5 @@ class TestTransform:
         client = FakeClient(response=tool_success(sent))
         mw = middleware_with(client)
         await mw.transform(sent)
-        (_, params) = client.calls[0]
+        _, params = client.calls[0]
         assert "groups" not in params

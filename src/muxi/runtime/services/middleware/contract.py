@@ -275,9 +275,7 @@ def validate_response_payload(
         _reject(f"message must be a string, got {type(message).__name__}")
 
     attachments = returned["attachments"]
-    if not isinstance(attachments, list) or any(
-        not isinstance(item, dict) for item in attachments
-    ):
+    if not isinstance(attachments, list) or any(not isinstance(item, dict) for item in attachments):
         _reject("attachments must be a list of objects")
 
     metadata = returned["metadata"]
