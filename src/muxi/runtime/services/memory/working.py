@@ -359,11 +359,19 @@ class WorkingMemory:
         keys.append(FORMATION_PARTITION)
         return keys
 
-    def _get_partition(self, key: str) -> _IndexPartition:
-        """Return the partition for ``key``, creating it lazily."""
+    def _get_partition(self, key: str, dimension: Optional[int] = None) -> _IndexPartition:
+        """Return the partition for ``key``, creating it lazily.
+
+        ``dimension`` overrides the memory-wide dim for the new partition.
+        Pre-computed embeddings (``add_with_embedding``, e.g. knowledge
+        chunks embedded with the formation's document model) may carry a
+        different dimensionality than this memory's own embedding model;
+        their partition must be created at the vectors' actual dim or
+        every ``index.add`` fails with a shape mismatch.
+        """
         partition = self.partitions.get(key)
         if partition is None:
-            partition = _IndexPartition(self.dimension)
+            partition = _IndexPartition(dimension or self.dimension)
             self.partitions[key] = partition
         return partition
 
@@ -490,13 +498,26 @@ class WorkingMemory:
 
         for i, item in enumerate(self.buffer):
             if "embedding" in item and item["embedding"] is not None:
+                embedding = item["embedding"]
+                dim = len(embedding)
                 key = self._partition_key(item.get("namespace", "buffer"), item.get("metadata"))
                 partition = new_partitions.get(key)
                 if partition is None:
-                    partition = _IndexPartition(self.dimension)
+                    # Partition dim follows the vectors it stores, NOT the
+                    # memory-wide dim: pre-computed embeddings (knowledge
+                    # chunks via add_with_embedding) may differ from this
+                    # memory's own embedding model. Rebuilding them at
+                    # self.dimension used to shape-crash the whole rebuild
+                    # (and with it every subsequent vector search).
+                    partition = _IndexPartition(dim)
                     new_partitions[key] = partition
                     embeddings_by_key[key] = []
-                embeddings_by_key[key].append(item["embedding"])
+                if dim != partition.index.d:
+                    # Defensive: never mix dims within one partition; the
+                    # mismatched item stays in the buffer (recency reach)
+                    # but out of this partition's index.
+                    continue
+                embeddings_by_key[key].append(embedding)
                 partition.index_mapping[i] = partition.index_count
                 partition.reverse_index_mapping[partition.index_count] = i
                 partition.index_count += 1
@@ -1307,8 +1328,15 @@ class WorkingMemory:
                     embedding_np = embedding_np / norm
 
                 # Route the vector to its partition (per-session for
-                # buffer items, shared otherwise) and update the mapping
-                partition = self._get_partition(self._partition_key(namespace, metadata))
+                # buffer items, shared otherwise) and update the mapping.
+                # The partition is created at THIS embedding's dim: pre-
+                # computed vectors routinely differ from the buffer's own
+                # embedding model dim (e.g. 1536-dim knowledge chunks in
+                # a 768-dim buffer memory).
+                partition = self._get_partition(
+                    self._partition_key(namespace, metadata),
+                    dimension=int(embedding_np.shape[1]),
+                )
                 partition.index.add(embedding_np)
 
                 buffer_idx = len(self.buffer) - 1

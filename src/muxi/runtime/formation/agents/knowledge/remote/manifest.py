@@ -90,6 +90,11 @@ class Manifest:
     last_sync_duration_ms: int = 0
     last_sync_status: str = "never"  # never | success | partial | failed
     last_sync_error: str = ""
+    # Archive sources (Phase 2): change token + size of the last archive
+    # successfully downloaded AND extracted. An unchanged archive skips
+    # both the download and the re-extraction.
+    archive_hash: str = ""
+    archive_size: int = 0
     files: Dict[str, FileRecord] = field(default_factory=dict)
 
     @property
@@ -154,6 +159,8 @@ class Manifest:
         manifest.last_sync_duration_ms = int(data.get("last_sync_duration_ms", 0) or 0)
         manifest.last_sync_status = str(data.get("last_sync_status", "never"))
         manifest.last_sync_error = str(data.get("last_sync_error", ""))
+        manifest.archive_hash = str(data.get("archive_hash", ""))
+        manifest.archive_size = int(data.get("archive_size", 0) or 0)
 
         raw_files = data.get("files", {})
         if isinstance(raw_files, dict):
@@ -177,6 +184,8 @@ class Manifest:
             "last_sync_duration_ms": self.last_sync_duration_ms,
             "last_sync_status": self.last_sync_status,
             "last_sync_error": self.last_sync_error,
+            "archive_hash": self.archive_hash,
+            "archive_size": self.archive_size,
             "files": {rel: asdict(record) for rel, record in self.files.items()},
             "stats": self.stats,
         }

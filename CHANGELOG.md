@@ -2,6 +2,66 @@
 
 ## [unreleased]
 
+### Remote knowledge sources - archives, scheduling, extra protocols (Phases 2-4)
+
+Completes the remote-knowledge-sources PRD on top of the Phase 1 core
+sync: archive extraction, scheduled re-sync with incremental
+re-embedding, a manual sync trigger endpoint, and four more protocols.
+
+- **Archive extraction (Phase 2)**: ``extract: true`` sources download a
+  single archive (``.zip``, ``.tar``, ``.tar.gz``/``.tgz``,
+  ``.tar.bz2``, ``.tar.xz``) and extract it into the local mirror;
+  ``extract_pattern`` keeps only matching members. Extraction is
+  security-hardened: member names are path-traversal-safe (same guards
+  as the manifest), symlink/hardlink/device members are rejected, and
+  decompression bombs are bounded by ``max_extracted_files`` (default
+  1000) and ``max_extracted_size`` (default 500MB) counted on the
+  DECOMPRESSED stream, never trusted from headers. Extraction happens in
+  a temp dir next to the mirror (always cleaned up); the mirror is only
+  updated after the whole archive extracted successfully, so a corrupt
+  or malicious archive degrades to the previously synced content.
+  Unchanged archives (hash + size) skip both download and extraction.
+- **Scheduled re-sync (Phase 3)**: sources with a cron ``schedule``
+  (or ``@hourly``/``@daily``/``@weekly``) now actually re-sync
+  periodically. The new ``KnowledgeSyncService`` registers with the
+  existing SchedulerService worker loop (the heartbeat's periodic-task
+  extension point -- no second scheduler). Per-source locks skip
+  overlapping syncs (``knowledge.sync.skipped``); total failures retry
+  with exponential backoff (per-source ``retry:`` block --
+  ``max_attempts``/``initial_delay``/``max_delay``/``exponential_base``,
+  defaults 3/5s/300s/2) and then fall back to the next cron fire, always
+  serving stale content in the meantime. After a sync that changed the
+  mirror, only the changed/deleted files are re-embedded
+  (``KnowledgeHandler.refresh_remote_source``), not the whole source.
+  Schedules without a running scheduler degrade to startup-only sync
+  with a loud init warning. ``@startup`` / no schedule keep the Phase 1
+  startup-only behavior.
+- **Manual sync trigger**: ``POST /v1/agents/{agent_id}/knowledge/sync``
+  (AdminKey; optional ``{"source_id": ...}`` body) re-syncs an agent's
+  remote sources on demand through the same locks and incremental
+  re-embed path, returning per-source results.
+- **Additional protocols (Phase 4)**: ``gs://`` (Google Cloud Storage,
+  Content-MD5 change detection, optional ``auth: {type: gcp,
+  credentials_json}`` else ADC), ``az://`` (Azure Blob Storage,
+  Content-MD5/ETag; requires ``auth: {type: azure}`` with
+  ``connection_string`` or ``account_name``+``account_key``),
+  ``ftp://`` (stdlib, size+mtime, ``basic`` auth or URL userinfo), and
+  ``sftp://`` (paramiko, size+mtime, ``ssh_key`` or ``basic`` auth;
+  strict host-key checking by default with the same
+  ``accept_new_host_keys`` opt-in as rsync+ssh). All use the shared
+  atomic-download path. Optional SDKs ship as extras --
+  ``muxi-runtime[gcs]``, ``[azure]``, ``[sftp]`` -- with clear
+  config-time errors naming the extra when missing; ftp needs nothing.
+- Fixed a latent WorkingMemory bug surfaced by incremental re-embedding:
+  FAISS partitions for pre-computed embeddings (knowledge chunks) were
+  created/rebuilt at the buffer's own embedding dimension, silently
+  dropping vectors on write and crashing every vector search after the
+  first index rebuild. Partition dimensionality now follows the vectors
+  it stores.
+- All new config keys are fail-fast validated at load time; formations
+  without remote sources remain untouched (the remote machinery is never
+  imported).
+
 ### Knowledge reasoning RAG - Method A tree retrieval (Phase 1)
 
 Large knowledge files are now indexed as hierarchical trees navigated by an

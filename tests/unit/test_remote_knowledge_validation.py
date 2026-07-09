@@ -45,8 +45,11 @@ class TestUrlSchemes:
             "https://wiki.company.com/export/docs.md",
             "http://internal.corp/files/notes.txt",
             "s3://acme-bucket/policies/*",
+            "gs://acme-bucket/policies/*",
             "rsync://docs-server/knowledge/",
             "rsync+ssh://docs@server.com/knowledge/",
+            "ftp://files.corp/docs/*.pdf",
+            "sftp://user@host/docs/",
             "file:///mounted/path/",
         ],
     )
@@ -54,13 +57,27 @@ class TestUrlSchemes:
         result = validate_sources(validator, [remote(url)])
         assert result.is_valid, result.errors
 
-    @pytest.mark.parametrize(
-        "url", ["gs://bucket/x", "az://container/x", "ftp://h/x", "sftp://u@h/x"]
-    )
-    def test_planned_schemes_rejected_as_not_yet_supported(self, validator, url):
+    def test_az_scheme_accepted_with_auth(self, validator):
+        result = validate_sources(
+            validator,
+            [
+                remote(
+                    "az://container/docs/*",
+                    auth={"type": "azure", "connection_string": "${{ secrets.AZ_CONN }}"},
+                )
+            ],
+        )
+        assert result.is_valid, result.errors
+
+    def test_az_requires_auth_block(self, validator):
+        result = validate_sources(validator, [remote("az://container/docs/*")])
+        assert not result.is_valid
+        assert any("'auth'" in e for e in result.errors)
+
+    @pytest.mark.parametrize("url", ["gs:///prefix/*", "ftp:///x", "sftp:///x"])
+    def test_new_schemes_require_host_or_bucket(self, validator, url):
         result = validate_sources(validator, [remote(url)])
         assert not result.is_valid
-        assert any("not yet supported" in e for e in result.errors)
 
     def test_unknown_scheme_rejected(self, validator):
         result = validate_sources(validator, [remote("gopher://host/x")])
@@ -257,10 +274,12 @@ class TestOptions:
         assert not result.is_valid
         assert any("boolean" in e for e in result.errors)
 
-    def test_extract_rejected_in_phase_1(self, validator):
-        result = validate_sources(validator, [remote("https://h/a.zip", extract=True)])
-        assert not result.is_valid
-        assert any("extraction" in e for e in result.errors)
+    def test_accept_new_host_keys_valid_for_sftp(self, validator):
+        result = validate_sources(
+            validator,
+            [remote("sftp://user@host/docs/", accept_new_host_keys=True)],
+        )
+        assert result.is_valid, result.errors
 
     def test_schedule_cron_and_aliases_accepted(self, validator):
         result = validate_sources(
@@ -279,6 +298,180 @@ class TestOptions:
         )
         assert not result.is_valid
         assert any("schedule" in e for e in result.errors)
+
+
+class TestArchiveExtractionOptions:
+    def test_extract_zip_source_valid(self, validator):
+        result = validate_sources(
+            validator,
+            [remote("https://h/export.zip", extract=True, extract_pattern="**/*.md")],
+        )
+        assert result.is_valid, result.errors
+
+    def test_extract_must_be_boolean(self, validator):
+        result = validate_sources(validator, [remote("https://h/a.zip", extract="yes")])
+        assert not result.is_valid
+        assert any("boolean" in e for e in result.errors)
+
+    def test_extract_pattern_requires_extract(self, validator):
+        result = validate_sources(validator, [remote("https://h/a.zip", extract_pattern="**/*.md")])
+        assert not result.is_valid
+        assert any("requires 'extract: true'" in e for e in result.errors)
+
+    def test_extract_rejected_for_rsync(self, validator):
+        result = validate_sources(validator, [remote("rsync://server/docs/", extract=True)])
+        assert not result.is_valid
+        assert any("not valid for rsync" in e for e in result.errors)
+
+    def test_extract_rejected_with_glob_url(self, validator):
+        result = validate_sources(validator, [remote("s3://bucket/*.zip", extract=True)])
+        assert not result.is_valid
+        assert any("single archive" in e for e in result.errors)
+
+    @pytest.mark.parametrize("key", ["max_extracted_files", "max_extracted_size"])
+    def test_extraction_bounds_positive_integers(self, validator, key):
+        result = validate_sources(validator, [remote("https://h/a.zip", extract=True, **{key: 0})])
+        assert not result.is_valid
+        result2 = validate_sources(
+            FormationValidator(), [remote("https://h/a.zip", extract=True, **{key: 500})]
+        )
+        assert result2.is_valid, result2.errors
+
+    def test_extraction_bounds_require_extract(self, validator):
+        result = validate_sources(validator, [remote("https://h/a.zip", max_extracted_files=10)])
+        assert not result.is_valid
+        assert any("requires 'extract: true'" in e for e in result.errors)
+
+    def test_empty_extract_pattern_rejected(self, validator):
+        result = validate_sources(
+            validator, [remote("https://h/a.zip", extract=True, extract_pattern="  ")]
+        )
+        assert not result.is_valid
+
+
+class TestRetryBlock:
+    def test_full_retry_block_valid(self, validator):
+        result = validate_sources(
+            validator,
+            [
+                remote(
+                    "s3://bucket/docs/*",
+                    retry={
+                        "max_attempts": 5,
+                        "initial_delay": 2,
+                        "max_delay": 120.5,
+                        "exponential_base": 2,
+                    },
+                )
+            ],
+        )
+        assert result.is_valid, result.errors
+
+    def test_retry_must_be_mapping(self, validator):
+        result = validate_sources(validator, [remote("s3://bucket/x", retry=3)])
+        assert not result.is_valid
+        assert any("mapping" in e for e in result.errors)
+
+    def test_unknown_retry_key_rejected(self, validator):
+        result = validate_sources(validator, [remote("s3://bucket/x", retry={"delay": 5})])
+        assert not result.is_valid
+        assert any("not recognized" in e for e in result.errors)
+
+    def test_max_attempts_positive_integer(self, validator):
+        result = validate_sources(validator, [remote("s3://bucket/x", retry={"max_attempts": 0})])
+        assert not result.is_valid
+
+    @pytest.mark.parametrize("key", ["initial_delay", "max_delay"])
+    def test_delays_positive_numbers(self, validator, key):
+        result = validate_sources(validator, [remote("s3://bucket/x", retry={key: -1})])
+        assert not result.is_valid
+
+    def test_exponential_base_at_least_one(self, validator):
+        result = validate_sources(
+            validator, [remote("s3://bucket/x", retry={"exponential_base": 0.5})]
+        )
+        assert not result.is_valid
+
+
+class TestPhase4AuthBlocks:
+    def test_gcp_auth_with_credentials_json(self, validator):
+        result = validate_sources(
+            validator,
+            [
+                remote(
+                    "gs://bucket/docs/*",
+                    auth={"type": "gcp", "credentials_json": "${{ secrets.GCP_SA_JSON }}"},
+                )
+            ],
+        )
+        assert result.is_valid, result.errors
+
+    def test_gcp_auth_default_credential_chain(self, validator):
+        result = validate_sources(validator, [remote("gs://bucket/x", auth={"type": "gcp"})])
+        assert result.is_valid, result.errors
+
+    def test_gcp_auth_empty_credentials_json_rejected(self, validator):
+        result = validate_sources(
+            validator, [remote("gs://bucket/x", auth={"type": "gcp", "credentials_json": " "})]
+        )
+        assert not result.is_valid
+
+    def test_azure_auth_account_pair_valid(self, validator):
+        result = validate_sources(
+            validator,
+            [
+                remote(
+                    "az://container/x",
+                    auth={
+                        "type": "azure",
+                        "account_name": "acme",
+                        "account_key": "${{ secrets.AZ_KEY }}",
+                    },
+                )
+            ],
+        )
+        assert result.is_valid, result.errors
+
+    def test_azure_auth_account_name_without_key_rejected(self, validator):
+        result = validate_sources(
+            validator,
+            [remote("az://container/x", auth={"type": "azure", "account_name": "acme"})],
+        )
+        assert not result.is_valid
+        assert any("account_key" in e for e in result.errors)
+
+    def test_azure_auth_type_alone_rejected(self, validator):
+        result = validate_sources(validator, [remote("az://container/x", auth={"type": "azure"})])
+        assert not result.is_valid
+        assert any("connection_string" in e for e in result.errors)
+
+    def test_ftp_basic_auth_valid(self, validator):
+        result = validate_sources(
+            validator,
+            [remote("ftp://h/docs/", auth={"type": "basic", "username": "u", "password": "p"})],
+        )
+        assert result.is_valid, result.errors
+
+    def test_sftp_ssh_key_auth_valid(self, validator):
+        result = validate_sources(
+            validator,
+            [remote("sftp://u@h/docs/", auth={"type": "ssh_key", "key": "${{ secrets.K }}"})],
+        )
+        assert result.is_valid, result.errors
+
+    def test_sftp_password_auth_valid(self, validator):
+        result = validate_sources(
+            validator,
+            [remote("sftp://h/docs/", auth={"type": "basic", "username": "u", "password": "p"})],
+        )
+        assert result.is_valid, result.errors
+
+    def test_ftp_ssh_key_auth_rejected(self, validator):
+        result = validate_sources(
+            validator, [remote("ftp://h/docs/", auth={"type": "ssh_key", "key": "k"})]
+        )
+        assert not result.is_valid
+        assert any("not valid for" in e for e in result.errors)
 
 
 class TestFormationLevelKnowledge:
