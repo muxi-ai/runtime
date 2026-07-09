@@ -270,6 +270,11 @@ class WorkingMemory:
         self.kv_store = {}
         self.kv_expiry = {}
 
+        # Pre-compaction flush hook (Memory Revamp Phase 3): registered via
+        # set_eviction_listener by the flush service; None means inert.
+        self._eviction_listener = None
+        self._eviction_flush_threshold: Optional[float] = None
+
         # Start the background FIFO cleanup task
         fifo_cleanup_task(self)
 
@@ -534,6 +539,59 @@ class WorkingMemory:
         self.partitions = new_partitions
         self.needs_rebuild = False
 
+    def set_eviction_listener(self, listener, flush_threshold: Optional[float] = None) -> None:
+        """
+        Register the pre-compaction flush hook (Memory Revamp Phase 3).
+
+        Args:
+            listener: Synchronous callable receiving a list of buffer item
+                snapshots ``{"text", "metadata", "timestamp"}``. Invoked
+                (a) when estimated buffer usage crosses
+                ``flush_threshold * max_memory_mb`` -- with the oldest ~25%
+                of buffer-namespace items (the next eviction candidates)
+                that have not been flushed yet -- and (b) at eviction time
+                with any not-yet-flushed items about to be dropped. The
+                callable must not block; listener errors are swallowed so
+                FIFO cleanup is never affected.
+            flush_threshold: Fraction of ``max_memory_mb`` (0-1] at which
+                the early flush fires; None disables the early trigger
+                (the eviction-time safety net still fires).
+        """
+        self._eviction_listener = listener
+        self._eviction_flush_threshold = flush_threshold
+
+    def _notify_eviction_listener(self, indices) -> None:
+        """Snapshot unflushed buffer items at ``indices`` and hand them off.
+
+        Items already handed to the listener are marked with the
+        ``_memory_flushed`` metadata key so threshold-triggered flushes and
+        the eviction-time safety net never double-flush the same item.
+        Never raises into the cleanup path.
+        """
+        if self._eviction_listener is None:
+            return
+        try:
+            buffer_items = list(self.buffer)
+            snapshots = []
+            for index in indices:
+                item = buffer_items[index]
+                metadata = item.get("metadata") or {}
+                if metadata.get("_memory_flushed"):
+                    continue
+                metadata["_memory_flushed"] = True
+                item["metadata"] = metadata
+                snapshots.append(
+                    {
+                        "text": item.get("text", ""),
+                        "metadata": dict(metadata),
+                        "timestamp": item.get("timestamp"),
+                    }
+                )
+            if snapshots:
+                self._eviction_listener(snapshots)
+        except Exception:
+            pass  # the flush is best-effort; cleanup must proceed
+
     def check_memory_usage_and_cleanup(self) -> None:
         """
         Check memory usage and perform FIFO cleanup if needed.
@@ -583,6 +641,21 @@ class WorkingMemory:
             #     f"configured limit: {self.max_memory_mb}MB"
             # )
 
+            # Pre-compaction flush trigger (Memory Revamp Phase 3): when
+            # usage crosses the flush threshold, hand the oldest ~25% of
+            # buffer items (the next eviction candidates) to the flush
+            # listener so their content is persisted BEFORE eviction can
+            # drop it.
+            if (
+                self._eviction_listener is not None
+                and self._eviction_flush_threshold
+                and buffer_namespace_indices
+                and estimated_usage_mb >= self._eviction_flush_threshold * self.max_memory_mb
+            ):
+                buffer_namespace_indices.sort()
+                flush_candidates = max(1, len(buffer_namespace_indices) // 4)
+                self._notify_eviction_listener(buffer_namespace_indices[:flush_candidates])
+
             # If we exceed the configured limit, remove oldest items from buffer namespace only
             if estimated_usage_mb > self.max_memory_mb and buffer_namespace_indices:
                 # Calculate how many buffer items to remove (25% of buffer items)
@@ -595,6 +668,11 @@ class WorkingMemory:
                 # Sort indices to remove oldest items first
                 buffer_namespace_indices.sort()
                 indices_to_remove = set(buffer_namespace_indices[:items_to_remove])
+
+                # Eviction-time safety net (Memory Revamp Phase 3): any item
+                # about to be evicted that was never flushed is snapshotted
+                # and handed to the flush listener before it is dropped.
+                self._notify_eviction_listener(sorted(indices_to_remove))
 
                 # Create new deque with same maxlen, keeping only non-removed items
                 new_buffer = collections.deque(maxlen=self.buffer.maxlen)

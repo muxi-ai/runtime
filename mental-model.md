@@ -1561,6 +1561,107 @@ per-source `retrieval:` accepts `vector`/`tree`, rejects the reserved
 both on `formations/formation-tree-reasoning/` (the 6f slot went to the
 remote-knowledge-sources tests that merged concurrently).
 
+### Memory Revamp Phases 3-5 (2026-07-09): Context Optimization, Knowledge Index, Lint
+
+**PRD:** `engineering/prds/memory-revamp.md` (Phases 1-2 shipped as KG +
+Captain's Log; Phase 6 Hybrid Search is deferred pending benchmark evidence)
+
+Four read-path/lifecycle services on top of the Phase 1-2 write pipeline:
+
+**Pre-compaction flush** (`services/memory/flush.py`,
+`PreCompactionFlushService`): the working-memory buffer is bounded; FIFO
+cleanup silently dropped the oldest items when it filled before the periodic
+Captain's Log digest ran. `WorkingMemory.set_eviction_listener(listener,
+flush_threshold)` is the additive hook: `check_memory_usage_and_cleanup`
+notifies the listener (a) when estimated usage crosses
+`flush_threshold * max_memory_mb` (default 0.80) with the oldest ~25% of
+buffer-namespace items, and (b) at eviction time with any not-yet-flushed
+items (snapshotted BEFORE the deque drops them). Items are marked
+`_memory_flushed` in metadata so nothing flushes twice. The listener runs on
+the FIFO daemon thread, so the flush service bridges to the formation loop
+via `run_coroutine_threadsafe` and runs the **silent turn**: an LLM digest
+outside the user-visible conversation, through
+`CaptainsLogService.digest_turns()` (new public wrapper over `_digest_user`)
+— one pass writes the log entry, buffer-item source lineage, lessons, and
+the digest's KG facts. Best-effort by design: a failed flush never re-queues
+(the items leave the buffer regardless) and never blocks eviction. Wired in
+`overlord._initialize_context_optimization()` (startup, after the other
+memory loops); config `memory.compaction.flush_enabled` (default true) /
+`flush_threshold`. `flush_enabled: false` leaves the listener unset —
+byte-identical to pre-feature behavior (pinned by unit test).
+
+**Cache-TTL pruning** (`services/memory/pruning.py`, `ContextPruner`):
+providers cache prompt prefixes ~5 minutes; resuming an idle session
+re-caches old bulky content at full cost. When a `(user, session)` has been
+idle past `cache_ttl_seconds`, the pruner trims prunable messages (role
+"tool", or content over `soft_trim_max_chars`) from the assembled buffer
+turns — soft trim keeps the first/last 1500 chars around a truncation
+marker; `strategy: hard_clear` replaces the body with "[Previous output
+cleared]". The newest `keep_last_n_tool_results` prunable messages are
+always preserved. Modes: `never` / `cache-ttl` / `always`. **Inert when
+unconfigured:** the Overlord only constructs a pruner when `memory.pruning`
+exists; applied in `_build_clean_chat_context` right after the buffer-turn
+fetch, failure-isolated (any error returns the original turns).
+
+**Knowledge index** (`services/memory/index.py`, `KnowledgeIndexService`,
+`overlord.memory_index`): a <=300-token navigable catalog of what exists in
+memory (active entities, captain's log count/span/most-recent, artifact
+manifest via `ArtifactMemoryService.list_artifacts` — the seam
+artifact-memory Phase 2 rides — and "knowledge gaps flagged by last lint").
+Injected at **retrieval start** in BOTH context representations: the clean
+chat bundle (leads `user_profile_text` as `[Memory Index - as of ...]`) and
+the analyzer blob (`=== MEMORY INDEX ===` section, right after CURRENT
+REQUEST — this is the one non-actionable/analyzer turns see). Cached per
+user + write-through persisted to `system_config` key
+`memory_index:{user_id}`; regeneration triggers (`regenerate_on`) are a
+cheap per-read fingerprint (log count/updated stamp, artifact count, entity
+count moving >= `entity_count_threshold`) plus explicit `invalidate()` from
+lint and a 24h staleness bound. Rendering truncates per section on item
+boundaries with `[+N more]` and hard-caps at `max_tokens * 4` chars. All
+read paths return "" on error — an index failure never breaks a turn.
+
+**Memory lint** (`services/memory/lint.py`, `MemoryLintService`,
+`overlord.memory_lint`): background audit (schedule `weekly`/`daily`/seconds;
+started beside the scheduler in overlord startup, cancelled in shutdown,
+failure-isolated per run AND per user). Checks per PRD: conflicted facts
+unresolved past `conflict_resolution_days` -> findings; superseded facts
+older than `superseded_retention_days` (default 30) -> hard-delete (edges
+first, then entities, then `algorithms.invalidate`); orphaned relationships
+-> auto-remove when `orphan_cleanup`; captain's log gaps > 7 days between
+consecutive entries -> flag; artifacts not accessed in `stale_artifact_days`
+-> flag; index not regenerated in 24h -> force regeneration. Findings feed
+`index.set_lint_findings()` (persisted, survive restart). On-demand:
+`run_lint(user_id=None)` and admin `POST /memory/lint`. **Inert when
+unconfigured:** the service is only constructed when the formation declares
+a `memory.lint` block (pinned by unit test).
+
+**Config validation:** all four sections fail-fast in
+`config/validation.py::_validate_memory_config` (mode/strategy enums,
+threshold in (0,1], positive ints, `regenerate_on` trigger names).
+
+**Observability:** `MEMORY_PRECOMPACTION_FLUSH_TRIGGERED/_COMPLETED/_FAILED`,
+`MEMORY_CONTEXT_PRUNED`, `MEMORY_INDEX_REGENERATED/_FAILED`,
+`MEMORY_LINT_STARTED/_COMPLETED/_FAILED` (ConversationEvents).
+
+**Tests:** `tests/unit/test_precompaction_flush.py`,
+`test_context_pruning.py`, `test_knowledge_index.py`, `test_memory_lint.py`,
+`test_memory_revamp_config_validation.py`; e2e
+`e2e/tests/2_memory/test_2x1_memory_revamp_phases_3_5.py` on
+`formations/formation-memory/formation-memory-revamp.yaml` (flush surviving
+real eviction, index injection observed in a real turn via pass-through
+spies on both context builders, on-demand lint).
+
+**Gotchas:**
+1. `select(func.count()).filter_by(...)` has no entity namespace — the
+   index/lint count queries must use `.select_from(Model).where(...)`.
+2. MagicMock overlords in orchestrator unit tests make `context_pruner` /
+   `memory_index` truthy; test fixtures must set them to None explicitly.
+3. Same-timestamp buffer items dedupe to one source-lineage row (unique
+   constraint on `(log_id, source_type, source_id)`) — flush snapshots keep
+   the buffer's per-item `time.time()` stamps.
+4. A simple recall turn can route through the analyzer/non-actionable path
+   (never reaching the agent's clean-context assembly) — which is why the
+   index injects into the enhanced blob too, not just the clean bundle.
 ### Memory Event Substrate (2026-07-09, Phases 2b-2d)
 
 **Location:** `src/muxi/runtime/services/memory/events/`
