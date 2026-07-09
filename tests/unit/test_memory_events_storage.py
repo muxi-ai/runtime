@@ -173,11 +173,16 @@ class TestImmutability:
         ]
         assert sorted(mutators) == [
             "append",
+            "count_events",  # read-only size-cap accounting
+            "expire_volatile",  # soft-delete of expired volatile events
             "find_by_source_id",  # read-only idempotency-key lookup
             "get_checkpoint",
             "get_event",
+            "get_event_by_public_id",  # read-only provenance lookup
             "hard_purge",
+            "list_event_user_ids",  # read-only maintenance enumeration
             "list_events",
+            "max_event_id",  # read-only cursor tail lookup
             "reset_checkpoint",
             "set_checkpoint",
             "soft_delete_events",

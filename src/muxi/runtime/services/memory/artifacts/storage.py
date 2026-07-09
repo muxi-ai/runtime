@@ -105,6 +105,8 @@ class ArtifactMemoryStorage:
         agent_id: Optional[str] = None,
         conversation_id: Optional[str] = None,
         expires_at: Optional[datetime] = None,
+        created_at: Optional[datetime] = None,
+        derived_from_event_id: Optional[int] = None,
     ) -> Dict[str, Any]:
         """
         Insert one artifact row, extending the version chain on name match.
@@ -116,6 +118,10 @@ class ArtifactMemoryStorage:
         IntegrityError the transaction is rolled back and re-run once
         against the re-read head; a second loss propagates to the
         failure-isolated capture path.
+
+        ``created_at`` / ``derived_from_event_id`` are the replay path's
+        stamps (artifact-metadata projector): a rebuilt row keeps its
+        original capture time and its provenance bridge into the event log.
 
         Returns the inserted row as a dict (version/parent_id reflect the
         chain position).
@@ -135,6 +141,8 @@ class ArtifactMemoryStorage:
             "agent_id": agent_id,
             "conversation_id": conversation_id,
             "expires_at": expires_at,
+            "created_at": created_at,
+            "derived_from_event_id": derived_from_event_id,
         }
         try:
             return await self._insert_version(**fields)
@@ -157,6 +165,8 @@ class ArtifactMemoryStorage:
         agent_id: Optional[str],
         conversation_id: Optional[str],
         expires_at: Optional[datetime],
+        created_at: Optional[datetime] = None,
+        derived_from_event_id: Optional[int] = None,
     ) -> Dict[str, Any]:
         """One read-head -> demote -> insert transaction (see save_artifact)."""
         async with self.db_manager.get_async_session() as session:
@@ -203,7 +213,12 @@ class ArtifactMemoryStorage:
                 compressed_bytes=compressed_bytes,
                 checksum_sha256=checksum_sha256,
                 expires_at=expires_at,
+                derived_from_event_id=derived_from_event_id,
             )
+            if created_at is not None:
+                artifact.created_at = created_at
+                artifact.updated_at = created_at
+                artifact.last_accessed_at = created_at
             session.add(artifact)
             await session.flush()
             return artifact.to_dict()
@@ -258,6 +273,47 @@ class ArtifactMemoryStorage:
             if expires_at is not None:
                 artifact.expires_at = expires_at
             await session.flush()
+
+    # ------------------------------------------------------------------
+    # Event substrate support (provenance stamping + rebuild)
+    # ------------------------------------------------------------------
+
+    async def set_derived_event(self, artifact_id: int, event_id: int) -> None:
+        """Stamp a row's provenance bridge into the memory event log.
+
+        Idempotent: an already-stamped row keeps its original event id
+        (the first artifact.saved event is the row's origin; replays and
+        backfills must not rewrite history).
+        """
+        async with self.db_manager.get_async_session() as session:
+            artifact = await session.get(Artifact, artifact_id)
+            if artifact is None or artifact.derived_from_event_id is not None:
+                return
+            artifact.derived_from_event_id = event_id
+            await session.flush()
+
+    async def delete_event_sourced_for_user(self, user_id: str) -> int:
+        """
+        Delete the user's event-sourced metadata rows (rebuild support).
+
+        Only rows carrying a ``derived_from_event_id`` are removed --
+        replaying artifact.saved events recreates exactly those. Blobs
+        are never touched: they live in artifact storage and are not a
+        projection. Pre-substrate rows (NULL provenance) survive so a
+        rebuild can never orphan a blob's only metadata. Returns the
+        number of rows deleted.
+        """
+        from sqlalchemy import delete as sql_delete
+
+        async with self.db_manager.get_async_session() as session:
+            stmt = (
+                sql_delete(Artifact)
+                .where(Artifact.user_id == str(user_id))
+                .where(Artifact.formation_id == self.formation_id)
+                .where(Artifact.derived_from_event_id.is_not(None))
+            )
+            result = await session.execute(stmt)
+            return int(result.rowcount or 0)
 
     # ------------------------------------------------------------------
     # Retention (soft delete of expired rows)

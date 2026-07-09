@@ -647,6 +647,46 @@ class SQLiteMemory(BaseMemory):
 
         return memory_id
 
+    async def list_extracted_orphan_memories(
+        self, user_id: Optional[str] = None
+    ) -> List[Dict[str, Any]]:
+        """
+        Extraction rows without event provenance (legacy backfill support).
+
+        Rows whose metadata says ``source == 'extraction'`` but carries no
+        ``derived_from_event_id`` predate the memory event substrate; the
+        backfill synthesizes fact.extracted events for exactly these so a
+        rebuild can recreate them. Non-extraction rows (conversations,
+        manual user memories, knowledge uploads) are not event-sourced and
+        are never listed.
+        """
+        await self._ensure_dim()
+        if user_id:
+            internal_user_id = await self.get_or_create_user(str(user_id))
+        else:
+            internal_user_id = self.default_user_id
+        rows = self.conn.execute(
+            f"""
+            SELECT id, text, collection, metadata, created_at
+            FROM {self.memories_table}
+            WHERE user_id = ?
+              AND json_extract(metadata, '$.source') = 'extraction'
+              AND json_extract(metadata, '$.derived_from_event_id') IS NULL
+            ORDER BY created_at, id
+            """,
+            (internal_user_id,),
+        ).fetchall()
+        return [
+            {
+                "id": row[0],
+                "text": row[1],
+                "collection": row[2],
+                "metadata": json.loads(row[3]) if row[3] else {},
+                "created_at": row[4],
+            }
+            for row in rows
+        ]
+
     async def delete_extracted_memories(self, user_id: Optional[str] = None) -> int:
         """
         Delete every event-sourced memory for a user (all collections).

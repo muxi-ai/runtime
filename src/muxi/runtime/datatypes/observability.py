@@ -869,6 +869,25 @@ class ConversationEvents(Enum):
     MEMORY_DELETION_HARD_PURGED = "memory.deletion.hard_purged"
     # When the post-grace-period hard purge removes soft-deleted events
 
+    # Memory event substrate Phases 2b-2d (projections, provenance, rebuild)
+    MEMORY_PROJECTION_LAGGING = "memory.projection.lagging"
+    # When a projection cursor falls behind the event tail past the threshold
+
+    MEMORY_EVENT_EXPIRED = "memory.event.expired"
+    # When the maintenance sweep soft-deletes expired volatile events
+
+    MEMORY_EVENT_SIZE_CAP_EXCEEDED = "memory.event.size_cap_exceeded"
+    # When a user's event log exceeds the configured per-user size cap
+
+    MEMORY_FACT_CONTRADICTED = "memory.fact.contradicted"
+    # When a knowledge graph write contradicts an existing exclusive fact
+
+    MEMORY_BACKFILL_STARTED = "memory.backfill.started"
+    # When a legacy backfill (synthetic events for pre-event-log rows) starts
+
+    MEMORY_BACKFILL_COMPLETED = "memory.backfill.completed"
+    # When a legacy backfill finishes (per-projection counts attached)
+
     # Memory ingestion pipeline (Memory Ingestion Phase 3a)
     MEMORY_INGESTION_ACCEPTED = "memory.ingestion.accepted"
     # When POST /v1/memories(/batch) accepts items and enqueues processing

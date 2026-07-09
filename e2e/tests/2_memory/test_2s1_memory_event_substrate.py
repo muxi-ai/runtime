@@ -151,9 +151,10 @@ class TestMemoryEventSubstrate(BaseMemoryTest):
                     all_passed = False
 
                 registered = sorted(memory_events.projectors)
-                if registered == ["captains_log", "flat_facts", "knowledge_graph"]:
+                core = {"captains_log", "flat_facts", "knowledge_graph"}
+                if core.issubset(set(registered)):
                     print(f"  ✓ Projectors registered: {registered}")
-                    checks_passed.append("All three projectors registered")
+                    checks_passed.append("Core projectors registered")
                 else:
                     print(f"  ✗ Unexpected projector registry: {registered}")
                     all_passed = False
@@ -212,8 +213,7 @@ class TestMemoryEventSubstrate(BaseMemoryTest):
                     all_passed = False
 
                 scoped = all(
-                    e["scope_type"] == "user" and e["scope_id"] == effective_user_id
-                    for e in events
+                    e["scope_type"] == "user" and e["scope_id"] == effective_user_id for e in events
                 )
                 if events and scoped:
                     print("  ✓ Every event carries the forward-compatible user scope")
@@ -274,14 +274,19 @@ class TestMemoryEventSubstrate(BaseMemoryTest):
                 print(f"  ✗ Projection wipe left rows behind: {wiped}")
                 all_passed = False
 
-            # Check 6: full rebuild replays every projection from events
+            # Check 6: full rebuild replays every projection from events.
+            # The three core projections must have replayed events; other
+            # registered projections (artifact_metadata) may legitimately
+            # have none in this conversation but must not fail.
             report = await memory_events.rebuild(effective_user_id)
             print(f"  Rebuild report: {report}")
+            core = {"knowledge_graph", "captains_log", "flat_facts"}
             replayed = all(
-                section["applied"] > 0 and section["failed"] == 0 for section in report.values()
+                report[name]["applied"] > 0 and report[name]["failed"] == 0 for name in core
             )
-            if set(report) == {"knowledge_graph", "captains_log", "flat_facts"} and replayed:
-                print("  ✓ Rebuild replayed events into all three projections")
+            clean = all(section["failed"] == 0 for section in report.values())
+            if core.issubset(set(report)) and replayed and clean:
+                print("  ✓ Rebuild replayed events into all core projections")
                 checks_passed.append("Rebuild replays all projections")
             else:
                 print("  ✗ Rebuild report incomplete or contains failures")

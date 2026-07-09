@@ -49,6 +49,64 @@ stays deferred pending benchmark evidence):
   validation stays 100%). New e2e: `test_2x1_memory_revamp_phases_3_5.py`
   (flush surviving real eviction, index injection observable in a real
   turn, on-demand lint).
+### Memory event substrate - projections, provenance, rebuild (Phases 2b-2d)
+
+The immutable memory event log (memory-event-substrate PRD) now covers the
+full write-path story on top of the shipped core log + dual-write:
+
+- Incremental projection builders (2b): per-(projection, user) cursors in
+  ``projection_checkpoints`` drive ``project_pending`` (catch a cursor up
+  to the log tail; idempotent, poison events are skipped and reconciled by
+  rebuild) and ``apply_event`` (project one just-appended event). A new
+  artifact-metadata projector rebuilds ``artifacts`` rows from
+  ``artifact.saved`` events (v2 payloads carry the full metadata; v1
+  events are reconstructed deterministically - builders handle every
+  historical payload version); blobs are never touched and pre-substrate
+  rows survive resets.
+- Event-first cutover groundwork (Phase C, flag-gated, DEFAULT OFF):
+  ``memory.events.event_first: true`` makes the extractor, knowledge
+  graph, captain's log, ingestion, and shared-scope write paths append
+  the event and derive the projection through the substrate (synchronous
+  apply + background applier as crash recovery, with cursor snapshots
+  guarding dual-written history). Dual-write remains the default until
+  cutover.
+- Provenance (2c): ``GET /v1/memories/provenance?entity=X`` answers "why
+  do you think X?" - the knowledge graph entity, every fact touching it
+  (contradicted/superseded included), and per-fact causation chains from
+  the event log back to the originating interaction turn or ingestion
+  item. ``?event_id=`` traces a single event. The ``artifacts`` table
+  gains an additive ``derived_from_event_id`` provenance column.
+- Decay at query time (2c): ``memory.decay`` settings (default half-life
+  180d, volatile TTL 24h, per-relationship-type ``half_lives`` map).
+  Volatile events without an explicit expiry are stamped at write time;
+  an hourly maintenance sweep soft-deletes expired volatile events so
+  rebuilds drop their projections. Context-block ranking re-weights
+  facts by half-life age for configured types (no-op by default - the
+  hot read path pays nothing unless the formation opts in).
+- Contradiction audit (2c): knowledge-graph writes that conflict with or
+  supersede an existing exclusive fact now record ``fact.contradicted``
+  events (idempotent per fact pair, ``caused_by``-linked to the
+  extraction) plus a ``memory.fact.contradicted`` observability event.
+  Replay re-marks rows but never re-records audit events.
+- Rebuild & migration (2d): ``POST /memory/rebuild`` (admin) runs as a
+  background job by default (202 + job id, pollable at
+  ``GET /memory/rebuild/{job_id}``; ``background: false`` blocks) - this
+  backs ``muxi memory rebuild --user <id>``. ``POST /memory/backfill``
+  synthesizes idempotent ``source='legacy'`` events for pre-event-log
+  rows (KG entities/relationships, captain's log entries/lessons,
+  artifacts, orphan flat facts); ``rebuild`` accepts ``backfill: true``
+  to do both. ``POST /memory/forget`` is the GDPR flow: soft-delete a
+  source's events (reversible for the retention grace period; the
+  hard-purge worker then removes them), record the ``user.deletion``
+  audit event, and rebuild projections as if the source never existed.
+- Ops: per-user event-log size-cap alert
+  (``memory.events.retention.max_events_per_user``, alert-only per the
+  PRD's SQLite posture), projection lag alerts
+  (``memory.projections.lag_alert_threshold_seconds``), and new
+  observability events (``memory.projection.lagging``,
+  ``memory.event.expired``, ``memory.event.size_cap_exceeded``,
+  ``memory.fact.contradicted``, ``memory.backfill.started/completed``).
+  All new config keys fail-fast validated at load.
 
 ### Knowledge reasoning RAG - Method A tree retrieval (Phase 1)
 
