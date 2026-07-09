@@ -2,6 +2,49 @@
 
 ## [unreleased]
 
+### Knowledge reasoning RAG - Method B, hybrid mode, per-agent trees (Phases 2-5)
+
+Completes the knowledge-reasoning-rag PRD on top of Phase 1's Method A:
+
+- **Method B (`retrieval: tree-vector`)**: per-node chunk embeddings computed
+  at tree build through the unified embedding layer and scored at query time
+  with the PageIndex formula `NodeScore = (1/sqrt(N+1)) * sum(ChunkScore)` -
+  nodes are retrieved, chunks are scoring scaffolding; zero LLM calls per
+  query. Embeddings persist as a cache sidecar (`.tree.emb.jsonl`) keyed to
+  the embedding model, so a model swap recomputes vectors without an LLM
+  rebuild.
+- **`ScoringService`** (`reasoning/scoring_service.py`): standalone,
+  memory-agnostic `embed` / `score` / `aggregate_with_diminishing_returns`
+  primitive - the published cross-PRD contract that memory-revamp Layer 3
+  (hybrid search) consumes.
+- **Hybrid mode (`retrieval: hybrid`)**: Method A and B run in parallel,
+  results dedup-merge by node_id, and a sufficiency evaluator (dedicated
+  structured-output LLM call on `knowledge.tree.terminator_model`, resolved
+  through the model hierarchy, default: the tree model) decides whether to
+  fetch more via gap-topic scoring. Loop bounds: `tree.max_sufficiency_rounds`
+  (default 3) and `tree.max_fetched_nodes_pct` (default 50). Results carry a
+  `cost` metadata block (llm_calls / evaluator_rounds).
+- **Per-agent trees** (`agent_tree:` block on a source): one persistent tree
+  per source in `<formation>/.knowledge-trees/` (tree + KV + embeddings +
+  versioned `meta.json`), committable to the formation repo so deployments
+  load without rebuilding. Regeneration triggers: `manual` /
+  `on-source-change` (aggregate source MD5) / `on-formation-load`. Force
+  rebuild via the new admin endpoint `POST /v1/knowledge/rebuild` (the
+  runtime side of the CLI's `muxi knowledge rebuild`) or
+  `KnowledgeHandler.rebuild_agent_trees()`.
+- Multi-tree query results now merge round-robin by per-tree relevance rank
+  so one tree cannot crowd out another's top results; all reasoning LLM calls
+  pin explicit `max_tokens` so formation-level chat caps cannot truncate
+  structured outputs, and bypass the semantic response cache.
+- New observability events: `KNOWLEDGE_TREE_NODE_SELECTED`,
+  `KNOWLEDGE_TREE_HYBRID_QUEUED`, `KNOWLEDGE_TREE_SUFFICIENCY_EVALUATED`,
+  `KNOWLEDGE_TREE_HYBRID_TERMINATED_EARLY`,
+  `KNOWLEDGE_TREE_HYBRID_LOOP_CAPPED`, `KNOWLEDGE_AGENT_TREE_REGENERATED`.
+- New comparison bench (`bench/knowledge/`): vector vs A vs B vs hybrid on a
+  fixture corpus; contributor doc `contributing/knowledge-trees.md`. All
+  retrieval modes fall back to vector on failure; existing formations without
+  the new keys behave byte-identically.
+
 ### Knowledge reasoning RAG - Method A tree retrieval (Phase 1)
 
 Large knowledge files are now indexed as hierarchical trees navigated by an

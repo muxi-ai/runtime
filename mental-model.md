@@ -1410,21 +1410,39 @@ def model(self):
 **Gotcha:**  
 Before the fix, API keys weren't passed through the embedding pipeline, causing authentication failures. Now the formation explicitly passes `api_key` to memory constructors.
 
-### Knowledge Reasoning RAG (2026-07-09, Phase 1: Method A)
+### Knowledge Reasoning RAG (2026-07-09, Phases 1-5: A, B, hybrid, agent trees)
 
 **Location:** `src/muxi/runtime/formation/agents/knowledge/reasoning/`
-**PRD:** `engineering/prds/knowledge-reasoning-rag.md` (Phase 1 shipped; Method B,
-hybrid mode, and per-agent formation-level trees are later phases)
+**PRD:** `engineering/prds/knowledge-reasoning-rag.md` (all phases shipped; the
+Phase 4 stretch spike — unified scope-selection prompt subsuming Memory Revamp
+Layer 4 Step 2 — is deferred). Contributor doc: `contributing/knowledge-trees.md`.
 
-Large knowledge files get a **hierarchical tree index navigated by an LLM at
-query time** instead of vector chunking. Gate is per-file at ingestion:
+Large knowledge files get a **hierarchical tree index** instead of vector
+chunking. Gate is per-file at ingestion; explicit per-source `retrieval:`
+overrides it (`vector` / `tree` / `tree-vector` / `hybrid` — all four active):
 
 ```
-add_file -> file crosses knowledge.reasoning_threshold tokens (default 40000, 0 disables)
+add_file -> source declares agent_tree: -> ONE persistent per-source tree
+            (formation dir .knowledge-trees/, regenerate trigger decides rebuild)
+         -> else: file crosses knowledge.reasoning_threshold tokens (default
+            40000, 0 disables) OR declares an explicit tree-serving mode
          -> TreeBuilder (structure pass + LLM summary pass) -> TreeCache (disk)
-         -> handler._tree_indexes[abs_path] = TreeIndex     (NO vector chunks for this file)
+         -> [tree-vector|hybrid] per-node chunk embeddings via ScoringService
+            (chunk each node's KV raw, embed through the UEL, persist sidecar)
+         -> handler._tree_indexes[abs_path] = TreeIndex,
+            handler._tree_modes[abs_path] = mode  (NO vector chunks for this file)
    else  -> vector pipeline, byte-identical to before this feature
 ```
+
+Query dispatch per tree (`_tree_searcher_for`): `tree` -> TreeSearchA (one LLM
+call), `tree-vector` -> TreeSearchB (query embed + cosine per chunk, NodeScore
+= `(1/sqrt(N+1)) * sum(ChunkScore)` — nodes retrieved, chunks are scaffolding),
+`hybrid` -> TreeSearchHybrid (A+B via `asyncio.gather`, dedup by node_id with
+A's picks leading, then a sufficiency-evaluator loop on the terminator model:
+`{"enough_info", "gaps"}`; gaps expand via B scoring over unfetched nodes;
+bounds `tree.max_sufficiency_rounds` (3) and `tree.max_fetched_nodes_pct`
+(50)). Multi-tree results merge ROUND-ROBIN by per-tree relevance rank — plain
+concatenation let the first tree hog every `top_k` slot (found in e2e 6H2).
 
 **Modules:**
 - `types.py` — `TreeNode` / `TreeIndex` (compact tree JSON + separate node->raw
@@ -1439,55 +1457,99 @@ add_file -> file crosses knowledge.reasoning_threshold tokens (default 40000, 0 
   descendants own their spans. `count_tokens` uses tiktoken with a `len//4`
   fallback.
 - `tree_cache.py` — cache key `(file_path, file_md5)` ->
-  `<path_hash>_<md5>.tree.json` + `.tree.kv.jsonl` in the same cache dir as
-  the vector embedding caches. Same MD5 never rebuilds (zero LLM calls);
-  changed MD5 evicts stale entries; corrupt files are removed and treated as
-  a miss.
+  `<path_hash>_<md5>.tree.json` + `.tree.kv.jsonl` (+ `.tree.emb.jsonl` for
+  Method B: meta header with the embedding model, then one
+  `{node_id, vectors}` line per node) in the same cache dir as the vector
+  embedding caches. Same MD5 never rebuilds (zero LLM calls); changed MD5
+  evicts stale entries; a stale embedding model recomputes only the sidecar;
+  corrupt files are removed and treated as a miss.
 - `tree_search_a.py` — Method A: ONE LLM call with the compressed tree
   (titles + summaries only, never raw) + query -> `{"thinking", "node_list"}`;
-  selected node_ids resolve raw content from the KV. Hallucinated ids are
+  selected node_ids resolve raw content from the KV
+  (`TreeIndex.resolve_content`, shared by A/B/hybrid). Hallucinated ids are
   skipped; parent selections append children content up to a 6k-char cap.
+- `scoring_service.py` — **cross-PRD contract with memory-revamp Layer 3**:
+  standalone, memory-agnostic `ScoringService(embedder)` (slug through the UEL
+  or an injected async callable) with `embed` / `score` (cosine) /
+  `aggregate_with_diminishing_returns` (`(1/sqrt(N+1)) * sum`; empty -> 0.0).
+  Grouping semantics stay OUT of the service.
+- `tree_search_b.py` — Method B retriever + `build_node_chunk_embeddings`
+  (chunker injected by the handler wrapping DocumentChunkManager
+  strategy="fixed"; deterministic paragraph splitter as fallback). No LLM
+  calls at query time.
+- `tree_search_hybrid.py` — hybrid runner + `SufficiencyEvaluator`. Emits the
+  hybrid observability events and stamps a `cost` metadata block
+  (`llm_calls`/`evaluator_rounds`) on every result.
+- `agent_trees.py` — `AgentTreeStore`: `<formation_dir>/.knowledge-trees/
+  <source_id>.json|.kv.jsonl|.emb.jsonl|.meta.json` (meta: schema version,
+  aggregate `source_md5` over relpath:file_md5 pairs, build timestamp,
+  embedding model). Deterministic, committable to the formation repo (a
+  persisted 26-node tree reloads in ~0.5s). Triggers: `manual` (serve stale
+  until explicit rebuild), `on-source-change` (MD5 drift), `on-formation-load`.
 
 **Handler integration** (`knowledge/handler.py`): `_maybe_ingest_as_tree` in
 `add_file` (per-file inside directories too — tree-indexed files are excluded
-from the vector chunking pass), `_search_trees` in `search()` (tree results
-merged ahead of vector results, truncated to `top_k`), tree cleanup hooks in
-`remove_file` / `cleanup_deleted_sources`.
+from the vector chunking pass); `_ingest_agent_tree` runs FIRST for
+`agent_tree:` sources (one tree replaces both per-file trees and vector
+chunks; requires `formation_path`, passed from
+`overlord._configured_services`); `_search_trees` in `search()` dispatches
+per `_tree_modes` and round-robin-merges; `rebuild_agent_trees()` force-
+rebuilds (exposed as admin `POST /v1/knowledge/rebuild` — the runtime side of
+the CLI's `muxi knowledge rebuild`); tree cleanup hooks in `remove_file` /
+`cleanup_deleted_sources` also purge `.knowledge-trees/` files.
 
 **Model selection:** tree build + navigation use the agent's text model by
-default; `knowledge.tree.model` overrides via the hierarchical model-selection
-resolution (alias or `provider/model`, resolved in
-`agent._initialize_knowledge` through `overlord.resolve_model_override`).
-Validation is fail-fast at load (`config/validation.py`:
-`_validate_knowledge_reasoning_config`, `_validate_source_retrieval_mode`;
-per-source `retrieval:` accepts `vector`/`tree`, rejects the reserved
-`tree-vector`/`hybrid` until those phases ship).
+default; `knowledge.tree.model` overrides, and the hybrid evaluator resolves
+`knowledge.tree.terminator_model` the same way (alias or `provider/model` via
+`overlord.resolve_model_override`; default = tree model — MUXI ships the knob,
+not a price table). Method B sidecars record the knowledge embedding slug
+(`embedding_model_slug` through the handler) so a model swap recomputes only
+the vectors, never the tree/KV. Validation is fail-fast at load
+(`config/validation.py`: all four `retrieval:` modes accepted; `agent_tree`
+requires an explicit tree-serving mode, rejects url-sources, `regenerate` in
+manual/on-source-change/on-formation-load; `max_sufficiency_rounds` positive
+int, `max_fetched_nodes_pct` 1-100).
 
-**Failure isolation (pinned by `tests/unit/test_knowledge_reasoning.py`):**
+**Failure isolation (pinned by the `test_knowledge_*` unit suites):**
 - Build failure at ingestion -> vector pipeline + `KNOWLEDGE_TREE_BUILD_FAILED`
   + `KNOWLEDGE_TREE_FALLBACK_TO_VECTOR` (also emitted for the
   `tree.max_document_tokens` size cap and a missing tree model).
-- Navigation failure at query time -> vector results still serve the turn
-  (fallback event with `phase: query`); never a failed turn.
+- Method B embedding failure at ingest -> tree serves Method A only (never
+  fails ingestion); at query time B failure falls back like A.
+- In hybrid, one method failing degrades to the other's results; BOTH failing
+  raises into the handler's vector fallback; sufficiency-evaluator failure
+  serves the current fetched set.
+- `agent_tree:` without a known formation dir -> per-document pipeline with a
+  warning event; agent-tree build failure -> vector.
 - No tree model (`tree_llm=None`, e.g. handler used outside an agent) or
   `reasoning_threshold: 0` -> fully inert, vector write sequence identical.
 
-**Gotchas (learned in e2e 6G1/6G2):**
-1. **LLM semantic cache poisons navigation.** Navigation prompts over the same
-   tree differ only by the short query, so OneLLM's semantic cache matches
-   them as "similar" and replays node selections from unrelated queries. Both
-   reasoning LLM calls pass `caching=False` (same class of bug as user-info
-   extraction above).
+**Gotchas (learned in e2e 6G1/6G2/6H1/6H2):**
+1. **LLM semantic cache poisons navigation AND sufficiency.** Prompts over the
+   same tree differ only by the short query, so OneLLM's semantic cache
+   matches them as "similar" and replays node selections/verdicts from
+   unrelated queries. EVERY reasoning LLM call passes `caching=False` (same
+   class of bug as user-info extraction above).
 2. **`temperature=0.0` is coerced to the instance default (0.7)** by
    `LLM.chat`'s falsy check — the reasoning calls use `0.1`.
 3. **Summaries must carry identifiers verbatim** (part names, codes, values);
    generic summaries make the navigator miss fact lookups.
+4. **Formation-level `llm.settings.max_tokens` truncates structured outputs**
+   — a 400-token cap cut the 40-node batch-summary JSON mid-object and every
+   tree build silently fell back to vector (found via bench/knowledge). All
+   reasoning calls now pin explicit `max_tokens`.
+5. **The workflow planner hijacks "retrieve X and Y from the handbook"
+   phrasing**: it decomposes into steps delegated to the knowledge-less
+   generalist instead of answering from the injected context. E2E chat checks
+   ask one simple factual question.
 
-**E2E:** `e2e/tests/6_knowledge/test_6g1_tree_reasoning_large_doc.py`
-(tree indexing + Method A retrieval + chat grounding) and
-`test_6g2_tree_vector_coexistence.py` (tree + vector sources in one agent),
-both on `formations/formation-tree-reasoning/` (the 6f slot went to the
-remote-knowledge-sources tests that merged concurrently).
+**E2E:** `test_6g1`/`test_6g2` (Method A, `formations/formation-tree-reasoning/`),
+`test_6h1_tree_vector_scoring.py` (Method B: node-scoped embeddings, no
+query-time LLM) and `test_6h2_hybrid_retrieval.py` (hybrid + persistent agent
+tree + on-source-change reuse across loads), both on
+`formations/formation-tree-hybrid/`. **Bench:** `bench/knowledge/` compares
+vector vs A vs B vs hybrid on a fixture corpus (last run: 8/8 hits for all
+three tree modes, 0/8 for flat vector on the same buried-fact questions).
 
 ---
 
