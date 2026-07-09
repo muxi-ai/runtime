@@ -342,6 +342,24 @@ class Agent:
                 if resolved is not None:
                     tree_llm = resolved
 
+            # Resolve the hybrid sufficiency evaluator ("terminator") model
+            # through the same hierarchy: ``knowledge.tree.terminator_model``
+            # (alias or "provider/model") when declared, otherwise the tree
+            # model. MUXI ships the mechanism, not a price table: picking a
+            # cheap terminator is the formation author's call via this knob.
+            terminator_llm = None
+            terminator_ref = (knowledge_config.get("tree") or {}).get("terminator_model")
+            if terminator_ref and hasattr(self.overlord, "resolve_model_override"):
+                terminator_llm = await self.overlord.resolve_model_override(
+                    terminator_ref, source="knowledge_tree_terminator"
+                )
+
+            # Formation directory for per-agent tree persistence
+            # (.knowledge-trees/). Absent outside a server-managed
+            # formation; the handler then falls back to per-document trees.
+            configured_services = getattr(self.overlord, "_configured_services", None) or {}
+            formation_path = configured_services.get("formation_path")
+
             # Create knowledge handler using the factory method with formation config.
             # ``working_memory`` was already resolved above when computing the
             # embedding slug; reuse it instead of re-fetching from the overlord.
@@ -354,6 +372,9 @@ class Agent:
                 auto_inject_knowledge=True,
                 formation_id=formation_id,  # Pass formation_id explicitly
                 tree_llm=tree_llm,  # Reasoning-RAG tree build/navigation model
+                terminator_llm=terminator_llm,  # Hybrid sufficiency evaluator model
+                formation_path=formation_path,  # Per-agent tree persistence dir
+                embedding_model_slug=embedding_slug,  # Method B sidecar invalidation
             )
 
             # Log successful knowledge initialization
