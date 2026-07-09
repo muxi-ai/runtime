@@ -209,6 +209,50 @@ class TestAgentTreeStore:
         # on-formation-load: always
         assert store.needs_rebuild("regs", "md5-one", "on-formation-load") is True
 
+    def test_failed_resave_preserves_previous_files(self, tmp_path, monkeypatch):
+        """OSError mid-save must leave the prior persisted tree intact.
+
+        Greptile finding on PR #263: a failed second save used to remove
+        ALL files for the source, silently losing persistence until the
+        next restart. The atomic write-temp-then-replace save only swaps
+        files in after every stage succeeded.
+        """
+        from muxi.runtime.formation.agents.knowledge.reasoning import agent_trees
+
+        store = AgentTreeStore(str(tmp_path))
+        tree_v1 = self._build_tree()
+        tree_v1.chunk_embeddings = {"0001": [[0.1, 0.2]]}
+        tree_v1.embedding_model = "test/model-v1"
+        store.save(tree_v1, "regs", "md5-v1")
+        assert store.load("regs") is not None
+
+        # Second save fails mid-write (embeddings stage).
+        def _boom(path, tree):
+            raise OSError("disk full")
+
+        monkeypatch.setattr(agent_trees, "write_embeddings_file", _boom)
+        tree_v2 = self._build_tree()
+        tree_v2.chunk_embeddings = {"0001": [[0.9, 0.9]]}
+        store.save(tree_v2, "regs", "md5-v2")  # must not raise
+
+        # v1 stays fully intact and loadable; no temp files linger.
+        meta = store.load_meta("regs")
+        assert meta is not None and meta["source_md5"] == "md5-v1"
+        loaded = store.load("regs")
+        assert loaded is not None
+        assert loaded.chunk_embeddings == {"0001": [[0.1, 0.2]]}
+        assert not list((tmp_path / ".knowledge-trees").glob("*.tmp"))
+
+    def test_save_is_staged_before_replacing(self, tmp_path):
+        """A successful save leaves no .tmp staging files behind."""
+        store = AgentTreeStore(str(tmp_path))
+        tree = self._build_tree()
+        tree.chunk_embeddings = {"0001": [[0.5]]}
+        store.save(tree, "regs", "md5-one")
+        files = sorted(p.name for p in (tmp_path / ".knowledge-trees").iterdir())
+        assert not any(name.endswith(".tmp") for name in files)
+        assert store.load("regs") is not None
+
     def test_remove_drops_all_files(self, tmp_path):
         store = AgentTreeStore(str(tmp_path))
         tree = self._build_tree()
@@ -284,6 +328,25 @@ class TestHandlerAgentTrees:
         handler = make_handler(tmp_path, tree_llm=llm, formation_path=formation_dir)
         ingest(handler, make_source(doc, regenerate="on-formation-load"))
         assert llm.calls > 0, "on-formation-load must rebuild every load"
+
+    def test_ingest_persists_exactly_once(self, tmp_path, monkeypatch):
+        """One store.save per build - the second unconditional save was the
+        window where a transient failure could clobber a good write."""
+        formation_dir, doc = write_corpus(tmp_path)
+        handler = make_handler(tmp_path, tree_llm=FakeLLM(), formation_path=formation_dir)
+        store = handler._get_agent_tree_store()
+        calls = []
+        original_save = store.save
+
+        def counting_save(tree, source_id, source_md5):
+            calls.append(source_id)
+            return original_save(tree, source_id, source_md5)
+
+        monkeypatch.setattr(store, "save", counting_save)
+        nodes = ingest(handler, make_source(doc, retrieval="hybrid"))
+
+        assert nodes and nodes > 0
+        assert len(calls) == 1, f"expected exactly one save, got {calls}"
 
     def test_search_returns_agent_tree_source_type(self, tmp_path):
         formation_dir, doc = write_corpus(tmp_path)

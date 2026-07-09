@@ -60,6 +60,19 @@ _EMB_SUFFIX = ".emb.jsonl"
 _META_SUFFIX = ".meta.json"
 
 
+def _write_text(path: str, content: str) -> None:
+    """Write ``content`` to ``path`` (staging helper for atomic saves)."""
+    with open(path, "w", encoding="utf-8") as f:
+        f.write(content)
+
+
+def _write_kv(path: str, kv: Dict[str, str]) -> None:
+    """Write a node->raw KV mapping as line-delimited JSON."""
+    with open(path, "w", encoding="utf-8") as f:
+        for node_id, raw in kv.items():
+            f.write(json.dumps({"node_id": node_id, "raw": raw}) + "\n")
+
+
 def source_id_for(source_name: str) -> str:
     """Slugify a knowledge source name into a filesystem-safe source_id."""
     slug = re.sub(r"[^A-Za-z0-9._-]+", "-", source_name.strip()).strip("-.")
@@ -155,19 +168,34 @@ class AgentTreeStore:
             return None
 
     def save(self, tree: TreeIndex, source_id: str, source_md5: str) -> None:
-        """Persist ``tree`` + meta.json for ``source_id``; best-effort."""
-        os.makedirs(self.trees_dir, exist_ok=True)
+        """
+        Persist ``tree`` + meta.json for ``source_id``; best-effort.
+
+        Write-temp-then-replace per file (the remote-knowledge
+        ``atomic_download`` pattern): every file is staged as a ``.tmp``
+        sibling first and only swapped in once ALL stages succeeded. A
+        failure at any point removes the temp files and leaves the
+        previously persisted tree fully intact - a failed re-save must
+        never destroy a good earlier save.
+        """
         base = self._base(source_id)
+        temp_suffix = ".tmp"
+        staged: list = []  # (temp_path, final_path)
         try:
-            with open(base + _TREE_SUFFIX, "w", encoding="utf-8") as f:
-                f.write(json.dumps(tree.to_json_dict(include_kv=False)))
-            with open(base + _KV_SUFFIX, "w", encoding="utf-8") as f:
-                for node_id, raw in tree.kv.items():
-                    f.write(json.dumps({"node_id": node_id, "raw": raw}) + "\n")
+            os.makedirs(self.trees_dir, exist_ok=True)
+
+            def _stage(suffix: str, writer) -> None:
+                temp_path = base + suffix + temp_suffix
+                writer(temp_path)
+                staged.append((temp_path, base + suffix))
+
+            _stage(
+                _TREE_SUFFIX,
+                lambda path: _write_text(path, json.dumps(tree.to_json_dict(include_kv=False))),
+            )
+            _stage(_KV_SUFFIX, lambda path: _write_kv(path, tree.kv))
             if tree.chunk_embeddings:
-                write_embeddings_file(base + _EMB_SUFFIX, tree)
-            elif os.path.exists(base + _EMB_SUFFIX):
-                os.remove(base + _EMB_SUFFIX)
+                _stage(_EMB_SUFFIX, lambda path: write_embeddings_file(path, tree))
             meta = {
                 "schema_version": TREE_SCHEMA_VERSION,
                 "source_id": source_id,
@@ -178,10 +206,28 @@ class AgentTreeStore:
                 "tree_token_count": tree.tree_token_count,
                 "embedding_model": tree.embedding_model or "",
             }
-            with open(base + _META_SUFFIX, "w", encoding="utf-8") as f:
-                f.write(json.dumps(meta))
+            _stage(_META_SUFFIX, lambda path: _write_text(path, json.dumps(meta)))
+
+            # All stages written - swap them in. os.replace is atomic on
+            # the same filesystem, so readers never observe a torn file.
+            for temp_path, final_path in staged:
+                os.replace(temp_path, final_path)
+            staged = []
+            if not tree.chunk_embeddings:
+                # A tree that lost its embeddings (e.g. mode downgraded)
+                # must not serve a stale sidecar.
+                try:
+                    os.remove(base + _EMB_SUFFIX)
+                except OSError:
+                    pass
         except OSError:
-            self.remove(source_id)  # drop partials; never fail the caller
+            # Never fail the caller and never touch the previously
+            # persisted files - just drop the staged temp files.
+            for temp_path, _ in staged:
+                try:
+                    os.remove(temp_path)
+                except OSError:
+                    pass
 
     def remove(self, source_id: str) -> None:
         """Remove all persisted files for ``source_id`` (best-effort)."""

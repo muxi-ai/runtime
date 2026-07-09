@@ -337,6 +337,45 @@ class TestHandlerTreeVectorMode:
         tree = next(iter(handler._tree_indexes.values()))
         assert tree.chunk_embeddings
 
+    def test_hybrid_without_tree_llm_degrades_to_method_b(self, tmp_path):
+        """A hybrid tree with pre-built embeddings but no tree model must
+        serve Method B results, not silently fall back to vector.
+
+        Greptile finding on PR #263: `_tree_searcher_for("hybrid")` used to
+        return None when `tree_llm` was unavailable, wasting the embeddings
+        built at ingestion.
+        """
+        tree = build_tree()  # embeddings included
+        handler = make_handler(tmp_path, tree_llm=None)
+        handler._generate_embeddings_fn = keyword_embeddings_fn
+        handler._tree_indexes["/tmp/manual.md"] = tree
+        handler._tree_modes["/tmp/manual.md"] = "hybrid"
+
+        results = asyncio.run(handler.search("how do I reset the blinking light"))
+
+        b_results = [r for r in results if r["metadata"].get("retrieval_method") == "tree_b"]
+        assert b_results, "hybrid must degrade to Method B, not vector"
+        assert any("RESET-CODE-77" in r["content"] for r in b_results)
+        # Degrade warning is throttled to once per (mode, cause)
+        assert handler._tree_degrade_warned == {"hybrid:no_tree_model"}
+        asyncio.run(handler.search("install firmware"))
+        assert len(handler._tree_degrade_warned) == 1
+
+    def test_hybrid_without_embeddings_degrades_to_method_a(self, tmp_path):
+        """The other side of the ladder: hybrid with a tree model but no
+        embedding function serves Method A."""
+        llm = FakeLLM()
+        handler = make_handler(tmp_path, tree_llm=llm)
+        searcher = handler._tree_searcher_for("hybrid")
+        from muxi.runtime.formation.agents.knowledge.reasoning import TreeSearchA
+
+        assert isinstance(searcher, TreeSearchA)
+        assert handler._tree_degrade_warned == {"hybrid:no_embedding_function"}
+
+    def test_hybrid_with_neither_dependency_falls_back_to_vector(self, tmp_path):
+        handler = make_handler(tmp_path, tree_llm=None)
+        assert handler._tree_searcher_for("hybrid") is None
+
     def test_embedding_failure_degrades_to_method_a(self, tmp_path):
         llm = FakeLLM()
         handler = make_handler(

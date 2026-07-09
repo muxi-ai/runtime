@@ -234,6 +234,8 @@ class KnowledgeHandler:
         # from the handler's embedding function; None until then).
         self._scoring_service: Optional[ScoringService] = None
         self._embedding_model_slug = embedding_model_slug or ""
+        # Once-per-(mode, cause) throttle for query-time degrade warnings.
+        self._tree_degrade_warned: set = set()
         # Keyed locks serializing tree check-and-build per (path, md5) so
         # concurrent ingestion of the same file never fires duplicate LLM
         # builds (same pattern as the artifact version-chain locks in
@@ -792,7 +794,10 @@ class KnowledgeHandler:
         if not store.needs_rebuild(source_id, source_md5, regenerate):
             tree = store.load(source_id)
             if tree is not None:
-                await self._finalize_agent_tree(tree, knowledge_source, source_id, source_md5)
+                if await self._finalize_agent_tree(tree, knowledge_source):
+                    # Embeddings were recomputed (mode upgrade or model
+                    # swap) - persist the refreshed tree once.
+                    store.save(tree, source_id, source_md5)
                 observability.observe(
                     event_type=observability.SystemEvents.KNOWLEDGE_TREE_BUILD_COMPLETED,
                     level=observability.EventLevel.DEBUG,
@@ -912,7 +917,8 @@ class KnowledgeHandler:
             return None
 
         tree.scope = "agent"
-        await self._finalize_agent_tree(tree, knowledge_source, source_id, source_md5)
+        await self._finalize_agent_tree(tree, knowledge_source)
+        # Single persistence point per build (finalize never saves).
         store.save(tree, source_id, source_md5)
         observability.observe(
             event_type=observability.SystemEvents.KNOWLEDGE_AGENT_TREE_REGENERATED,
@@ -931,12 +937,18 @@ class KnowledgeHandler:
         )
         return tree.node_count
 
-    async def _finalize_agent_tree(
-        self, tree, knowledge_source, source_id: str, source_md5: str
-    ) -> None:
-        """Register an agent tree and ensure Method B embeddings when needed."""
+    async def _finalize_agent_tree(self, tree, knowledge_source) -> bool:
+        """
+        Register an agent tree and ensure Method B embeddings when needed.
+
+        Does NOT persist: the caller owns the single ``store.save`` so a
+        tree is never written twice per ingestion (a second save failing
+        mid-write must not be able to clobber a good first save). Returns
+        True when embeddings were (re)computed and the tree needs saving.
+        """
         source_path = os.path.abspath(knowledge_source.path)
         mode = self._effective_tree_mode(knowledge_source)
+        embeddings_updated = False
         if mode in EMBEDDING_RETRIEVAL_MODES:
             scoring = self._get_scoring_service()
             current_model = (self._embedding_model_slug or scoring.model_slug) if scoring else None
@@ -948,9 +960,7 @@ class KnowledgeHandler:
                     await build_node_chunk_embeddings(tree, scoring, chunker=self._node_chunker)
                     if current_model:
                         tree.embedding_model = current_model
-                    store = self._get_agent_tree_store()
-                    if store is not None:
-                        store.save(tree, source_id, source_md5)
+                    embeddings_updated = True
                 except Exception as e:
                     observability.observe(
                         event_type=observability.SystemEvents.KNOWLEDGE_TREE_FALLBACK_TO_VECTOR,
@@ -965,6 +975,7 @@ class KnowledgeHandler:
                     )
         self._tree_indexes[source_path] = tree
         self._tree_modes[source_path] = mode
+        return embeddings_updated
 
     async def rebuild_agent_trees(self, source_id: Optional[str] = None) -> Dict[str, Any]:
         """
@@ -1002,23 +1013,60 @@ class KnowledgeHandler:
     def _tree_searcher_for(self, mode: str):
         """
         Build the searcher serving a tree's retrieval mode, or None when
-        the mode's dependencies are unavailable (Method B without an
-        embedding function degrades to Method A; no tree model at all
-        degrades to None -> vector-only).
+        the mode's dependencies are unavailable.
+
+        Degradation ladder (never waste a working method):
+        - hybrid without a tree model -> Method B only (embeddings were
+          already built at ingestion; dropping to vector would waste them)
+        - hybrid or tree-vector without an embedding function -> Method A
+        - no tree model AND no embeddings -> None (vector serves the turn)
         """
         scoring = self._get_scoring_service() if mode in EMBEDDING_RETRIEVAL_MODES else None
         if mode == "tree-vector" and scoring is not None:
             return TreeSearchB(scoring)
-        if mode == "hybrid" and scoring is not None and self.tree_llm is not None:
-            return TreeSearchHybrid(
-                llm=self.tree_llm,
-                scoring_service=scoring,
-                terminator_llm=self.terminator_llm,
-                settings=self._tree_settings,
+        if mode == "hybrid" and scoring is not None:
+            if self.tree_llm is not None:
+                return TreeSearchHybrid(
+                    llm=self.tree_llm,
+                    scoring_service=scoring,
+                    terminator_llm=self.terminator_llm,
+                    settings=self._tree_settings,
+                )
+            self._warn_tree_degrade_once(
+                mode,
+                cause="no_tree_model",
+                description="Hybrid retrieval degraded: no tree model - serving Method B only",
             )
+            return TreeSearchB(scoring)
         if self.tree_llm is not None:
+            if mode in EMBEDDING_RETRIEVAL_MODES:
+                self._warn_tree_degrade_once(
+                    mode,
+                    cause="no_embedding_function",
+                    description=(
+                        f"{mode} retrieval degraded: no embedding function - "
+                        "serving Method A only"
+                    ),
+                )
             return TreeSearchA(self.tree_llm)
         return None
+
+    def _warn_tree_degrade_once(self, mode: str, cause: str, description: str) -> None:
+        """Emit one degrade warning per (mode, cause) per handler lifetime.
+
+        ``_tree_searcher_for`` runs on every query; unthrottled events here
+        would spam the stream with the same fact each turn.
+        """
+        key = f"{mode}:{cause}"
+        if key in self._tree_degrade_warned:
+            return
+        self._tree_degrade_warned.add(key)
+        observability.observe(
+            event_type=observability.ErrorEvents.WARNING,
+            level=observability.EventLevel.WARNING,
+            description=description,
+            data={"retrieval_mode": mode, "cause": cause, "phase": "query"},
+        )
 
     async def _search_trees(self, query: str, top_k: int) -> List[Dict[str, Any]]:
         """
