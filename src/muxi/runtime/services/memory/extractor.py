@@ -698,6 +698,11 @@ class MemoryExtractor:
                 caused_by=caused_by_event_id,
                 agent_id=memory_metadata["agent_id"],
             )
+            if event is not None and getattr(memory_events, "event_first", False):
+                # Event-first cutover (flag-gated, default off): the append
+                # is the write; the substrate applies the projection.
+                await memory_events.apply_event(event)
+                return
 
         await apply_fact_event(
             self.overlord.long_term_memory,

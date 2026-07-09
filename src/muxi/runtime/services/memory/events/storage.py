@@ -27,7 +27,7 @@
 from datetime import datetime, timedelta
 from typing import Any, Dict, List, Optional, Tuple
 
-from sqlalchemy import delete as sql_delete, select
+from sqlalchemy import delete as sql_delete, func, select
 from sqlalchemy.exc import IntegrityError
 
 from ....utils.datetime_utils import utc_now_naive
@@ -198,6 +198,43 @@ class MemoryEventStorage:
                 return None
             return event.to_dict()
 
+    async def get_event_by_public_id(
+        self, user_id: str, public_id: str
+    ) -> Optional[Dict[str, Any]]:
+        """Return the user's event with the given public id, or None."""
+        async with self.db_manager.get_async_session() as session:
+            stmt = select(MemoryEvent).filter_by(
+                user_id=str(user_id), formation_id=self.formation_id, public_id=public_id
+            )
+            event = (await session.execute(stmt)).scalars().first()
+            return event.to_dict() if event else None
+
+    async def list_event_user_ids(self) -> List[str]:
+        """Distinct user ids with events in this formation's log."""
+        async with self.db_manager.get_async_session() as session:
+            stmt = select(MemoryEvent.user_id).filter_by(formation_id=self.formation_id).distinct()
+            return [str(row[0]) for row in (await session.execute(stmt)).all()]
+
+    async def count_events(self, user_id: str, include_deleted: bool = True) -> int:
+        """Number of events in a user's log (size-cap accounting)."""
+        async with self.db_manager.get_async_session() as session:
+            stmt = (
+                select(func.count())
+                .select_from(MemoryEvent)
+                .filter_by(user_id=str(user_id), formation_id=self.formation_id)
+            )
+            if not include_deleted:
+                stmt = stmt.filter(MemoryEvent.deleted_at.is_(None))
+            return int((await session.execute(stmt)).scalar() or 0)
+
+    async def max_event_id(self, user_id: Optional[str] = None) -> int:
+        """Highest event id in the log (0 when empty); optionally per user."""
+        async with self.db_manager.get_async_session() as session:
+            stmt = select(func.max(MemoryEvent.id)).filter_by(formation_id=self.formation_id)
+            if user_id is not None:
+                stmt = stmt.filter_by(user_id=str(user_id))
+            return int((await session.execute(stmt)).scalar() or 0)
+
     async def list_events(
         self,
         user_id: str,
@@ -253,6 +290,35 @@ class MemoryEventStorage:
                 marked += 1
             await session.flush()
         return marked
+
+    async def expire_volatile(self, now: Optional[datetime] = None) -> int:
+        """
+        Soft-delete live volatile events past their ``expires_at``.
+
+        The expiry worker's write half (PRD "Decay Model"): once expired,
+        a volatile event is filtered from replay listings exactly like a
+        forgotten event, so the next rebuild drops whatever it projected.
+        The soft-delete keeps the audit trail until the retention hard
+        purge removes the row. Returns the number of events expired.
+        """
+        now = now or utc_now_naive()
+        expired = 0
+        async with self.db_manager.get_async_session() as session:
+            stmt = (
+                select(MemoryEvent)
+                .filter_by(formation_id=self.formation_id)
+                .filter(
+                    MemoryEvent.expires_at.is_not(None),
+                    MemoryEvent.expires_at <= now,
+                    MemoryEvent.deleted_at.is_(None),
+                )
+            )
+            for event in (await session.execute(stmt)).scalars().all():
+                event.deleted_at = now
+                event.deleted_reason = "expired"
+                expired += 1
+            await session.flush()
+        return expired
 
     async def hard_purge(self, grace_period_days: int) -> int:
         """

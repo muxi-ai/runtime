@@ -44,6 +44,111 @@ Completes the knowledge-reasoning-rag PRD on top of Phase 1's Method A:
   fixture corpus; contributor doc `contributing/knowledge-trees.md`. All
   retrieval modes fall back to vector on failure; existing formations without
   the new keys behave byte-identically.
+### Memory revamp phases 3-5 - context optimization, knowledge index, lint
+
+The memory system's read-path and lifecycle layers on top of the Phase 1-2
+knowledge graph and captain's log (memory-revamp PRD; Phase 6 hybrid search
+stays deferred pending benchmark evidence):
+
+- Pre-compaction flush (Phase 3): working-memory FIFO eviction no longer
+  silently loses conversational context. A new eviction listener hook on
+  `WorkingMemory` hands at-risk buffer items to a silent LLM turn - at the
+  `memory.compaction.flush_threshold` (default 0.80) crossing and again as
+  an eviction-time safety net - which digests them through the captain's
+  log pipeline (entry + source lineage + lessons + graph facts) before the
+  buffer drops them. Best-effort and failure-isolated: a failed flush never
+  blocks eviction or a chat turn. `flush_enabled: false` is byte-identical
+  to the previous behavior (pinned by unit test).
+- Cache-TTL context pruning (Phase 3): when a session resumes after the
+  provider prompt-cache window (`memory.pruning.mode: cache-ttl`, default
+  TTL 300s), stale tool results and oversized turns are soft-trimmed
+  (first/last 1500 chars) or hard-cleared from the assembled history; the
+  newest `keep_last_n_tool_results` stay intact. Inert when unconfigured:
+  no `memory.pruning` block means no pruner is constructed.
+- Knowledge index (Phase 4): a <=300-token navigable catalog of what exists
+  in memory (entities, captain's log span, artifact manifest via the
+  artifact memory service - the seam artifact-memory Phase 2 rides - and
+  lint-flagged knowledge gaps), cached per user, persisted in
+  `system_config` (`memory_index:{user_id}`), and injected at retrieval
+  start in both context representations. Regenerates on log entries,
+  artifact saves, entity-count jumps past `entity_count_threshold`, lint
+  runs, and 24h staleness; truncates per section with `[+N more]` under the
+  `max_tokens` cap. Index failures never break a turn.
+- Memory lint (Phase 5): a background audit (weekly by default, on demand
+  via `run_lint` / admin `POST /memory/lint`) following the shared
+  background-loop lifecycle (started beside the scheduler, cancelled on
+  shutdown, failure-isolated per run and per user). Flags conflicted facts
+  unresolved past `conflict_resolution_days` and captain's log gaps > 7
+  days, hard-deletes superseded facts past the retention window, removes
+  orphaned relationships (`orphan_cleanup`), flags artifacts unaccessed for
+  `stale_artifact_days`, and force-regenerates a stale index. Findings feed
+  back into the knowledge index as knowledge gaps. Inert when unconfigured:
+  only constructed when the formation declares a `memory.lint` block.
+- All four new config sections (`memory.compaction`, `memory.pruning`,
+  `memory.index`, `memory.lint`) fail-fast validate at load time. New
+  observability events: `MEMORY_PRECOMPACTION_FLUSH_*`,
+  `MEMORY_CONTEXT_PRUNED`, `MEMORY_INDEX_*`, `MEMORY_LINT_*` (event
+  validation stays 100%). New e2e: `test_2x1_memory_revamp_phases_3_5.py`
+  (flush surviving real eviction, index injection observable in a real
+  turn, on-demand lint).
+### Memory event substrate - projections, provenance, rebuild (Phases 2b-2d)
+
+The immutable memory event log (memory-event-substrate PRD) now covers the
+full write-path story on top of the shipped core log + dual-write:
+
+- Incremental projection builders (2b): per-(projection, user) cursors in
+  ``projection_checkpoints`` drive ``project_pending`` (catch a cursor up
+  to the log tail; idempotent, poison events are skipped and reconciled by
+  rebuild) and ``apply_event`` (project one just-appended event). A new
+  artifact-metadata projector rebuilds ``artifacts`` rows from
+  ``artifact.saved`` events (v2 payloads carry the full metadata; v1
+  events are reconstructed deterministically - builders handle every
+  historical payload version); blobs are never touched and pre-substrate
+  rows survive resets.
+- Event-first cutover groundwork (Phase C, flag-gated, DEFAULT OFF):
+  ``memory.events.event_first: true`` makes the extractor, knowledge
+  graph, captain's log, ingestion, and shared-scope write paths append
+  the event and derive the projection through the substrate (synchronous
+  apply + background applier as crash recovery, with cursor snapshots
+  guarding dual-written history). Dual-write remains the default until
+  cutover.
+- Provenance (2c): ``GET /v1/memories/provenance?entity=X`` answers "why
+  do you think X?" - the knowledge graph entity, every fact touching it
+  (contradicted/superseded included), and per-fact causation chains from
+  the event log back to the originating interaction turn or ingestion
+  item. ``?event_id=`` traces a single event. The ``artifacts`` table
+  gains an additive ``derived_from_event_id`` provenance column.
+- Decay at query time (2c): ``memory.decay`` settings (default half-life
+  180d, volatile TTL 24h, per-relationship-type ``half_lives`` map).
+  Volatile events without an explicit expiry are stamped at write time;
+  an hourly maintenance sweep soft-deletes expired volatile events so
+  rebuilds drop their projections. Context-block ranking re-weights
+  facts by half-life age for configured types (no-op by default - the
+  hot read path pays nothing unless the formation opts in).
+- Contradiction audit (2c): knowledge-graph writes that conflict with or
+  supersede an existing exclusive fact now record ``fact.contradicted``
+  events (idempotent per fact pair, ``caused_by``-linked to the
+  extraction) plus a ``memory.fact.contradicted`` observability event.
+  Replay re-marks rows but never re-records audit events.
+- Rebuild & migration (2d): ``POST /memory/rebuild`` (admin) runs as a
+  background job by default (202 + job id, pollable at
+  ``GET /memory/rebuild/{job_id}``; ``background: false`` blocks) - this
+  backs ``muxi memory rebuild --user <id>``. ``POST /memory/backfill``
+  synthesizes idempotent ``source='legacy'`` events for pre-event-log
+  rows (KG entities/relationships, captain's log entries/lessons,
+  artifacts, orphan flat facts); ``rebuild`` accepts ``backfill: true``
+  to do both. ``POST /memory/forget`` is the GDPR flow: soft-delete a
+  source's events (reversible for the retention grace period; the
+  hard-purge worker then removes them), record the ``user.deletion``
+  audit event, and rebuild projections as if the source never existed.
+- Ops: per-user event-log size-cap alert
+  (``memory.events.retention.max_events_per_user``, alert-only per the
+  PRD's SQLite posture), projection lag alerts
+  (``memory.projections.lag_alert_threshold_seconds``), and new
+  observability events (``memory.projection.lagging``,
+  ``memory.event.expired``, ``memory.event.size_cap_exceeded``,
+  ``memory.fact.contradicted``, ``memory.backfill.started/completed``).
+  All new config keys fail-fast validated at load.
 
 ### Knowledge reasoning RAG - Method A tree retrieval (Phase 1)
 

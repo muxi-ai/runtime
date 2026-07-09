@@ -1551,6 +1551,213 @@ tree + on-source-change reuse across loads), both on
 vector vs A vs B vs hybrid on a fixture corpus (last run: 8/8 hits for all
 three tree modes, 0/8 for flat vector on the same buried-fact questions).
 
+### Memory Revamp Phases 3-5 (2026-07-09): Context Optimization, Knowledge Index, Lint
+
+**PRD:** `engineering/prds/memory-revamp.md` (Phases 1-2 shipped as KG +
+Captain's Log; Phase 6 Hybrid Search is deferred pending benchmark evidence)
+
+Four read-path/lifecycle services on top of the Phase 1-2 write pipeline:
+
+**Pre-compaction flush** (`services/memory/flush.py`,
+`PreCompactionFlushService`): the working-memory buffer is bounded; FIFO
+cleanup silently dropped the oldest items when it filled before the periodic
+Captain's Log digest ran. `WorkingMemory.set_eviction_listener(listener,
+flush_threshold)` is the additive hook: `check_memory_usage_and_cleanup`
+notifies the listener (a) when estimated usage crosses
+`flush_threshold * max_memory_mb` (default 0.80) with the oldest ~25% of
+buffer-namespace items, and (b) at eviction time with any not-yet-flushed
+items (snapshotted BEFORE the deque drops them). Items are marked
+`_memory_flushed` in metadata so nothing flushes twice. The listener runs on
+the FIFO daemon thread, so the flush service bridges to the formation loop
+via `run_coroutine_threadsafe` and runs the **silent turn**: an LLM digest
+outside the user-visible conversation, through
+`CaptainsLogService.digest_turns()` (new public wrapper over `_digest_user`)
+— one pass writes the log entry, buffer-item source lineage, lessons, and
+the digest's KG facts. Best-effort by design: a failed flush never re-queues
+(the items leave the buffer regardless) and never blocks eviction. Wired in
+`overlord._initialize_context_optimization()` (startup, after the other
+memory loops); config `memory.compaction.flush_enabled` (default true) /
+`flush_threshold`. `flush_enabled: false` leaves the listener unset —
+byte-identical to pre-feature behavior (pinned by unit test).
+
+**Cache-TTL pruning** (`services/memory/pruning.py`, `ContextPruner`):
+providers cache prompt prefixes ~5 minutes; resuming an idle session
+re-caches old bulky content at full cost. When a `(user, session)` has been
+idle past `cache_ttl_seconds`, the pruner trims prunable messages (role
+"tool", or content over `soft_trim_max_chars`) from the assembled buffer
+turns — soft trim keeps the first/last 1500 chars around a truncation
+marker; `strategy: hard_clear` replaces the body with "[Previous output
+cleared]". The newest `keep_last_n_tool_results` prunable messages are
+always preserved. Modes: `never` / `cache-ttl` / `always`. **Inert when
+unconfigured:** the Overlord only constructs a pruner when `memory.pruning`
+exists; applied in `_build_clean_chat_context` right after the buffer-turn
+fetch, failure-isolated (any error returns the original turns).
+
+**Knowledge index** (`services/memory/index.py`, `KnowledgeIndexService`,
+`overlord.memory_index`): a <=300-token navigable catalog of what exists in
+memory (active entities, captain's log count/span/most-recent, artifact
+manifest via `ArtifactMemoryService.list_artifacts` — the seam
+artifact-memory Phase 2 rides — and "knowledge gaps flagged by last lint").
+Injected at **retrieval start** in BOTH context representations: the clean
+chat bundle (leads `user_profile_text` as `[Memory Index - as of ...]`) and
+the analyzer blob (`=== MEMORY INDEX ===` section, right after CURRENT
+REQUEST — this is the one non-actionable/analyzer turns see). Cached per
+user + write-through persisted to `system_config` key
+`memory_index:{user_id}`; regeneration triggers (`regenerate_on`) are a
+cheap per-read fingerprint (log count/updated stamp, artifact count, entity
+count moving >= `entity_count_threshold`) plus explicit `invalidate()` from
+lint and a 24h staleness bound. Rendering truncates per section on item
+boundaries with `[+N more]` and hard-caps at `max_tokens * 4` chars. All
+read paths return "" on error — an index failure never breaks a turn.
+
+**Memory lint** (`services/memory/lint.py`, `MemoryLintService`,
+`overlord.memory_lint`): background audit (schedule `weekly`/`daily`/seconds;
+started beside the scheduler in overlord startup, cancelled in shutdown,
+failure-isolated per run AND per user). Checks per PRD: conflicted facts
+unresolved past `conflict_resolution_days` -> findings; superseded facts
+older than `superseded_retention_days` (default 30) -> hard-delete (edges
+first, then entities, then `algorithms.invalidate`); orphaned relationships
+-> auto-remove when `orphan_cleanup`; captain's log gaps > 7 days between
+consecutive entries -> flag; artifacts not accessed in `stale_artifact_days`
+-> flag; index not regenerated in 24h -> force regeneration. Findings feed
+`index.set_lint_findings()` (persisted, survive restart). On-demand:
+`run_lint(user_id=None)` and admin `POST /memory/lint`. **Inert when
+unconfigured:** the service is only constructed when the formation declares
+a `memory.lint` block (pinned by unit test).
+
+**Config validation:** all four sections fail-fast in
+`config/validation.py::_validate_memory_config` (mode/strategy enums,
+threshold in (0,1], positive ints, `regenerate_on` trigger names).
+
+**Observability:** `MEMORY_PRECOMPACTION_FLUSH_TRIGGERED/_COMPLETED/_FAILED`,
+`MEMORY_CONTEXT_PRUNED`, `MEMORY_INDEX_REGENERATED/_FAILED`,
+`MEMORY_LINT_STARTED/_COMPLETED/_FAILED` (ConversationEvents).
+
+**Tests:** `tests/unit/test_precompaction_flush.py`,
+`test_context_pruning.py`, `test_knowledge_index.py`, `test_memory_lint.py`,
+`test_memory_revamp_config_validation.py`; e2e
+`e2e/tests/2_memory/test_2x1_memory_revamp_phases_3_5.py` on
+`formations/formation-memory/formation-memory-revamp.yaml` (flush surviving
+real eviction, index injection observed in a real turn via pass-through
+spies on both context builders, on-demand lint).
+
+**Gotchas:**
+1. `select(func.count()).filter_by(...)` has no entity namespace — the
+   index/lint count queries must use `.select_from(Model).where(...)`.
+2. MagicMock overlords in orchestrator unit tests make `context_pruner` /
+   `memory_index` truthy; test fixtures must set them to None explicitly.
+3. Same-timestamp buffer items dedupe to one source-lineage row (unique
+   constraint on `(log_id, source_type, source_id)`) — flush snapshots keep
+   the buffer's per-item `time.time()` stamps.
+4. A simple recall turn can route through the analyzer/non-actionable path
+   (never reaching the agent's clean-context assembly) — which is why the
+   index injects into the enhanced blob too, not just the clean bundle.
+### Memory Event Substrate (2026-07-09, Phases 2b-2d)
+
+**Location:** `src/muxi/runtime/services/memory/events/`
+
+The immutable event log underneath every memory projection
+(memory-event-substrate PRD). Every memory-producing write first becomes a
+row in `memory_events`; the knowledge graph, captain's log (+lessons), flat
+facts, and artifact metadata are DERIVED state, rebuildable by replaying
+events in append order.
+
+**Files:**
+- `models.py` — `MemoryEvent` / `ProjectionCheckpoint` tables, the versioned
+  `EVENT_SCHEMAS` payload registry (validated at write), source vocabulary,
+  decay-rate constants. Integer PK doubles as the replay cursor; a partial
+  unique index on `(formation_id, user_id, source, source_id)` is the
+  idempotency key (soft-deleting re-allows a source_id).
+- `storage.py` — append-only persistence: append (idempotent + race-safe),
+  replay listings, soft-delete/hard-purge, volatile expiry, checkpoints.
+  No update surface, ever (pinned by a unit test that enumerates methods).
+- `service.py` — `MemoryEventService`: failure-isolated `record()` (never
+  raises into a write path), projector registry, `apply_event` /
+  `project_pending` (incremental, cursor-gated), `rebuild` (reset -> replay
+  -> checkpoint), `backfill_user`, `forget_source`, `provenance_chain`,
+  and the background loops (hourly maintenance: volatile expiry + hard
+  purge + size-cap alert; event-first applier).
+- `projectors.py` — one projector per projection (`knowledge_graph`,
+  `captains_log`, `flat_facts`, `artifact_metadata`), each with
+  `apply` / `reset` / `event_types` (+ optional `backfill`). `apply` must be
+  a PURE function of the event — no LLM calls, no event recording — so
+  replay is deterministic. It may RETURN info (e.g. contradictions); the
+  live path records derived audit events from it, replay ignores it.
+- `decay.py` — `DecaySettings` (`memory.decay`: default half-life 180d,
+  volatile TTL 24h, per-relationship-type `half_lives`) and the pure math
+  (`0.5 ** (age/half_life)` — true half-life semantics; the PRD sketched
+  `exp(-age/half_life)` under the same parameter name). Applied at QUERY
+  time only; stored confidences never change.
+- `provenance.py` — "why do you think X?" assembly: entity -> facts (any
+  status) -> `derived_from_event_ids` -> `caused_by` chains root-first.
+  Served by `GET /v1/memories/provenance?entity=X` (client route).
+
+**Write posture (dual-write, default):** each write path (extractor,
+graph service, captain's log, ingestion, shared-scope API) appends its
+event first (failure-isolated: append failure never blocks the projection
+write or the turn), then performs its own projection write through the
+SAME apply function the replay uses. Shared-scope API writes are the one
+event-FIRST path even in dual-write mode (no event -> 503, no row), since
+a shared row without provenance would silently survive every rebuild.
+
+**Event-first cutover (`memory.events.event_first: true`, DEFAULT OFF):**
+write paths append the event and derive the projection through
+`apply_event` (synchronous; cursor advances so the background applier
+never double-applies). The applier loop (`memory.projections.
+apply_interval_seconds`, default 5s) is crash recovery; on startup it
+snapshots missing cursors to the log tail so dual-written history is
+never replayed into projections (flat facts would duplicate — their write
+path inserts, it does not upsert). Lag past
+`memory.projections.lag_alert_threshold_seconds` (default 300) emits
+`memory.projection.lagging`.
+
+**Provenance:** every projection row carries `derived_from_event_ids`
+(JSON list; artifacts use a singular additive `derived_from_event_id`
+column). `fact.contradicted` audit events are recorded when a KG write
+conflicts with / supersedes an exclusive fact (idempotent per fact pair,
+`caused_by`-linked to the extraction event) — the marking itself lives in
+`graph/storage.upsert_relationship`, which returns the detections.
+
+**GDPR / forgetting:** `forget_source` soft-deletes a source's live
+events + records `user.deletion`; replay skips soft-deleted events, so a
+rebuild recomputes state as if the source never existed. Reversible until
+the grace period (`memory.events.retention.grace_period_days`, 30d)
+elapses and the hard purge removes the rows. Admin flow:
+`POST /memory/forget {user_id, source, reason, rebuild}`.
+
+**Rebuild & backfill (admin API, backs `muxi memory rebuild`):**
+`POST /memory/rebuild {user_id, projection?, dry_run?, background?,
+backfill?}` — background by default (202 + job id via the request
+tracker, poll `GET /memory/rebuild/{job_id}`). `POST /memory/backfill`
+synthesizes idempotent `source='legacy'` events for pre-event-log rows
+(per-row source_ids like `legacy/kg_entity/<public_id>`); graph/log/
+artifact rows are stamped in place, orphan flat facts become
+provenance-complete on the next rebuild.
+
+**Gotchas:**
+1. **Projector `apply` purity is the whole ballgame.** Recording events
+   inside a projector would duplicate them on every rebuild. Derived
+   audit events (contradictions) are recorded by the CALLER on live
+   paths only.
+2. **Flat-fact applies are inserts, not upserts** — idempotency comes
+   from the cursor, never from re-applying. That is why cursors snapshot
+   to tail before the event-first applier starts, and why the flat-fact
+   backfill does not apply (rebuild stamps provenance instead).
+3. **`artifact.saved` has two payload versions.** v1 (pre-2b) lacks
+   summary/compressed_bytes; the projector reconstructs them
+   deterministically. Builders must keep handling ALL historical
+   versions until events are hard-purged (PRD open question 3).
+4. **Registration order:** the artifact-metadata projector registers
+   inside `_initialize_artifact_memory` (the service exists only then),
+   not in `_register_memory_projectors` with the other three.
+
+**Unit tests:** `tests/unit/test_memory_events_*.py` (schema, storage,
+service, replay, projection cursors, decay, provenance, contradiction,
+backfill, GDPR). **E2E:** `2_memory/test_2s1_memory_event_substrate.py`
+(dual-write + wipe-and-replay equality) and
+`test_2s2_provenance_and_rebuild.py` (provenance chains on a real
+conversation, GDPR forget + rebuild, legacy backfill).
+
 ---
 
 ## 4. LLM Layer

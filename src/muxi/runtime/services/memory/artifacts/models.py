@@ -94,6 +94,12 @@ class Artifact(Base, AsyncModelMixin):
     # Soft delete: metadata is retained for audit, the blob is removed.
     deleted_at = Column(DateTime, nullable=True)
 
+    # Provenance bridge (Memory Event Substrate Phase 2c): the
+    # artifact.saved memory event this row derives from. NULL on
+    # pre-substrate rows until a legacy backfill stamps them; rows with a
+    # value are event-sourced and are wiped/recreated by rebuilds.
+    derived_from_event_id = Column(Integer, nullable=True)
+
     __table_args__ = (
         # Chain-head integrity: at most one live latest version per
         # (formation, user, name). This is the multi-process backstop for
@@ -159,4 +165,5 @@ class Artifact(Base, AsyncModelMixin):
             ),
             "expires_at": self.expires_at.isoformat() if self.expires_at else None,
             "deleted_at": self.deleted_at.isoformat() if self.deleted_at else None,
+            "derived_from_event_id": self.derived_from_event_id,
         }

@@ -80,8 +80,40 @@ They pass through to OneLLM untouched.
 
 from __future__ import annotations
 
+import os
+import sys
+
 import onellm
 from onellm.errors import InvalidRequestError
+
+# macOS default: run local ONNX models on the CPU execution provider.
+#
+# onnxruntime's Darwin/arm64 wheels register CoreMLExecutionProvider by
+# default, but neither of the small encoder models the runtime ships
+# (Nomic v1.5, e5-small) fits CoreML's constraints — the graph splits
+# into ~97 CoreML/CPU partitions and every inference pays the
+# cross-partition round-trips. Measured on an M1 Pro (ORT 1.x, both
+# models warm):
+#
+#   single embed p50   CoreML ~31-35 ms   CPU ~3-12 ms
+#   32-text batch      CoreML ~950 ms     CPU ~400 ms
+#   classifier warmup  CoreML ~6-13 s     CPU ~1.5 s
+#
+# CPU wins on per-request latency (the runtime's stated priority) AND
+# startup, so default CoreML off. ``setdefault`` keeps this a default,
+# not a policy: operators who ship a CoreML-friendly model can export
+# ``ONELLM_COREML_DISABLED=false`` (or any non-truthy value) before
+# startup and OneLLM keeps the CoreML EP. Linux/SIF deployments have
+# no CoreML EP, so this is a Darwin-only concern; the guard just keeps
+# the env var from showing up where it is meaningless.
+#
+# Must run before the first ``onellm`` InferenceSession is constructed
+# — sessions are cached per repo, so a CoreML session created earlier
+# would stick for the process lifetime. This module is the runtime's
+# single embedding chokepoint and is imported before any local model
+# loads, which makes import time here the reliable hook.
+if sys.platform == "darwin":
+    os.environ.setdefault("ONELLM_COREML_DISABLED", "true")
 
 DEFAULT_EMBEDDING_MODEL = "local/nomic-ai/nomic-embed-text-v1.5"
 """Apache-2.0 Nomic v1.5 (768-dim, 8k context, Matryoshka 64-768).

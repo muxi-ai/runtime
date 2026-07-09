@@ -384,6 +384,22 @@ class LessonStorage:
             await session.flush()
             return lesson.to_dict(), True
 
+    async def list_all_for_user(self, user_id: str) -> List[Dict[str, Any]]:
+        """Every lesson for a user (any archived state), oldest first.
+
+        Legacy backfill support (Memory Substrate Phase 2d): the backfill
+        scans the full projection for rows without event provenance, so
+        archived lessons are included -- replay must reproduce them too.
+        """
+        async with self.db_manager.get_async_session() as session:
+            stmt = (
+                select(Lesson)
+                .filter_by(user_id=str(user_id), formation_id=self.formation_id)
+                .order_by(Lesson.id.asc())
+            )
+            rows = (await session.execute(stmt)).scalars().all()
+            return [row.to_dict() for row in rows]
+
     async def list_active(
         self,
         user_id: str,

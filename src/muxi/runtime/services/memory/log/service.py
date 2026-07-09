@@ -257,6 +257,38 @@ class CaptainsLogService:
                 )
         return totals
 
+    async def digest_turns(
+        self, user_id: Any, turns: List[Tuple[str, str]], model
+    ) -> Dict[str, int]:
+        """
+        Digest an explicit batch of turns immediately (silent-turn path).
+
+        Public entry point for the Phase 3 pre-compaction flush: the items
+        leaving the working memory buffer are digested through the same
+        pipeline the periodic pass uses (entry + lineage + lessons + graph
+        facts). Failure-isolated and best-effort -- unlike the periodic
+        pass there is no re-queue on failure, because the source items are
+        leaving the buffer regardless. Returns stored counts.
+        """
+        totals = {"entries": 0, "sources": 0, "lessons": 0}
+        if not self.enabled or model is None or not turns:
+            return totals
+        try:
+            return await self._digest_user(str(user_id), list(turns), model)
+        except Exception as e:
+            observability.observe(
+                event_type=observability.ConversationEvents.MEMORY_CAPTAINS_LOG_FAILED,
+                level=observability.EventLevel.WARNING,
+                data={
+                    "user_id": str(user_id),
+                    "error": str(e),
+                    "error_type": type(e).__name__,
+                    "pass": "precompaction_flush",
+                },
+                description=f"Pre-compaction flush digest failed: {e}",
+            )
+            return totals
+
     def _requeue_turns(self, user_id: str, turns: List[Tuple[str, str]]) -> None:
         """Restore a failed digest's turn snapshot for the next run.
 
@@ -331,9 +363,16 @@ class CaptainsLogService:
                 payload=entry_payload,
                 source=SOURCE_CAPTAINS_LOG,
             )
-        entry, source_counts = await self.apply_log_entry_event(
-            user_id, entry_payload, event_id=event["id"] if event else None
-        )
+        if event is not None and self.event_log.event_first:
+            # Event-first cutover (flag-gated, default off): the append is
+            # the write; the substrate applies the projection.
+            await self.event_log.apply_event(event)
+            entry = {"date": entry_payload["date"]}
+            source_counts = {"added": len(entry_payload["sources"])}
+        else:
+            entry, source_counts = await self.apply_log_entry_event(
+                user_id, entry_payload, event_id=event["id"] if event else None
+            )
 
         lessons_stored = 0
         if extract_lessons:
@@ -419,6 +458,11 @@ class CaptainsLogService:
                     payload=payload,
                     source=SOURCE_CAPTAINS_LOG,
                 )
+            if event is not None and self.event_log.event_first:
+                # Event-first cutover: the substrate applies the lesson.
+                await self.event_log.apply_event(event)
+                stored += 1
+                continue
             lesson, created = await self.apply_lesson_event(
                 user_id, payload, event_id=event["id"] if event else None
             )
@@ -525,9 +569,17 @@ class CaptainsLogService:
                 source=SOURCE_TOOL,
                 agent_id=str(agent_id),
             )
-        lesson, created = await self.apply_lesson_event(
-            str(user_id), payload, event_id=event["id"] if event else None
-        )
+        if event is not None and self.event_log.event_first:
+            # Event-first cutover: the substrate applies the projection;
+            # its apply result is the same (lesson, created) tuple.
+            applied = await self.event_log.apply_event(event)
+            if not isinstance(applied, tuple):
+                raise ValueError("Lesson write failed; the event is retained for replay")
+            lesson, created = applied
+        else:
+            lesson, created = await self.apply_lesson_event(
+                str(user_id), payload, event_id=event["id"] if event else None
+            )
         observability.observe(
             event_type=observability.ConversationEvents.MEMORY_LESSON_RECORDED,
             level=observability.EventLevel.DEBUG,

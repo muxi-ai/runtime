@@ -588,6 +588,22 @@ class Overlord:
             configured_services.get("artifact_memory") if configured_services else None
         )
 
+        # Knowledge index (Memory Revamp Phase 4) - the navigable memory
+        # catalog injected at retrieval start; None when disabled or when
+        # there is nothing to index.
+        self.memory_index = configured_services.get("memory_index") if configured_services else None
+
+        # Memory lint (Memory Revamp Phase 5) - background knowledge-store
+        # audit; None unless the formation declares a memory.lint block.
+        self.memory_lint = configured_services.get("memory_lint") if configured_services else None
+
+        # Context optimization (Memory Revamp Phase 3) - created during
+        # startup: the pre-compaction flush bridges the buffer's FIFO
+        # eviction to the captain's log, and the pruner trims stale tool
+        # results on idle session resume. Both stay None when unconfigured.
+        self.precompaction_flush = None
+        self.context_pruner = None
+
         # Configure extraction settings (intelligence concerns)
         self.auto_extract_user_info = auto_extract_user_info
 
@@ -1574,10 +1590,72 @@ class Overlord:
         if getattr(self, "artifact_memory", None):
             self.artifact_memory.start()
 
+        # Start the memory lint background loop (Memory Revamp Phase 5).
+        # Only present when the formation declares a memory.lint block.
+        if getattr(self, "memory_lint", None):
+            self.memory_lint.start()
+
+        # Context optimization (Memory Revamp Phase 3): attach the
+        # pre-compaction flush to the buffer's eviction path (silent turn
+        # through the captain's log digest before FIFO drops items), and
+        # create the cache-TTL context pruner when memory.pruning is
+        # configured. Both are failure-isolated and inert when off.
+        self._initialize_context_optimization()
+
         # Populate formation capabilities after all services are loaded
         self._populate_formation_capabilities()
 
         #  SystemEvents.STARTED (overlord)
+
+    def _initialize_context_optimization(self) -> None:
+        """
+        Create the Phase 3 context-optimization services (Memory Revamp).
+
+        Pre-compaction flush: attached when the captain's log and buffer
+        memory both exist and ``memory.compaction.flush_enabled`` is not
+        false -- at-risk buffer items run a silent digest turn before FIFO
+        eviction can drop them. Cache-TTL pruner: created only when the
+        formation declares a ``memory.pruning`` block (inert otherwise).
+        Failure-isolated: an initialization error leaves both off.
+        """
+        memory_config = (
+            self.formation_config.get("memory", {}) if self.formation_config else {}
+        ) or {}
+
+        try:
+            compaction_config = memory_config.get("compaction", {}) or {}
+            if getattr(self, "captains_log", None) and self.buffer_memory is not None:
+                from ...services.memory.flush import PreCompactionFlushService
+
+                flush = PreCompactionFlushService(self.captains_log, compaction_config)
+                if flush.enabled:
+                    flush.attach(
+                        self.buffer_memory,
+                        lambda: getattr(self, "extraction_model", None)
+                        or getattr(self, "default_model", None),
+                    )
+                    self.precompaction_flush = flush
+        except Exception as e:
+            observability.observe(
+                event_type=observability.ErrorEvents.MEMORY_INITIALIZATION_FAILED,
+                level=observability.EventLevel.WARNING,
+                data={"error": str(e), "service": "precompaction_flush"},
+                description=f"Failed to initialize pre-compaction flush: {e}",
+            )
+
+        try:
+            pruning_config = memory_config.get("pruning")
+            if isinstance(pruning_config, dict) and pruning_config:
+                from ...services.memory.pruning import ContextPruner
+
+                self.context_pruner = ContextPruner(pruning_config)
+        except Exception as e:
+            observability.observe(
+                event_type=observability.ErrorEvents.MEMORY_INITIALIZATION_FAILED,
+                level=observability.EventLevel.WARNING,
+                data={"error": str(e), "service": "context_pruner"},
+                description=f"Failed to initialize context pruner: {e}",
+            )
 
     def _initialize_proactive_services(self) -> None:
         """
@@ -4570,6 +4648,18 @@ Agent response: {raw_response}"""
                     level=observability.EventLevel.WARNING,
                     data={"error": str(e), "service": "artifact_memory"},
                     description=f"Error stopping artifact memory service: {e}",
+                )
+
+        # Stop the memory lint background loop (Memory Revamp Phase 5)
+        if getattr(self, "memory_lint", None):
+            try:
+                await self.memory_lint.stop()
+            except Exception as e:
+                observability.observe(
+                    event_type=observability.ErrorEvents.INTERNAL_ERROR,
+                    level=observability.EventLevel.WARNING,
+                    data={"error": str(e), "service": "memory_lint"},
+                    description=f"Error stopping memory lint service: {e}",
                 )
 
         observability.observe(
