@@ -210,20 +210,31 @@ class TestForgetSource:
 
 
 class TestPurgeLifecycle:
-    async def test_start_and_stop_purge_loop(self, service):
+    async def test_start_and_stop_maintenance_loop(self, service):
         service.start()
-        assert service._purge_task is not None
-        first_task = service._purge_task
+        assert service._maintenance_task is not None
+        first_task = service._maintenance_task
         service.start()  # idempotent while running
-        assert service._purge_task is first_task
+        assert service._maintenance_task is first_task
+        assert service._applier_task is None  # dual-write mode: no applier
         await service.stop()
-        assert service._purge_task is None
+        assert service._maintenance_task is None
         await service.stop()  # idempotent when stopped
+
+    async def test_start_event_first_spawns_applier(self, tmp_path):
+        db_manager = DatabaseManager(f"sqlite:///{tmp_path}/ef.db")
+        db_manager.create_tables(Base.metadata)
+        ef_service = MemoryEventService(db_manager, FORMATION_ID, config={"event_first": True})
+        ef_service.start()
+        assert ef_service._applier_task is not None
+        await ef_service.stop()
+        assert ef_service._applier_task is None
+        db_manager.engine.dispose()
 
     async def test_start_disabled_is_noop(self, service):
         service.enabled = False
         service.start()
-        assert service._purge_task is None
+        assert service._maintenance_task is None
 
     async def test_run_hard_purge_empty_log(self, service):
         assert await service.run_hard_purge() == 0

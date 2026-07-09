@@ -181,8 +181,19 @@ class LocalClassifier:
             negative_inputs = [f"query: {t}" for t in spec.negative]
 
             try:
-                pos_vecs = await embed(self.model, positive_inputs)
-                neg_vecs = await embed(self.model, negative_inputs)
+                # Both example sets go out in one embed call and are
+                # split on return — halves the per-call overhead (async
+                # executor hop, provider dispatch) during warmup, which
+                # every formation start pays via the overlord's
+                # classifier preload. The combined batch stays small
+                # (~12-35 rows per intent); do NOT be tempted to batch
+                # ALL intents into one call — ONNX pads every row to
+                # the longest sequence in the batch, and a ~250-row
+                # batch measured 2-15x SLOWER than per-intent calls
+                # under the CoreML execution provider.
+                vectors = await embed(self.model, positive_inputs + negative_inputs)
+                pos_vecs = vectors[: len(positive_inputs)]
+                neg_vecs = vectors[len(positive_inputs) :]
             except Exception as exc:
                 observability.observe(
                     event_type=observability.ErrorEvents.EMBEDDINGS_GENERATION_FAILED,

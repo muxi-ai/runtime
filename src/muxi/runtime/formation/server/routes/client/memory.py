@@ -382,6 +382,12 @@ async def _write_shared_memory(
         )
         return None, JSONResponse(content=response.model_dump(), status_code=503)
 
+    if getattr(memory_events, "event_first", False):
+        # Event-first cutover (flag-gated, default off): route the apply
+        # through the substrate so the projection cursor advances and the
+        # background applier never re-applies (duplicates) this fact.
+        await memory_events.apply_event(event)
+        return None, None
     memory_id = await apply_fact_event(
         overlord.long_term_memory,
         user_id,
@@ -953,6 +959,105 @@ async def get_ingestion_status(
 
     response = create_success_response(
         APIObjectType.MEMORY_INGESTION, APIEventType.MEMORY_INGESTION_STATUS, data, request_id
+    )
+    return JSONResponse(content=response.model_dump(), status_code=200)
+
+
+@router.get(
+    "/memories/provenance", response_model=APIResponse, operation_id="get_memory_provenance"
+)
+async def get_memory_provenance(
+    request: Request,
+    x_user_id: Optional[str] = Header(None, alias="X-Muxi-User-ID"),
+    entity: Optional[str] = Query(
+        None, description="Knowledge graph entity name to explain (e.g. 'London')"
+    ),
+    event_id: Optional[str] = Query(
+        None, description="Public id of a memory event to trace instead of an entity"
+    ),
+) -> JSONResponse:
+    """
+    Answer "why do you think X?" (Memory Event Substrate Phase 2c).
+
+    With ``entity``: returns the knowledge graph entity, every fact
+    (relationship) touching it -- including contradicted and superseded
+    facts, so disagreements stay explainable -- and, per fact, the full
+    causation chains from the immutable event log (extraction events back
+    to the interaction turn or ingestion item that produced them).
+    Confidence is reported both as stored and as the query-time effective
+    value after decay.
+
+    With ``event_id``: returns that event's causation chain directly.
+    """
+    formation = request.app.state.formation
+    request_id = getattr(request.state, "request_id", None)
+
+    user_id, error_response = _get_user_id(x_user_id, request_id)
+    if error_response:
+        return error_response
+
+    if not entity and not event_id:
+        response = create_error_response(
+            "INVALID_PARAMS",
+            "Provide 'entity' (a knowledge graph entity name) or 'event_id'",
+            None,
+            request_id,
+        )
+        return JSONResponse(content=response.model_dump(), status_code=422)
+
+    overlord = getattr(formation, "_overlord", None)
+    memory_events = getattr(overlord, "memory_events", None) if overlord else None
+    knowledge_graph = getattr(overlord, "knowledge_graph", None) if overlord else None
+    if memory_events is None:
+        response = create_error_response(
+            "SERVICE_UNAVAILABLE",
+            "Memory event substrate is not available",
+            None,
+            request_id,
+        )
+        return JSONResponse(content=response.model_dump(), status_code=503)
+
+    # Same identity pipeline as the other memory reads (middleware may
+    # rewrite the identity; RBAC may reject).
+    user_id, _permissions, error_response = await _run_request_pipeline(
+        formation, user_id, request_id, "/v1/memories/provenance"
+    )
+    if error_response:
+        return error_response
+
+    from .....services.memory.events.provenance import entity_provenance, event_provenance
+
+    try:
+        if entity:
+            if knowledge_graph is None:
+                response = create_error_response(
+                    "SERVICE_UNAVAILABLE",
+                    "Knowledge graph is not available",
+                    None,
+                    request_id,
+                )
+                return JSONResponse(content=response.model_dump(), status_code=503)
+            data = await entity_provenance(
+                memory_events, knowledge_graph, user_id, entity, decay=memory_events.decay
+            )
+            missing = f"Unknown entity '{entity}'"
+        else:
+            data = await event_provenance(
+                memory_events, user_id, event_id, decay=memory_events.decay
+            )
+            missing = f"Unknown event '{event_id}'"
+    except Exception as e:
+        response = create_error_response(
+            "INTERNAL_ERROR", f"Failed to resolve provenance: {str(e)}", None, request_id
+        )
+        return JSONResponse(content=response.model_dump(), status_code=500)
+
+    if data is None:
+        response = create_error_response("NOT_FOUND", missing, None, request_id)
+        return JSONResponse(content=response.model_dump(), status_code=404)
+
+    response = create_success_response(
+        APIObjectType.MEMORY, APIEventType.MEMORY_RETRIEVED, data, request_id
     )
     return JSONResponse(content=response.model_dump(), status_code=200)
 

@@ -763,7 +763,7 @@ def initialize_memory_systems(formation) -> None:
                 # Initialize the memory event substrate first: the knowledge
                 # graph and captain's log dual-write through it, so it must
                 # exist before they are constructed.
-                _initialize_memory_events(formation, memory_config.get("events", {}) or {})
+                _initialize_memory_events(formation, memory_config)
 
                 # Initialize the knowledge graph service (Memory Revamp Phase 1).
                 # Placed after table creation (kg_entities/kg_relationships must
@@ -789,25 +789,37 @@ def initialize_memory_systems(formation) -> None:
                 _initialize_artifact_memory(formation)
 
 
-def _initialize_memory_events(formation, events_config: Dict[str, Any]) -> None:
-    """Initialize the memory event substrate on top of persistent memory."""
+def _initialize_memory_events(formation, memory_config: Dict[str, Any]) -> None:
+    """Initialize the memory event substrate on top of persistent memory.
+
+    Reads three sibling sections of the memory config: ``events`` (the
+    substrate itself: retention, event_first cutover flag), ``projections``
+    (incremental applier interval + lag alerting), and ``decay``
+    (query-time decay settings, also shared with the knowledge graph).
+    Configuration errors fail fast (ValueError from the service/decay
+    constructors) and disable the substrate with a logged warning.
+    """
+    events_config = memory_config.get("events", {}) or {}
     if events_config.get("enabled", True) is False:
         formation._memory_events = None
         return
 
     try:
-        from ..services.memory.events import MemoryEventService
+        from ..services.memory.events import DecaySettings, MemoryEventService
 
         formation_id = getattr(formation, "formation_id", "default-formation")
         formation._memory_events = MemoryEventService(
             db_manager=formation._db_manager,
             formation_id=formation_id,
             config=events_config,
+            projections_config=memory_config.get("projections", {}) or {},
+            decay=DecaySettings(memory_config.get("decay", {}) or {}),
         )
+        posture = "event-first" if formation._memory_events.event_first else "dual-write"
         print(
             InitEventFormatter.format_ok(
                 "Initializing memory event substrate",
-                f"grace period {formation._memory_events.grace_period_days}d",
+                f"{posture}, grace period {formation._memory_events.grace_period_days}d",
             )
         )
     except Exception as e:
@@ -846,6 +858,15 @@ def _initialize_artifact_memory(formation) -> None:
             formation_dir=formation_dir,
             memory_events=getattr(formation, "_memory_events", None),
         )
+        # Register the artifact-metadata projection with the substrate
+        # (Memory Substrate Phase 2b). Registered here rather than in
+        # _register_memory_projectors because the artifact service is
+        # constructed after the other projections.
+        memory_events = getattr(formation, "_memory_events", None)
+        if memory_events is not None:
+            from ..services.memory.events import ArtifactMetadataProjector
+
+            memory_events.register_projector(ArtifactMetadataProjector(formation._artifact_memory))
         settings = formation._artifact_memory.settings
         retention = f"{settings.retention_days}d" if settings.retention_days else "forever"
         print(
@@ -903,11 +924,13 @@ def _initialize_knowledge_graph(formation, graph_config: Dict[str, Any]) -> None
         from ..services.memory.graph import KnowledgeGraphService
 
         formation_id = getattr(formation, "formation_id", "default-formation")
+        memory_events = getattr(formation, "_memory_events", None)
         formation._knowledge_graph = KnowledgeGraphService(
             db_manager=formation._db_manager,
             formation_id=formation_id,
             config=graph_config,
-            event_log=getattr(formation, "_memory_events", None),
+            event_log=memory_events,
+            decay=getattr(memory_events, "decay", None),
         )
         backend = "pgRouting" if formation._knowledge_graph.pgrouting_available else "NetworkX"
         print(InitEventFormatter.format_ok("Initializing knowledge graph", f"{backend} backend"))
@@ -1251,6 +1274,40 @@ def _migrate_add_derived_from_event_ids_column(db_manager, table_name: str) -> N
         pass  # Table may not exist yet on first run; create_tables handles it
 
 
+def _migrate_add_derived_from_event_id_column(db_manager, table_name: str) -> None:
+    """Add the singular provenance column to tables from older schema versions.
+
+    Additive migration (Memory Substrate Phase 2c): the column stays NULL
+    on existing rows until a legacy backfill stamps them; rows written
+    after this migration carry the artifact.saved event id they derive
+    from.
+    """
+    from sqlalchemy import text
+
+    try:
+        with db_manager.engine.connect() as conn:
+            if db_manager.database_type == "postgresql":
+                conn.execute(
+                    text(
+                        f"ALTER TABLE {table_name} ADD COLUMN IF NOT EXISTS "
+                        f"derived_from_event_id INTEGER"
+                    )
+                )
+            else:
+                # SQLite: check if column exists via PRAGMA, add if missing
+                result = conn.execute(text(f"PRAGMA table_info({table_name})"))
+                columns = [row[1] for row in result]
+                if "derived_from_event_id" not in columns:
+                    conn.execute(
+                        text(
+                            f"ALTER TABLE {table_name} ADD COLUMN " f"derived_from_event_id INTEGER"
+                        )
+                    )
+            conn.commit()
+    except Exception:
+        pass  # Table may not exist yet on first run; create_tables handles it
+
+
 def _migrate_add_scope_columns(db_manager, table_name: str) -> None:
     """Add the memory-namespaces scope columns to memories tables from older schema versions.
 
@@ -1407,6 +1464,10 @@ def _create_all_database_tables(db_manager, embedding_dimension: int = 1536) -> 
         # created before the memory event substrate shipped
         for projection_table in ("kg_entities", "kg_relationships", "captains_log", "lessons"):
             _migrate_add_derived_from_event_ids_column(db_manager, projection_table)
+        # Migrate: ensure the singular provenance column exists on the
+        # artifacts table created before the artifact-metadata projection
+        # shipped (Memory Substrate Phase 2c, additive)
+        _migrate_add_derived_from_event_id_column(db_manager, "artifacts")
         # Migrate: ensure the memory-namespaces scope columns exist on
         # memories tables created before the scope substrate shipped.
         # Covers ALL memories_{dim} tables, not just the active dimension's:
