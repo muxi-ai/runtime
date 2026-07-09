@@ -440,11 +440,6 @@ class KnowledgeIndexService:
         self._lint_findings[user_id] = findings
         return findings
 
-    def last_generated_at(self, user_id: Any) -> Optional[float]:
-        """Epoch seconds of the user's last regeneration (None if never)."""
-        cached = self._cache.get(str(user_id))
-        return cached["generated_at"] if cached else None
-
     # ------------------------------------------------------------------
     # system_config persistence
     # ------------------------------------------------------------------

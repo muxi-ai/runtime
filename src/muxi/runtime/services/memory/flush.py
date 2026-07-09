@@ -167,15 +167,23 @@ def _group_items_by_user(items: List[Dict[str, Any]]) -> Dict[str, List[tuple]]:
 
     Each turn is ``(timestamp_key, rendered_text)`` -- the exact shape the
     Captain's Log digest consumes, with the buffer timestamp as the
-    ``buffer_item`` source-lineage key.
+    ``buffer_item`` source-lineage key. Items without a ``user_id`` in
+    their metadata are skipped (with a debug event): attributing them to a
+    fallback scope would pollute a real user's persistent memory --
+    single-user mode stores ``user_id`` explicitly, so legitimate chat
+    items always carry the key.
     """
     grouped: Dict[str, List[tuple]] = {}
+    skipped_missing_user = 0
     for item in items:
         metadata = item.get("metadata") or {}
         text = (item.get("text") or "").strip()
         if not text:
             continue
-        user_id = str(metadata.get("user_id", "0"))
+        raw_user_id = metadata.get("user_id")
+        if raw_user_id is None:
+            skipped_missing_user += 1
+            continue
         role = metadata.get("role")
         if role == "user":
             rendered = f"User: {text}"
@@ -184,5 +192,15 @@ def _group_items_by_user(items: List[Dict[str, Any]]) -> Dict[str, List[tuple]]:
         else:
             rendered = text
         timestamp = item.get("timestamp") or 0.0
-        grouped.setdefault(user_id, []).append((f"{float(timestamp):.6f}", rendered))
+        grouped.setdefault(str(raw_user_id), []).append((f"{float(timestamp):.6f}", rendered))
+    if skipped_missing_user:
+        observability.observe(
+            event_type=observability.ConversationEvents.MEMORY_PRECOMPACTION_FLUSH_FAILED,
+            level=observability.EventLevel.DEBUG,
+            data={"reason": "missing_user_id", "skipped_items": skipped_missing_user},
+            description=(
+                f"Pre-compaction flush skipped {skipped_missing_user} buffer item(s) "
+                "without user_id metadata"
+            ),
+        )
     return grouped

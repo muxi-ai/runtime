@@ -19,7 +19,7 @@
 # | Orphaned relationships (endpoint entity deleted)  | Auto-remove         |
 # | Captain's log gaps (> 7 days between entries)     | Flag as gap         |
 # | Artifacts not accessed in > stale_artifact_days   | Flag for review     |
-# | Knowledge index stale (> 24h since regeneration)  | Force regeneration  |
+# | Knowledge index staleness                          | Regenerate per run  |
 #
 # Findings are written back into the Phase 4 knowledge index
 # (``set_lint_findings``) as "knowledge gaps flagged by last lint" so agents
@@ -34,7 +34,6 @@
 # =============================================================================
 
 import asyncio
-import time
 from datetime import datetime, timedelta
 from typing import Any, Dict, List, Optional, Set
 
@@ -58,9 +57,6 @@ DEFAULT_SUPERSEDED_RETENTION_DAYS = 30
 
 # PRD: "Captain's log gaps (> 7 days with no entry despite activity)".
 LOG_GAP_DAYS = 7
-
-# PRD: "Knowledge index stale (not regenerated in > 24h)".
-INDEX_STALE_SECONDS = 86400
 
 _SCHEDULE_SECONDS = {"daily": 86400, "weekly": 604800}
 
@@ -267,10 +263,13 @@ class MemoryLintService:
 
         if self.index is not None and getattr(self.index, "enabled", False):
             await self.index.set_lint_findings(user_id, findings)
-            generated_at = self.index.last_generated_at(user_id)
-            if generated_at is None or time.time() - generated_at > INDEX_STALE_SECONDS:
-                await self.index.regenerate(user_id)
-                report["index_regenerated"] = 1
+            # set_lint_findings just invalidated the cached blob, so
+            # regenerate unconditionally: lint runs weekly, regeneration is
+            # a handful of indexed queries (no LLM work), and rebuilding on
+            # every run satisfies the PRD's "index stale > 24h -> force
+            # regeneration" check by construction.
+            await self.index.regenerate(user_id)
+            report["index_regenerated"] = 1
 
         return report
 
@@ -328,33 +327,53 @@ class MemoryLintService:
         return findings
 
     async def _purge_superseded(self, user_id: str) -> int:
-        """Hard-delete superseded facts older than the retention window."""
+        """Hard-delete superseded facts older than the retention window.
+
+        Uses column-only selects plus bulk DELETEs (never ORM instance
+        deletes): a superseded relationship whose endpoint entity is also
+        superseded would otherwise be deleted twice -- once by the edge
+        cleanup for the purged entity and once by the ORM unit of work --
+        making the flush raise StaleDataError.
+        """
         cutoff = utc_now_naive() - timedelta(days=self.superseded_retention_days)
         deleted = 0
         async with self.db_manager.get_async_session() as session:
-            # Relationships first (they reference entities by FK).
-            stmt = select(KGRelationship).filter_by(
+            # Superseded relationships past retention (ids only).
+            stmt = select(
+                KGRelationship.id, KGRelationship.updated_at, KGRelationship.created_at
+            ).filter_by(user_id=user_id, formation_id=self.formation_id, status=STATUS_SUPERSEDED)
+            old_rel_ids = [
+                row[0]
+                for row in (await session.execute(stmt)).all()
+                if (row[1] or row[2]) <= cutoff
+            ]
+            if old_rel_ids:
+                await session.execute(
+                    delete(KGRelationship).where(KGRelationship.id.in_(old_rel_ids))
+                )
+                deleted += len(old_rel_ids)
+
+            # Superseded entities past retention (ids only).
+            stmt = select(KGEntity.id, KGEntity.updated_at, KGEntity.created_at).filter_by(
                 user_id=user_id, formation_id=self.formation_id, status=STATUS_SUPERSEDED
             )
-            for relationship in (await session.execute(stmt)).scalars().all():
-                if (relationship.updated_at or relationship.created_at) <= cutoff:
-                    await session.delete(relationship)
-                    deleted += 1
-            stmt = select(KGEntity).filter_by(
-                user_id=user_id, formation_id=self.formation_id, status=STATUS_SUPERSEDED
-            )
-            for entity in (await session.execute(stmt)).scalars().all():
-                if (entity.updated_at or entity.created_at) <= cutoff:
-                    # Remove edges referencing the entity before the row
-                    # itself so the FK never dangles mid-transaction.
-                    await session.execute(
-                        delete(KGRelationship).where(
-                            (KGRelationship.from_entity_id == entity.id)
-                            | (KGRelationship.to_entity_id == entity.id)
-                        )
+            old_entity_ids = [
+                row[0]
+                for row in (await session.execute(stmt)).all()
+                if (row[1] or row[2]) <= cutoff
+            ]
+            if old_entity_ids:
+                # Remove every edge referencing a purged entity before the
+                # entity rows so the FK never dangles mid-transaction
+                # (cascade cleanup, not counted as superseded deletions).
+                await session.execute(
+                    delete(KGRelationship).where(
+                        KGRelationship.from_entity_id.in_(old_entity_ids)
+                        | KGRelationship.to_entity_id.in_(old_entity_ids)
                     )
-                    await session.delete(entity)
-                    deleted += 1
+                )
+                await session.execute(delete(KGEntity).where(KGEntity.id.in_(old_entity_ids)))
+                deleted += len(old_entity_ids)
             await session.flush()
         return deleted
 
@@ -407,8 +426,13 @@ class MemoryLintService:
             if not last_accessed:
                 continue
             try:
-                accessed_at = datetime.fromisoformat(str(last_accessed))
-            except ValueError:
+                # Normalize tz-aware stamps to naive: the runtime stores
+                # naive UTC, but external artifact rows may carry offsets;
+                # comparing aware vs naive raises TypeError, and an
+                # unparseable stamp raises ValueError -- either would
+                # otherwise abort the whole user's lint pass.
+                accessed_at = datetime.fromisoformat(str(last_accessed)).replace(tzinfo=None)
+            except (ValueError, TypeError):
                 continue
             if accessed_at <= cutoff:
                 findings.append(

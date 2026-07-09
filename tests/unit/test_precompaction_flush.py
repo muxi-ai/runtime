@@ -187,11 +187,18 @@ class TestGrouping:
         for timestamp_key, _ in grouped["u1"]:
             float(timestamp_key)
 
-    def test_missing_user_id_defaults_to_single_user_scope(self):
+    def test_missing_user_id_items_are_skipped(self):
+        # Items without user_id metadata are dropped rather than attributed
+        # to a fallback scope (which would pollute a real user's log or
+        # create orphan entries).
         item = _buffer_item("anonymous")
         del item["metadata"]["user_id"]
-        grouped = _group_items_by_user([item])
-        assert set(grouped) == {"0"}
+        keeper = _buffer_item("attributed", user_id="u9")
+
+        grouped = _group_items_by_user([item, keeper])
+
+        assert set(grouped) == {"u9"}
+        assert [text for _, text in grouped["u9"]] == ["User: attributed"]
 
 
 class TestFlushService:

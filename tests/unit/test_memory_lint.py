@@ -271,6 +271,49 @@ class TestSupersededPurge:
         entities = await graph.storage.list_entities(USER, status=None)
         assert any(e["name"] == "Recent Move" for e in entities)
 
+    async def test_superseded_relationship_with_superseded_endpoint(self, db_manager, graph):
+        """The overlap case: a superseded edge whose endpoint entity is also
+        superseded must purge cleanly (the old ORM-delete loop double-deleted
+        the edge and made the session flush raise StaleDataError)."""
+        old_home = await graph.storage.upsert_entity(
+            user_id=USER, entity_type="location", name="Old Home", confidence=0.5
+        )
+        person = await graph.storage.upsert_entity(
+            user_id=USER, entity_type="person", name="Ran", confidence=0.9
+        )
+        relationship = await graph.storage.upsert_relationship(
+            user_id=USER,
+            from_entity_id=person["id"],
+            to_entity_id=old_home["id"],
+            rel_type="lives_in",
+            confidence=0.5,
+        )
+        stamp = utc_now_naive() - timedelta(days=60)
+        async with db_manager.get_async_session() as session:
+            await session.execute(
+                update(KGEntity)
+                .where(KGEntity.id == old_home["id"])
+                .values(status=STATUS_SUPERSEDED, updated_at=stamp)
+            )
+            await session.execute(
+                update(KGRelationship)
+                .where(KGRelationship.id == relationship["id"])
+                .values(status=STATUS_SUPERSEDED, updated_at=stamp)
+            )
+
+        service = _lint(db_manager, knowledge_graph=graph)
+        report = await service.run_lint(user_id=USER)  # must not raise
+
+        # One superseded relationship + one superseded entity purged.
+        assert report["superseded_deleted"] == 2
+        entities = await graph.storage.list_entities(USER, status=None)
+        assert all(e["name"] != "Old Home" for e in entities)
+        assert await graph.storage.list_relationships(USER) == []
+        # The failure previously surfaced as a silently skipped user: the
+        # per-user catch swallowed the StaleDataError. A counted user pins
+        # that the pass really ran.
+        assert report["users"] == 1
+
 
 class TestOrphanCleanup:
     async def _seed_orphan(self, db_manager, graph) -> None:
@@ -343,6 +386,26 @@ class TestLogGapsAndArtifacts:
         assert "Old Report" in report["findings"][USER][0]
         assert all("Fresh Diagram" not in f for f in report["findings"][USER])
 
+    async def test_tz_aware_timestamps_never_abort_the_lint_pass(self, db_manager, captains_log):
+        """tz-aware ISO stamps must normalize instead of raising TypeError
+        (which the per-user catch would turn into a silently skipped user)."""
+        stale_aware = (utc_now_naive() - timedelta(days=120)).isoformat() + "+00:00"
+        fresh_aware = utc_now_naive().isoformat() + "+00:00"
+        artifact_memory = FakeArtifactMemory(
+            [
+                {"name": "Aware Old Report", "last_accessed_at": stale_aware},
+                {"name": "Aware Fresh Diagram", "last_accessed_at": fresh_aware},
+                {"name": "Broken Stamp", "last_accessed_at": "not-a-date"},
+            ]
+        )
+
+        service = _lint(db_manager, captains_log=captains_log, artifact_memory=artifact_memory)
+        report = await service.run_lint(user_id=USER)  # must not raise
+
+        assert report["users"] == 1  # the user's pass completed
+        assert report["stale_artifacts"] == 1
+        assert "Aware Old Report" in report["findings"][USER][0]
+
 
 class TestIndexIntegration:
     async def test_findings_feed_the_knowledge_index(self, db_manager, graph, captains_log):
@@ -355,7 +418,8 @@ class TestIndexIntegration:
         service = _lint(db_manager, knowledge_graph=graph, captains_log=captains_log, index=index)
         report = await service.run_lint(user_id=USER)
 
-        # Never regenerated before -> the staleness check forces one.
+        # Lint regenerates the index unconditionally after the findings
+        # write-back (set_lint_findings invalidates the cached blob).
         assert report["index_regenerated"] == 1
         findings = await index.get_lint_findings(USER)
         assert findings == report["findings"][USER]
@@ -363,6 +427,22 @@ class TestIndexIntegration:
         block = await index.get_index_block(USER)
         assert "Knowledge gaps flagged by last lint:" in block
         assert "lives_in" in block
+
+    async def test_lint_regenerates_even_a_fresh_index(self, db_manager, graph, captains_log):
+        """Pins the always-regenerate-after-lint decision: lint is weekly
+        and regeneration is cheap, so no staleness gate applies."""
+        index = KnowledgeIndexService(
+            db_manager, FORMATION_ID, knowledge_graph=graph, captains_log=captains_log
+        )
+        await graph.storage.upsert_entity(
+            user_id=USER, entity_type="person", name="Ran", confidence=0.9
+        )
+        assert await index.get_index_block(USER)  # cache is warm and fresh
+
+        service = _lint(db_manager, knowledge_graph=graph, captains_log=captains_log, index=index)
+        report = await service.run_lint(user_id=USER)
+
+        assert report["index_regenerated"] == 1
 
     async def test_all_users_sweep_discovers_users_from_rows(self, db_manager, graph, captains_log):
         await graph.storage.upsert_entity(
