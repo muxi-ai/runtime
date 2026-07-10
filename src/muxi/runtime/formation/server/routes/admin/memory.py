@@ -68,17 +68,22 @@ class MemoryForgetRequest(BaseModel):
 
     Soft-deletes every live memory event from ``source`` for the user and
     records the user.deletion audit event. With ``rebuild`` (default
-    True) the projections are recomputed immediately, so derived state
-    reflects the forgetting; otherwise the events stay excluded from any
-    later rebuild. Soft-deleted events are reversible until the
-    retention grace period elapses and the hard-purge worker removes
-    them.
+    True) the projections are recomputed so derived state reflects the
+    forgetting; otherwise the events stay excluded from any later
+    rebuild. ``background`` (default True) runs that rebuild as a
+    tracked background job (202 + ``job_id`` pollable at GET
+    /memory/forget/{job_id}) so large users never block the admin call;
+    ``background: false`` -- or the ``?sync=true`` query escape hatch --
+    blocks until the rebuild finishes and returns the report inline.
+    Soft-deleted events are reversible until the retention grace period
+    elapses and the hard-purge worker removes them.
     """
 
     user_id: str
     source: str
     reason: str = "user_request"
     rebuild: bool = True
+    background: bool = True
 
 
 @router.get("/memory", response_model=APIResponse)
@@ -207,6 +212,70 @@ async def _run_memory_job(memory_events, job: MemoryRebuildRequest) -> Dict[str,
     return data
 
 
+async def _start_tracked_job(overlord, prefix: str, user_id: str, runner) -> str:
+    """Track and launch one background admin job; returns its job id.
+
+    ``runner`` is an argless coroutine function producing the job's
+    result dict. The job is registered with the overlord's request
+    tracker (the same lifecycle chat requests use), so it survives for
+    polling after completion and its task can be cancelled on shutdown.
+    """
+    import asyncio
+    import time
+
+    from .....utils.id_generator import get_default_nanoid
+    from ....background.request_tracker import RequestState, RequestStatus
+
+    job_id = f"{prefix}_{get_default_nanoid()}"
+    tracker = overlord.request_tracker
+    state = RequestState(
+        id=job_id,
+        status=RequestStatus.PROCESSING,
+        start_time=time.time(),
+        user_id=user_id,
+    )
+    await tracker.track_request(job_id, state)
+
+    async def _job():
+        try:
+            result = await runner()
+            await tracker.update_request(job_id, status=RequestStatus.COMPLETED, result=result)
+        except Exception as e:
+            await tracker.update_request(job_id, status=RequestStatus.FAILED, error=str(e))
+
+    state.task_ref = asyncio.create_task(_job())
+    return job_id
+
+
+async def _job_status_response(request: Request, job_id: str, kind: str) -> JSONResponse:
+    """Shared poll handler for background memory jobs (rebuild / forget)."""
+    request_id = getattr(request.state, "request_id", None)
+    formation = request.app.state.formation
+    overlord = getattr(formation, "_overlord", None)
+    if overlord is None:
+        response = create_error_response(
+            "SERVICE_UNAVAILABLE", "Overlord service is not available", None, request_id
+        )
+        return JSONResponse(content=response.model_dump(), status_code=503)
+
+    state = await overlord.request_tracker.get_request(job_id)
+    if state is None:
+        response = create_error_response(
+            "NOT_FOUND", f"Unknown or expired {kind} job '{job_id}'", None, request_id
+        )
+        return JSONResponse(content=response.model_dump(), status_code=404)
+
+    data: Dict[str, Any] = {"job_id": job_id, "status": state.status.value}
+    if state.error:
+        data["error"] = state.error
+    if isinstance(state.result, dict):
+        data.update(state.result)
+    response = create_success_response(
+        APIObjectType.MEMORY, APIEventType.MEMORY_RETRIEVED, data, request_id
+    )
+    return JSONResponse(content=response.model_dump(), status_code=200)
+
+
 @router.post("/memory/rebuild", response_model=APIResponse, operation_id="rebuild_memory")
 async def rebuild_memory_projections(
     request: Request, rebuild: MemoryRebuildRequest
@@ -240,30 +309,11 @@ async def rebuild_memory_projections(
         return JSONResponse(content=response.model_dump(), status_code=422)
 
     if rebuild.background and not rebuild.dry_run:
-        import asyncio
-        import time
 
-        from .....utils.id_generator import get_default_nanoid
-        from ....background.request_tracker import RequestState, RequestStatus
+        async def _runner():
+            return await _run_memory_job(memory_events, rebuild)
 
-        job_id = f"rebuild_{get_default_nanoid()}"
-        tracker = overlord.request_tracker
-        state = RequestState(
-            id=job_id,
-            status=RequestStatus.PROCESSING,
-            start_time=time.time(),
-            user_id=rebuild.user_id,
-        )
-        await tracker.track_request(job_id, state)
-
-        async def _job():
-            try:
-                result = await _run_memory_job(memory_events, rebuild)
-                await tracker.update_request(job_id, status=RequestStatus.COMPLETED, result=result)
-            except Exception as e:
-                await tracker.update_request(job_id, status=RequestStatus.FAILED, error=str(e))
-
-        state.task_ref = asyncio.create_task(_job())
+        job_id = await _start_tracked_job(overlord, "rebuild", rebuild.user_id, _runner)
         data = {
             "user_id": rebuild.user_id,
             "job_id": job_id,
@@ -345,31 +395,17 @@ async def lint_memory(request: Request, lint: MemoryLintRequest) -> JSONResponse
 )
 async def get_memory_rebuild_status(request: Request, job_id: str) -> JSONResponse:
     """Poll a background memory rebuild job (completed reports attached)."""
-    request_id = getattr(request.state, "request_id", None)
-    formation = request.app.state.formation
-    overlord = getattr(formation, "_overlord", None)
-    if overlord is None:
-        response = create_error_response(
-            "SERVICE_UNAVAILABLE", "Overlord service is not available", None, request_id
-        )
-        return JSONResponse(content=response.model_dump(), status_code=503)
+    return await _job_status_response(request, job_id, "rebuild")
 
-    state = await overlord.request_tracker.get_request(job_id)
-    if state is None:
-        response = create_error_response(
-            "NOT_FOUND", f"Unknown or expired rebuild job '{job_id}'", None, request_id
-        )
-        return JSONResponse(content=response.model_dump(), status_code=404)
 
-    data: Dict[str, Any] = {"job_id": job_id, "status": state.status.value}
-    if state.error:
-        data["error"] = state.error
-    if isinstance(state.result, dict):
-        data.update(state.result)
-    response = create_success_response(
-        APIObjectType.MEMORY, APIEventType.MEMORY_RETRIEVED, data, request_id
-    )
-    return JSONResponse(content=response.model_dump(), status_code=200)
+@router.get(
+    "/memory/forget/{job_id}",
+    response_model=APIResponse,
+    operation_id="get_memory_forget_status",
+)
+async def get_memory_forget_status(request: Request, job_id: str) -> JSONResponse:
+    """Poll a background memory forget job (rebuild report attached)."""
+    return await _job_status_response(request, job_id, "forget")
 
 
 @router.post("/memory/backfill", response_model=APIResponse, operation_id="backfill_memory")
@@ -383,6 +419,12 @@ async def backfill_memory_events(request: Request, backfill: MemoryBackfillReque
     stamped in place; flat-fact rows become provenance-complete on the
     next rebuild (POST /memory/rebuild with ``backfill: true`` does both
     in one call).
+
+    BOUNDED PER PASS: each projection scans at most
+    BACKFILL_MAX_ROWS_PER_PASS rows per table per call, persisting a
+    resume cursor between passes. A projection reporting ``complete:
+    false`` still has unscanned rows -- call again until every
+    projection reports ``complete: true``.
     """
     request_id = getattr(request.state, "request_id", None)
     memory_events, _overlord, error_response = _memory_events_or_error(request, request_id)
@@ -408,7 +450,9 @@ async def backfill_memory_events(request: Request, backfill: MemoryBackfillReque
 
 
 @router.post("/memory/forget", response_model=APIResponse, operation_id="forget_memory_source")
-async def forget_memory_source(request: Request, forget: MemoryForgetRequest) -> JSONResponse:
+async def forget_memory_source(
+    request: Request, forget: MemoryForgetRequest, sync: bool = False
+) -> JSONResponse:
     """
     Forget every memory derived from a source (GDPR / selective forgetting).
 
@@ -417,9 +461,16 @@ async def forget_memory_source(request: Request, forget: MemoryForgetRequest) ->
     removes them permanently), records the user.deletion audit event,
     and -- unless ``rebuild: false`` -- recomputes the projections so
     derived state reflects a world where the source was never imported.
+
+    The soft delete itself always runs inline (the response carries
+    ``deleted_events``). The rebuild runs as a tracked background job by
+    default (202 + ``job_id`` pollable at GET /memory/forget/{job_id})
+    so large users never block the admin call; ``background: false`` in
+    the body or ``?sync=true`` on the query blocks until the rebuild
+    finishes and returns the projection report inline.
     """
     request_id = getattr(request.state, "request_id", None)
-    memory_events, _overlord, error_response = _memory_events_or_error(request, request_id)
+    memory_events, overlord, error_response = _memory_events_or_error(request, request_id)
     if error_response:
         return error_response
 
@@ -433,10 +484,27 @@ async def forget_memory_source(request: Request, forget: MemoryForgetRequest) ->
             "deleted_events": result["deleted_events"],
             "grace_period_days": memory_events.grace_period_days,
         }
-        if forget.rebuild:
-            data["projections"] = await memory_events.rebuild(forget.user_id)
-        else:
+        if not forget.rebuild:
             data["rebuild_required"] = result["rebuild_required"]
+        elif forget.background and not sync:
+
+            async def _runner():
+                return {"projections": await memory_events.rebuild(forget.user_id)}
+
+            job_id = await _start_tracked_job(overlord, "forget", forget.user_id, _runner)
+            data.update(
+                {
+                    "job_id": job_id,
+                    "status": "processing",
+                    "status_url": f"/memory/forget/{job_id}",
+                }
+            )
+            response = create_success_response(
+                APIObjectType.MEMORY, APIEventType.MEMORY_DELETED, data, request_id
+            )
+            return JSONResponse(content=response.model_dump(), status_code=202)
+        else:
+            data["projections"] = await memory_events.rebuild(forget.user_id)
     except ValueError as e:
         response = create_error_response("INVALID_PARAMS", str(e), None, request_id)
         return JSONResponse(content=response.model_dump(), status_code=422)

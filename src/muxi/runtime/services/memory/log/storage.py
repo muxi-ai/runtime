@@ -144,8 +144,14 @@ class CaptainsLogStorage:
         limit: int = 10,
         date_from: Optional[date_type] = None,
         date_to: Optional[date_type] = None,
+        after_id: Optional[int] = None,
     ) -> List[Dict[str, Any]]:
-        """List entries for a user, newest date first."""
+        """List entries for a user, newest date first.
+
+        ``after_id`` switches to keyset pagination: rows with id greater
+        than the cursor, oldest first (the legacy backfill's stable
+        multi-pass scan ordering).
+        """
         async with self.db_manager.get_async_session() as session:
             stmt = select(CaptainsLogEntry).filter_by(
                 user_id=str(user_id), formation_id=self.formation_id
@@ -154,9 +160,29 @@ class CaptainsLogStorage:
                 stmt = stmt.filter(CaptainsLogEntry.date >= date_from)
             if date_to is not None:
                 stmt = stmt.filter(CaptainsLogEntry.date <= date_to)
-            stmt = stmt.order_by(CaptainsLogEntry.date.desc()).limit(limit)
+            if after_id is not None:
+                stmt = stmt.filter(CaptainsLogEntry.id > after_id)
+                stmt = stmt.order_by(CaptainsLogEntry.id.asc()).limit(limit)
+            else:
+                stmt = stmt.order_by(CaptainsLogEntry.date.desc()).limit(limit)
             rows = (await session.execute(stmt)).scalars().all()
             return [row.to_dict() for row in rows]
+
+    async def get_entry_dates(self, log_ids) -> Dict[int, Optional[str]]:
+        """Return {entry id: ISO date} for many entries in one query.
+
+        Batched lookup for the lesson backfill, whose paginated lesson
+        pages may reference entries outside the current entry page.
+        """
+        ids = [log_id for log_id in log_ids if log_id is not None]
+        if not ids:
+            return {}
+        async with self.db_manager.get_async_session() as session:
+            stmt = select(CaptainsLogEntry.id, CaptainsLogEntry.date).filter(
+                CaptainsLogEntry.id.in_(ids)
+            )
+            rows = (await session.execute(stmt)).all()
+            return {int(row[0]): row[1].isoformat() if row[1] else None for row in rows}
 
     # ------------------------------------------------------------------
     # Source lineage (evidence trail + derivation DAG)
@@ -384,19 +410,27 @@ class LessonStorage:
             await session.flush()
             return lesson.to_dict(), True
 
-    async def list_all_for_user(self, user_id: str) -> List[Dict[str, Any]]:
+    async def list_all_for_user(
+        self,
+        user_id: str,
+        limit: Optional[int] = None,
+        after_id: Optional[int] = None,
+    ) -> List[Dict[str, Any]]:
         """Every lesson for a user (any archived state), oldest first.
 
         Legacy backfill support (Memory Substrate Phase 2d): the backfill
         scans the full projection for rows without event provenance, so
         archived lessons are included -- replay must reproduce them too.
+        ``after_id`` / ``limit`` support the backfill's bounded multi-pass
+        keyset scan.
         """
         async with self.db_manager.get_async_session() as session:
-            stmt = (
-                select(Lesson)
-                .filter_by(user_id=str(user_id), formation_id=self.formation_id)
-                .order_by(Lesson.id.asc())
-            )
+            stmt = select(Lesson).filter_by(user_id=str(user_id), formation_id=self.formation_id)
+            if after_id is not None:
+                stmt = stmt.filter(Lesson.id > after_id)
+            stmt = stmt.order_by(Lesson.id.asc())
+            if limit is not None:
+                stmt = stmt.limit(limit)
             rows = (await session.execute(stmt)).scalars().all()
             return [row.to_dict() for row in rows]
 
