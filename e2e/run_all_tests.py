@@ -228,14 +228,22 @@ def capture_proof(test_file: Path, run_name: str) -> None:
     try:
         subprocess.run(
             [
-                "proof", "capture",
-                "--app", PROOF_APP,
-                "--command", command,
-                "--mode", "terminal",
-                "--label", label,
-                "--dir", str(EVIDENCE_DIR),
-                "--run", run_name,
-                "--description", test_file.stem.replace("_", " "),
+                "proof",
+                "capture",
+                "--app",
+                PROOF_APP,
+                "--command",
+                command,
+                "--mode",
+                "terminal",
+                "--label",
+                label,
+                "--dir",
+                str(EVIDENCE_DIR),
+                "--run",
+                run_name,
+                "--description",
+                test_file.stem.replace("_", " "),
             ],
             timeout=timeout,
             capture_output=True,
@@ -251,7 +259,16 @@ def generate_proof_reports(run_names: list) -> None:
     for run_name in run_names:
         try:
             subprocess.run(
-                ["proof", "report", "--app", PROOF_APP, "--dir", str(EVIDENCE_DIR), "--run", run_name],
+                [
+                    "proof",
+                    "report",
+                    "--app",
+                    PROOF_APP,
+                    "--dir",
+                    str(EVIDENCE_DIR),
+                    "--run",
+                    run_name,
+                ],
                 timeout=30,
                 capture_output=True,
             )
@@ -260,7 +277,11 @@ def generate_proof_reports(run_names: list) -> None:
 
 
 def main():
-    provision_keys()
+    try:
+        provision_keys()
+    except Exception as exc:
+        print(f"[provision_keys] error: {exc}", file=sys.stderr)
+        sys.exit(1)
     RESULTS_DIR.mkdir(parents=True, exist_ok=True)
 
     # Collect all test files

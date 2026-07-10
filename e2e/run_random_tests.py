@@ -36,7 +36,11 @@ def main():
     args = parser.parse_args()
     n = args.n
 
-    provision_keys()
+    try:
+        provision_keys()
+    except Exception as exc:
+        print(f"[provision_keys] error: {exc}", file=sys.stderr)
+        sys.exit(1)
 
     excluded = set()
     if args.exclude_file:
@@ -56,7 +60,9 @@ def main():
 
     if excluded:
         before = len(all_tests)
-        all_tests = [t for t in all_tests if str(t.relative_to(t.parent.parent.parent)) not in excluded]
+        all_tests = [
+            t for t in all_tests if str(t.relative_to(t.parent.parent.parent)) not in excluded
+        ]
         print(f"Excluded {before - len(all_tests)} already-passing tests from pool")
 
     if n > len(all_tests):

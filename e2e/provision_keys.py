@@ -102,6 +102,11 @@ def provision_keys(
     key_bytes = assets_key.read_bytes()
     shared_secrets_bytes = _read_resolved(assets_secrets)
 
+    # NOTE: a non-zero warnings count does NOT abort the run -- warnings flag
+    # formations the provisioner deliberately left alone (e.g. a formation-owned
+    # key pair, or a readable symlink pointing at a DIFFERENT checkout's key,
+    # which will decrypt with the wrong key). They surface in console output;
+    # callers wanting strictness can inspect the returned stats dict.
     stats: Dict[str, List[str]] = {"created": [], "replaced": [], "ok": [], "warnings": []}
 
     def log(action: str, rel: str, detail: str = "") -> None:
