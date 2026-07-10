@@ -417,9 +417,9 @@ class TestRecallGateKnowledgeGraph:
         assert await system._is_recall_question_with_answer(
             "What is my email address?", {"user_id": "0"}
         )
-        overlord.knowledge_graph.get_context_block.assert_awaited_once_with(
-            "0", query_text="What is my email address?"
-        )
+        # Existence check only: the gate must not trigger the topic-match/
+        # multi-hop traversal -- that runs where the context is built.
+        overlord.knowledge_graph.get_context_block.assert_awaited_once_with("0", query_text=None)
 
     @pytest.mark.asyncio
     async def test_empty_graph_does_not_skip_clarification(self):

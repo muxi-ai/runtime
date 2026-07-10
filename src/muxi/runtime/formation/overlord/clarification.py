@@ -1586,11 +1586,13 @@ Please check {mcp_service}'s documentation for specific instructions on obtainin
             # clarification -- the agent's context carries the rendered
             # graph block (see _fetch_graph_context), so a non-empty
             # graph gets the same benefit of the doubt as a non-empty
-            # vector result set above.
+            # vector result set above. Existence check only (no
+            # query_text): the topic-match/multi-hop traversal runs
+            # where the context is actually built, not twice per turn.
             knowledge_graph = getattr(self.overlord, "knowledge_graph", None)
             if knowledge_graph is not None:
                 try:
-                    if await knowledge_graph.get_context_block(user_id, query_text=clean_message):
+                    if await knowledge_graph.get_context_block(user_id, query_text=None):
                         return True
                 except Exception:
                     # If the graph lookup fails, don't skip clarification

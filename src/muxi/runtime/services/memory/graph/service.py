@@ -530,10 +530,13 @@ class KnowledgeGraphService:
         compact attribute cards ("Name (type): key: value; ...") for the
         entities carrying attribute facts -- emails, roles, tracking codes
         live on the entity itself, so a relationship-only rendering would
-        never surface them to the LLM. Cards are budgeted like the
-        relationship lines (at most ``limit``), most relevant entities
-        first: entities touching the ranked relationships lead, then the
-        newest attribute-bearing entities. Entities without attributes add
+        never surface them to the LLM. Relationships and cards SHARE the
+        single ``limit`` budget -- relationship lines consume first, cards
+        fill the remainder -- so the block never grows past the ceiling
+        callers sized their context for. Cards render most relevant
+        entities first: entities touching the ranked relationships lead,
+        then the newest attribute-bearing entities. Entities without
+        attributes add
         nothing -- graphs with no attribute facts render exactly as
         before. When the query mentions a known entity, multi-hop
         exploration via the GraphAlgorithms backend appends the entities
@@ -576,7 +579,13 @@ class KnowledgeGraphService:
                 f"{names.get(r['to_entity_id'], '?')}"
                 for r in relationships
             ]
-            lines.extend(_attribute_lines(connected_ids, entities, entities_by_id, limit))
+            # Shared budget: relationship lines consume first (they lead
+            # the relevance order), attribute cards fill the remainder --
+            # the block never exceeds the single ``limit`` ceiling callers
+            # sized their context for.
+            remaining = limit - len(lines)
+            if remaining > 0:
+                lines.extend(_attribute_lines(connected_ids, entities, entities_by_id, remaining))
             if not lines:
                 return ""
 
@@ -711,9 +720,11 @@ def _attribute_lines(
 
     Most relevant first: entities touching the ranked relationships (in
     rank order) lead, then the remaining attribute-bearing entities from
-    the scan window (newest first). At most ``limit`` cards, mirroring
-    the relationship budget. Entities without renderable attributes are
-    skipped entirely, so attribute-free graphs render unchanged.
+    the scan window (newest first). At most ``limit`` cards -- the caller
+    passes the budget left after the relationship lines, so the whole
+    block stays under one shared ceiling. Entities without renderable
+    attributes are skipped entirely, so attribute-free graphs render
+    unchanged.
     """
     ordered_ids = list(connected_ids)
     seen = set(connected_ids)
@@ -763,8 +774,14 @@ def _entity_attribute_line(entity: Dict[str, Any], attributes: Dict[str, Any]) -
 
 
 def _format_attribute_value(value: Any) -> str:
-    """Render one attribute value compactly (lists join, scalars stringify)."""
-    if isinstance(value, (list, tuple, set)):
+    """Render one attribute value compactly (lists join, scalars stringify).
+
+    Sets are sorted first -- their iteration order is arbitrary, and the
+    card must render deterministically for the same stored value.
+    """
+    if isinstance(value, (set, frozenset)):
+        return ", ".join(sorted(str(item) for item in value))
+    if isinstance(value, (list, tuple)):
         return ", ".join(str(item) for item in value)
     return str(value)
 

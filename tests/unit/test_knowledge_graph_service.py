@@ -344,13 +344,44 @@ class TestQuerySurface:
             )
 
         block = await service.get_context_block("u1", limit=3)
-        attribute_lines = [line for line in block.splitlines() if "-[" not in line]
-        assert len(attribute_lines) == 3  # card budget mirrors the relationship budget
-        # Connected entities lead (relationship rank order) ...
+        lines = block.splitlines()
+        # Shared budget: 1 relationship line + 2 cards, never more than limit.
+        assert len(lines) == 3
+        attribute_lines = [line for line in lines if "-[" not in line]
+        assert len(attribute_lines) == 2
+        # Connected entities lead (relationship rank order).
         assert attribute_lines[0].startswith("User (person):")
         assert attribute_lines[1].startswith("Acme (company):")
-        # ... then the newest attribute-bearing entity from the scan.
-        assert attribute_lines[2].startswith("Project 4 (project):")
+
+    async def test_context_block_relationships_consume_shared_budget(self, service):
+        # When relationship lines fill the limit, no attribute cards render:
+        # relationships and cards share ONE ceiling (callers sized their
+        # context assuming limit-bounded output).
+        storage = service.storage
+        user = await storage.upsert_entity(
+            "u1", "person", "User", attributes={"email": "a@b.c"}, confidence=0.95
+        )
+        acme = await storage.upsert_entity("u1", "company", "Acme", confidence=0.95)
+        muxi = await storage.upsert_entity("u1", "project", "MUXI", confidence=0.9)
+        await storage.upsert_relationship("u1", user["id"], acme["id"], "founded", confidence=0.95)
+        await storage.upsert_relationship("u1", acme["id"], muxi["id"], "building", confidence=0.9)
+
+        block = await service.get_context_block("u1", limit=2)
+        assert block.splitlines() == [
+            "User -[founded]-> Acme",
+            "Acme -[building]-> MUXI",
+        ]
+
+    async def test_context_block_unconnected_cards_newest_first(self, service):
+        for i in range(5):
+            await service.storage.upsert_entity(
+                "u1", "project", f"Project {i}", attributes={"code": f"P-{i}"}, confidence=0.5
+            )
+        block = await service.get_context_block("u1", limit=2)
+        lines = block.splitlines()
+        assert len(lines) == 2
+        assert lines[0].startswith("Project 4 (project):")
+        assert lines[1].startswith("Project 3 (project):")
 
     async def test_context_block_skips_internal_and_empty_attributes(self, service):
         await service.storage.upsert_entity(
@@ -379,6 +410,15 @@ class TestQuerySurface:
         )
         block = await service.get_context_block("u1")
         assert block == "User (person): aliases: Jordan, J"
+
+    def test_set_attribute_values_render_deterministically(self):
+        # Sets have arbitrary iteration order; the card must not churn
+        # between renders of the same stored value.
+        from muxi.runtime.services.memory.graph.service import _format_attribute_value
+
+        assert _format_attribute_value({"pear", "apple", "banana"}) == "apple, banana, pear"
+        assert _format_attribute_value(frozenset({"b", "a"})) == "a, b"
+        assert _format_attribute_value(["z", "a"]) == "z, a"  # lists keep stored order
 
     async def test_explain_path_renders_edge_chain(self, service):
         await self._seed(service)
