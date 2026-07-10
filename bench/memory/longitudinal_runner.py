@@ -27,9 +27,9 @@ Runs the four PRD Tier 3 scenarios against a real MUXI formation
 Every scenario is failure-isolated and writes its own report; the
 process exits nonzero when any scenario was partial or errored.
 Each scenario boots its own formation, and ``--scenario all`` runs
-one subprocess per scenario: the runtime's database manager is a
-process-level singleton, so two formations in one process would
-silently share the first run's (already removed) SQLite path.
+one subprocess per scenario for failure isolation and fresh process
+state (the runtime's database managers are keyed by connection
+string, so DB isolation itself no longer requires subprocesses).
 
 Usage
 -----
@@ -684,13 +684,12 @@ async def _run_scenario_subprocess(args: argparse.Namespace, key: str) -> Tuple[
 async def _run_all_scenarios(args: argparse.Namespace) -> int:
     """Run every scenario in its own subprocess (fresh formation each).
 
-    One subprocess per scenario because the runtime's database manager
-    is a process-level singleton keyed to the first connection string
-    it sees — a second formation in the same process would reuse the
-    first scenario's (already removed) run-local SQLite path. The
-    subprocesses run CONCURRENTLY (each has its own temp run dir and
-    report file); output is buffered per scenario and printed whole as
-    each finishes, so summaries never interleave.
+    One subprocess per scenario keeps scenarios failure-isolated with
+    fresh process state (the runtime's database managers are keyed by
+    connection string, so DB isolation alone no longer requires
+    subprocesses). The subprocesses run CONCURRENTLY (each has its own
+    temp run dir and report file); output is buffered per scenario and
+    printed whole as each finishes, so summaries never interleave.
     """
     tasks = [asyncio.create_task(_run_scenario_subprocess(args, key)) for key in SCENARIOS]
     exit_code = 0
