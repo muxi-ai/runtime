@@ -664,7 +664,6 @@ sandbox. No inner LLM loop, no orchestration, no new execution paths.
   ``failure_kind`` breakdown. Disable via ``skills.disable_builtin``;
   degrades like any scripted skill when no RCE is configured.
 
-### Fixes (#229, #231, #234, #235, #240, #241, #249, #269)
 ### Performance: local embeddings on macOS (#258)
 
 The CoreML execution provider is now off by default on macOS for the
@@ -673,7 +672,7 @@ it saved (observed: e2e p50 retrieval latency dropped ~27%) -- and the
 classifier warmup halves its embed calls. Set
 ``ONELLM_COREML_DISABLED=false`` to opt back in.
 
-### Fixes (#229, #231, #234, #235, #240, #241, #249, #257)
+### Fixes (#229, #231, #234, #235, #240, #241, #249, #257, #269, #272)
 
 - Pytest-based e2e tests no longer inherit the unit-test 60-second
   pytest-timeout through rootdir discovery: ``e2e/pytest.ini`` now owns
@@ -688,6 +687,9 @@ classifier warmup halves its embed calls. Set
   ``secrets.enc``. Stale auto-generated keys over the shared symlinked
   ``secrets.enc`` are replaced; formation-owned key/secrets pairs are
   never touched (#269).
+- The background-forget job lifecycle test polls with a wall-clock
+  deadline and a short sleep instead of 50 back-to-back requests, which
+  raced the background rebuild on loaded CI runners and flaked (#272).
 - Scheduler due-job queries are scoped to the owning formation:
   formations sharing one database no longer execute each other's
   scheduled jobs (``get_active_jobs_batch`` and its pagination count
