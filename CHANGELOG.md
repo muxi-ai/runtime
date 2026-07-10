@@ -632,6 +632,14 @@ sandbox. No inner LLM loop, no orchestration, no new execution paths.
 
 ### Fixes (#229, #231, #234, #235, #240, #241, #249)
 
+- The e2e harness self-provisions the gitignored formation ``.key``
+  symlinks (``e2e/provision_keys.py``, run automatically by
+  ``run_all_tests.py``/``run_random_tests.py``): fresh checkouts and git
+  worktrees no longer hit ``InvalidSignature`` failures from
+  SecretsManager auto-generating a wrong key next to the committed
+  ``secrets.enc``. Stale auto-generated keys over the shared symlinked
+  ``secrets.enc`` are replaced; formation-owned key/secrets pairs are
+  never touched.
 - Scheduler due-job queries are scoped to the owning formation:
   formations sharing one database no longer execute each other's
   scheduled jobs (``get_active_jobs_batch`` and its pagination count

@@ -9,6 +9,7 @@ import random
 import sys
 import time
 
+from provision_keys import provision_keys
 from run_all_tests import (
     AREAS,
     EVIDENCE_DIR,
@@ -34,6 +35,8 @@ def main():
     )
     args = parser.parse_args()
     n = args.n
+
+    provision_keys()
 
     excluded = set()
     if args.exclude_file:

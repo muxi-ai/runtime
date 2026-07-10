@@ -14,6 +14,8 @@ import sys
 import time
 from pathlib import Path
 
+from provision_keys import provision_keys
+
 TIMEOUT_SECONDS = 120
 EARLY_KILL_AFTER_SUCCESS = 3  # seconds to wait after SUCCESS before killing
 AREA_TIMEOUT_OVERRIDES = {
@@ -258,6 +260,7 @@ def generate_proof_reports(run_names: list) -> None:
 
 
 def main():
+    provision_keys()
     RESULTS_DIR.mkdir(parents=True, exist_ok=True)
 
     # Collect all test files
