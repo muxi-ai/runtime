@@ -893,6 +893,11 @@ class Overlord:
 
         self.memory_ingestion = MemoryIngestionService(self)
 
+        # Memory synthesis cadences (Memory Ingestion maturation): created
+        # in start_background_services only when memory.ingestion is
+        # configured -- inert otherwise (pinned by unit test).
+        self.memory_synthesis = None
+
         # Memory distillery intake (Memory Distillery Phase 3b): the
         # verify + accept service behind POST /v1/memories/distilled.
         # Construction is cheap (config parse only) and the service stays
@@ -1572,6 +1577,11 @@ class Overlord:
         # without url-based knowledge sources.
         self._initialize_knowledge_sync_service()
 
+        # Register the memory synthesis cadences (Memory Ingestion
+        # maturation) on the same scheduler loop. No-op for formations
+        # without a memory.ingestion block.
+        self._initialize_memory_synthesis()
+
         # Start the knowledge graph periodic extraction loop now that the
         # extraction/default model is resolved. The getter is evaluated per
         # run so the loop always uses the current capability model.
@@ -1746,6 +1756,64 @@ class Overlord:
                 f"heartbeat {'on' if self.heartbeat_service else 'off'}",
             )
         )
+
+    def _initialize_memory_synthesis(self) -> None:
+        """
+        Create the memory synthesis service (Memory Ingestion maturation).
+
+        Inert when ingestion is unconfigured: formations without a
+        ``memory.ingestion`` block get no synthesis service, no periodic
+        task, and never import the synthesis module (pinned by unit
+        test). When ingestion is configured, the cadences ride the
+        scheduler's worker loop through ``register_periodic_task`` -- the
+        same extension point the proactive heartbeat and remote knowledge
+        sync use. Without a running scheduler the service still exists
+        for manual passes (``run_cadence``) but nothing fires
+        periodically; that degradation is announced at init, never a
+        startup failure. The service also requires the memory event
+        substrate (synthesis reads and writes through it).
+        """
+        memory_config = (self.formation_config or {}).get("memory") or {}
+        ingestion_config = memory_config.get("ingestion")
+        if not isinstance(ingestion_config, dict) or not ingestion_config:
+            return
+
+        settings = getattr(self.memory_ingestion, "settings", None)
+        if settings is None or not settings.synthesis.enabled:
+            return
+
+        memory_events = getattr(self, "memory_events", None)
+        if memory_events is None or not getattr(memory_events, "enabled", False):
+            return
+
+        from ...datatypes.observability import InitEventFormatter
+        from ...services.memory.synthesis import CADENCES, MemorySynthesisService
+
+        self.memory_synthesis = MemorySynthesisService(
+            self, settings.synthesis, settings.entity_resolution
+        )
+
+        enabled_cadences = [
+            cadence for cadence in CADENCES if settings.synthesis.cadence(cadence).enabled
+        ]
+        if not enabled_cadences:
+            return
+        if self.scheduler_service:
+            self.scheduler_service.register_periodic_task(self.memory_synthesis)
+            print(
+                InitEventFormatter.format_ok(
+                    "Memory synthesis cadences active",
+                    ", ".join(enabled_cadences),
+                )
+            )
+        else:
+            print(
+                InitEventFormatter.format_warn(
+                    "Memory synthesis cadences require the scheduler",
+                    "manual passes only - enable 'scheduler.enabled: true' "
+                    "(requires persistent memory) for periodic synthesis",
+                )
+            )
 
     def _initialize_knowledge_sync_service(self) -> None:
         """

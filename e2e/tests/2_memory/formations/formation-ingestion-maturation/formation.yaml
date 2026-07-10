@@ -1,0 +1,73 @@
+schema: "1.0.0"
+id: ingestion-maturation-test
+description: "Formation for testing ingestion maturation: tier heuristics, entity resolution, synthesis cadences"
+auto_extract_user_info: true
+
+runtime:
+  built_in_mcps: false
+
+overlord:
+  clarification:
+    enabled: false
+
+llm:
+  settings:
+    temperature: 0.2
+    max_tokens: 1000
+  api_keys:
+    openai: "${{ secrets.OPENAI_API_KEY }}"
+  models:
+    - text: "openai/gpt-4o-mini"
+    - embedding: "openai/text-embedding-3-small"
+
+# Scheduler on so the synthesis cadences register as a periodic task
+# (the test drives passes directly for determinism; registration is the
+# assertion here).
+scheduler:
+  enabled: true
+
+memory:
+  buffer:
+    size: 50
+    multiplier: 10
+    vector_search: false
+
+  persistent:
+    provider: "sqlite"
+    connection_string: "ingestion_maturation_test.db"
+    embedding_model: "openai/text-embedding-3-small"
+
+  # Ingestion maturation surface: tier heuristics on (defaults), entity
+  # resolution with lowered thresholds so name+email/employer evidence
+  # from real LLM extraction reliably crosses the merge bar, and the
+  # synthesis cadence table (defaults, cold_cold weekly).
+  ingestion:
+    sources:
+      notes:
+        filter: lenient
+    tiers:
+      enabled: true
+    entity_resolution:
+      enabled: true
+      auto_merge_threshold: 0.45
+      flag_threshold: 0.3
+    synthesis:
+      enabled: true
+
+agents:
+  - id: assistant
+    name: "Maturation Test Assistant"
+    description: "A helpful assistant for testing matured ingestion recall"
+    system_message: "You are a helpful assistant. Be concise and direct. Answer from the provided context when possible."
+
+server:
+  enabled: true
+  port: 8275
+  api_keys:
+    admin_key: test-admin-key-2v2
+    client_key: test-client-key-2v2
+
+logging:
+  system:
+    level: "error"
+    destination: "stdout"

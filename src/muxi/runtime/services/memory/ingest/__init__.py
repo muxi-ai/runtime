@@ -19,6 +19,16 @@ from .classification import (
     classify_content,
     is_filtered,
 )
+from .config import (
+    TIER_FRONTIER,
+    TIER_LOCAL,
+    TIER_STANDARD,
+    IngestionSettings,
+    ResolutionSettings,
+    SynthesisSettings,
+    TierSettings,
+    parse_ingestion_config,
+)
 from .service import (
     DISPOSITION_FAILED,
     DISPOSITION_FILTERED,
@@ -32,6 +42,7 @@ from .service import (
     MemoryIngestionService,
     validate_item,
 )
+from .tiers import TierBudget, content_signals, decide_tier, signal_score
 
 __all__ = [
     "CATEGORY_SPECS",
@@ -43,6 +54,14 @@ __all__ = [
     "build_category_specs",
     "classify_content",
     "is_filtered",
+    "TIER_FRONTIER",
+    "TIER_LOCAL",
+    "TIER_STANDARD",
+    "IngestionSettings",
+    "ResolutionSettings",
+    "SynthesisSettings",
+    "TierSettings",
+    "parse_ingestion_config",
     "DISPOSITION_FAILED",
     "DISPOSITION_FILTERED",
     "DISPOSITION_STORED",
@@ -54,4 +73,8 @@ __all__ = [
     "IngestItem",
     "MemoryIngestionService",
     "validate_item",
+    "TierBudget",
+    "content_signals",
+    "decide_tier",
+    "signal_score",
 ]

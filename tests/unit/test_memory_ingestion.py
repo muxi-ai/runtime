@@ -518,19 +518,29 @@ class TestPipeline:
         assert filtered[0]["payload"]["filter_level"] == "strict"
         assert filtered[0]["source"] == "gmail"
 
-    async def test_filter_off_keeps_noise(self, memory_events):
+    async def test_filter_off_keeps_noise_at_tier_1(self, memory_events):
+        # Kept noise (automated content surviving filter: off) rests at
+        # Tier 1 under the escalation heuristics: stored verbatim as an
+        # event-sourced fact, no LLM extraction spent on it.
+        ltm = RecordingLTM()
         extractor = StubExtractor(memory_events)
         overlord = make_overlord(
             memory_events,
             extractor=extractor,
-            classifier=StubClassifier(margins_for(CATEGORY_AUTOMATED)),
+            long_term_memory=ltm,
+            classifier=StubClassifier({f"{INTENT_PREFIX}{CATEGORY_AUTOMATED}": 0.4}),
             ingestion_config={"sources": {"gmail": {"filter": "off"}}},
         )
         service = MemoryIngestionService(overlord)
         outcome = await service.submit("alice", [(0, make_item())])
         state = await finish_job(overlord, outcome["processing_id"])
-        assert state.result["items"][0]["disposition"] == DISPOSITION_STORED
-        assert len(extractor.calls) == 1
+        report = state.result["items"][0]
+        assert report["disposition"] == DISPOSITION_STORED
+        assert report["tier"] == 1
+        assert report["tier_reason"].startswith("low_signal_category:")
+        # Tier 1 = small local processing only: verbatim fact, no extractor.
+        assert extractor.calls == []
+        assert len(ltm.rows) == 1
 
     async def test_classifier_failure_fails_open(self, memory_events):
         extractor = StubExtractor(memory_events)

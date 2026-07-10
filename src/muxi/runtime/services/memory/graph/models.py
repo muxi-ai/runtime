@@ -66,6 +66,12 @@ STATUS_ACTIVE = "active"
 STATUS_CONFLICTED = "conflicted"
 STATUS_SUPERSEDED = "superseded"
 
+# Entity resolved as a duplicate identity (Memory Ingestion maturation,
+# PRD "Entity resolution"). The row is retained with ``superseded_by``
+# pointing at the canonical entity; upserts by the merged name redirect
+# to the canonical row so the duplicate never silently revives.
+STATUS_MERGED = "merged"
+
 # Confidence delta above which a new fact auto-supersedes a conflicting old
 # fact instead of flagging both as conflicted (PRD: ">0.3 delta").
 SUPERSEDE_CONFIDENCE_DELTA = 0.3

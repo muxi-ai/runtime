@@ -2455,6 +2455,24 @@ class FormationValidator:
         if "lint" in memory_config:
             self._validate_memory_lint_config(memory_config["lint"])
 
+        # Validate ingestion configuration (Memory Ingestion maturation)
+        if "ingestion" in memory_config:
+            self._validate_memory_ingestion_config(memory_config["ingestion"])
+
+    def _validate_memory_ingestion_config(self, ingestion_config: Any) -> None:
+        """Validate memory.ingestion (tiers, entity resolution, synthesis).
+
+        Reuses the service-level parser so the validator and the runtime
+        can never disagree about what a valid ingestion block looks like
+        (the same pattern the artifacts/proactive/commands sections use).
+        """
+        from ...services.memory.ingest.config import parse_ingestion_config
+
+        try:
+            parse_ingestion_config(ingestion_config)
+        except ValueError as e:
+            self.result.add_error(str(e))
+
     def _validate_compaction_config(self, compaction_config: Any) -> None:
         """Validate memory.compaction (pre-compaction flush) configuration."""
         if not isinstance(compaction_config, dict):

@@ -2,6 +2,46 @@
 
 ## [unreleased]
 
+### Memory ingestion maturation - tier heuristics, entity resolution, synthesis cadences
+
+Completes the memory-ingestion PRD's remaining scope on top of the
+shipped `/v1/memories` pipeline (#218) and the substrate's
+projections/rebuild machinery (#259):
+
+- Tier-escalation heuristics: a pure, deterministic decision per kept
+  item over Tier-0 regex signals (identities, dates, money,
+  commitments) plus the local classifier's category/margin. Personal/
+  work (and fail-open unknown) content escalates T1 -> T2 (LLM
+  extraction); flagged high-signal items and `metadata.priority: high`
+  escalate to T3 with an optionally configured frontier model
+  (`memory.ingestion.tiers.models`); per-source `tier` pins override.
+  Kept noise now rests at Tier 1 (verbatim event-sourced fact, no LLM
+  spent). Per-job budgets (`tiers.budget.t{2,3}_items_per_job`) demote
+  capped items instead of dropping them; every escalation is observable
+  (`memory.ingestion.tier_escalated` + tier/reason on the item report).
+- Entity resolution: probabilistic identity matching over the knowledge
+  graph (name/email/handle/role/relationship context). Auto-merge at or
+  above `entity_resolution.auto_merge_threshold` (0.85), flag below it
+  (event + `attributes.possible_duplicates` marker). Decisions ride the
+  event substrate as `entity.resolved` events with deterministic
+  per-pair idempotency keys, so re-ingestion can never duplicate or
+  re-merge differently; rebuilds replay recorded decisions verbatim,
+  and merged names redirect on upsert (duplicates never revive).
+- Pattern extraction + preference inference (v1): deterministic
+  aggregation only - activity schedule from event timestamps,
+  preference profile from `prefers`/`interested_in` edges, domain
+  expertise from reinforced topic entities - written as decaying
+  `fact.extracted` events keyed per (kind, ISO week).
+- Synthesis scheduling: hot (5min, resolution) / warm (hourly,
+  patterns) / cold (nightly, full pass) / cold-cold (weekly full
+  re-synthesis replaying the event log through the substrate rebuild)
+  cadences on the scheduler's existing periodic-task loop, each
+  individually disableable and interval-configurable, with durable
+  per-user cursors; failure-isolated everywhere and fully inert when
+  `memory.ingestion` is unconfigured (pinned by test).
+- Fail-fast config validation for the whole `memory.ingestion` block
+  through one shared parser (runtime service + formation validator).
+
 ### Memory benchmarking - Tier 3 multi-session longitudinal scenarios
 
 Completes the memory-benchmarking PRD's Tier 3 in `bench/memory/`
@@ -96,6 +136,7 @@ Agents now use what artifact memory captures (artifact-memory PRD Phase 2,
   e2e: `5_artifacts/test_5_16_artifact_retrieval.py` (generate a file in
   one turn, retrieve it by id in a later turn, list history after an
   update).
+
 ### Memory benchmarking - Tier 2 structured recall + Tier 4 cost efficiency
 
 Extends the `bench/memory/` harness (memory-benchmarking PRD; Tier 1

@@ -931,6 +931,28 @@ class ConversationEvents(Enum):
     MEMORY_INGESTION_FILTERED = "memory.ingestion.filtered"
     # When the noise gate drops an ingested item (disposition event recorded)
 
+    # Memory ingestion maturation (tier heuristics + synthesis layer)
+    MEMORY_INGESTION_TIER_ESCALATED = "memory.ingestion.tier_escalated"
+    # When an ingested item escalates past Tier 1 (tier + reason attached)
+
+    MEMORY_ENTITY_MERGED = "memory.entity.merged"
+    # When entity resolution auto-merges a duplicate identity
+
+    MEMORY_ENTITY_FLAGGED = "memory.entity.flagged"
+    # When entity resolution flags a possible duplicate below the merge threshold
+
+    MEMORY_PATTERN_EXTRACTED = "memory.pattern.extracted"
+    # When the synthesis layer derives a behavioral pattern / preference fact
+
+    MEMORY_SYNTHESIS_STARTED = "memory.synthesis.started"
+    # When a synthesis cadence pass (hot/warm/cold/cold_cold) starts
+
+    MEMORY_SYNTHESIS_COMPLETED = "memory.synthesis.completed"
+    # When a synthesis cadence pass completes (per-user counts attached)
+
+    MEMORY_SYNTHESIS_FAILED = "memory.synthesis.failed"
+    # When a synthesis pass or per-user step fails (isolated; never breaks chat)
+
     # Memory distillery intake (Memory Distillery Phase 3b)
     MEMORY_DISTILLED_ACCEPTED = "memory.distilled.accepted"
     # When POST /v1/memories/distilled accepts a signed batch

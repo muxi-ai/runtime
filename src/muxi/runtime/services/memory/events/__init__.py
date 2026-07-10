@@ -11,6 +11,7 @@
 from .decay import DecaySettings
 from .models import (
     EVENT_ARTIFACT_SAVED,
+    EVENT_ENTITY_RESOLVED,
     EVENT_FACT_CONTRADICTED,
     EVENT_FACT_EXTRACTED,
     EVENT_GRAPH_EXTRACTED,
@@ -20,6 +21,7 @@ from .models import (
     EVENT_LOG_ENTRY,
     EVENT_MEMORY_INGESTED,
     EVENT_USER_DELETION,
+    SOURCE_SYNTHESIS,
     MemoryEvent,
     ProjectionCheckpoint,
     append_event_id,
@@ -36,6 +38,7 @@ from .storage import MemoryEventStorage
 
 __all__ = [
     "EVENT_ARTIFACT_SAVED",
+    "EVENT_ENTITY_RESOLVED",
     "EVENT_FACT_CONTRADICTED",
     "EVENT_FACT_EXTRACTED",
     "EVENT_GRAPH_EXTRACTED",
@@ -45,6 +48,7 @@ __all__ = [
     "EVENT_LOG_ENTRY",
     "EVENT_MEMORY_INGESTED",
     "EVENT_USER_DELETION",
+    "SOURCE_SYNTHESIS",
     "MemoryEvent",
     "ProjectionCheckpoint",
     "append_event_id",
