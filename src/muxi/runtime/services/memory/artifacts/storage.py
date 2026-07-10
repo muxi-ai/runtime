@@ -240,14 +240,37 @@ class ArtifactMemoryStorage:
             artifact = (await session.execute(stmt)).scalars().first()
             return artifact.to_dict() if artifact else None
 
+    async def get_latest_by_name(self, user_id: str, name: str) -> Optional[Dict[str, Any]]:
+        """Return the live chain head for one (user, name), or None."""
+        async with self.db_manager.get_async_session() as session:
+            stmt = (
+                select(Artifact)
+                .filter_by(
+                    user_id=str(user_id),
+                    formation_id=self.formation_id,
+                    name=name,
+                    is_latest=True,
+                )
+                .filter(Artifact.deleted_at.is_(None))
+            )
+            artifact = (await session.execute(stmt)).scalars().first()
+            return artifact.to_dict() if artifact else None
+
     async def list_artifacts(
         self,
         user_id: str,
         name: Optional[str] = None,
         latest_only: bool = True,
         include_deleted: bool = False,
+        limit: Optional[int] = None,
+        order_by_last_accessed: bool = False,
     ) -> List[Dict[str, Any]]:
-        """List a user's artifacts, newest first."""
+        """List a user's artifacts, newest first.
+
+        ``order_by_last_accessed`` switches to the manifest ordering
+        (PRD 2.1: ``last_accessed_at DESC``); ``limit`` caps the fetch so
+        the manifest never pulls a user's entire artifact history.
+        """
         async with self.db_manager.get_async_session() as session:
             stmt = select(Artifact).filter_by(user_id=str(user_id), formation_id=self.formation_id)
             if name is not None:
@@ -256,9 +279,89 @@ class ArtifactMemoryStorage:
                 stmt = stmt.filter_by(is_latest=True)
             if not include_deleted:
                 stmt = stmt.filter(Artifact.deleted_at.is_(None))
-            stmt = stmt.order_by(Artifact.id.desc())
+            if order_by_last_accessed:
+                stmt = stmt.order_by(Artifact.last_accessed_at.desc(), Artifact.id.desc())
+            else:
+                stmt = stmt.order_by(Artifact.id.desc())
+            if limit is not None:
+                stmt = stmt.limit(limit)
             rows = (await session.execute(stmt)).scalars().all()
             return [row.to_dict() for row in rows]
+
+    async def count_artifacts(self, user_id: str, latest_only: bool = True) -> int:
+        """Count a user's live artifacts without materializing the rows."""
+        from sqlalchemy import func
+
+        async with self.db_manager.get_async_session() as session:
+            stmt = (
+                select(func.count())
+                .select_from(Artifact)
+                .where(
+                    Artifact.user_id == str(user_id),
+                    Artifact.formation_id == self.formation_id,
+                    Artifact.deleted_at.is_(None),
+                )
+            )
+            if latest_only:
+                stmt = stmt.where(Artifact.is_latest.is_(True))
+            return int((await session.execute(stmt)).scalar() or 0)
+
+    async def get_version_chain(
+        self, user_id: str, public_id: str, include_deleted: bool = False
+    ) -> List[Dict[str, Any]]:
+        """Return the full version chain containing ``public_id``.
+
+        Walks ancestors through ``parent_id`` and descendants through the
+        reverse link, so any version's public id resolves the whole chain.
+        Returned newest-version-first. Empty when the id is unknown for
+        this user.
+        """
+        async with self.db_manager.get_async_session() as session:
+            stmt = select(Artifact).filter_by(
+                user_id=str(user_id), formation_id=self.formation_id, public_id=public_id
+            )
+            if not include_deleted:
+                stmt = stmt.filter(Artifact.deleted_at.is_(None))
+            anchor = (await session.execute(stmt)).scalars().first()
+            if anchor is None:
+                return []
+
+            chain: Dict[int, Dict[str, Any]] = {anchor.id: anchor.to_dict()}
+
+            # Ancestors: follow parent_id links up to the chain root. The
+            # user check is defensive -- chains never legitimately cross
+            # users, but a stray link must not leak another user's rows.
+            parent_id = anchor.parent_id
+            while parent_id is not None and parent_id not in chain:
+                parent = await session.get(Artifact, parent_id)
+                if (
+                    parent is None
+                    or parent.user_id != str(user_id)
+                    or parent.formation_id != self.formation_id
+                    or (not include_deleted and parent.deleted_at is not None)
+                ):
+                    break
+                chain[parent.id] = parent.to_dict()
+                parent_id = parent.parent_id
+
+            # Descendants: follow the reverse link down to the chain head,
+            # scoped by user like every other chain query.
+            current_id = anchor.id
+            while True:
+                stmt = select(Artifact).filter_by(
+                    user_id=str(user_id),
+                    formation_id=self.formation_id,
+                    parent_id=current_id,
+                )
+                if not include_deleted:
+                    stmt = stmt.filter(Artifact.deleted_at.is_(None))
+                child = (await session.execute(stmt)).scalars().first()
+                if child is None or child.id in chain:
+                    break
+                chain[child.id] = child.to_dict()
+                current_id = child.id
+
+            return sorted(chain.values(), key=lambda row: row["version"], reverse=True)
 
     async def touch_last_accessed(self, artifact_id: int, expires_at: Optional[datetime]) -> None:
         """

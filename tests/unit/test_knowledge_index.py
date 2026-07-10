@@ -154,7 +154,9 @@ class TestReadPath:
         assert "Automaze (Company)" in block
         assert "Captain's Log: 2 entries spanning 2026-01-15 - 2026-04-03" in block
         assert "Most recent: Memory PRD finalised" in block
-        assert "Artifacts (1): Q1 Strategy Report (pdf, 2026-03-28)" in block
+        # Artifact manifest (artifact-memory Phase 2 shape).
+        assert "Artifacts (1):" in block
+        assert "Q1 Strategy Report (pdf) by overlord | 2026-03-28" in block
         assert "Knowledge gaps flagged by last lint: stale entity 'Berlin office'" in block
 
     async def test_read_failure_returns_empty(self, index, monkeypatch):
@@ -163,6 +165,86 @@ class TestReadPath:
 
         monkeypatch.setattr(index, "_fingerprint", explode)
         assert await index.get_index_block(USER) == ""
+
+
+class TestArtifactManifest:
+    """The artifact section renders the PRD 2.1 manifest shape and cap."""
+
+    @staticmethod
+    def _manifest_row(i: int, agent: str = "finance-agent") -> dict:
+        return {
+            "public_id": f"artifact-id-{i:03d}",
+            "name": f"Report {i:03d}",
+            "version": i + 1,
+            "content_type": "text/markdown",
+            "agent_id": agent,
+            "summary": f"Quarterly analysis number {i}",
+            "created_at": "2026-07-01T10:00:00",
+            "updated_at": "2026-07-02T10:00:00",
+            "last_accessed_at": "2026-07-03T10:00:00",
+        }
+
+    async def test_manifest_line_carries_id_version_agent_and_summary(
+        self, db_manager, graph, captains_log
+    ):
+        index = KnowledgeIndexService(
+            db_manager,
+            FORMATION_ID,
+            config={"max_tokens": 2000},
+            knowledge_graph=graph,
+            captains_log=captains_log,
+            artifact_memory=FakeArtifactMemory([self._manifest_row(0)]),
+        )
+        block = await index.get_index_block(USER)
+        assert (
+            "- artifact-id-000 v1 | Report 000 (markdown) by finance-agent | 2026-07-03 "
+            "-- Quarterly analysis number 0"
+        ) in block
+
+    async def test_manifest_caps_at_20_with_retrieval_pointer(
+        self, db_manager, graph, captains_log
+    ):
+        rows = [self._manifest_row(i) for i in range(25)]
+        index = KnowledgeIndexService(
+            db_manager,
+            FORMATION_ID,
+            config={"max_tokens": 5000},
+            knowledge_graph=graph,
+            captains_log=captains_log,
+            artifact_memory=FakeArtifactMemory(rows),
+        )
+        block = await index.get_index_block(USER)
+        assert "Artifacts (25):" in block
+        assert "artifact-id-019" in block
+        assert "artifact-id-020" not in block  # beyond the 20-entry cap
+        assert "... and 5 more. Use get_artifact to search." in block
+
+    async def test_manifest_uses_service_manifest_ordering(self, db_manager, graph, captains_log):
+        """When the artifact service exposes list_manifest (the real Phase 2
+        surface), the index uses it with the configured cap."""
+
+        calls = {}
+
+        class ManifestFake(FakeArtifactMemory):
+            async def list_manifest(self, user_id, limit):
+                calls["limit"] = limit
+                return self.artifacts[:limit]
+
+            async def count_artifacts(self, user_id):
+                return len(self.artifacts)
+
+        index = KnowledgeIndexService(
+            db_manager,
+            FORMATION_ID,
+            config={"max_tokens": 2000, "artifact_cap": 3},
+            knowledge_graph=graph,
+            captains_log=captains_log,
+            artifact_memory=ManifestFake([self._manifest_row(i) for i in range(5)]),
+        )
+        block = await index.get_index_block(USER)
+        assert calls["limit"] == 3
+        assert "Artifacts (5):" in block
+        assert "... and 2 more. Use get_artifact to search." in block
 
 
 class TestSizeCap:

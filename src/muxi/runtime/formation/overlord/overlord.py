@@ -4871,6 +4871,7 @@ Agent response: {raw_response}"""
         message: str,
         request_id: Optional[str] = None,
         session_id: Optional[str] = None,
+        user_id: Optional[str] = None,
     ) -> str:
         """
         Select the most appropriate agent for a given message using intelligent routing.
@@ -4884,6 +4885,8 @@ Agent response: {raw_response}"""
                 that needs to be directed to an appropriate agent.
             request_id: Optional request ID for request-scoped agent exclusion
             session_id: Optional session ID for follow-up routing context
+            user_id: Optional user ID for artifact routing awareness
+                (Artifact Memory Phase 2)
 
         Returns:
             The ID of the selected agent. This will always be a valid agent ID
@@ -4893,7 +4896,7 @@ Agent response: {raw_response}"""
             ValueError: If no agents are available in the overlord.
         """
         return await self.agent_router.select_agent_for_message(
-            message, request_id, session_id=session_id
+            message, request_id, session_id=session_id, user_id=user_id
         )
 
     async def list_agents(self) -> Dict[str, Dict[str, Any]]:
@@ -8920,7 +8923,10 @@ Agent response: {raw_response}"""
 
             try:
                 agent_name = await self.select_agent_for_message(
-                    routing_message, request_id=request_id, session_id=session_id
+                    routing_message,
+                    request_id=request_id,
+                    session_id=session_id,
+                    user_id=user_id,
                 )
             except SecurityViolation as e:
                 # Security threat detected - but skip if this is a credential/workflow response

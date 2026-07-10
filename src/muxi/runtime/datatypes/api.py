@@ -52,6 +52,11 @@ class APIEventType(str, Enum):
     MEMORY_DISTILLERY_LIST = "memory.distillery.list"
     MEMORY_DISTILLERY_REVOKED = "memory.distillery.revoked"
 
+    # Artifact events (Artifact Memory Phase 2 read surface)
+    ARTIFACT_LIST = "artifact.list"
+    ARTIFACT_RETRIEVED = "artifact.retrieved"
+    ARTIFACT_VERSIONS_RETRIEVED = "artifact.versions.retrieved"
+
     JOB_RETRIEVED = "job.retrieved"
     JOB_DELETED = "job.deleted"
     JOB_LIST = "job.list"
@@ -183,6 +188,8 @@ class APIObjectType(str, Enum):
     MEMORY_DISTILLATION = "memory_distillation"
     MEMORY_DISTILLERY = "memory_distillery"
     MEMORY_DISTILLERY_LIST = "memory_distillery_list"
+    ARTIFACT = "artifact"
+    ARTIFACT_LIST = "artifact_list"
     JOB = "job"
     JOB_LIST = "job_list"
     ERROR = "error"

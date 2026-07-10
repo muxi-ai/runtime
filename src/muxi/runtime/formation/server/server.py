@@ -673,6 +673,7 @@ class FormationServer:
 
         # Import all client route modules
         from .routes.client import (
+            artifacts,
             chat,
             credentials,
             distilled,
@@ -711,6 +712,9 @@ class FormationServer:
             events.router,
             requests.router,
             memory.router,
+            # Artifact reads (Artifact Memory Phase 2): user-scoped like
+            # the memory routes, admin key accepted for tooling.
+            artifacts.router,
             # Distilled batches additionally require an Ed25519 signature
             # from a registered distillery (memory distillery Phase 3b);
             # the API key here is the PRD's formation-key layer.
