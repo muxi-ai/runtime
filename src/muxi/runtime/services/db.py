@@ -15,6 +15,7 @@ Key Features:
 """
 
 import os
+import threading
 from contextlib import asynccontextmanager
 from typing import Any, Dict, Optional
 from urllib.parse import urlparse
@@ -551,10 +552,19 @@ class DatabaseManager:
             )
             raise
 
+    def _evict_from_registry(self) -> None:
+        # A closed manager must not be served to future get_database_manager
+        # callers (its engines are disposed); evict only if the registry entry
+        # is this exact instance -- private managers are never registered.
+        with _db_managers_lock:
+            if _db_managers.get(self.connection_string) is self:
+                del _db_managers[self.connection_string]
+
     async def close_async(self) -> None:
         """
         Asynchronously disposes of the async database engine and releases associated resources.
         """
+        self._evict_from_registry()
         if self._async_engine is not None:
             await self._async_engine.dispose()
 
@@ -566,6 +576,7 @@ class DatabaseManager:
         based on the event loop state. In production, prefer using `close_async()`
         for asynchronous cleanup.
         """
+        self._evict_from_registry()
         if hasattr(self, "engine"):
             self.engine.dispose()
         if self._async_engine is not None:
@@ -596,6 +607,11 @@ class DatabaseManager:
 # components of a single formation (memory, scheduler, credentials) share one
 # manager and its connection pool.
 _db_managers: Dict[str, DatabaseManager] = {}
+
+# Guards the check-create-store sequence below: concurrent boot paths (e.g. two
+# formations loading on different threads) must not construct two managers for
+# the same connection string.
+_db_managers_lock = threading.Lock()
 
 
 def get_database_manager(
@@ -629,12 +645,14 @@ def get_database_manager(
         using DatabaseManager() instead of this function.
     """
     key = _resolve_connection_string(connection_string)
-    db_manager = _db_managers.get(key)
+    with _db_managers_lock:
+        db_manager = _db_managers.get(key)
+        if db_manager is None:
+            db_manager = DatabaseManager(key, statement_timeout_seconds)
+            _db_managers[key] = db_manager
+            return db_manager
 
-    if db_manager is None:
-        db_manager = DatabaseManager(key, statement_timeout_seconds)
-        _db_managers[key] = db_manager
-    elif statement_timeout_seconds != db_manager.statement_timeout_seconds:
+    if statement_timeout_seconds != db_manager.statement_timeout_seconds:
         import logging
 
         logger = logging.getLogger(__name__)
@@ -659,4 +677,5 @@ def set_database_manager(db_manager: DatabaseManager) -> None:
     Args:
         db_manager: DatabaseManager instance to register
     """
-    _db_managers[db_manager.connection_string] = db_manager
+    with _db_managers_lock:
+        _db_managers[db_manager.connection_string] = db_manager

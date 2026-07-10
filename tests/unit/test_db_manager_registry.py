@@ -83,3 +83,54 @@ class TestFormationScopedManagers:
         manager = DatabaseManager(connection_string)
         set_database_manager(manager)
         assert get_database_manager(connection_string) is manager
+
+
+class TestRegistryHardening:
+    """Review follow-ups: lock around check-create-store, eviction on close."""
+
+    def test_concurrent_get_returns_single_instance(self, tmp_path):
+        import threading as _t
+
+        from muxi.runtime.services import db as db_mod
+
+        conn = f"sqlite:///{tmp_path}/reg.db"
+        results = []
+        barrier = _t.Barrier(8)
+
+        def grab():
+            barrier.wait()
+            results.append(db_mod.get_database_manager(conn))
+
+        threads = [_t.Thread(target=grab) for _ in range(8)]
+        for t in threads:
+            t.start()
+        for t in threads:
+            t.join()
+        try:
+            assert len({id(m) for m in results}) == 1
+        finally:
+            results[0].close()
+
+    def test_close_evicts_from_registry(self, tmp_path):
+        from muxi.runtime.services import db as db_mod
+
+        conn = f"sqlite:///{tmp_path}/evict.db"
+        first = db_mod.get_database_manager(conn)
+        first.close()
+        second = db_mod.get_database_manager(conn)
+        try:
+            assert second is not first
+        finally:
+            second.close()
+
+    def test_close_does_not_evict_foreign_instance(self, tmp_path):
+        from muxi.runtime.services import db as db_mod
+
+        conn = f"sqlite:///{tmp_path}/foreign.db"
+        registered = db_mod.get_database_manager(conn)
+        private = db_mod.DatabaseManager(registered.connection_string, 30)
+        private.close()
+        try:
+            assert db_mod.get_database_manager(conn) is registered
+        finally:
+            registered.close()
