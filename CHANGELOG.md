@@ -2,6 +2,57 @@
 
 ## [unreleased]
 
+### Memory benchmarking - Tier 3 multi-session longitudinal scenarios
+
+Completes the memory-benchmarking PRD's Tier 3 in `bench/memory/`
+(Tiers 1/2/4 shipped in #220/#261) - the four longitudinal scenarios,
+run against a real formation with no mocks:
+
+- MemBench Generator (`longitudinal_corpus.py`): seeded, fully
+  deterministic multi-session corpora (no LLM), one per PRD scenario,
+  with a committed CI fixture and a `--preset full` PRD scale (30-day
+  corpora, 100 isolation users, 10,000 isolation retrieval ops).
+- Scenario A (buffer cycle compensation): raw turns replayed into the
+  real working memory under a small `--buffer-max-mb` budget with the
+  FIFO cleanup pass driven per session - the exact path the
+  pre-compaction flush (#260) guards; flush hand-offs are counted (an
+  opt-in `--flush-digest` runs the real silent-turn LLM digest).
+  Reports show evicted-fact R@5 through KG + Captain's Log vs the
+  working-memory baseline, a `recent_recall` control group, an
+  `evidence_evicted_fraction` validity check, and the PRD's
+  zero-lost-decisions audit. Fixture: structured R@5 100% on evicted
+  questions vs 0% working baseline (131/228 turns evicted).
+- Scenario B (cross-agent propagation): facts/artifacts produced in
+  one agent's sessions answered via another agent (question_meta
+  records the pair), plus the zero-artifact-orphans KG audit.
+- Scenario C (multi-user isolation): all users ingested side by side
+  with identical fact templates differing only in values; vector, KG,
+  and log retrieval ops audited for foreign `CANARY-*` tokens and
+  foreign session ids. Pass/fail per the PRD (fixture: 0 leaks / 600
+  ops; full preset: 10,000 ops across 100 users).
+- Scenario D (contradiction detection over time): manifests replayed
+  per-session through the live `store_extraction` path with per-fact
+  confidences, so the storage layer's supersede/conflict detection
+  and the substrate's `fact.contradicted` events (#259) fire as in
+  production; measures precision/recall plus detection-kind accuracy
+  against injected pairs (with duplicate/non-exclusive precision
+  distractors), tallies the substrate events, and re-audits after a
+  knowledge-graph projection rebuild from the event log
+  (`rebuild.consistent_with_live`).
+- `longitudinal_runner.py` keeps the harness conventions: cheap-model
+  config ($0 retrieval-only runs), per-scenario failure isolation with
+  reports always written (one per scenario under `results/`), nonzero
+  exit on incomplete runs; `--scenario all` spawns one subprocess per
+  scenario because the runtime's database manager is a process-level
+  singleton.
+- Fix in the Tier 2 structured adapter's KG retrieval rendering: when
+  several facts share a provenance turn (entity card + relationship
+  from the same utterance), their renderings are now merged into the
+  turn's text instead of dropping all but the first - rankings are
+  unchanged, but QA context no longer loses facts retrieval had
+  already found (`structured_recall_fixture_structured.json`
+  regenerated; retrieval metrics identical).
+
 ### Artifact memory phase 2 - manifest + retrieval tools
 
 Agents now use what artifact memory captures (artifact-memory PRD Phase 2,
