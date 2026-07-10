@@ -630,7 +630,7 @@ sandbox. No inner LLM loop, no orchestration, no new execution paths.
   ``failure_kind`` breakdown. Disable via ``skills.disable_builtin``;
   degrades like any scripted skill when no RCE is configured.
 
-### Fixes (#229, #231, #234, #235, #240, #241, #249)
+### Fixes (#229, #231, #234, #235, #240, #241, #249, #269)
 
 - The e2e harness self-provisions the gitignored formation ``.key``
   symlinks (``e2e/provision_keys.py``, run automatically by
@@ -639,7 +639,7 @@ sandbox. No inner LLM loop, no orchestration, no new execution paths.
   SecretsManager auto-generating a wrong key next to the committed
   ``secrets.enc``. Stale auto-generated keys over the shared symlinked
   ``secrets.enc`` are replaced; formation-owned key/secrets pairs are
-  never touched.
+  never touched (#269).
 - Scheduler due-job queries are scoped to the owning formation:
   formations sharing one database no longer execute each other's
   scheduled jobs (``get_active_jobs_batch`` and its pagination count
