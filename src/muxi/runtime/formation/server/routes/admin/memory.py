@@ -5,6 +5,8 @@ These endpoints provide memory configuration and buffer management,
 requiring admin API key authentication.
 """
 
+import asyncio
+import time
 from typing import Any, Dict, Optional
 
 from fastapi import APIRouter, Request
@@ -13,6 +15,8 @@ from pydantic import BaseModel
 
 from .....datatypes.api import APIEventType, APIObjectType
 from .....services import observability
+from .....utils.id_generator import get_default_nanoid
+from ....background.request_tracker import RequestState, RequestStatus
 from ...responses import (
     APIResponse,
     create_error_response,
@@ -218,14 +222,11 @@ async def _start_tracked_job(overlord, prefix: str, user_id: str, runner) -> str
     ``runner`` is an argless coroutine function producing the job's
     result dict. The job is registered with the overlord's request
     tracker (the same lifecycle chat requests use), so it survives for
-    polling after completion and its task can be cancelled on shutdown.
+    polling after completion and its task can be cancelled on shutdown
+    -- cancellation marks the job CANCELLED (terminal) before
+    re-raising, so a graceful shutdown never strands a poller on a job
+    stuck at PROCESSING.
     """
-    import asyncio
-    import time
-
-    from .....utils.id_generator import get_default_nanoid
-    from ....background.request_tracker import RequestState, RequestStatus
-
     job_id = f"{prefix}_{get_default_nanoid()}"
     tracker = overlord.request_tracker
     state = RequestState(
@@ -240,6 +241,11 @@ async def _start_tracked_job(overlord, prefix: str, user_id: str, runner) -> str
         try:
             result = await runner()
             await tracker.update_request(job_id, status=RequestStatus.COMPLETED, result=result)
+        except asyncio.CancelledError:
+            await tracker.update_request(
+                job_id, status=RequestStatus.CANCELLED, error="job cancelled"
+            )
+            raise
         except Exception as e:
             await tracker.update_request(job_id, status=RequestStatus.FAILED, error=str(e))
 
@@ -317,7 +323,7 @@ async def rebuild_memory_projections(
         data = {
             "user_id": rebuild.user_id,
             "job_id": job_id,
-            "status": "processing",
+            "status": RequestStatus.PROCESSING.value,
             "status_url": f"/memory/rebuild/{job_id}",
         }
         response = create_success_response(
@@ -495,7 +501,7 @@ async def forget_memory_source(
             data.update(
                 {
                     "job_id": job_id,
-                    "status": "processing",
+                    "status": RequestStatus.PROCESSING.value,
                     "status_url": f"/memory/forget/{job_id}",
                 }
             )

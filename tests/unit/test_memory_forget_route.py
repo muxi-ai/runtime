@@ -12,14 +12,15 @@ job polling, and the substrate-unavailable 503.
 
 from __future__ import annotations
 
+import asyncio
 from types import SimpleNamespace
 
 import pytest
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
 
-from muxi.runtime.formation.background.request_tracker import RequestTracker
-from muxi.runtime.formation.server.routes.admin.memory import router
+from muxi.runtime.formation.background.request_tracker import RequestStatus, RequestTracker
+from muxi.runtime.formation.server.routes.admin.memory import _start_tracked_job, router
 from muxi.runtime.services.db import Base, DatabaseManager
 from muxi.runtime.services.memory.events import KnowledgeGraphProjector, MemoryEventService
 from muxi.runtime.services.memory.graph.service import KnowledgeGraphService
@@ -178,3 +179,49 @@ class TestUnavailableSubstrate:
         with TestClient(make_app(None)) as client:
             response = client.post("/memory/forget", json={"user_id": USER, "source": "gmail"})
             assert response.status_code == 503
+
+
+class TestJobCancellation:
+    """Graceful-shutdown cancellation marks tracked jobs terminal.
+
+    ``except Exception`` alone would miss asyncio.CancelledError and
+    strand the tracker entry at PROCESSING forever; the shared
+    ``_start_tracked_job`` helper (rebuild AND forget paths) must mark
+    the job CANCELLED and re-raise so the task cancels cleanly.
+    """
+
+    async def test_cancelled_job_marked_terminal_and_reraises(self):
+        tracker = RequestTracker()
+        overlord = SimpleNamespace(request_tracker=tracker)
+        started = asyncio.Event()
+
+        async def runner():
+            started.set()
+            await asyncio.sleep(3600)  # a long rebuild, interrupted by shutdown
+
+        job_id = await _start_tracked_job(overlord, "forget", USER, runner)
+        await asyncio.wait_for(started.wait(), timeout=5.0)
+
+        state = await tracker.get_request(job_id)
+        assert state.status is RequestStatus.PROCESSING
+        state.task_ref.cancel()
+        with pytest.raises(asyncio.CancelledError):  # cancellation propagates
+            await state.task_ref
+
+        final = await tracker.get_request(job_id)
+        assert final.status is RequestStatus.CANCELLED  # terminal, not stuck
+        assert final.error == "job cancelled"
+
+    async def test_completed_job_still_reports_completed(self):
+        """The cancellation guard does not disturb the happy path."""
+        tracker = RequestTracker()
+        overlord = SimpleNamespace(request_tracker=tracker)
+
+        async def runner():
+            return {"projections": {}}
+
+        job_id = await _start_tracked_job(overlord, "rebuild", USER, runner)
+        state = await tracker.get_request(job_id)
+        await state.task_ref
+        final = await tracker.get_request(job_id)
+        assert final.status is RequestStatus.COMPLETED
