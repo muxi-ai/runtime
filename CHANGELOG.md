@@ -2,6 +2,34 @@
 
 ## [unreleased]
 
+### Episodic memory - session-end digests + time-anchored recall tool
+
+Closes the two residual gaps from the muxi#32 episodic memory audit
+(per-user cross-session continuity itself already ships; formation-level
+narrative defers to the Formation Wiki):
+
+- Session-end digest trigger: conversation turns now stamp a
+  (user, session) activity clock on the Captain's Log; an idle sweep
+  (riding the service's existing background-loop lifecycle) ends
+  sessions idle past `memory.captains_log.session_idle_minutes`
+  (default 30, `0`/`false` disables), emits the already-defined
+  `session.ended` observability event exactly once per session, and
+  digests the user's pending turns through the same pipeline the daily
+  tick uses. Short sessions persist at session end instead of waiting
+  for the next daily tick; drained queues mean the daily tick can never
+  double-digest, and a failed session-end digest re-queues its snapshot
+  so nothing is worse off than before.
+- `recall_history` built-in agent tool (registered/dispatched like
+  `get_artifact`, gated on an enabled Captain's Log): turns
+  time-anchored recall questions ("what did we discuss last Tuesday?")
+  into date-ranged queries over the user's log entries -- params
+  `date_from`/`date_to` (ISO dates, strict validation with friendly
+  errors), optional `query` keyword filter, `limit` (default 10,
+  max 30). Read-only, user-scoped (the calling user's entries only),
+  failure-isolated.
+- E2E: `2_memory/test_2y1_session_end_recall.py` seeds a short session,
+  idles it, and recalls it by date through the real agent tool path.
+
 ### Coding-agent delegation - mechanism + claude-code/droid adapters
 
 Formations can now delegate coding tasks to external headless coding

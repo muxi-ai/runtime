@@ -1678,6 +1678,15 @@ class Agent:
                 if self.overlord and artifact_tools_available(self.overlord):
                     tools.extend(build_artifact_tools())
 
+                # Built-in time-anchored recall tool (episodic memory):
+                # registered only when the overlord carries an enabled
+                # captain's log service. Formations without the captain's
+                # log see no tool at all.
+                from .recall_dispatch import build_recall_tools, recall_tools_available
+
+                if self.overlord and recall_tools_available(self.overlord):
+                    tools.extend(build_recall_tools())
+
                 # Always add the built-in generate_file tool if artifact service is available
                 if self.overlord and hasattr(self.overlord, "artifact_service"):
                     generate_file_tool = {
@@ -4235,6 +4244,18 @@ class Agent:
                     "get_artifact_history": handle_get_artifact_history,
                 }
                 return await artifact_handlers[tool_name](
+                    self.agent_id, parameters, self.overlord, user_id=user_id
+                )
+
+            if tool_name == "recall_history" and self.overlord:
+                # Time-anchored recall built-in (episodic memory).
+                # Read-only and user-scoped: the handler only ever sees
+                # the calling user's captain's log entries, and every
+                # failure returns a friendly error instead of raising
+                # into the turn.
+                from .recall_dispatch import handle_recall_history
+
+                return await handle_recall_history(
                     self.agent_id, parameters, self.overlord, user_id=user_id
                 )
 

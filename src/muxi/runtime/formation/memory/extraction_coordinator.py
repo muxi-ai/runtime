@@ -36,6 +36,7 @@ class ExtractionCoordinator:
         user_id: Any,
         agent_id: str,
         extraction_model=None,
+        session_id: Any = None,
     ) -> None:
         """
         Handle user information extraction from a conversation turn.
@@ -49,6 +50,8 @@ class ExtractionCoordinator:
             user_id: The user's ID (extraction skipped for user_id=0)
             agent_id: The agent's ID that handled the conversation
             extraction_model: Optional model to use for extraction
+            session_id: Optional session ID stamping the captain's log
+                session-activity clock (the session-end digest trigger)
         """
         # Skip extraction for anonymous users in multi-user mode only
         # In single-user mode, user_id="0" is normal and expected
@@ -70,6 +73,7 @@ class ExtractionCoordinator:
             user_id=user_id,
             agent_id=agent_id,
             extraction_model=extraction_model,
+            session_id=session_id,
         )
 
     async def _run_extraction(
@@ -79,6 +83,7 @@ class ExtractionCoordinator:
         user_id: Any,
         agent_id: str,
         extraction_model=None,
+        session_id: Any = None,
     ) -> None:
         """
         Run the actual extraction process.
@@ -167,6 +172,7 @@ class ExtractionCoordinator:
                     user_message=user_message,
                     agent_response=agent_response,
                     user_id=user_id,
+                    session_id=session_id,
                 )
 
         except Exception as e:
@@ -191,6 +197,7 @@ class ExtractionCoordinator:
         agent_id: str,
         extraction_model=None,
         original_message: str = None,
+        session_id: Any = None,
     ) -> None:
         """
         Extract user information from a conversation turn.
@@ -205,6 +212,7 @@ class ExtractionCoordinator:
             agent_id: The agent's ID that handled the conversation
             extraction_model: Optional model to use for extraction
             original_message: The original user message (without enhancement)
+            session_id: Optional session ID for the session-end digest trigger
         """
         await self.handle_user_information_extraction(
             user_message=user_message,
@@ -213,4 +221,5 @@ class ExtractionCoordinator:
             agent_id=agent_id,
             extraction_model=extraction_model,
             original_message=original_message,
+            session_id=session_id,
         )

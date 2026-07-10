@@ -50,6 +50,10 @@ from .summarizer import CaptainsLogSummarizer
 # PRD defaults (Configuration Reference -> memory.captains_log / memory.lessons).
 DEFAULT_SCHEDULE = "daily"
 DEFAULT_INCLUDE_IN_CONTEXT = 5
+# Session-end digest trigger: a short session that never fills the buffer
+# is digested when it goes idle instead of waiting for the daily tick.
+# ``memory.captains_log.session_idle_minutes: 0`` (or false) disables it.
+DEFAULT_SESSION_IDLE_MINUTES = 30
 DEFAULT_INJECT_TOP_N = 20
 DEFAULT_MAX_PER_AGENT = 50
 DEFAULT_CONFIDENCE_DECAY_PER_30D = 0.05
@@ -68,6 +72,13 @@ CONSOLIDATION_SIMILARITY = 0.8
 
 # Bound on cached per-session lesson blocks.
 LESSON_BLOCK_CACHE_SIZE = 256
+
+# Idle-session sweep cadence bound: the sweep ticks at most once a minute
+# and at least twice per idle window (so short thresholds stay responsive).
+SESSION_SWEEP_INTERVAL_SECONDS = 60.0
+
+# Bound on tracked (user, session) activity stamps (ContextPruner idiom).
+SESSION_ACTIVITY_CACHE_SIZE = 1024
 
 # Header used for the lessons dynamic block. The block sits at the tail of
 # the system prompt, after the cache-stable static persona and addendum, so
@@ -117,6 +128,12 @@ class CaptainsLogService:
         self.enabled = config.get("enabled", True)
         self.interval_seconds = _schedule_to_seconds(config.get("schedule", DEFAULT_SCHEDULE))
         self.include_in_context = int(config.get("include_in_context", DEFAULT_INCLUDE_IN_CONTEXT))
+        # Session-end trigger: minutes of inactivity before a session is
+        # considered ended and its user's pending turns are digested.
+        # 0/false disables the sweep (turns then wait for the daily tick).
+        self.session_idle_seconds = (
+            float(config.get("session_idle_minutes", DEFAULT_SESSION_IDLE_MINUTES) or 0) * 60.0
+        )
 
         self.lessons_enabled = lessons_config.get("enabled", True)
         self.extract_lessons_during_digest = lessons_config.get("extract_during_digest", True)
@@ -144,6 +161,10 @@ class CaptainsLogService:
         # timestamp used as the buffer_item source key.
         self._pending_turns: Dict[str, Deque[Tuple[str, str]]] = {}
         self._task: Optional[asyncio.Task] = None
+        # Last turn timestamp per (user, session), LRU-capped: the idle
+        # sweep's session-end trigger.
+        self._session_activity: "OrderedDict[Tuple[str, str], float]" = OrderedDict()
+        self._sweep_task: Optional[asyncio.Task] = None
         # Session-stable rendered lesson blocks: (user, agent, session) -> str.
         self._lesson_block_cache: "OrderedDict[Tuple[str, str, str], str]" = OrderedDict()
 
@@ -159,8 +180,14 @@ class CaptainsLogService:
     # Turn intake (chat path -- no LLM work here)
     # ------------------------------------------------------------------
 
-    def queue_turn(self, user_message: str, agent_response: str, user_id: Any) -> None:
-        """Buffer one conversation turn for the next summarization run."""
+    def queue_turn(
+        self, user_message: str, agent_response: str, user_id: Any, session_id: Any = None
+    ) -> None:
+        """Buffer one conversation turn for the next summarization run.
+
+        ``session_id`` (optional) stamps the (user, session) activity clock
+        the idle sweep uses for the session-end digest trigger.
+        """
         if not self.enabled:
             return
         text = _format_turn(user_message, agent_response)
@@ -168,6 +195,17 @@ class CaptainsLogService:
             str(user_id), deque(maxlen=MAX_PENDING_TURNS_PER_USER)
         )
         queue.append((f"{time.time():.6f}", text))
+        self._record_session_activity(user_id, session_id)
+
+    def _record_session_activity(self, user_id: Any, session_id: Any) -> None:
+        """Stamp (user, session) activity for the idle sweep; LRU-capped."""
+        if self.session_idle_seconds <= 0:
+            return
+        key = (str(user_id), str(session_id or "default"))
+        self._session_activity[key] = time.time()
+        self._session_activity.move_to_end(key)
+        while len(self._session_activity) > SESSION_ACTIVITY_CACHE_SIZE:
+            self._session_activity.popitem(last=False)
 
     # ------------------------------------------------------------------
     # Background loop (Phase 1 lifecycle pattern)
@@ -184,19 +222,24 @@ class CaptainsLogService:
         """
         if not self.enabled:
             return
-        if self._task is not None and not self._task.done():
-            return
-        self._task = asyncio.create_task(self._loop(model_getter))
+        if self._task is None or self._task.done():
+            self._task = asyncio.create_task(self._loop(model_getter))
+        # Session-end trigger: sweep sessions idle past the threshold so a
+        # short session is digested without waiting for the daily tick.
+        if self.session_idle_seconds > 0 and (self._sweep_task is None or self._sweep_task.done()):
+            self._sweep_task = asyncio.create_task(self._session_sweep_loop(model_getter))
 
     async def stop(self) -> None:
-        """Cancel the background loop, if running."""
-        if self._task is not None:
-            self._task.cancel()
-            try:
-                await self._task
-            except asyncio.CancelledError:
-                pass
-            self._task = None
+        """Cancel the background loops, if running."""
+        for attr in ("_task", "_sweep_task"):
+            task = getattr(self, attr)
+            if task is not None:
+                task.cancel()
+                try:
+                    await task
+                except asyncio.CancelledError:
+                    pass
+                setattr(self, attr, None)
 
     async def _loop(self, model_getter) -> None:
         """Sleep-run loop for summarization and lesson maintenance."""
@@ -215,6 +258,98 @@ class CaptainsLogService:
                     data={"error": str(e), "error_type": type(e).__name__, "pass": "loop"},
                     description=f"Captain's log periodic run failed: {e}",
                 )
+
+    async def _session_sweep_loop(self, model_getter) -> None:
+        """Sleep-run loop for the idle-session session-end trigger."""
+        interval = max(1.0, min(SESSION_SWEEP_INTERVAL_SECONDS, self.session_idle_seconds / 2.0))
+        while True:
+            await asyncio.sleep(interval)
+            try:
+                await self.sweep_idle_sessions(model_getter())
+            except asyncio.CancelledError:
+                raise
+            except Exception as e:
+                observability.observe(
+                    event_type=observability.ConversationEvents.MEMORY_CAPTAINS_LOG_FAILED,
+                    level=observability.EventLevel.WARNING,
+                    data={"error": str(e), "error_type": type(e).__name__, "pass": "session_sweep"},
+                    description=f"Captain's log session sweep failed: {e}",
+                )
+
+    async def sweep_idle_sessions(self, model, now: Optional[float] = None) -> Dict[str, int]:
+        """
+        End sessions idle past the threshold and digest their users' turns.
+
+        The session-end digest trigger: every (user, session) whose last
+        turn is older than ``session_idle_minutes`` is ended exactly once
+        (its activity stamp is dropped, ``session.ended`` is emitted), and
+        each affected user's pending turns are digested through the same
+        pipeline the daily tick uses. A user whose turns were already
+        digested (daily tick, flush, or an earlier sweep) is skipped, so
+        nothing is ever digested twice. On digest failure the snapshot is
+        re-queued for the periodic pass -- no turn is worse off than
+        without this trigger. Returns aggregate counts.
+        """
+        totals = {"sessions": 0, "entries": 0, "sources": 0, "lessons": 0}
+        if not self.enabled or self.session_idle_seconds <= 0:
+            return totals
+        now = time.time() if now is None else now
+        idle = [
+            key
+            for key, last in self._session_activity.items()
+            if (now - last) >= self.session_idle_seconds
+        ]
+        if not idle:
+            return totals
+
+        users: List[str] = []
+        for key in idle:
+            user_id, session_id = key
+            last = self._session_activity.pop(key)
+            totals["sessions"] += 1
+            if user_id not in users:
+                users.append(user_id)
+            observability.observe(
+                event_type=observability.ConversationEvents.SESSION_ENDED,
+                level=observability.EventLevel.INFO,
+                data={
+                    "user_id": user_id,
+                    "session_id": session_id,
+                    "idle_seconds": round(now - last, 3),
+                    "trigger": "captains_log_idle_sweep",
+                },
+                description=f"Session '{session_id}' ended after inactivity",
+            )
+
+        if model is None:
+            # No digest model available: activity stamps are dropped (the
+            # sessions did end) but the turns stay queued for the daily tick.
+            return totals
+
+        for user_id in users:
+            turns = list(self._pending_turns.pop(user_id, ()))
+            if not turns:
+                continue
+            try:
+                stored = await self._digest_user(user_id, turns, model)
+                totals["entries"] += stored["entries"]
+                totals["sources"] += stored["sources"]
+                totals["lessons"] += stored["lessons"]
+            except Exception as e:
+                self._requeue_turns(user_id, turns)
+                observability.observe(
+                    event_type=observability.ConversationEvents.MEMORY_CAPTAINS_LOG_FAILED,
+                    level=observability.EventLevel.WARNING,
+                    data={
+                        "user_id": user_id,
+                        "error": str(e),
+                        "error_type": type(e).__name__,
+                        "pass": "session_end",
+                        "requeued_turns": len(self._pending_turns.get(user_id, ())),
+                    },
+                    description=f"Session-end digest failed: {e}",
+                )
+        return totals
 
     async def run_periodic_summarization(self, model) -> Dict[str, int]:
         """

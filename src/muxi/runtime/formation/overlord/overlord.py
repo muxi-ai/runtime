@@ -5046,6 +5046,7 @@ Agent response: {raw_response}"""
         user_id: Any,
         agent_id: str,
         extraction_model: Optional[LLM] = None,
+        session_id: Any = None,
     ) -> None:
         """
         Handle the process of extracting user information from a conversation turn.
@@ -5083,7 +5084,12 @@ Agent response: {raw_response}"""
 
         try:
             await self.extraction_coordinator.handle_user_information_extraction(
-                user_message, agent_response, user_id, agent_id, extraction_model
+                user_message,
+                agent_response,
+                user_id,
+                agent_id,
+                extraction_model,
+                session_id=session_id,
             )
             # DEBUG: Log after coordinator call
             observability.observe(
@@ -5114,10 +5120,11 @@ Agent response: {raw_response}"""
         user_id: Any,
         agent_id: str,
         extraction_model=None,
+        session_id: Any = None,
     ) -> None:
         """Extract user information from conversation (delegates to handle method)."""
         await self.handle_user_information_extraction(
-            user_message, agent_response, user_id, agent_id, extraction_model
+            user_message, agent_response, user_id, agent_id, extraction_model, session_id=session_id
         )
 
     async def get_user_synopsis(self, external_user_id: str) -> str:
