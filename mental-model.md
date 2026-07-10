@@ -3982,6 +3982,151 @@ against the live formation, then clears `config.sop` and runs a real
 heartbeat under the bundled SOP -- agent replies HEARTBEAT_OK,
 suppression keeps the channel silent).
 
+### Coding-Agent Delegation (2026-07-10, Phase 1 + droid)
+
+**PRD:** `engineering/prds/coding-agent-delegation.md` (supersedes the
+ACP integration PRD). **Paths:** `services/coding/` (config, adapter,
+service, models), `formation/agents/coding_dispatch.py` (tool),
+`formation/background/builtin/coding/` (bundled adapter templates),
+wiring in `formation.py::_setup_coding`,
+`overlord.py::_initialize_delegation_service`, `/jobs` in
+`builtin_commands.py`. Docs: `contributing/coding-delegation.md`.
+
+**The model.** Formations delegate coding tasks to external HEADLESS
+coding CLIs (claude-code, droid) as fire-and-collect background work.
+A top-level `coding:` block registers ONE built-in tool,
+`delegate_coding` (registered/dispatched in agent.py exactly like
+generate_file/get_artifact*, plus `_NEVER_CACHE_NAMES` in
+tool_cache.py). The tool is ALWAYS asynchronous (hard requirement,
+D8): it returns `{"job_id", "status": "started"}` immediately; the
+subprocess runs as a tracked background job; completion synthesizes an
+internal request into the originating session with
+`route_class: "delegation"` -- the exact middleware + RBAC pipeline
+heartbeats/scheduled jobs use (route_class is a free string; no enum
+to extend) -- and the agent's reply is delivered via the proactiveness
+NotificationRouter when configured (no router = record-only). MUXI
+ships the mechanism only: installation/auth/sandboxing are the
+developer's business; vendor flags pass through `extra_args`; `model`
+is an opaque string.
+
+**Adapters are declarative content.** Bundled dormant templates in
+`background/builtin/coding/{claude-code,droid}.yaml` (same convention
+as channel transformers: inert until `coding.client:` references one,
+formation-local `coding/<name>.yaml` shadows, inline form as escape
+hatch, `name:` must match filename, packaged via the existing
+`**/*.yaml` globs). Command assembly is an exec array, never a shell:
+command + base + model fragment (only when set) + session fragment +
+extra_args + prompt (or stdin). Two session shapes: MUXI-generated ids
+(idempotent `session:` fragment, or `session_new`/`session_resume`
+pair -- claude style) and tool-assigned/captured ids (`session_resume`
+only + `parse.session_id`; such adapters cannot use `output: text`,
+load-validated). Output parsing reuses the triggers `parse:` idiom
+(`extract_path` from background/transformers.py) per the
+`stream-json | json | text` enum; stream-json events emit
+DELEGATION_PROGRESS (DEBUG) with the coarse vendor event type.
+
+**Droid verification (2026-07-10, droid 0.169.0):** despite the docs'
+"existing session to continue" wording, `droid exec --session-id
+<fresh-uuid>` silently CREATES the session and echoes it back -- so
+the bundled droid template uses the single idempotent `session:`
+fragment (the PRD's [verify] resolved in favor of create-or-resume).
+`--output-format json` result shape confirmed
+(`{"type":"result","result":...,"session_id":...}`); `stream-json`
+also works. Droid's default autonomy is READ-ONLY: real formations
+need `extra_args: ["--auto", "medium"|"high"]`.
+
+**Fail-fast at load; inert when unconfigured (D9).** Structural checks
+live in `parse_coding_config` (reused by
+FormationValidator._validate_coding_config with
+`resolve_client=False`); environment checks (binary on PATH/abs,
+workdir roots exist, groups exist when RBAC active) in
+`validate_coding_runtime`, called from `_setup_coding` (after
+`_setup_rbac`, so the groups allowlist can be validated). The
+secrets-placement rule (D11: `${{ secrets.* }}` resolves under
+`coding.env` ONLY) is enforced TWICE: the validator sees raw
+pre-interpolation YAML (the parser scans every non-env subtree,
+including adapter template files), and `_setup_coding` re-checks the
+loader's `_secret_placeholders` registry (paths like `coding.env.FOO`)
+because global interpolation has already resolved refs by then. No
+block = parse returns None, no service, no tool (pinned).
+
+**DelegationService** (`services/coding/service.py`): in-memory job
+dict always; write-through to `coding_delegations` (model import
+registered in `_create_all_database_tables`) when persistent memory
+exists -- continuation across restarts needs the vendor session id to
+survive. On boot, rows stuck in `running` are marked `orphaned`;
+`stop()` (called from `Formation.stop_overlord`) kills process groups
+and orphans in-memory jobs. Subprocesses spawn with
+`start_new_session=True` so cancel/timeout kill the WHOLE process
+group; env = os.environ + coding.env (argv never carries secrets).
+Workdir lifecycle: fresh `<root>/<sanitized_user>/<job_id>` per
+delegation (never the root; traversal-proof), `cleanup: delete`
+disposes on terminal state + a 5-minute TTL sweep loop removes stray
+dirs older than 1h (only depth-2 dirs, only under `delete`; live jobs
+spared); `keep` retains everything (used by the e2e fixtures for
+assertions). Per-user `max_concurrent`; timeout kills the group and
+marks `timed_out` (session id retained -- post-timeout resumption is
+vendor-dependent, never blocked). Cancel keeps the session id;
+user-initiated cancels do NOT re-enter. Re-entry failures are caught +
+observed, never break the tracker (heartbeat precedent).
+
+**Gating (D3):** the `coding.groups:` resource-side allowlist is
+checked in `service.delegate()` against the request's
+middleware-resolved groups (`gbac.get_request_groups()` ContextVar at
+dispatch time); empty/absent = everyone. Deliberate asymmetry with the
+group-file `tools:` vocabulary (registry tools only). All rejections
+(allowlist, concurrency, unknown continue_job_id, bad workdir) are
+friendly `{"success": False, "error"}` dicts.
+
+**/jobs integration:** coding tasks list alongside scheduled jobs with
+one continuous 1-based index (`_delegation(ctx)` helper; jobs carry
+`kind: "coding"`). `cancel` -> `cancel_job` (process-group kill,
+resumable); `logs` -> the job's in-memory trail; `pause`/`resume`
+reply "not supported for coding tasks". A formation with delegation
+but no scheduler still gets a working /jobs.
+
+**Events:** `DELEGATION_STARTED/PROGRESS/COMPLETED/FAILED/TIMED_OUT/
+CANCELLED/ORPHANED` in ConversationEvents (`delegation.*`); data
+carries job id, adapter, delegation dir -- never env values.
+
+**Security-layer false positives (found by e2e, artifact-retrieval
+precedent):** "clone the repository at file://... and push a branch"
+reads like exfiltration to BOTH LLM security layers (routing
+SECURITY_BLOCK and the RequestAnalyzer). Fix mirrors artifact
+retrieval exactly: `RequestAnalyzer._heuristic_is_coding_delegation`
+(explicit delegate_coding mention, or delegation phrasing + a coding
+anchor) downgrades `information_extraction`/`credential_fishing` in
+the analyzer and downgrades SECURITY_BLOCK to fallback selection in
+the router (router override additionally requires
+`overlord.delegation_service` to exist). `prompt_injection`/`jailbreak`
+are never downgraded. Both prompts gained explicit
+delegation carve-out text (`workflow_request_analysis.md`, routing
+system prompt).
+
+**Gotchas:**
+1. Single-user formations normalize the caller to user "0" -- e2e
+   assertions must look the tracked job up under the effective user,
+   not the external id passed to chat(). SQLite persistence also
+   carries job rows across test runs: pick the job id that was not
+   tracked before the turn.
+2. The `json` parser has a last-parseable-line fallback (some CLIs
+   prepend informational lines) and falls back to raw stdout when
+   selectors extract nothing -- a completed run never reports empty.
+3. stream-json lines can exceed asyncio's 64KB default readline limit;
+   the subprocess is created with an 8MB limit.
+4. e2e formation dirs need BOTH `.key` and `secrets.enc` symlinks; a
+   missing `.key` makes the SecretsManager mint a fresh key that then
+   fails to decrypt the shared blob (InvalidToken at load).
+
+**Tests:** `tests/unit/coding/` (config matrix incl. secrets
+placement + both session shapes + captured-id; service: always-async,
+parsers, workdir lifecycle/TTL, gating, cancel/timeout, re-entry) and
+`TestJobsCoding` in `tests/unit/test_builtin_commands.py`; e2e area
+`e2e/tests/24_coding/` -- six standalone tests, {claude-code, droid} x
+{ad-hoc, new-project, existing-project}, REAL agent runs against local
+file:// bare-repo fixtures (no GitHub, no network; area timeout 900s
+in run_all_tests.py).
+
 ---
 
 ## 9. Testing Infrastructure

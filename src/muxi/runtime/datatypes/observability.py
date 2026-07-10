@@ -1410,6 +1410,30 @@ class ConversationEvents(Enum):
     COMMAND_FAILED = "command.failed"
     # When a built-in slash command handler raises (isolated from the turn)
 
+    # ===================================================================
+    # CODING DELEGATION (headless coding CLIs)
+    # ===================================================================
+    DELEGATION_STARTED = "delegation.started"
+    # When a coding delegation subprocess is spawned
+
+    DELEGATION_PROGRESS = "delegation.progress"
+    # Per vendor stream event (coarse passthrough of the vendor event type)
+
+    DELEGATION_COMPLETED = "delegation.completed"
+    # When a coding delegation finishes successfully (exit code 0)
+
+    DELEGATION_FAILED = "delegation.failed"
+    # When a coding delegation exits non-zero or errors before spawn
+
+    DELEGATION_TIMED_OUT = "delegation.timed_out"
+    # When a coding delegation exceeds its timeout (process group killed)
+
+    DELEGATION_CANCELLED = "delegation.cancelled"
+    # When a coding delegation is cancelled (session id retained)
+
+    DELEGATION_ORPHANED = "delegation.orphaned"
+    # When a running delegation's record survives a runtime restart/shutdown
+
 
 class ServerEvents(Enum):
     """Server event types for MUXI observability"""

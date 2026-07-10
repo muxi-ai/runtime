@@ -79,6 +79,43 @@ class FakeScheduler:
         return [{"timestamp": "2026-07-08T09:00:00", "action": "created"}]
 
 
+class FakeDelegation:
+    """Deterministic stand-in for the coding DelegationService surface."""
+
+    def __init__(self, jobs: Optional[List[Dict[str, Any]]] = None):
+        self.jobs = jobs or []
+        self.actions: List[tuple] = []
+
+    async def list_user_jobs(self, user_id: str) -> List[Dict[str, Any]]:
+        return [j for j in self.jobs if j.get("user_id", user_id) == user_id]
+
+    async def cancel_job(self, job_id: str, user_id: str = "0") -> bool:
+        self.actions.append(("cancel", job_id, user_id))
+        job = next((j for j in self.jobs if j["id"] == job_id), None)
+        if job is None or job["status"] != "running":
+            return False
+        job["status"] = "cancelled"
+        return True
+
+    async def get_job_trail(self, job_id: str, user_id: str = "0"):
+        return [
+            {"timestamp": "2026-07-10T09:00:00", "action": "started"},
+            {"timestamp": "2026-07-10T09:05:00", "action": "completed"},
+        ]
+
+
+def coding_job(job_id="cdg_abc123", status="running", user_id="0", **extra):
+    return {
+        "id": job_id,
+        "kind": "coding",
+        "title": "Fix the login bug",
+        "status": status,
+        "adapter": "claude-code",
+        "user_id": user_id,
+        **extra,
+    }
+
+
 class FakeBuffer:
     """Buffer memory double exposing only remove_by_metadata."""
 
@@ -129,6 +166,7 @@ def make_overlord(
     buffer: Any = None,
     router: Any = None,
     db_manager: Any = None,
+    delegation: Any = None,
 ) -> Overlord:
     """Bare Overlord carrying only what the command path touches."""
     overlord = Overlord.__new__(Overlord)
@@ -146,6 +184,7 @@ def make_overlord(
     overlord.notification_router = router
     overlord.heartbeat_service = None
     overlord.scheduler_service = scheduler
+    overlord.delegation_service = delegation
     overlord.buffer_memory = buffer
     overlord.db_manager = db_manager
     overlord.long_term_memory = None
@@ -373,6 +412,79 @@ class TestJobs:
         overlord = make_overlord(scheduler=FakeScheduler())
         response = await run_command(overlord, "/jobs frobnicate")
         assert "Usage: /jobs" in response.content
+
+
+# ===================================================================
+# /jobs x coding delegations (coding-agent delegation)
+# ===================================================================
+
+
+class TestJobsCoding:
+    async def test_coding_only_formation_lists_coding_tasks(self):
+        # No scheduler, but a delegation service: /jobs still works.
+        delegation = FakeDelegation(jobs=[coding_job()])
+        overlord = make_overlord(scheduler=None, delegation=delegation)
+        response = await run_command(overlord, "/jobs")
+        assert "1 coding task(s)" in response.content
+        assert "Fix the login bug [cdg_abc123]" in response.content
+        assert "claude-code" in response.content
+
+    async def test_coding_only_empty_listing(self):
+        overlord = make_overlord(scheduler=None, delegation=FakeDelegation())
+        response = await run_command(overlord, "/jobs")
+        assert "no coding tasks" in response.content
+
+    async def test_combined_listing_continuous_index(self):
+        scheduler = FakeScheduler(jobs=[_job("job_a", "Check email")])
+        delegation = FakeDelegation(jobs=[coding_job()])
+        overlord = make_overlord(scheduler=scheduler, delegation=delegation)
+        response = await run_command(overlord, "/jobs")
+        assert "1. Check email [job_a]" in response.content
+        # The coding section continues the index (2, not 1).
+        assert "2. Fix the login bug [cdg_abc123]" in response.content
+
+    async def test_cancel_coding_task_by_continuous_index(self):
+        scheduler = FakeScheduler(jobs=[_job("job_a", "Check email")])
+        delegation = FakeDelegation(jobs=[coding_job()])
+        overlord = make_overlord(scheduler=scheduler, delegation=delegation)
+        response = await run_command(overlord, "/jobs cancel 2")
+        assert "Cancelled coding task" in response.content
+        assert "resumed" in response.content  # session retained
+        assert ("cancel", "cdg_abc123", "0") in delegation.actions
+
+    async def test_cancel_non_running_coding_task(self):
+        delegation = FakeDelegation(jobs=[coding_job(status="completed")])
+        overlord = make_overlord(scheduler=None, delegation=delegation)
+        response = await run_command(overlord, "/jobs cancel cdg_abc123")
+        assert "Could not cancel" in response.content
+
+    async def test_pause_and_resume_unsupported_for_coding(self):
+        delegation = FakeDelegation(jobs=[coding_job()])
+        overlord = make_overlord(scheduler=None, delegation=delegation)
+        for action in ("pause", "resume"):
+            response = await run_command(overlord, f"/jobs {action} cdg_abc123")
+            assert "not supported for coding tasks" in response.content
+
+    async def test_logs_for_coding_task(self):
+        delegation = FakeDelegation(jobs=[coding_job(status="completed")])
+        overlord = make_overlord(scheduler=None, delegation=delegation)
+        response = await run_command(overlord, "/jobs logs cdg_abc123")
+        assert 'History for coding task "Fix the login bug"' in response.content
+        assert "started" in response.content
+        assert "completed" in response.content
+
+    async def test_scheduler_actions_untouched_by_coding_presence(self):
+        scheduler = FakeScheduler(jobs=[_job("job_a", "Check email")])
+        delegation = FakeDelegation(jobs=[coding_job()])
+        overlord = make_overlord(scheduler=scheduler, delegation=delegation)
+        response = await run_command(overlord, "/jobs pause job_a")
+        assert 'Paused "Check email"' in response.content
+        assert delegation.actions == []
+
+    async def test_neither_service_stays_friendly(self):
+        overlord = make_overlord(scheduler=None, delegation=None)
+        response = await run_command(overlord, "/jobs")
+        assert "scheduler is not enabled" in response.content
 
 
 # ===================================================================

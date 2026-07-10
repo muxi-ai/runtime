@@ -1743,6 +1743,15 @@ class Agent:
                         if run_tool:
                             tools.append(run_tool)
 
+                # Built-in coding delegation tool (coding-agent delegation):
+                # registered only when the formation declares a 'coding'
+                # block (the overlord carries a DelegationService).
+                # Formations without the block see no tool at all.
+                from .coding_dispatch import build_coding_tools, coding_tools_available
+
+                if self.overlord and coding_tools_available(self.overlord):
+                    tools.extend(build_coding_tools(self.overlord))
+
             except Exception as e:
                 # Log but don't fail if we can't get tools
                 observability.observe(
@@ -4227,6 +4236,20 @@ class Agent:
                 }
                 return await artifact_handlers[tool_name](
                     self.agent_id, parameters, self.overlord, user_id=user_id
+                )
+
+            if tool_name == "delegate_coding" and self.overlord:
+                # Coding delegation built-in (always async: returns a job
+                # handle immediately). User-scoped and failure-isolated --
+                # every rejection is a friendly error dict.
+                from .coding_dispatch import handle_delegate_coding
+
+                return await handle_delegate_coding(
+                    self.agent_id,
+                    parameters,
+                    self.overlord,
+                    user_id=user_id,
+                    session_id=getattr(self, "_current_session_id", None),
                 )
 
             if tool_name == "generate_file" and self.overlord:

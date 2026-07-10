@@ -33,6 +33,10 @@ AREA_TIMEOUT_OVERRIDES = {
     # routinely runs 3-4 minutes before the first chat turn even
     # starts.
     "6_knowledge": 600,
+    # Coding delegation tests run REAL headless coding agents (claude,
+    # droid) end to end: each delegation is a full agentic run (git init,
+    # clone, commit, push against local fixtures) that takes minutes.
+    "24_coding": 900,
 }
 E2E_DIR = Path(__file__).parent
 TESTS_DIR = E2E_DIR / "tests"

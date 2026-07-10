@@ -29,8 +29,8 @@
 #     response is validated at runtime regardless).
 #   * route_class identifies the origin of the request: external routes
 #     ("chat", "audiochat", "trigger", "api") and internal origins
-#     ("heartbeat", "scheduler") traverse the middleware identically.
-#     The middleware must echo route_class unchanged.
+#     ("heartbeat", "scheduler", "delegation") traverse the middleware
+#     identically. The middleware must echo route_class unchanged.
 # =============================================================================
 
 from __future__ import annotations

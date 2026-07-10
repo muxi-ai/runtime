@@ -437,6 +437,44 @@ class RequestAnalyzer:
         return False
 
     @staticmethod
+    def _heuristic_is_coding_delegation(user_message: str) -> bool:
+        """
+        Detect whether a request delegates a coding task to the formation's
+        configured coding agent (coding-agent delegation).
+
+        Used as a defensive override for the LLM security classifier,
+        which occasionally flags legitimate delegation requests as
+        threats: "clone the repository at file://... and push a branch"
+        reads like exfiltration or system exploitation to the classifier,
+        but it is exactly what the user-scoped delegate_coding tool exists
+        for -- the task runs in a disposable delegation directory against
+        repositories the user names.
+
+        Precision-first: returns True only for an explicit delegate_coding
+        tool mention, or delegation phrasing ("delegate"/"hand off")
+        combined with a coding anchor. Ambiguous messages leave the LLM
+        classification standing.
+        """
+        import re
+
+        if not user_message or not user_message.strip():
+            return False
+
+        msg = user_message.lower()
+
+        # Explicit built-in tool mentions are unambiguous.
+        if re.search(r"\bdelegate_coding\b", msg):
+            return True
+
+        # Delegation phrasing + a coding anchor.
+        if re.search(r"\b(?:delegate|delegating|hand(?:\s+this)?\s+off)\b", msg) and re.search(
+            r"\b(?:coding|code|programming)\b", msg
+        ):
+            return True
+
+        return False
+
+    @staticmethod
     def _heuristic_detect_scheduler_query(message_lower: str) -> bool:
         """Detect scheduler query intent via keyword patterns."""
         import re
@@ -511,6 +549,33 @@ class RequestAnalyzer:
                     description=(
                         "LLM flagged user-self-recall as information_extraction; "
                         "heuristic override downgraded to non-threat"
+                    ),
+                )
+                analysis.is_security_threat = False
+                analysis.threat_type = None
+
+            # Same defensive posture for coding delegation: "clone this
+            # repository and push a branch" phrasing reads like
+            # exfiltration to the classifier, but delegating a coding
+            # task to the formation-configured coding agent is the
+            # delegate_coding tool's normal use (never downgrades
+            # prompt_injection / jailbreak).
+            if (
+                analysis.is_security_threat
+                and analysis.threat_type in ("information_extraction", "credential_fishing")
+                and self._heuristic_is_coding_delegation(user_message)
+            ):
+                observability.observe(
+                    event_type=observability.ConversationEvents.WORKFLOW_ANALYSIS_FAILED,
+                    level=observability.EventLevel.INFO,
+                    data={
+                        "reason": "coding_delegation_override",
+                        "original_threat_type": analysis.threat_type,
+                        "message_preview": user_message[:120],
+                    },
+                    description=(
+                        "LLM flagged a coding delegation request as a security "
+                        "threat; heuristic override downgraded to non-threat"
                     ),
                 )
                 analysis.is_security_threat = False

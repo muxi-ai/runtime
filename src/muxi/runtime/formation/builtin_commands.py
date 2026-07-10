@@ -110,6 +110,10 @@ def _scheduler(ctx: BuiltinCommandContext) -> Any:
     return getattr(ctx.overlord, "scheduler_service", None)
 
 
+def _delegation(ctx: BuiltinCommandContext) -> Any:
+    return getattr(ctx.overlord, "delegation_service", None)
+
+
 def _db_manager(ctx: BuiltinCommandContext) -> Any:
     """The formation database manager (orchestrator's fallback chain)."""
     db = getattr(ctx.overlord, "db_manager", None)
@@ -136,6 +140,16 @@ def _format_job(index: int, job: Dict[str, Any]) -> str:
     detail = f"   {_job_schedule_line(job)} | Status: {job.get('status')}"
     if job.get("last_run_at"):
         detail += f" | Last run: {job.get('last_run_at')} ({job.get('last_run_status')})"
+    lines.append(detail)
+    return "\n".join(lines)
+
+
+def _format_coding_job(index: int, job: Dict[str, Any]) -> str:
+    """One /jobs listing entry for a coding delegation."""
+    lines = [f"{index}. {job.get('title') or 'Coding task'} [{job.get('id')}]"]
+    detail = f"   Coding task ({job.get('adapter') or 'inline'}) | Status: {job.get('status')}"
+    if job.get("completed_at"):
+        detail += f" | Finished: {job.get('completed_at')}"
     lines.append(detail)
     return "\n".join(lines)
 
@@ -235,7 +249,8 @@ _JOBS_USAGE = (
 
 async def _cmd_jobs(ctx: BuiltinCommandContext) -> str:
     scheduler = _scheduler(ctx)
-    if scheduler is None:
+    delegation = _delegation(ctx)
+    if scheduler is None and delegation is None:
         return (
             "Scheduled tasks are not available: the scheduler is not enabled "
             "in this formation ('scheduler.enabled: true' requires persistent memory)."
@@ -245,16 +260,32 @@ async def _cmd_jobs(ctx: BuiltinCommandContext) -> str:
     tokens = ctx.args.split()
     action = tokens[0].lower() if tokens else "list"
 
-    jobs = await scheduler.list_user_jobs(user)
+    scheduled_jobs = await scheduler.list_user_jobs(user) if scheduler is not None else []
+    coding_jobs = await delegation.list_user_jobs(user) if delegation is not None else []
+    # One continuous 1-based index across both listings so <id> resolution
+    # stays unambiguous.
+    jobs = list(scheduled_jobs) + list(coding_jobs)
 
     if action == "list" and len(tokens) <= 1:
         if not jobs:
+            if scheduler is None:
+                return "You have no coding tasks running."
             return (
                 "You have no scheduled tasks. Ask me to schedule something "
                 "(e.g. 'remind me every Friday at 4pm') to create one."
             )
-        lines = [f"You have {len(jobs)} scheduled task(s):", ""]
-        lines.extend(_format_job(i, job) for i, job in enumerate(jobs, start=1))
+        lines: List[str] = []
+        if scheduled_jobs:
+            lines.extend([f"You have {len(scheduled_jobs)} scheduled task(s):", ""])
+            lines.extend(_format_job(i, job) for i, job in enumerate(scheduled_jobs, start=1))
+        if coding_jobs:
+            if lines:
+                lines.append("")
+            lines.extend([f"You have {len(coding_jobs)} coding task(s):", ""])
+            lines.extend(
+                _format_coding_job(i, job)
+                for i, job in enumerate(coding_jobs, start=len(scheduled_jobs) + 1)
+            )
         lines.extend(["", "Commands: /jobs pause <id>, resume <id>, cancel <id>, logs <id>"])
         return "\n".join(lines)
 
@@ -269,6 +300,37 @@ async def _cmd_jobs(ctx: BuiltinCommandContext) -> str:
 
     job_id = job["id"]
     title = job.get("title") or job_id
+
+    if job.get("kind") == "coding":
+        # Coding delegations: pause has no meaning for a one-shot headless
+        # run (documented, not faked); cancel kills the process group but
+        # keeps the vendor session id, so the task stays resumable.
+        if action in {"pause", "resume"}:
+            return (
+                f"'{action}' is not supported for coding tasks: a one-shot "
+                "headless run has no meaningful pause. Use /jobs cancel "
+                f"{tokens[1]} to stop it (it stays resumable via a new "
+                "delegation)."
+            )
+        if action == "cancel":
+            if await delegation.cancel_job(job_id, user_id=user):
+                return (
+                    f'Cancelled coding task "{title}" (its process group was '
+                    "killed; the session is retained, so the task can be "
+                    "resumed with a new delegation)."
+                )
+            return f'Could not cancel "{title}" (only running coding tasks can be cancelled).'
+        # logs
+        trail = await delegation.get_job_trail(job_id, user_id=user)
+        lines = [f'History for coding task "{title}":', ""]
+        lines.append(f"Status: {job.get('status')}")
+        if job.get("error"):
+            lines.append(f"Error: {job.get('error')}")
+        if trail:
+            lines.append("Recent activity:")
+            for entry in trail[-5:]:
+                lines.append(f"- {entry.get('timestamp')}: {entry.get('action')}")
+        return "\n".join(lines)
 
     if action == "pause":
         if await scheduler.pause_job(job_id, user_id=user):

@@ -1526,7 +1526,9 @@ def _create_all_database_tables(db_manager, embedding_dimension: int = 1536) -> 
 
         # Scheduler models (scheduled_jobs, scheduled_job_audit)
         # Proactive models (user_channel_state) - Proactiveness Phase 1
+        # Coding delegation models (coding_delegations)
         from ..formation.proactive.user_channels import UserChannelState  # noqa: F401
+        from ..services.coding.models import CodingDelegation  # noqa: F401
         from ..services.scheduler.models import ScheduledJob, ScheduledJobAudit  # noqa: F401
 
         # On SQLite the dim-specific memories table is owned by SQLiteMemory,

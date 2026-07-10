@@ -223,6 +223,11 @@ class Formation:
         self._request_middleware = None
         self._rbac_prepared = False
 
+        # Coding delegation (populated by _setup_coding from the top-level
+        # coding: block; None means the feature stays inert)
+        self._coding_config = None
+        self._coding_prepared = False
+
     def set_secrets_manager(self, secrets_manager: SecretsManager) -> None:
         """
         Inject a pre-configured SecretsManager instance.
@@ -1103,6 +1108,10 @@ class Formation:
         # plus the auto-discovered groups/ directory)
         self._setup_rbac()
 
+        # Coding delegation (top-level coding: block; fail-fast validation
+        # of the adapter, binary, workdirs, groups, and the secrets rule)
+        self._setup_coding()
+
         # Prepare and validate service configurations
         self._setup_llm_config()
         self._setup_memory_config()
@@ -1243,6 +1252,7 @@ class Formation:
                 "logging_config": self._logging_config,
                 "clarification_config": self._clarification_config,
                 "document_processing_config": self._document_processing_config,
+                "coding_config": self._coding_config,
                 "scheduler_config": self._scheduler_config,
                 "runtime_config": self._runtime_config,
                 "agents_config": self._agents_config,
@@ -1679,6 +1689,97 @@ class Formation:
     def request_middleware(self):
         """The formation's RequestMiddleware, or None when not declared."""
         return self._request_middleware
+
+    def _setup_coding(self) -> None:
+        """
+        Parse + fail-fast validate the top-level ``coding:`` block.
+
+        No block means nothing is constructed, no tool is registered, and
+        behavior is byte-identical (pinned by unit test). With the block,
+        every problem is a formation-load error, never a delegation-time
+        surprise: adapter schema/resolution, binary on PATH, workdir roots,
+        the groups allowlist (when RBAC is active), and the secrets rule
+        (``${{ secrets.* }}`` resolves under ``coding.env`` ONLY).
+
+        Runs after _setup_rbac so the groups allowlist can be validated
+        against the loaded groups/ directory. Idempotent like _setup_rbac.
+        """
+        if self._coding_prepared:
+            return
+
+        raw = (self.config or {}).get("coding")
+        if raw is None:
+            self._coding_config = None
+            self._coding_prepared = True
+            return
+
+        formation_dir = self._formation_path
+        if formation_dir and os.path.isfile(formation_dir):
+            formation_dir = os.path.dirname(formation_dir)
+
+        # Secrets-placement rule (D11), enforced against the interpolation
+        # registry: global interpolation already resolved every reference,
+        # but the loader records where each placeholder lived. Anything
+        # under coding.* that is not under coding.env is a load error.
+        misplaced = sorted(
+            path
+            for path in (self._secret_placeholders or {})
+            if path.startswith("coding.") and not path.startswith("coding.env.")
+        )
+        if misplaced:
+            raise ConfigurationValidationError(
+                [
+                    f"${{{{ secrets.* }}}} references are only allowed under "
+                    f"coding.env (found at {misplaced})"
+                ],
+                {
+                    "suggestion": (
+                        "Move the secret into coding.env -- the only place "
+                        "secrets resolve. Command lines are visible to every "
+                        "user on the host via ps; environment variables are not."
+                    ),
+                    "example": {"coding": {"env": {"SOME_VAR": "${{ secrets.SOME_VAR }}"}}},
+                },
+            )
+
+        from ..services.coding import (
+            CodingConfigError,
+            parse_coding_config,
+            validate_coding_runtime,
+        )
+
+        try:
+            coding_config = parse_coding_config(raw, formation_dir=formation_dir)
+            known_groups = (
+                set(self._group_permissions) if self._permission_resolver is not None else None
+            )
+            validate_coding_runtime(
+                coding_config,
+                formation_dir=formation_dir,
+                known_groups=known_groups,
+            )
+        except CodingConfigError as e:
+            raise ConfigurationValidationError(
+                [f"Invalid coding configuration: {e}"],
+                {
+                    "suggestion": (
+                        "Declare 'client' (a bundled or formation-local adapter "
+                        "template name) or an inline adapter, plus at least one "
+                        "existing 'workdirs' root; the adapter binary must be "
+                        "installed and on PATH"
+                    ),
+                    "example": {
+                        "coding": {
+                            "client": "claude-code",
+                            "workdirs": ["./workspace"],
+                            "env": {"SOME_VAR": "${{ secrets.SOME_VAR }}"},
+                        }
+                    },
+                },
+            ) from e
+
+        self._coding_config = coding_config
+        self._coding_prepared = True
 
     def _setup_llm_config(self) -> None:
         """Setup and validate LLM configuration."""
@@ -3276,6 +3377,20 @@ class Formation:
                         f"forcing termination after {timeout_seconds} seconds",
                     )
                 )
+
+            # Stop the coding delegation service (kills running delegation
+            # process groups and marks their jobs orphaned; best effort)
+            delegation_service = getattr(self._overlord, "delegation_service", None)
+            if delegation_service is not None:
+                try:
+                    await delegation_service.stop()
+                except Exception as delegation_error:
+                    observability.observe(
+                        event_type=observability.ErrorEvents.SERVICE_UNAVAILABLE,
+                        level=observability.EventLevel.WARNING,
+                        data={"service": "coding_delegation", "error": str(delegation_error)},
+                        description=f"Failed to stop delegation service: {delegation_error}",
+                    )
 
             # Disconnect the request middleware before cleanup (best effort)
             if self._request_middleware is not None:
