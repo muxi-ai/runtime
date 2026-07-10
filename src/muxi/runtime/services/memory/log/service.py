@@ -284,11 +284,17 @@ class CaptainsLogService:
         turn is older than ``session_idle_minutes`` is ended exactly once
         (its activity stamp is dropped, ``session.ended`` is emitted), and
         each affected user's pending turns are digested through the same
-        pipeline the daily tick uses. A user whose turns were already
-        digested (daily tick, flush, or an earlier sweep) is skipped, so
-        nothing is ever digested twice. On digest failure the snapshot is
-        re-queued for the periodic pass -- no turn is worse off than
-        without this trigger. Returns aggregate counts.
+        pipeline the daily tick uses. Pending turns are queued per user,
+        so the digest only runs when the swept session was the user's LAST
+        session with recent activity: while any other non-idle session
+        exists the queue is left intact (a fresh sibling session's turns
+        must never be digested under this session's boundary) and digests
+        on that sibling's eventual sweep or the daily tick, exactly once.
+        A user whose turns were already digested (daily tick, flush, or
+        an earlier sweep) is likewise skipped, so nothing is ever
+        digested twice. On digest failure the snapshot is re-queued for
+        the periodic pass -- no turn is worse off than without this
+        trigger. Returns aggregate counts.
         """
         totals = {"sessions": 0, "entries": 0, "sources": 0, "lessons": 0}
         if not self.enabled or self.session_idle_seconds <= 0:
@@ -327,6 +333,13 @@ class CaptainsLogService:
             return totals
 
         for user_id in users:
+            if any(key[0] == user_id for key in self._session_activity):
+                # The user still has a non-idle session: its fresh turns
+                # share this user's queue, so digesting now would fold
+                # them under the ended session's boundary. Leave the
+                # queue intact -- it digests when the user's last active
+                # session idles out (or at the daily tick), exactly once.
+                continue
             turns = list(self._pending_turns.pop(user_id, ()))
             if not turns:
                 continue

@@ -42,9 +42,11 @@ class FakeModel:
     def __init__(self, response=DIGEST_RESPONSE):
         self.response = response
         self.calls = 0
+        self.prompts = []
 
     async def generate_text(self, prompt, caching=True):
         self.calls += 1
+        self.prompts.append(prompt)
         if isinstance(self.response, Exception):
             raise self.response
         return self.response
@@ -181,6 +183,67 @@ class TestIdleSweep:
         totals = await service.sweep_idle_sessions(model, now=idle_now(service))
         assert totals["sessions"] == 2
         assert totals["entries"] == 1
+        assert model.calls == 1
+
+    async def test_active_sibling_defers_digest_until_last_session_idles(self, service):
+        # Pending turns are per-user: sweeping idle s1 while s2 is still
+        # active must NOT consume s2's fresh turns under s1's boundary.
+        model = FakeModel()
+        service.queue_turn("s1 turn about the kickoff", "ok", user_id="u1", session_id="s1")
+        service.queue_turn("s2 turn about the launch", "ok", user_id="u1", session_id="s2")
+        # Age s1 past the idle threshold; s2 stays fresh.
+        service._session_activity[("u1", "s1")] = time.time() - service.session_idle_seconds - 1
+
+        totals = await service.sweep_idle_sessions(model, now=time.time())
+        assert totals["sessions"] == 1  # s1 still ends...
+        assert totals["entries"] == 0  # ...but nothing is digested
+        assert model.calls == 0
+        assert len(service._pending_turns["u1"]) == 2  # queue left intact
+        assert ("u1", "s1") not in service._session_activity
+        assert ("u1", "s2") in service._session_activity
+
+        # When the user's LAST session idles out, the digest runs exactly
+        # once with ALL the queued turns.
+        totals = await service.sweep_idle_sessions(model, now=idle_now(service))
+        assert totals["sessions"] == 1
+        assert totals["entries"] == 1
+        assert model.calls == 1
+        assert "s1 turn about the kickoff" in model.prompts[0]
+        assert "s2 turn about the launch" in model.prompts[0]
+        assert not service._pending_turns.get("u1")
+
+    async def test_active_sibling_sweep_emits_ended_for_idle_session_only(self, service, events):
+        service.queue_turn("s1 turn", "ok", user_id="u1", session_id="s1")
+        service.queue_turn("s2 turn", "ok", user_id="u1", session_id="s2")
+        service._session_activity[("u1", "s1")] = time.time() - service.session_idle_seconds - 1
+
+        await service.sweep_idle_sessions(FakeModel(), now=time.time())
+        ended = [
+            data
+            for event_type, data in events
+            if event_type is service_module.observability.ConversationEvents.SESSION_ENDED
+        ]
+        assert [data["session_id"] for data in ended] == ["s1"]
+
+    async def test_daily_tick_digests_deferred_turns_exactly_once(self, service):
+        # Deferred turns (idle s1 + active s2) are not lost: the daily
+        # tick digests the intact queue once, and s2's eventual session
+        # end has nothing left to double-digest.
+        model = FakeModel()
+        service.queue_turn("s1 turn", "ok", user_id="u1", session_id="s1")
+        service.queue_turn("s2 turn", "ok", user_id="u1", session_id="s2")
+        service._session_activity[("u1", "s1")] = time.time() - service.session_idle_seconds - 1
+
+        assert (await service.sweep_idle_sessions(model, now=time.time()))["entries"] == 0
+        assert model.calls == 0
+
+        totals = await service.run_periodic_summarization(model)
+        assert totals["entries"] == 1
+        assert model.calls == 1
+
+        totals = await service.sweep_idle_sessions(model, now=idle_now(service))
+        assert totals["sessions"] == 1  # s2 ends...
+        assert totals["entries"] == 0  # ...with nothing left to digest
         assert model.calls == 1
 
     async def test_session_ended_event_emitted(self, service, events):

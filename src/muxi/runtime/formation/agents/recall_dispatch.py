@@ -184,7 +184,7 @@ async def handle_recall_history(
                 "date_to": date_to,
                 "matched": len(matches),
             },
-            description=f"Recalled {len(matches)} log entrie(s) via recall_history",
+            description=f"Recalled {len(matches)} log entries via recall_history",
         )
         result = {"success": True, "entries": matches, "count": len(matches)}
         if not matches:
