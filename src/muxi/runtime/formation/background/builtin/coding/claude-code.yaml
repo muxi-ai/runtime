@@ -1,0 +1,33 @@
+# Bundled coding adapter template: claude-code (dormant until referenced).
+#
+# Activate with `coding.client: claude-code`; shadow by placing a
+# coding/claude-code.yaml file in the formation directory. Installation
+# and authentication are the developer's business -- MUXI only verifies
+# the binary is present at formation load.
+#
+# Tested against: Claude Code CLI 2.x (flags verified 2026-07-10 against
+# the installed binary: --print, --output-format stream-json, --verbose,
+# --session-id <uuid> [create; must be a valid UUID], --resume <id>,
+# --model <alias-or-full-name>).
+#
+# Session shape: distinct create/resume pair; MUXI generates the UUID for
+# the first delegation and persists it on the tracked job.
+#
+# Vendor permission/safety surface goes through coding.extra_args
+# (passthrough only): --permission-mode, --allowedTools/--disallowedTools,
+# --dangerously-skip-permissions, --max-turns, --max-budget-usd.
+name: claude-code
+command: claude
+args:
+  base: ["--print", "--output-format", "stream-json", "--verbose"]
+  prompt: stdin
+  session_new: ["--session-id", "{id}"]
+  session_resume: ["--resume", "{id}"]
+  model: ["--model", "{model}"]
+output: stream-json
+parse:
+  result: "$.result"
+  session_id: "$.session_id"
+# MUXI sets the subprocess cwd (fresh <root>/<user_id>/<request_id> dir);
+# flags that would move it are rejected at load.
+forbidden_extra_args: ["-w", "--worktree"]

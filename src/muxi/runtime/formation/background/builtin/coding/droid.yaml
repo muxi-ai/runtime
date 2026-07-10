@@ -1,0 +1,38 @@
+# Bundled coding adapter template: droid (Factory; dormant until referenced).
+#
+# Activate with `coding.client: droid`; shadow by placing a
+# coding/droid.yaml file in the formation directory. Installation and
+# authentication (FACTORY_API_KEY or `droid` login) are the developer's
+# business -- MUXI only verifies the binary is present at formation load.
+#
+# Tested against: droid 0.169.0 (flags verified 2026-07-10 against the
+# installed binary):
+# - `droid exec [prompt]` -- positional prompt confirmed (stdin also works).
+# - `--output-format json` -- single result document confirmed:
+#   {"type":"result","subtype":"success","is_error":...,"result":"...",
+#    "session_id":"...","usage":{...}}. `stream-json` (JSONL) also works.
+# - `--session-id <id>` -- the docs say "existing session to continue",
+#   but passing a FRESH UUID silently creates the session and echoes it
+#   back (verified empirically), so the template uses a single idempotent
+#   `session` fragment with a MUXI-generated id. This resolves the PRD's
+#   [verify] item in favor of create-or-resume.
+# - `--model <id>` -- vendor ids; `custom:`-prefixed for custom models.
+#
+# Autonomy via coding.extra_args (passthrough only): `--auto low|medium|high`,
+# `--skip-permissions-unsafe`. The default is READ-ONLY: a droid formation
+# that should edit files or push branches almost certainly wants
+# extra_args: ["--auto", "medium"] (or "high" for git push).
+name: droid
+command: droid
+args:
+  base: ["exec", "--output-format", "json"]
+  prompt: ["{prompt}"]
+  session: ["--session-id", "{id}"]
+  model: ["--model", "{model}"]
+output: json
+parse:
+  result: "$.result"
+  session_id: "$.session_id"
+# MUXI sets the subprocess cwd (fresh <root>/<user_id>/<request_id> dir);
+# flags that would move it are rejected at load.
+forbidden_extra_args: ["--cwd", "-w", "--worktree", "--worktree-dir"]

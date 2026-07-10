@@ -59,6 +59,7 @@ _NEVER_CACHE_NAMES = frozenset(
         "generate_file",  # always produces a fresh artifact
         "activate_skill",  # state mutation on the skill manager
         "run_skill",  # arbitrary code execution
+        "delegate_coding",  # spawns a tracked background delegation
     }
 )
 

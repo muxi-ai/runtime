@@ -465,6 +465,11 @@ class Overlord:
         self.notification_router = None
         self.heartbeat_service = None
 
+        # Coding delegation service (created in _async_startup when the
+        # formation declares a 'coding' block; None means no delegate_coding
+        # tool is registered and the feature stays inert).
+        self.delegation_service = None
+
         # Initialize credential resolver if database is configured
         self.credential_resolver = None
         if configured_services:
@@ -696,6 +701,12 @@ class Overlord:
             complexity_method=self.workflow_config.complexity_method,
             complexity_threshold=self.workflow_config.complexity_threshold,
             complexity_weights=self.workflow_config.complexity_weights,
+            # Lazy: the delegation service is created in _async_startup,
+            # after this constructor. Gates the coding-delegation
+            # security-override on the feature actually being configured.
+            coding_delegation_configured=(
+                lambda: getattr(self, "delegation_service", None) is not None
+            ),
         )
 
         # Initialize planning filter now that request_analyzer is available
@@ -1572,6 +1583,11 @@ class Overlord:
         # No-op for formations without a 'proactive' block.
         self._initialize_proactive_services()
 
+        # Start the coding delegation service after the proactive services
+        # so completion re-entry can deliver through the notification
+        # router. No-op for formations without a 'coding' block.
+        await self._initialize_delegation_service()
+
         # Register periodic re-sync of remote knowledge sources (Phase 3)
         # after the scheduler for the same reason. No-op for formations
         # without url-based knowledge sources.
@@ -1674,6 +1690,44 @@ class Overlord:
                 data={"error": str(e), "service": "context_pruner"},
                 description=f"Failed to initialize context pruner: {e}",
             )
+
+    async def _initialize_delegation_service(self) -> None:
+        """
+        Create + start the coding DelegationService (coding-agent delegation).
+
+        Inert when unconfigured: formations without a 'coding' block get no
+        service and no delegate_coding tool (pinned by unit test). The
+        parsed config arrives from Formation._setup_coding via the
+        configured-services bundle -- every fail-fast check already ran at
+        formation load.
+        """
+        coding_config = (
+            self._configured_services.get("coding_config") if self._configured_services else None
+        )
+        if coding_config is None:
+            return
+
+        from ...datatypes.observability import InitEventFormatter
+        from ...services.coding import DelegationService
+
+        formation_dir = (
+            self._configured_services.get("formation_path") if self._configured_services else None
+        )
+        self.delegation_service = DelegationService(
+            config=coding_config,
+            overlord=self,
+            formation_dir=formation_dir,
+        )
+        await self.delegation_service.start()
+
+        print(
+            InitEventFormatter.format_ok(
+                "Coding delegation initialized",
+                f"client {coding_config.client or 'inline'}, "
+                f"{len(coding_config.workdirs)} workdir root(s), "
+                f"cleanup {coding_config.cleanup}",
+            )
+        )
 
     def _initialize_proactive_services(self) -> None:
         """
@@ -6421,9 +6475,10 @@ Agent response: {raw_response}"""
                 and scenarios where manual approval doesn't make sense.
             route_class: The request origin carried in the middleware
                 payload ("chat", "audiochat", "trigger", "api", and the
-                internal origins "heartbeat" / "scheduler"). Internal
-                callers set theirs so internally-originated requests
-                traverse the middleware + RBAC pipeline identically.
+                internal origins "heartbeat" / "scheduler" / "delegation").
+                Internal callers set theirs so internally-originated
+                requests traverse the middleware + RBAC pipeline
+                identically.
             middleware_applied: True when the entry point already ran the
                 request middleware for this request (e.g. the trigger
                 route, which needs the groups for its own permission

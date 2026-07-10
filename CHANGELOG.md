@@ -2,6 +2,54 @@
 
 ## [unreleased]
 
+### Coding-agent delegation - mechanism + claude-code/droid adapters
+
+Formations can now delegate coding tasks to external headless coding
+CLIs as fire-and-collect background work (Phase 1 of the coding-agent
+delegation PRD, plus the droid adapter pulled forward):
+
+- Top-level `coding:` block: `client` (bundled adapter template name)
+  or inline adapter (exec-array command assembly, `{prompt}`/`{id}`/
+  `{model}` semantic slots, both session shapes plus the captured-id
+  path via `parse.session_id`), `output: stream-json | json | text`
+  with `parse:` selectors (the triggers `parse:` idiom reused), opaque
+  `model` with per-call override, `workdirs` roots (each delegation
+  runs in a fresh `<root>/<user_id>/<request_id>` dir), `cleanup:
+  delete` (default, with a TTL sweep for strays) or `keep`, a
+  resource-side `groups:` allowlist, `extra_args` vendor passthrough,
+  `env:` (the ONLY place `${{ secrets.* }}` resolves - references
+  anywhere else in the block fail the load pointing at `env:`),
+  `timeout` (default 30m), and per-user `max_concurrent` (default 3).
+- Fail-fast load validation: binary presence, adapter schema, workdir
+  roots, groups existence (when RBAC is active), output/cleanup/
+  timeout enums. No `coding:` block = nothing constructed, no tool
+  registered (pinned by unit test).
+- `delegate_coding` built-in tool (registered/dispatched like
+  `generate_file`): ALWAYS asynchronous - returns immediately with a
+  job id; params `prompt`, `workdir`, `model`, `continue_job_id`
+  (session continuation; vendor session ids persist on the job record
+  and never reach agents). Friendly error dicts for allowlist,
+  concurrency, and unknown-job rejections.
+- DelegationService: tracked background jobs visible in `/jobs`
+  (list/cancel/logs; cancel kills the process group and keeps the
+  session resumable; pause/resume documented as unsupported),
+  subprocess exec with env merge, per-mode output parsing, timeout,
+  orphan marking on boot/shutdown, optional `coding_delegations`
+  persistence table, and completion re-entry through the middleware +
+  RBAC pipeline (`route_class: delegation`) with delivery via the
+  proactiveness notification router.
+- Bundled dormant adapter templates `claude-code` and `droid`
+  (formation-local shadowing, inline escape hatch). Droid flags
+  verified against droid 0.169.0: `--session-id` with a fresh UUID
+  creates the session (idempotent create-or-resume), `--output-format
+  json` result shape confirmed.
+- New observability events: `delegation.started/progress/completed/
+  failed/timed_out/cancelled/orphaned`.
+- New e2e area `24_coding`: {claude-code, droid} x {ad-hoc,
+  new-project, existing-project}, all hermetic (local file:// bare
+  remotes, real agent runs). Developer guide:
+  `contributing/coding-delegation.md`.
+
 ### Fixes
 
 - Knowledge graph entity ATTRIBUTES now render in the graph context

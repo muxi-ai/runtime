@@ -396,6 +396,10 @@ class FormationValidator:
         if "middleware" in config:
             self._validate_middleware_config(config["middleware"])
 
+        # Validate coding delegation configuration
+        if "coding" in config:
+            self._validate_coding_config(config["coding"])
+
         # Validate LLM configuration
         if "llm" in config:
             self._validate_llm_config(config["llm"])
@@ -3692,6 +3696,26 @@ class FormationValidator:
             RequestMiddleware.from_config(middleware_config)
         except MiddlewareConfigError as e:
             self.result.add_error(str(e))
+
+    def _validate_coding_config(self, coding_config: Any) -> None:
+        """Validate the top-level ``coding`` block (coding-agent delegation).
+
+        Reuses the service-level parser so the validator and the runtime
+        can never disagree: block schema, output/cleanup enums, inline
+        adapter shape, and the secrets-placement rule (``${{ secrets.* }}``
+        under ``coding.env`` ONLY -- this validator sees the raw,
+        pre-interpolation YAML, which is exactly where that rule must be
+        enforced). Environment-dependent checks (binary on PATH, workdir
+        roots, named template resolution, groups existence) run in
+        ``Formation._setup_coding`` where the formation directory and the
+        loaded groups are available.
+        """
+        from ...services.coding import CodingConfigError, parse_coding_config
+
+        try:
+            parse_coding_config(coding_config, resolve_client=False)
+        except CodingConfigError as e:
+            self.result.add_error(f"Invalid coding configuration: {e}")
 
     def _validate_server_config(self, server_config: Dict[str, Any]) -> None:
         """Validate server configuration."""
