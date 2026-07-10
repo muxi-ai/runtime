@@ -488,7 +488,15 @@ class KnowledgeIndexService:
 
 
 def _entity_label(entity: Dict[str, Any]) -> str:
-    """Render one entity as ``Name (Type)`` for the index listing."""
+    """Render one entity as ``Name (Type)`` for the index listing.
+
+    Deliberately name-only: the index is a ~300-token orientation catalog
+    ("what exists?"), not a fact store -- entity attribute values are
+    rendered by KnowledgeGraphService.get_context_block, which is injected
+    alongside this index on every turn. Inlining attributes here would
+    crowd out entity coverage under the size cap for facts already present
+    in the graph context block.
+    """
     entity_type = (entity.get("type") or "").capitalize()
     return f"{entity['name']} ({entity_type})" if entity_type else entity["name"]
 
