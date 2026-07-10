@@ -27,6 +27,14 @@
 # events carry source='legacy' with a per-row source_id, so the backfill is
 # idempotent through the substrate's own (source, source_id) key.
 #
+# BACKFILL IS BOUNDED PER PASS: each backfill call scans at most
+# ``BACKFILL_MAX_ROWS_PER_PASS`` rows per table and persists a resume
+# cursor (a ``projection_checkpoints`` row named ``backfill/...``) when it
+# stops short. Legacy tables larger than the bound need multiple passes:
+# keep calling ``backfill_user`` until every projection reports
+# ``complete: true``. A completed pass clears its cursors so a later
+# re-run scans from the start again (idempotent through per-row keys).
+#
 # Extensibility: adding a projection (e.g. the deferred Knowledge Index) is
 # a new class with these members plus a service.register_projector call --
 # no schema changes to the event log.
@@ -51,6 +59,42 @@ from .models import (
 # (the provenance bridge for the vector projection, which has no dedicated
 # derived_from column -- metadata is its extension point).
 FACT_EVENT_METADATA_KEY = "derived_from_event_id"
+
+# ---------------------------------------------------------------------------
+# LOUD BOUND: legacy backfill scans at most this many rows PER TABLE PER
+# PASS. One ``backfill_user`` call is NOT guaranteed to cover a legacy
+# table larger than this -- it persists a resume cursor and reports
+# ``complete: false``; run additional passes until ``complete: true``.
+# Overridable per projector instance via ``backfill_batch_rows`` (tests).
+# ---------------------------------------------------------------------------
+BACKFILL_MAX_ROWS_PER_PASS = 100_000
+
+
+async def _backfill_cursor(event_service, cursor_name: str, user_id: str) -> int:
+    """Read a persisted backfill resume cursor (0 = scan from the start).
+
+    Backfill cursors reuse the ``projection_checkpoints`` table exactly
+    like projection cursors, under reserved ``backfill/...`` names;
+    ``last_event_id`` holds the scan position (a projection row id, or a
+    row offset for the flat-fact projection) rather than an event id.
+    """
+    checkpoint = await event_service.storage.get_checkpoint(cursor_name, user_id)
+    return checkpoint["last_event_id"] if checkpoint else 0
+
+
+async def _save_backfill_cursor(
+    event_service, cursor_name: str, user_id: str, position: int, complete: bool
+) -> None:
+    """Persist (or, on a completed scan, clear) a backfill resume cursor.
+
+    Clearing on completion restores the historical semantics for small
+    tables: a later backfill run re-scans everything and skips rows that
+    already carry provenance or an idempotent (source, source_id) event.
+    """
+    if complete:
+        await event_service.storage.reset_checkpoint(cursor_name, user_id)
+    else:
+        await event_service.storage.set_checkpoint(cursor_name, user_id, last_event_id=position)
 
 
 def event_scope(event: Dict[str, Any]) -> Optional[Tuple[str, str]]:
@@ -150,7 +194,9 @@ class KnowledgeGraphProjector:
         await self.service.storage.delete_all_for_user(user_id)
         self.service.algorithms.invalidate(str(user_id))
 
-    async def backfill(self, user_id: str, event_service) -> int:
+    backfill_batch_rows = BACKFILL_MAX_ROWS_PER_PASS
+
+    async def backfill(self, user_id: str, event_service) -> Dict[str, Any]:
         """Synthesize graph.extracted events for pre-event-log rows.
 
         One event per entity/relationship without provenance, keyed
@@ -158,14 +204,20 @@ class KnowledgeGraphProjector:
         dated to the row's creation. Each synthetic event is applied
         immediately: the upsert merges into the existing row (a no-op for
         content) and stamps its ``derived_from_event_ids`` bridge.
-        Returns the number of events synthesized.
+
+        Bounded per pass (BACKFILL_MAX_ROWS_PER_PASS rows per table);
+        resume cursors persist under ``backfill/knowledge_graph/*``.
+        Returns {"synthesized": n, "complete": bool}.
         """
         user_id = str(user_id)
         storage = self.service.storage
+        limit = self.backfill_batch_rows
         synthesized = 0
 
-        entities = await storage.list_entities(user_id, status=None, limit=100000)
-        names = {entity["id"]: entity for entity in entities}
+        entity_cursor_name = "backfill/knowledge_graph/entities"
+        cursor = await _backfill_cursor(event_service, entity_cursor_name, user_id)
+        entities = await storage.list_entities(user_id, status=None, limit=limit, after_id=cursor)
+        entities_complete = len(entities) < limit
         for entity in entities:
             if entity["derived_from_event_ids"]:
                 continue
@@ -191,8 +243,24 @@ class KnowledgeGraphProjector:
                 continue
             await self.apply({"user_id": user_id, "id": event["id"], "payload": event["payload"]})
             synthesized += 1
+        await _save_backfill_cursor(
+            event_service,
+            entity_cursor_name,
+            user_id,
+            entities[-1]["id"] if entities else cursor,
+            entities_complete,
+        )
 
-        for rel in await storage.list_relationships(user_id, status=None, limit=100000):
+        rel_cursor_name = "backfill/knowledge_graph/relationships"
+        cursor = await _backfill_cursor(event_service, rel_cursor_name, user_id)
+        relationships = await storage.list_relationships(
+            user_id, status=None, limit=limit, after_id=cursor
+        )
+        relationships_complete = len(relationships) < limit
+        endpoint_ids = {rel["from_entity_id"] for rel in relationships}
+        endpoint_ids.update(rel["to_entity_id"] for rel in relationships)
+        names = {entity["id"]: entity for entity in await storage.get_entities_by_ids(endpoint_ids)}
+        for rel in relationships:
             if rel["derived_from_event_ids"]:
                 continue
             from_entity = names.get(rel["from_entity_id"])
@@ -224,7 +292,17 @@ class KnowledgeGraphProjector:
                 continue
             await self.apply({"user_id": user_id, "id": event["id"], "payload": event["payload"]})
             synthesized += 1
-        return synthesized
+        await _save_backfill_cursor(
+            event_service,
+            rel_cursor_name,
+            user_id,
+            relationships[-1]["id"] if relationships else cursor,
+            relationships_complete,
+        )
+        return {
+            "synthesized": synthesized,
+            "complete": entities_complete and relationships_complete,
+        }
 
 
 class CaptainsLogProjector:
@@ -261,20 +339,28 @@ class CaptainsLogProjector:
         await self.service.lessons.delete_all_for_user(user_id)
         await self.service.storage.delete_all_for_user(user_id)
 
-    async def backfill(self, user_id: str, event_service) -> int:
+    backfill_batch_rows = BACKFILL_MAX_ROWS_PER_PASS
+
+    async def backfill(self, user_id: str, event_service) -> Dict[str, Any]:
         """Synthesize log.entry / lesson.recorded events for legacy rows.
 
         Entries are keyed ``legacy/captains_log/<public_id>``, lessons
         ``legacy/lesson/<public_id>``; both dated to the row's creation
-        and applied immediately to stamp provenance. Returns the number
-        of events synthesized.
+        and applied immediately to stamp provenance.
+
+        Bounded per pass (BACKFILL_MAX_ROWS_PER_PASS rows per table);
+        resume cursors persist under ``backfill/captains_log/*``.
+        Returns {"synthesized": n, "complete": bool}.
         """
         user_id = str(user_id)
+        limit = self.backfill_batch_rows
         synthesized = 0
 
-        entries = await self.service.storage.list_entries(user_id, limit=100000)
+        entry_cursor_name = "backfill/captains_log/entries"
+        cursor = await _backfill_cursor(event_service, entry_cursor_name, user_id)
+        entries = await self.service.storage.list_entries(user_id, limit=limit, after_id=cursor)
+        entries_complete = len(entries) < limit
         sources = await self.service.storage.get_sources_for_logs([e["id"] for e in entries])
-        dates_by_id = {entry["id"]: entry["date"] for entry in entries}
         for entry in entries:
             if entry["derived_from_event_ids"]:
                 continue
@@ -307,8 +393,24 @@ class CaptainsLogProjector:
                 }
             )
             synthesized += 1
+        await _save_backfill_cursor(
+            event_service,
+            entry_cursor_name,
+            user_id,
+            entries[-1]["id"] if entries else cursor,
+            entries_complete,
+        )
 
-        for lesson in await self.service.lessons.list_all_for_user(user_id):
+        lesson_cursor_name = "backfill/captains_log/lessons"
+        cursor = await _backfill_cursor(event_service, lesson_cursor_name, user_id)
+        lessons = await self.service.lessons.list_all_for_user(
+            user_id, limit=limit, after_id=cursor
+        )
+        lessons_complete = len(lessons) < limit
+        dates_by_id = await self.service.storage.get_entry_dates(
+            {lesson["source_log_id"] for lesson in lessons}
+        )
+        for lesson in lessons:
             if lesson["derived_from_event_ids"]:
                 continue
             event = await event_service.record(
@@ -336,7 +438,14 @@ class CaptainsLogProjector:
                 }
             )
             synthesized += 1
-        return synthesized
+        await _save_backfill_cursor(
+            event_service,
+            lesson_cursor_name,
+            user_id,
+            lessons[-1]["id"] if lessons else cursor,
+            lessons_complete,
+        )
+        return {"synthesized": synthesized, "complete": entries_complete and lessons_complete}
 
 
 class FlatFactProjector:
@@ -376,7 +485,9 @@ class FlatFactProjector:
         """
         return await self.long_term_memory.delete_extracted_memories(str(user_id))
 
-    async def backfill(self, user_id: str, event_service) -> int:
+    backfill_batch_rows = BACKFILL_MAX_ROWS_PER_PASS
+
+    async def backfill(self, user_id: str, event_service) -> Dict[str, Any]:
         """Synthesize fact.extracted events for pre-event-log extraction rows.
 
         Keyed ``legacy/memory/<row id>``, dated to the row's creation. The
@@ -384,11 +495,23 @@ class FlatFactProjector:
         does not upsert, so applying would duplicate them); the provenance
         bridge lands on the next rebuild, whose reset already wipes
         extraction rows and whose replay recreates them from these events.
-        Returns the number of events synthesized.
+
+        Bounded per pass (BACKFILL_MAX_ROWS_PER_PASS rows). Because the
+        rows stay orphaned until the next rebuild, the resume cursor is a
+        row OFFSET into the stable orphan listing, persisted under
+        ``backfill/flat_facts/memories``.
+        Returns {"synthesized": n, "complete": bool}.
         """
         user_id = str(user_id)
+        limit = self.backfill_batch_rows
+        cursor_name = "backfill/flat_facts/memories"
+        offset = await _backfill_cursor(event_service, cursor_name, user_id)
+        rows = await self.long_term_memory.list_extracted_orphan_memories(
+            user_id, limit=limit, offset=offset
+        )
+        complete = len(rows) < limit
         synthesized = 0
-        for row in await self.long_term_memory.list_extracted_orphan_memories(user_id):
+        for row in rows:
             source_id = f"legacy/memory/{row['id']}"
             # The row stays orphaned until the next rebuild stamps it, so
             # a re-run sees it again -- the per-row idempotency key keeps
@@ -417,7 +540,10 @@ class FlatFactProjector:
             )
             if event is not None:
                 synthesized += 1
-        return synthesized
+        await _save_backfill_cursor(
+            event_service, cursor_name, user_id, offset + len(rows), complete
+        )
+        return {"synthesized": synthesized, "complete": complete}
 
 
 class ArtifactMetadataProjector:
@@ -489,19 +615,30 @@ class ArtifactMetadataProjector:
         """
         return await self.service.storage.delete_event_sourced_for_user(str(user_id))
 
-    async def backfill(self, user_id: str, event_service) -> int:
+    backfill_batch_rows = BACKFILL_MAX_ROWS_PER_PASS
+
+    async def backfill(self, user_id: str, event_service) -> Dict[str, Any]:
         """Synthesize artifact.saved events for pre-substrate metadata rows.
 
         Uses the live capture path's ``artifact/<public_id>`` idempotency
         key, so rows that already have an audit event reuse it instead of
         duplicating; either way the row is stamped with its provenance
-        bridge. Returns the number of rows stamped.
+        bridge.
+
+        Bounded per pass (BACKFILL_MAX_ROWS_PER_PASS rows); the resume
+        cursor persists under ``backfill/artifact_metadata/artifacts``.
+        Returns {"synthesized": n, "complete": bool} (synthesized counts
+        rows stamped).
         """
         user_id = str(user_id)
+        limit = self.backfill_batch_rows
+        cursor_name = "backfill/artifact_metadata/artifacts"
+        cursor = await _backfill_cursor(event_service, cursor_name, user_id)
         stamped = 0
         rows = await self.service.storage.list_artifacts(
-            user_id, latest_only=False, include_deleted=True
+            user_id, latest_only=False, include_deleted=True, limit=limit, after_id=cursor
         )
+        complete = len(rows) < limit
         for row in rows:
             if row.get("derived_from_event_id") is not None:
                 continue
@@ -532,7 +669,10 @@ class ArtifactMetadataProjector:
                 continue
             await self.service.storage.set_derived_event(row["id"], event["id"])
             stamped += 1
-        return stamped
+        await _save_backfill_cursor(
+            event_service, cursor_name, user_id, rows[-1]["id"] if rows else cursor, complete
+        )
+        return {"synthesized": stamped, "complete": complete}
 
 
 def _parse_iso(value):
