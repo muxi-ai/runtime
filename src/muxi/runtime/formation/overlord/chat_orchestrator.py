@@ -659,6 +659,7 @@ class ChatOrchestrator:
                         user_id=user_id,
                         agent_id=agent_name or "overlord",
                         enhanced_message=enhanced_message,  # Enhanced message for context
+                        session_id=session_id,  # Session-end digest trigger clock
                     ),
                     name=f"extract_user_info_{request_id}",
                 )
@@ -1828,6 +1829,7 @@ class ChatOrchestrator:
         user_id: Any,
         agent_id: str,
         enhanced_message: Optional[str] = None,
+        session_id: Optional[str] = None,
     ) -> None:
         """Extract user information from conversation without blocking."""
         try:
@@ -1839,6 +1841,7 @@ class ChatOrchestrator:
                 agent_response=agent_response,
                 user_id=user_id,
                 agent_id=agent_id,
+                session_id=session_id,  # Session-end digest trigger clock
             )
             # User information extraction completed
         except Exception as e:
