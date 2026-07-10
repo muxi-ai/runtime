@@ -1878,7 +1878,10 @@ twice or differently. `apply_entity_resolution` (graph service) is a
 pure function of the payload; the KnowledgeGraphProjector consumes
 `entity.resolved` alongside `graph.extracted`, so rebuilds replay
 recorded decisions verbatim (never re-scored). Merges re-point edges
-(collisions/self-loops become status `superseded`, retained), absorb
+(collisions with the canonical's ACTIVE copy of the same fact, and
+would-be self-loops, become status `superseded`, retained; non-active
+duplicate edges follow the re-point but never join collision handling,
+so an active fact can never be folded into superseded history), absorb
 attributes, record `aliases`; the duplicate row gets status `merged` +
 `superseded_by`, and `upsert_entity` REDIRECTS merged names to the
 canonical row (sticky -- re-mentions can never revive a duplicate).

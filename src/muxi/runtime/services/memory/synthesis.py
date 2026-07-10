@@ -61,6 +61,7 @@ from .events.models import (
     SOURCE_SYNTHESIS,
 )
 from .events.projectors import apply_fact_event
+from .graph.extractor import USER_ENTITY_NAME, USER_ENTITY_TYPE
 from .ingest.config import ResolutionSettings, SynthesisSettings
 
 CADENCE_HOT = "hot"
@@ -373,7 +374,7 @@ class MemorySynthesisService:
         if knowledge_graph is None:
             return None
         storage = knowledge_graph.storage
-        user_entity = await storage.get_entity(user_id, "person", "User")
+        user_entity = await storage.get_entity(user_id, USER_ENTITY_TYPE, USER_ENTITY_NAME)
         if user_entity is None:
             return None
         top_k = self.settings.patterns.top_k

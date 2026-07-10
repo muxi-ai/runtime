@@ -432,6 +432,10 @@ class KnowledgeGraphStorage:
                 return {"repointed": 0, "superseded": 0}
 
             # Existing canonical edge index for collision detection.
+            # ACTIVE edges only: an active duplicate fact must never be
+            # folded into a superseded/conflicted canonical row (that
+            # would silently drop it from the active graph); non-active
+            # rows are retained history, not collision targets.
             stmt = select(KGRelationship).filter_by(user_id=user_id, formation_id=self.formation_id)
             edges = (await session.execute(stmt)).scalars().all()
             canonical_edges: Dict[tuple, KGRelationship] = {}
@@ -440,7 +444,10 @@ class KnowledgeGraphStorage:
                 touches_duplicate = duplicate.id in (edge.from_entity_id, edge.to_entity_id)
                 if touches_duplicate:
                     duplicate_edges.append(edge)
-                elif canonical.id in (edge.from_entity_id, edge.to_entity_id):
+                elif edge.status == STATUS_ACTIVE and canonical.id in (
+                    edge.from_entity_id,
+                    edge.to_entity_id,
+                ):
                     canonical_edges[(edge.from_entity_id, edge.to_entity_id, edge.type)] = edge
 
             repointed = superseded = 0
@@ -449,6 +456,17 @@ class KnowledgeGraphStorage:
                     canonical.id if edge.from_entity_id == duplicate.id else edge.from_entity_id
                 )
                 new_to = canonical.id if edge.to_entity_id == duplicate.id else edge.to_entity_id
+                if edge.status != STATUS_ACTIVE:
+                    # Retained non-active facts follow the merge (their
+                    # endpoints stay coherent with the surviving entity)
+                    # but never participate in collision handling.
+                    edge.from_entity_id = new_from
+                    edge.to_entity_id = new_to
+                    edge.derived_from_event_ids = append_event_id(
+                        edge.derived_from_event_ids, event_id
+                    )
+                    repointed += 1
+                    continue
                 collision = canonical_edges.get((new_from, new_to, edge.type))
                 if new_from == new_to:
                     # Would become a self-loop (e.g. duplicate -> canonical

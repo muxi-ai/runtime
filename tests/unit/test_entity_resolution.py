@@ -304,6 +304,102 @@ class TestResolver:
 
 
 # ----------------------------------------------------------------------
+# Merge edge handling (collision map is ACTIVE-only)
+# ----------------------------------------------------------------------
+
+
+class TestMergeEdgeCollisions:
+    async def test_both_entities_share_the_same_active_edge(self, graph_env):
+        # Both rows carry an ACTIVE works_at edge to the same company:
+        # the duplicate's copy folds into the canonical's (max confidence,
+        # merged attributes) and is retained as superseded.
+        graph, _ = graph_env
+        storage = graph.storage
+        full = await storage.upsert_entity(USER, "person", "Ryan Leveille", confidence=0.9)
+        short = await storage.upsert_entity(USER, "person", "Ryan", confidence=0.8)
+        company = await storage.upsert_entity(USER, "company", "Nabo", confidence=0.9)
+        kept = await storage.upsert_relationship(
+            USER, full["id"], company["id"], "works_at", confidence=0.7
+        )
+        await storage.upsert_relationship(
+            USER, short["id"], company["id"], "works_at", confidence=0.95
+        )
+
+        result = await storage.merge_entities(USER, full["id"], short["id"])
+        assert result == {"repointed": 0, "superseded": 1}
+
+        active = await storage.list_relationships(USER, rel_type="works_at")
+        assert len(active) == 1
+        assert active[0]["id"] == kept["id"]
+        assert active[0]["confidence"] == 0.95  # absorbed the duplicate's max
+        folded = await storage.list_relationships(
+            USER, rel_type="works_at", status=STATUS_SUPERSEDED
+        )
+        assert len(folded) == 1
+        assert folded[0]["superseded_by"] == kept["id"]
+
+    async def test_active_duplicate_edge_survives_superseded_canonical_copy(self, graph_env):
+        # The canonical's copy of the fact is SUPERSEDED history; the
+        # duplicate's copy is ACTIVE. The active fact must be re-pointed
+        # and stay active -- never folded into the superseded row (which
+        # would silently drop it from the active graph).
+        graph, _ = graph_env
+        storage = graph.storage
+        full = await storage.upsert_entity(USER, "person", "Ryan Leveille", confidence=0.9)
+        short = await storage.upsert_entity(USER, "person", "Ryan", confidence=0.8)
+        old_co = await storage.upsert_entity(USER, "company", "Nabo", confidence=0.9)
+        new_co = await storage.upsert_entity(USER, "company", "Acme", confidence=0.9)
+        # works_at is exclusive: the Acme fact supersedes the canonical's
+        # Nabo fact (confidence delta > 0.3), leaving a SUPERSEDED
+        # canonical works_at row pointing at Nabo.
+        await storage.upsert_relationship(
+            USER, full["id"], old_co["id"], "works_at", confidence=0.5
+        )
+        await storage.upsert_relationship(
+            USER, full["id"], new_co["id"], "works_at", confidence=0.9
+        )
+        live = await storage.upsert_relationship(
+            USER, short["id"], old_co["id"], "works_at", confidence=0.85
+        )
+
+        await storage.merge_entities(USER, full["id"], short["id"])
+
+        refreshed = await storage.get_relationship_by_id(live["id"])
+        assert refreshed["status"] == STATUS_ACTIVE
+        assert refreshed["from_entity_id"] == full["id"]  # re-pointed, not folded
+
+    async def test_superseded_duplicate_edge_follows_merge_without_collision(self, graph_env):
+        # A retained non-active duplicate fact is re-pointed to the
+        # canonical entity (coherent history) but never merges into or
+        # displaces the canonical's ACTIVE copy of the same fact.
+        graph, _ = graph_env
+        storage = graph.storage
+        full = await storage.upsert_entity(USER, "person", "Ryan Leveille", confidence=0.9)
+        short = await storage.upsert_entity(USER, "person", "Ryan", confidence=0.8)
+        old_co = await storage.upsert_entity(USER, "company", "Nabo", confidence=0.9)
+        new_co = await storage.upsert_entity(USER, "company", "Acme", confidence=0.9)
+        active_canonical = await storage.upsert_relationship(
+            USER, full["id"], old_co["id"], "works_at", confidence=0.9
+        )
+        # Duplicate's Nabo fact got superseded by its Acme fact.
+        stale = await storage.upsert_relationship(
+            USER, short["id"], old_co["id"], "works_at", confidence=0.5
+        )
+        await storage.upsert_relationship(
+            USER, short["id"], new_co["id"], "works_at", confidence=0.9
+        )
+
+        await storage.merge_entities(USER, full["id"], short["id"])
+
+        refreshed_stale = await storage.get_relationship_by_id(stale["id"])
+        assert refreshed_stale["status"] == STATUS_SUPERSEDED
+        assert refreshed_stale["from_entity_id"] == full["id"]  # follows the merge
+        refreshed_active = await storage.get_relationship_by_id(active_canonical["id"])
+        assert refreshed_active["status"] == STATUS_ACTIVE
+        assert refreshed_active["confidence"] == 0.9  # untouched by the stale copy
+
+
+# ----------------------------------------------------------------------
 # Rebuild determinism (replay reproduces the merged graph)
 # ----------------------------------------------------------------------
 
