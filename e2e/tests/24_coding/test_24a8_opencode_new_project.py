@@ -48,7 +48,8 @@ async def main():
 
         hello = os.path.join(workdir, "hello.txt")
         assert os.path.isfile(hello), "hello.txt was not created"
-        assert "hello muxi" in open(hello).read(), "hello.txt content wrong"
+        with open(hello) as f:
+            assert "hello muxi" in f.read(), "hello.txt content wrong"
 
         log = git(["log", "--oneline", "-5"], cwd=workdir).stdout
         assert "init muxi project" in log, f"expected commit missing from log: {log!r}"

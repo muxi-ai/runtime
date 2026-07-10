@@ -16,8 +16,9 @@
 #   positional prompt confirmed.
 # - The first output line is the session header
 #   {"type":"session","version":3,"id":"<uuid>","timestamp":...,"cwd":...}
-#   (real output) -- the only event with a top-level "id", so
-#   parse.session_id captures it.
+#   (real output). Session-id capture is first-match, so the header wins
+#   even if some later event in a credentialed run carries an unrelated
+#   root-level "id" (never observed; guarded regardless).
 # - `--session <path|id>` -- resume ONLY: a fresh id fails with "No
 #   session found matching" (exit 1, verified empirically), so the
 #   template uses the captured-id path. Id lookup falls back to a global
