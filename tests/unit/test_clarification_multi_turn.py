@@ -379,6 +379,77 @@ async def test_multi_turn_clarification_flow(mock_overlord):
     assert "Build a web application" in response3.content
 
 
+class _RecallGateOverlord:
+    """Bare-attribute overlord stub for the recall-question memory gate.
+
+    A plain object (not Mock) so ``hasattr`` checks in the gate reflect
+    exactly the attributes configured here.
+    """
+
+    def __init__(self, vector_results, graph_block):
+        self.buffer_memory = None
+        self.extraction_model = None
+        self.persistent_memory_manager = Mock(
+            search_long_term_memory=AsyncMock(return_value=vector_results)
+        )
+        self.knowledge_graph = Mock(get_context_block=AsyncMock(return_value=graph_block))
+        self._classifier = Mock(classify_binary=AsyncMock(return_value=(True, 0.9)))
+
+    async def _get_local_classifier(self):
+        return self._classifier
+
+
+class TestRecallGateKnowledgeGraph:
+    """Recall questions answerable from the knowledge graph skip clarification.
+
+    KG attribute rendering fix: facts stored as entity attributes (emails,
+    roles) live only in the graph, so the memory gate must consult it --
+    otherwise recall questions bounce to clarification and the agent
+    (whose context carries the rendered graph block) never runs.
+    """
+
+    @pytest.mark.asyncio
+    async def test_graph_facts_count_as_memory_answer(self):
+        overlord = _RecallGateOverlord(
+            vector_results=[], graph_block="User (person): email: jordan@automaze.io"
+        )
+        system = UnifiedClarificationSystem(overlord)
+        assert await system._is_recall_question_with_answer(
+            "What is my email address?", {"user_id": "0"}
+        )
+        # Existence check only: the gate must not trigger the topic-match/
+        # multi-hop traversal -- that runs where the context is built.
+        overlord.knowledge_graph.get_context_block.assert_awaited_once_with("0", query_text=None)
+
+    @pytest.mark.asyncio
+    async def test_empty_graph_does_not_skip_clarification(self):
+        overlord = _RecallGateOverlord(vector_results=[], graph_block="")
+        system = UnifiedClarificationSystem(overlord)
+        assert not await system._is_recall_question_with_answer(
+            "What is my email address?", {"user_id": "0"}
+        )
+
+    @pytest.mark.asyncio
+    async def test_vector_results_short_circuit_before_graph(self):
+        overlord = _RecallGateOverlord(
+            vector_results=[{"text": "favorite color is blue"}], graph_block=""
+        )
+        system = UnifiedClarificationSystem(overlord)
+        assert await system._is_recall_question_with_answer(
+            "What is my favorite color?", {"user_id": "0"}
+        )
+        overlord.knowledge_graph.get_context_block.assert_not_awaited()
+
+    @pytest.mark.asyncio
+    async def test_graph_lookup_failure_is_isolated(self):
+        overlord = _RecallGateOverlord(vector_results=[], graph_block="")
+        overlord.knowledge_graph.get_context_block.side_effect = RuntimeError("db down")
+        system = UnifiedClarificationSystem(overlord)
+        assert not await system._is_recall_question_with_answer(
+            "What is my email address?", {"user_id": "0"}
+        )
+
+
 if __name__ == "__main__":
     # Run tests with pytest
     pytest.main([__file__, "-v"])

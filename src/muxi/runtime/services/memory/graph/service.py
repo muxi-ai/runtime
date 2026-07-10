@@ -45,6 +45,16 @@ MAX_PENDING_TURNS_PER_USER = 50
 
 _SCHEDULE_SECONDS = {"hourly": 3600, "daily": 86400}
 
+# Context rendering: how many entities the attribute scan may consider
+# (matches the topic-match scan window) and the hard per-line clip that
+# keeps one verbose attribute from eating the context block.
+ENTITY_SCAN_LIMIT = 200
+MAX_ATTRIBUTE_LINE_CHARS = 200
+
+# Attribute keys written by internal graph machinery (entity-resolution
+# review flags), never user facts -- excluded from context rendering.
+INTERNAL_ATTRIBUTE_KEYS = frozenset({"possible_duplicates"})
+
 
 class KnowledgeGraphService:
     """Owns knowledge graph storage, extraction, and query surface."""
@@ -516,10 +526,22 @@ class KnowledgeGraphService:
         """
         Render the user's graph context for prompt injection.
 
-        Always includes the strongest 1-hop facts (direct SQL). When the
-        query mentions a known entity, multi-hop exploration via the
-        GraphAlgorithms backend appends the entities most strongly
-        connected to it. Returns "" when the graph is empty or on error.
+        Always includes the strongest 1-hop facts (direct SQL) followed by
+        compact attribute cards ("Name (type): key: value; ...") for the
+        entities carrying attribute facts -- emails, roles, tracking codes
+        live on the entity itself, so a relationship-only rendering would
+        never surface them to the LLM. Relationships and cards SHARE the
+        single ``limit`` budget -- relationship lines consume first, cards
+        fill the remainder -- so the block never grows past the ceiling
+        callers sized their context for. Cards render most relevant
+        entities first: entities touching the ranked relationships lead,
+        then the newest attribute-bearing entities. Entities without
+        attributes add
+        nothing -- graphs with no attribute facts render exactly as
+        before. When the query mentions a known entity, multi-hop
+        exploration via the GraphAlgorithms backend appends the entities
+        most strongly connected to it. Returns "" when the graph is empty
+        or on error.
 
         Decay (Memory Substrate Phase 2c): when the formation configures
         half-lives (memory.decay.half_lives), facts are re-ranked by their
@@ -531,22 +553,44 @@ class KnowledgeGraphService:
         try:
             user_id = str(user_id)
             relationships = await self.storage.list_relationships(user_id, limit=limit)
-            if not relationships:
+            entities = await self.storage.list_entities(user_id, limit=ENTITY_SCAN_LIMIT)
+            if not relationships and not entities:
                 return ""
             relationships = self._rank_with_decay(relationships)
 
-            names = await self._entity_names(
-                {r["from_entity_id"] for r in relationships}
-                | {r["to_entity_id"] for r in relationships}
-            )
+            entities_by_id = {entity["id"]: entity for entity in entities}
+            # Relationship endpoints in rank order (strongest facts first);
+            # also the relevance order for the attribute cards below.
+            connected_ids: List[int] = []
+            for rel in relationships:
+                for entity_id in (rel["from_entity_id"], rel["to_entity_id"]):
+                    if entity_id not in connected_ids:
+                        connected_ids.append(entity_id)
+            # Endpoints outside the active-entity scan window (e.g. merged
+            # or superseded rows) still need names: one batched backfill.
+            missing = [eid for eid in connected_ids if eid not in entities_by_id]
+            if missing:
+                for entity in await self.storage.get_entities_by_ids(missing):
+                    entities_by_id[entity["id"]] = entity
+
+            names = {eid: entity["name"] for eid, entity in entities_by_id.items()}
             lines = [
                 f"{names.get(r['from_entity_id'], '?')} -[{r['type']}]-> "
                 f"{names.get(r['to_entity_id'], '?')}"
                 for r in relationships
             ]
+            # Shared budget: relationship lines consume first (they lead
+            # the relevance order), attribute cards fill the remainder --
+            # the block never exceeds the single ``limit`` ceiling callers
+            # sized their context for.
+            remaining = limit - len(lines)
+            if remaining > 0:
+                lines.extend(_attribute_lines(connected_ids, entities, entities_by_id, remaining))
+            if not lines:
+                return ""
 
             if query_text:
-                topic = await self._match_topic_entity(user_id, query_text)
+                topic = await self._match_topic_entity(user_id, query_text, entities=entities)
                 if topic is not None:
                     neighbors = await self.algorithms.weighted_neighbors(
                         topic["id"], user_id=user_id, limit=limit
@@ -621,14 +665,23 @@ class KnowledgeGraphService:
         entities = await self.storage.get_entities_by_ids(entity_ids)
         return {entity["id"]: entity["name"] for entity in entities}
 
-    async def _match_topic_entity(self, user_id: str, query_text: str) -> Optional[Dict[str, Any]]:
+    async def _match_topic_entity(
+        self,
+        user_id: str,
+        query_text: str,
+        entities: Optional[List[Dict[str, Any]]] = None,
+    ) -> Optional[Dict[str, Any]]:
         """Find the first known entity whose name appears in the query.
 
         Whole-word matching only: a substring check would let short entity
         names match inside longer words (e.g. "go" inside "category").
+        ``entities`` lets callers that already fetched the scan window
+        (get_context_block) skip the second storage round-trip.
         """
+        if entities is None:
+            entities = await self.storage.list_entities(user_id, limit=ENTITY_SCAN_LIMIT)
         query_lower = query_text.lower()
-        for entity in await self.storage.list_entities(user_id, limit=200):
+        for entity in entities:
             name = entity["name"].lower()
             if name == _name_key(USER_ENTITY_NAME):
                 continue
@@ -655,6 +708,82 @@ def _format_turn(user_message: str, agent_response: str) -> str:
 def _name_key(name: str) -> str:
     """Case-insensitive comparison key for entity names."""
     return name.strip().lower()
+
+
+def _attribute_lines(
+    connected_ids: List[int],
+    scanned_entities: List[Dict[str, Any]],
+    entities_by_id: Dict[int, Dict[str, Any]],
+    limit: int,
+) -> List[str]:
+    """Compact attribute cards for the entities carrying attribute facts.
+
+    Most relevant first: entities touching the ranked relationships (in
+    rank order) lead, then the remaining attribute-bearing entities from
+    the scan window (newest first). At most ``limit`` cards -- the caller
+    passes the budget left after the relationship lines, so the whole
+    block stays under one shared ceiling. Entities without renderable
+    attributes are skipped entirely, so attribute-free graphs render
+    unchanged.
+    """
+    ordered_ids = list(connected_ids)
+    seen = set(connected_ids)
+    for entity in scanned_entities:
+        if entity["id"] not in seen:
+            seen.add(entity["id"])
+            ordered_ids.append(entity["id"])
+
+    lines: List[str] = []
+    for entity_id in ordered_ids:
+        entity = entities_by_id.get(entity_id)
+        if entity is None:
+            continue
+        attributes = _renderable_attributes(entity)
+        if not attributes:
+            continue
+        lines.append(_entity_attribute_line(entity, attributes))
+        if len(lines) >= limit:
+            break
+    return lines
+
+
+def _renderable_attributes(entity: Dict[str, Any]) -> Dict[str, Any]:
+    """The entity's attribute facts worth rendering (internal keys and
+    empty values excluded)."""
+    attributes = entity.get("attributes") or {}
+    return {
+        key: value
+        for key, value in attributes.items()
+        if key not in INTERNAL_ATTRIBUTE_KEYS and value not in (None, "", [], {})
+    }
+
+
+def _entity_attribute_line(entity: Dict[str, Any], attributes: Dict[str, Any]) -> str:
+    """Render one entity's attribute card: ``Name (type): key: value; ...``.
+
+    Keys are sorted for deterministic output; the line is hard-clipped to
+    MAX_ATTRIBUTE_LINE_CHARS so a verbose value cannot blow the budget.
+    """
+    pairs = "; ".join(
+        f"{key}: {_format_attribute_value(attributes[key])}" for key in sorted(attributes)
+    )
+    line = f"{entity['name']} ({entity['type']}): {pairs}"
+    if len(line) > MAX_ATTRIBUTE_LINE_CHARS:
+        line = line[: MAX_ATTRIBUTE_LINE_CHARS - 3] + "..."
+    return line
+
+
+def _format_attribute_value(value: Any) -> str:
+    """Render one attribute value compactly (lists join, scalars stringify).
+
+    Sets are sorted first -- their iteration order is arbitrary, and the
+    card must render deterministically for the same stored value.
+    """
+    if isinstance(value, (set, frozenset)):
+        return ", ".join(sorted(str(item) for item in value))
+    if isinstance(value, (list, tuple)):
+        return ", ".join(str(item) for item in value)
+    return str(value)
 
 
 def _schedule_to_seconds(schedule: Any) -> float:
