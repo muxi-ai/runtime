@@ -65,6 +65,14 @@ elif mode == "argv":
     }))
 elif mode == "pwd":
     print(json.dumps({"type": "result", "result": os.getcwd(), "session_id": "vend-pwd"}))
+elif mode == "envpwd":
+    # Some CLIs (opencode) resolve their working directory from the PWD
+    # environment variable rather than the real cwd.
+    print(json.dumps({
+        "type": "result",
+        "result": os.environ.get("PWD", ""),
+        "session_id": "vend-envpwd",
+    }))
 elif mode == "stream":
     prompt = sys.stdin.read()
     print(json.dumps({"type": "system", "subtype": "init", "session_id": "ignored"}))
@@ -443,6 +451,15 @@ class TestWorkdirs:
         assert os.path.realpath(job.result) == os.path.realpath(expected)
         assert os.path.isdir(expected)  # keep: directory survives
 
+    async def test_env_pwd_matches_delegation_dir(self, tmp_path, fixture_cli):
+        """PWD is rewritten to the delegation dir (POSIX-shell hygiene):
+        CLIs that trust PWD over the real cwd (opencode) must not see the
+        runtime's own directory."""
+        service = make_service(tmp_path, fixture_cli, mode_args=["envpwd"], cleanup="keep")
+        result = await service.delegate(user_id="u1", prompt="where does PWD say")
+        job = await wait_terminal(service, result["job_id"])
+        assert os.path.realpath(job.result) == os.path.realpath(job.delegation_dir)
+
     async def test_workdir_param_selects_root(self, tmp_path, fixture_cli):
         service = make_service(
             tmp_path, fixture_cli, mode_args=["pwd"], workdirs=["ws", "alt"], cleanup="keep"
@@ -797,3 +814,86 @@ class TestParsers:
         adapter = self._adapter("json")
         parsed = parse_output(adapter, json.dumps({"result": {"files": 3}}))
         assert json.loads(parsed.result) == {"files": 3}
+
+    def test_opencode_template_selectors_on_real_shape(self):
+        """The bundled opencode template's selectors against the real
+        event shapes (captured from opencode 1.14.46, 2026-07-10)."""
+        from muxi.runtime.services.coding.config import resolve_adapter_template
+
+        adapter = resolve_adapter_template("opencode", None)
+        stdout = "\n".join(
+            [
+                json.dumps(
+                    {
+                        "type": "step_start",
+                        "sessionID": "ses_abc123",
+                        "part": {"type": "step-start"},
+                    }
+                ),
+                json.dumps(
+                    {
+                        "type": "tool_use",
+                        "sessionID": "ses_abc123",
+                        "part": {"type": "tool", "tool": "write", "state": {"output": "ok"}},
+                    }
+                ),
+                json.dumps(
+                    {
+                        "type": "step_finish",
+                        "sessionID": "ses_abc123",
+                        "part": {"type": "step-finish", "cost": 0},
+                    }
+                ),
+                json.dumps(
+                    {
+                        "type": "text",
+                        "sessionID": "ses_abc123",
+                        "part": {"type": "text", "text": "I created the file."},
+                    }
+                ),
+            ]
+        )
+        parsed = parse_output(adapter, stdout)
+        assert parsed.result == "I created the file."
+        assert parsed.session_id == "ses_abc123"
+
+    def test_pi_template_selectors_on_documented_shape(self):
+        """The bundled pi template's selectors: session header (real shape,
+        pi 0.73.1) + agent_end (docs/json.md shape), negative indices."""
+        from muxi.runtime.services.coding.config import resolve_adapter_template
+
+        adapter = resolve_adapter_template("pi", None)
+        final = {
+            "role": "assistant",
+            "content": [
+                {"type": "thinking", "thinking": "hmm"},
+                {"type": "text", "text": "All done."},
+            ],
+            "stopReason": "stop",
+        }
+        stdout = "\n".join(
+            [
+                json.dumps(
+                    {
+                        "type": "session",
+                        "version": 3,
+                        "id": "0199aaaa-bbbb-7ccc-8ddd-eeeeffff0001",
+                        "cwd": "/tmp/x",
+                    }
+                ),
+                json.dumps({"type": "agent_start"}),
+                json.dumps({"type": "message_end", "message": final}),
+                json.dumps(
+                    {
+                        "type": "agent_end",
+                        "messages": [
+                            {"role": "user", "content": [{"type": "text", "text": "task"}]},
+                            final,
+                        ],
+                    }
+                ),
+            ]
+        )
+        parsed = parse_output(adapter, stdout)
+        assert parsed.result == "All done."
+        assert parsed.session_id == "0199aaaa-bbbb-7ccc-8ddd-eeeeffff0001"

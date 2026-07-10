@@ -1,0 +1,48 @@
+# Bundled coding adapter template: pi (@mariozechner/pi-coding-agent;
+# dormant until referenced).
+#
+# Activate with `coding.client: pi`; shadow by placing a coding/pi.yaml
+# file in the formation directory. Installation
+# (`npm install -g @mariozechner/pi-coding-agent`) and credentials
+# (provider API-key env vars such as ANTHROPIC_API_KEY, via coding.env)
+# are the developer's business -- MUXI only verifies the binary is
+# present at formation load.
+#
+# Tested against: pi 0.73.1 (flags verified 2026-07-10 against a local
+# install; the verification runs were credential-less, so everything a
+# run emits BEFORE the LLM call is real-verified and the successful-run
+# event schema comes from that version's bundled docs/json.md):
+# - `pi --print --mode json [messages..]` -- headless JSONL events;
+#   positional prompt confirmed.
+# - The first output line is the session header
+#   {"type":"session","version":3,"id":"<uuid>","timestamp":...,"cwd":...}
+#   (real output) -- the only event with a top-level "id", so
+#   parse.session_id captures it.
+# - `--session <path|id>` -- resume ONLY: a fresh id fails with "No
+#   session found matching" (exit 1, verified empirically), so the
+#   template uses the captured-id path. Id lookup falls back to a global
+#   search across project session dirs (source-verified), so resuming
+#   from a fresh delegation directory works.
+# - `--model <provider/id>` -- opaque; optional ":<thinking>" suffix
+#   (e.g. anthropic/claude-sonnet-4-5:high).
+#
+# Useful coding.extra_args (passthrough only): --thinking <level>,
+# --tools <allowlist>, --no-extensions, --no-skills.
+name: pi
+command: pi
+args:
+  base: ["--print", "--mode", "json"]
+  prompt: ["{prompt}"]
+  session_resume: ["--session", "{id}"]
+  model: ["--model", "{model}"]
+output: stream-json
+parse:
+  # [verify] Selector derived from docs/json.md (no credentialed run was
+  # available): the terminal "agent_end" event carries every message; the
+  # last message is the final assistant one and its last content block is
+  # its text (thinking blocks precede text blocks).
+  result: "$.messages[-1].content[-1].text"
+  session_id: "$.id"
+# pi exposes no cwd/worktree flag (sessions live under ~/.pi, looked up
+# globally); MUXI sets the subprocess cwd itself. Nothing to forbid.
+forbidden_extra_args: []

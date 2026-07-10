@@ -1,0 +1,63 @@
+schema: "1.0.0"
+id: formation-coding-opencode
+description: E2E formation delegating coding tasks to the opencode CLI adapter
+
+llm:
+  api_keys:
+    openai: "${{ secrets.OPENAI_API_KEY }}"
+  models:
+    - text: "openai/gpt-4o-mini"
+
+# Coding-agent delegation via the bundled opencode adapter template.
+# --dangerously-skip-permissions because the tests exercise file writes,
+# git commits, and git push (opencode prompts for permission otherwise).
+# The model is pinned to opencode's built-in zen model so the run does
+# not depend on which providers the local install has configured.
+# cleanup: keep so the tests can assert on the delegation directory
+# contents after the run.
+coding:
+  client: opencode
+  model: opencode/big-pickle
+  workdirs: ["./workspace"]
+  cleanup: keep
+  extra_args: ["--dangerously-skip-permissions"]
+  timeout: 10m
+  max_concurrent: 2
+
+agents:
+  - id: assistant
+    name: Assistant
+    description: Coding delegation test assistant
+    system_message: |
+      You are a test assistant with a delegate_coding tool that hands
+      coding tasks to a background coding agent. When the user asks you to
+      delegate a coding task, ALWAYS call the delegate_coding tool exactly
+      once, passing the user's task text VERBATIM as the prompt (keep any
+      quoted text, URLs, and file paths exactly as written). After the
+      tool returns, reply with only the job id it gave you. Keep responses
+      under 40 words.
+    default: true
+
+overlord:
+  workflow:
+    auto_decomposition: true
+    complexity_threshold: 9.0
+    plan_approval_threshold: 10
+  response:
+    streaming: false
+    widgets: false
+
+server:
+  host: 0.0.0.0
+  port: 18243
+  access_log: false
+  api_keys:
+    admin_key: "testing-api-key"
+    client_key: "testing-api-key"
+
+logging:
+  system:
+    level: "error"
+    destination: "stdout"
+  conversation:
+    enabled: false
