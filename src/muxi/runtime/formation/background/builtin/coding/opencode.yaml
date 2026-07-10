@@ -1,0 +1,40 @@
+# Bundled coding adapter template: opencode (dormant until referenced).
+#
+# Activate with `coding.client: opencode`; shadow by placing a
+# coding/opencode.yaml file in the formation directory. Installation and
+# authentication (`opencode auth login` or provider API-key env vars) are
+# the developer's business -- MUXI only verifies the binary is present at
+# formation load.
+#
+# Tested against: opencode 1.14.46 (flags verified 2026-07-10 against the
+# installed binary with real runs):
+# - `opencode run [message..]` -- positional prompt confirmed.
+# - `--format json` -- raw JSON events, one per line (JSONL): step_start,
+#   tool_use, step_finish, text -- maps to the stream-json parser. Every
+#   event carries a top-level "sessionID"; text events carry the complete
+#   part text at "part.text", so the last text event is the final
+#   assistant message (last non-empty extraction wins).
+# - `--session <id>` -- resume ONLY: passing a fresh id fails with
+#   "Session not found" (exit 1, verified empirically), so the template
+#   uses the captured-id path: the first run gets NO session flag and the
+#   tool-assigned id is parsed from output.
+# - `--model <provider/model>` -- opaque vendor namespace.
+#
+# Vendor permission/safety surface goes through coding.extra_args
+# (passthrough only): --dangerously-skip-permissions (auto-approve
+# anything not explicitly denied -- sandboxed environments only),
+# --agent <name>, --title <title>.
+name: opencode
+command: opencode
+args:
+  base: ["run", "--format", "json"]
+  prompt: ["{prompt}"]
+  session_resume: ["--session", "{id}"]
+  model: ["--model", "{model}"]
+output: stream-json
+parse:
+  result: "$.part.text"
+  session_id: "$.sessionID"
+# MUXI sets the subprocess cwd (fresh <root>/<user_id>/<request_id> dir);
+# flags that would move it are rejected at load.
+forbidden_extra_args: ["--dir"]

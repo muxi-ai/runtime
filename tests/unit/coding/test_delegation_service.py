@@ -65,14 +65,24 @@ elif mode == "argv":
     }))
 elif mode == "pwd":
     print(json.dumps({"type": "result", "result": os.getcwd(), "session_id": "vend-pwd"}))
+elif mode == "envpwd":
+    # Some CLIs (opencode) resolve their working directory from the PWD
+    # environment variable rather than the real cwd.
+    print(json.dumps({
+        "type": "result",
+        "result": os.environ.get("PWD", ""),
+        "session_id": "vend-envpwd",
+    }))
 elif mode == "stream":
     prompt = sys.stdin.read()
-    print(json.dumps({"type": "system", "subtype": "init", "session_id": "ignored"}))
+    # Session-id capture is FIRST-match (the init event wins); the
+    # terminal event's differing value must not clobber it.
+    print(json.dumps({"type": "system", "subtype": "init", "session_id": "vend-stream"}))
     print(json.dumps({"type": "assistant", "text": "working"}))
     print(json.dumps({
         "type": "result",
         "result": "stream-done: " + prompt.strip(),
-        "session_id": "vend-stream",
+        "session_id": "later-value-must-not-clobber",
         "total_cost_usd": 0.042,
     }))
 elif mode == "sleep":
@@ -239,6 +249,8 @@ class TestCompletionAndReentry:
         job = await wait_terminal(service, result["job_id"])
         assert job.status == STATUS_COMPLETED
         assert job.result == "stream-done: via stdin"
+        # First-match capture: the init event's id, not the terminal
+        # event's differing value.
         assert job.vendor_session_id == "vend-stream"
         assert job.cost_usd == 0.042
 
@@ -442,6 +454,15 @@ class TestWorkdirs:
         expected = os.path.join(root, "user-1", job.job_id)
         assert os.path.realpath(job.result) == os.path.realpath(expected)
         assert os.path.isdir(expected)  # keep: directory survives
+
+    async def test_env_pwd_matches_delegation_dir(self, tmp_path, fixture_cli):
+        """PWD is rewritten to the delegation dir (POSIX-shell hygiene):
+        CLIs that trust PWD over the real cwd (opencode) must not see the
+        runtime's own directory."""
+        service = make_service(tmp_path, fixture_cli, mode_args=["envpwd"], cleanup="keep")
+        result = await service.delegate(user_id="u1", prompt="where does PWD say")
+        job = await wait_terminal(service, result["job_id"])
+        assert os.path.realpath(job.result) == os.path.realpath(job.delegation_dir)
 
     async def test_workdir_param_selects_root(self, tmp_path, fixture_cli):
         service = make_service(
@@ -754,7 +775,9 @@ class TestParsers:
             raw["parse"] = {"result": "$.result", "session_id": "$.session_id"}
         return parse_coding_config(raw).adapter
 
-    def test_stream_json_last_result_wins(self):
+    def test_stream_json_result_last_session_first(self):
+        """Result: last non-empty extraction wins. Session id: first
+        match wins (it never changes mid-run)."""
         adapter = self._adapter("stream-json")
         stdout = "\n".join(
             [
@@ -765,7 +788,7 @@ class TestParsers:
         )
         parsed = parse_output(adapter, stdout)
         assert parsed.result == "final"
-        assert parsed.session_id == "late"
+        assert parsed.session_id == "early"
         assert parsed.event_count == 2  # unparseable line skipped
 
     def test_json_document(self):
@@ -797,3 +820,166 @@ class TestParsers:
         adapter = self._adapter("json")
         parsed = parse_output(adapter, json.dumps({"result": {"files": 3}}))
         assert json.loads(parsed.result) == {"files": 3}
+
+    def test_opencode_template_selectors_on_real_shape(self):
+        """The bundled opencode template's selectors against the real
+        event shapes (captured from opencode 1.14.46, 2026-07-10)."""
+        from muxi.runtime.services.coding.config import resolve_adapter_template
+
+        adapter = resolve_adapter_template("opencode", None)
+        stdout = "\n".join(
+            [
+                json.dumps(
+                    {
+                        "type": "step_start",
+                        "sessionID": "ses_abc123",
+                        "part": {"type": "step-start"},
+                    }
+                ),
+                json.dumps(
+                    {
+                        "type": "tool_use",
+                        "sessionID": "ses_abc123",
+                        "part": {"type": "tool", "tool": "write", "state": {"output": "ok"}},
+                    }
+                ),
+                json.dumps(
+                    {
+                        "type": "step_finish",
+                        "sessionID": "ses_abc123",
+                        "part": {"type": "step-finish", "cost": 0},
+                    }
+                ),
+                json.dumps(
+                    {
+                        "type": "text",
+                        "sessionID": "ses_abc123",
+                        "part": {"type": "text", "text": "I created the file."},
+                    }
+                ),
+            ]
+        )
+        parsed = parse_output(adapter, stdout)
+        assert parsed.result == "I created the file."
+        assert parsed.session_id == "ses_abc123"
+
+    def test_pi_template_selectors_on_documented_shape(self):
+        """The bundled pi template's selectors: session header (real shape,
+        pi 0.73.1) + agent_end (docs/json.md shape), negative indices."""
+        from muxi.runtime.services.coding.config import resolve_adapter_template
+
+        adapter = resolve_adapter_template("pi", None)
+        final = {
+            "role": "assistant",
+            "content": [
+                {"type": "thinking", "thinking": "hmm"},
+                {"type": "text", "text": "All done."},
+            ],
+            "stopReason": "stop",
+        }
+        stdout = "\n".join(
+            [
+                json.dumps(
+                    {
+                        "type": "session",
+                        "version": 3,
+                        "id": "0199aaaa-bbbb-7ccc-8ddd-eeeeffff0001",
+                        "cwd": "/tmp/x",
+                    }
+                ),
+                json.dumps({"type": "agent_start"}),
+                json.dumps({"type": "message_end", "message": final}),
+                json.dumps(
+                    {
+                        "type": "agent_end",
+                        "messages": [
+                            {"role": "user", "content": [{"type": "text", "text": "task"}]},
+                            final,
+                        ],
+                    }
+                ),
+            ]
+        )
+        parsed = parse_output(adapter, stdout)
+        assert parsed.result == "All done."
+        assert parsed.session_id == "0199aaaa-bbbb-7ccc-8ddd-eeeeffff0001"
+
+    def test_pi_session_id_survives_later_root_level_ids(self):
+        """First-match session capture: a later event carrying an
+        unrelated root-level "id" (tool-call shaped; plausible in a
+        credentialed run, never observed in the credential-less
+        verification) must not clobber the header UUID."""
+        from muxi.runtime.services.coding.config import resolve_adapter_template
+
+        adapter = resolve_adapter_template("pi", None)
+        header_id = "0199aaaa-bbbb-7ccc-8ddd-eeeeffff0001"
+        stdout = "\n".join(
+            [
+                json.dumps({"type": "session", "version": 3, "id": header_id, "cwd": "/tmp/x"}),
+                json.dumps({"type": "agent_start"}),
+                json.dumps(
+                    {
+                        "type": "tool_execution_start",
+                        "id": "call_9f2a",  # unrelated root-level id
+                        "toolCallId": "call_9f2a",
+                        "toolName": "bash",
+                        "args": {"command": "ls"},
+                    }
+                ),
+                json.dumps(
+                    {
+                        "type": "agent_end",
+                        "messages": [
+                            {
+                                "role": "assistant",
+                                "content": [{"type": "text", "text": "done"}],
+                                "stopReason": "stop",
+                            }
+                        ],
+                    }
+                ),
+            ]
+        )
+        parsed = parse_output(adapter, stdout)
+        assert parsed.session_id == header_id
+        assert parsed.result == "done"
+
+    def test_pi_thinking_block_last_falls_back_to_raw_stdout(self):
+        """When the final content block has no text (thinking last), the
+        pi result selector extracts nothing and the documented fallback
+        -- raw stdout as the result -- is what carries the outcome."""
+        from muxi.runtime.services.coding.config import resolve_adapter_template
+
+        adapter = resolve_adapter_template("pi", None)
+        stdout = "\n".join(
+            [
+                json.dumps(
+                    {
+                        "type": "session",
+                        "version": 3,
+                        "id": "0199aaaa-bbbb-7ccc-8ddd-eeeeffff0002",
+                        "cwd": "/tmp/x",
+                    }
+                ),
+                json.dumps(
+                    {
+                        "type": "agent_end",
+                        "messages": [
+                            {
+                                "role": "assistant",
+                                "content": [
+                                    {"type": "text", "text": "partial"},
+                                    {"type": "thinking", "thinking": "trailing thought"},
+                                ],
+                                "stopReason": "stop",
+                            }
+                        ],
+                    }
+                ),
+            ]
+        )
+        parsed = parse_output(adapter, stdout)
+        # No .text on the final block -> selector extracts nothing ->
+        # the raw stdout fallback keeps the run from reporting empty.
+        assert parsed.result == stdout
+        assert parsed.session_id == "0199aaaa-bbbb-7ccc-8ddd-eeeeffff0002"

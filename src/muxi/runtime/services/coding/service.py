@@ -420,6 +420,12 @@ class DelegationService:
             # secrets resolve). Argv never carries a secret.
             env = dict(os.environ)
             env.update(self.config.env)
+            # POSIX-shell hygiene: PWD must match the child's cwd (shells
+            # rewrite it on every cd; a plain environ inherit leaks the
+            # runtime's). opencode 1.14.46 resolves its working directory
+            # from PWD (verified 2026-07-10) -- with a stale value it
+            # operates on the wrong tree.
+            env["PWD"] = job.delegation_dir
 
             proc = await asyncio.create_subprocess_exec(
                 *argv,

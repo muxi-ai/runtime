@@ -50,6 +50,35 @@ delegation PRD, plus the droid adapter pulled forward):
   remotes, real agent runs). Developer guide:
   `contributing/coding-delegation.md`.
 
+### Coding-agent delegation - opencode + pi adapter templates
+
+Phase 2a of the coding-agent delegation PRD: the two remaining bundled
+adapter templates, both on the captured-session path (the tool assigns
+the session id; MUXI parses it from output and replays it on
+`continue_job_id`):
+
+- `opencode` template, verified against opencode 1.14.46 with real
+  runs: `opencode run --format json` (JSONL events), result from the
+  final `text` event (`$.part.text`), session id from the events'
+  top-level `sessionID`, `--session` confirmed resume-only (a fresh id
+  fails), `--dir` on the forbidden list (MUXI sets the cwd).
+- `pi` template (@mariozechner/pi-coding-agent), verified against a
+  local pi 0.73.1 install: `pi --print --mode json` (JSONL), session
+  id from the real session-header event (`$.id`), `--session`
+  confirmed resume-only with global id lookup. The successful-run
+  result selector (`$.messages[-1].content[-1].text`) derives from
+  that version's bundled docs (no credentialed run was available) and
+  is marked `[verify]` in the template.
+- Delegation subprocesses now get `PWD` rewritten to the delegation
+  directory (POSIX-shell hygiene): opencode resolves its working
+  directory from `PWD` rather than the real cwd, and the inherited
+  runtime value made it operate on the wrong tree.
+- E2e: three real-run opencode tests (ad-hoc, new-project,
+  existing-project - hermetic local file:// bare remotes) and a pi
+  fixture-CLI test (real event shapes; exercises the bundled
+  template's selectors and captured-session continuation end to end).
+  Developer guide gained paste-ready `coding:` blocks for both tools.
+
 ### Fixes
 
 - Knowledge graph entity ATTRIBUTES now render in the graph context

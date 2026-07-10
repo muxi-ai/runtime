@@ -1,0 +1,61 @@
+schema: "1.0.0"
+id: formation-coding-pi
+description: E2E formation delegating coding tasks to the pi CLI adapter (fixture binary)
+
+llm:
+  api_keys:
+    openai: "${{ secrets.OPENAI_API_KEY }}"
+  models:
+    - text: "openai/gpt-4o-mini"
+
+# Coding-agent delegation via the bundled pi adapter template. The pi CLI
+# is not installed in the e2e environment; test 24A10 provisions a
+# fixture `pi` binary on PATH that emits the REAL pi 0.73.1 JSONL shapes
+# (session header verified against the actual tool; agent_end from that
+# version's bundled docs/json.md), so the bundled template's parse
+# selectors and captured-session wiring are still exercised end to end.
+# cleanup: keep so the test can inspect the delegation directory.
+coding:
+  client: pi
+  workdirs: ["./workspace"]
+  cleanup: keep
+  timeout: 2m
+  max_concurrent: 2
+
+agents:
+  - id: assistant
+    name: Assistant
+    description: Coding delegation test assistant
+    system_message: |
+      You are a test assistant with a delegate_coding tool that hands
+      coding tasks to a background coding agent. When the user asks you to
+      delegate a coding task, ALWAYS call the delegate_coding tool exactly
+      once, passing the user's task text VERBATIM as the prompt (keep any
+      quoted text, URLs, and file paths exactly as written). After the
+      tool returns, reply with only the job id it gave you. Keep responses
+      under 40 words.
+    default: true
+
+overlord:
+  workflow:
+    auto_decomposition: true
+    complexity_threshold: 9.0
+    plan_approval_threshold: 10
+  response:
+    streaming: false
+    widgets: false
+
+server:
+  host: 0.0.0.0
+  port: 18244
+  access_log: false
+  api_keys:
+    admin_key: "testing-api-key"
+    client_key: "testing-api-key"
+
+logging:
+  system:
+    level: "error"
+    destination: "stdout"
+  conversation:
+    enabled: false

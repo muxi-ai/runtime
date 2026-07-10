@@ -28,9 +28,8 @@ MUXI ships the mechanism only:
 ## Ready-to-paste formation blocks
 
 Each block below is complete and working -- copy it into `formation.yaml`
-and edit. Bundled templates today: `claude-code` and `droid`. (`opencode`
-and `pi` templates ship in a later phase; their blocks will slot into this
-list the same way.)
+and edit. Bundled templates today: `claude-code`, `droid`, `opencode`,
+and `pi`.
 
 ### claude-code
 
@@ -83,6 +82,57 @@ coding:
     FACTORY_API_KEY: "${{ secrets.FACTORY_API_KEY }}"
 ```
 
+### opencode
+
+Prerequisite: install the opencode CLI and authenticate a provider
+(`opencode auth login` or a provider API-key env var) -- your
+responsibility, MUXI only checks the binary exists.
+
+```yaml
+coding:
+  client: opencode               # bundled adapter template
+  model: anthropic/claude-sonnet-4-5   # provider/model namespace
+  workdirs: ["./workspace"]
+  cleanup: delete
+  timeout: 30m
+  max_concurrent: 3
+  groups: []
+  extra_args:
+    # opencode prompts for tool permission by default; auto-approve
+    # anything not explicitly denied ONLY in a sandboxed environment:
+    - "--dangerously-skip-permissions"
+    # also useful: --agent <name>, --title <title>
+  env:
+    # The ONLY place ${{ secrets.* }} resolves (argv is ps-visible; env is not).
+    ANTHROPIC_API_KEY: "${{ secrets.ANTHROPIC_API_KEY }}"
+```
+
+### pi
+
+Prerequisite: install the pi coding agent
+(`npm install -g @mariozechner/pi-coding-agent`) and provide a provider
+API key -- your responsibility, MUXI only checks the binary exists.
+
+```yaml
+coding:
+  client: pi                     # bundled adapter template
+  model: anthropic/claude-sonnet-4-5   # provider/id; optional :<thinking> suffix
+  workdirs: ["./workspace"]
+  cleanup: delete
+  timeout: 30m
+  max_concurrent: 3
+  groups: []
+  extra_args:
+    # pi's built-in tools (read, bash, edit, write) run unattended in
+    # headless mode -- rely on YOUR sandbox, or restrict the tool set:
+    - "--tools"
+    - "read,bash"
+    # also useful: --thinking <off|minimal|low|medium|high>, --no-skills
+  env:
+    # pi reads provider keys from the standard env vars.
+    ANTHROPIC_API_KEY: "${{ secrets.ANTHROPIC_API_KEY }}"
+```
+
 ## How it behaves
 
 ### The tool
@@ -111,8 +161,8 @@ flags) in `extra_args`; MUXI sets the cwd and rejects those flags at load.
 ### Sessions and continuation
 
 The vendor session id is persisted on the tracked job (MUXI-generated for
-claude-code and droid; captured from output for tools that assign their
-own). To continue a task -- including answering a question a run ended
+claude-code and droid; captured from output for opencode and pi, which
+assign their own). To continue a task -- including answering a question a run ended
 with -- call `delegate_coding` again with `continue_job_id: <job id>`;
 MUXI replays the stored session id. Agents never see vendor session ids.
 

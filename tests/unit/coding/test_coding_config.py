@@ -318,6 +318,8 @@ class TestTemplateResolution:
         names = list_bundled_adapters()
         assert "claude-code" in names
         assert "droid" in names
+        assert "opencode" in names
+        assert "pi" in names
 
     def test_bundled_claude_code_shape(self):
         adapter = resolve_adapter_template("claude-code", None)
@@ -343,11 +345,50 @@ class TestTemplateResolution:
         assert adapter.generates_session_id is True
         assert "--cwd" in adapter.forbidden_extra_args
 
+    def test_bundled_opencode_shape(self):
+        adapter = resolve_adapter_template("opencode", None)
+        assert adapter.command == "opencode"
+        assert adapter.prompt == ["{prompt}"]
+        assert adapter.output == "stream-json"
+        # Verified 2026-07-10 against opencode 1.14.46: --session with a
+        # fresh id fails ("Session not found"), so the template uses the
+        # captured-id path -- no session flag on the first run, the
+        # tool-assigned id parsed from output.
+        assert adapter.session is None
+        assert adapter.session_new is None
+        assert adapter.session_resume == ["--session", "{id}"]
+        assert adapter.captures_session_id is True
+        assert adapter.generates_session_id is False
+        assert adapter.supports_resume is True
+        assert adapter.parse_result == "$.part.text"
+        assert adapter.parse_session_id == "$.sessionID"
+        assert "--dir" in adapter.forbidden_extra_args
+
+    def test_bundled_pi_shape(self):
+        adapter = resolve_adapter_template("pi", None)
+        assert adapter.command == "pi"
+        assert adapter.prompt == ["{prompt}"]
+        assert adapter.output == "stream-json"
+        # Verified 2026-07-10 against pi 0.73.1: --session with a fresh
+        # id fails ("No session found matching"), so pi also uses the
+        # captured-id path (the session header event carries the id).
+        assert adapter.session is None
+        assert adapter.session_new is None
+        assert adapter.session_resume == ["--session", "{id}"]
+        assert adapter.captures_session_id is True
+        assert adapter.generates_session_id is False
+        assert adapter.supports_resume is True
+        assert adapter.parse_result == "$.messages[-1].content[-1].text"
+        assert adapter.parse_session_id == "$.id"
+        assert adapter.forbidden_extra_args == []
+
     def test_unknown_client_lists_bundled(self):
         with pytest.raises(CodingConfigError) as excinfo:
             parse_coding_config({"client": "nope", "workdirs": ["./ws"]})
         assert "claude-code" in str(excinfo.value)
         assert "droid" in str(excinfo.value)
+        assert "opencode" in str(excinfo.value)
+        assert "pi" in str(excinfo.value)
 
     def test_client_name_pattern(self):
         with pytest.raises(CodingConfigError, match="template name"):

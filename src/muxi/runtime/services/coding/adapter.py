@@ -100,12 +100,18 @@ def _extract_cost(document: Dict[str, Any]) -> Optional[float]:
 
 
 def _apply_selectors(adapter: AdapterConfig, document: Dict[str, Any], parsed: ParsedOutput):
-    """Apply the adapter's parse selectors to one JSON document (last wins)."""
+    """Apply the adapter's parse selectors to one JSON document.
+
+    Result: last non-empty extraction wins (the terminal event carries
+    the final result). Session id: FIRST match wins -- a session id never
+    changes mid-run, and a later event may carry an unrelated root-level
+    field of the same name (a tool-call id, say) that must not clobber it.
+    """
     if adapter.parse_result:
         value = extract_path(document, adapter.parse_result)
         if value is not None:
             parsed.result = value if isinstance(value, str) else json.dumps(value)
-    if adapter.parse_session_id:
+    if adapter.parse_session_id and parsed.session_id is None:
         value = extract_path(document, adapter.parse_session_id)
         if isinstance(value, str) and value.strip():
             parsed.session_id = value.strip()
@@ -132,8 +138,9 @@ def parse_output(adapter: AdapterConfig, stdout: str) -> ParsedOutput:
 
     - ``stream-json``: JSONL -- every parseable event is retained (the
       service also observes them incrementally as DELEGATION_PROGRESS);
-      selectors apply to each event, last non-empty extraction wins (the
-      terminal event carries the result).
+      selectors apply to each event: the result takes the last non-empty
+      extraction (the terminal event carries it), the session id the
+      first (it never changes mid-run).
     - ``json``: a single document on exit; selectors apply to it. Defensive
       fallback: when the whole stdout is not one document, the last
       parseable line wins (some CLIs prepend informational lines).

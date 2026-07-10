@@ -1,0 +1,4 @@
+# Delegation directories are disposable runtime output (cleanup: keep in
+# this fixture so tests can assert on them); never commit them.
+*
+!.gitignore
