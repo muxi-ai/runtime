@@ -33,6 +33,7 @@ class RequestAnalyzer:
         complexity_threshold: float = 7.0,
         custom_complexity_fn: Optional[Callable[[str, Optional[Dict[str, Any]]], float]] = None,
         complexity_weights: Optional[Dict[str, float]] = None,
+        coding_delegation_configured: Optional[Callable[[], bool]] = None,
     ):
         """
         Initialize the request analyzer with enhanced configuration.
@@ -43,8 +44,15 @@ class RequestAnalyzer:
             complexity_threshold: Configurable threshold for decomposition (1-10)
             custom_complexity_fn: Custom function for complexity scoring
             complexity_weights: Weights for different complexity factors
+            coding_delegation_configured: Callable answering whether the
+                formation has coding delegation configured. Gates the
+                coding-delegation security-override: without it (None or
+                False) the override never fires, so delegation-shaped
+                phrasing cannot launder a threat verdict in formations
+                that have no delegate_coding tool at all.
         """
         self.llm = llm
+        self.coding_delegation_configured = coding_delegation_configured
         self.complexity_method = (
             ComplexityMethod(complexity_method)
             if isinstance(complexity_method, str)
@@ -436,6 +444,26 @@ class RequestAnalyzer:
 
         return False
 
+    def _should_downgrade_coding_delegation(
+        self, threat_type: Optional[str], user_message: str
+    ) -> bool:
+        """
+        Whether the coding-delegation override may downgrade this verdict.
+
+        Three gates, ALL required: the threat type is one of the two
+        false-positive categories (never prompt_injection/jailbreak); the
+        formation actually has coding delegation configured (without a
+        coding: block there is no legitimate delegation to protect, so
+        delegation-shaped phrasing cannot launder a threat verdict); and
+        the message is confidently delegation-shaped.
+        """
+        return (
+            threat_type in ("information_extraction", "credential_fishing")
+            and self.coding_delegation_configured is not None
+            and self.coding_delegation_configured()
+            and self._heuristic_is_coding_delegation(user_message)
+        )
+
     @staticmethod
     def _heuristic_is_coding_delegation(user_message: str) -> bool:
         """
@@ -559,11 +587,12 @@ class RequestAnalyzer:
             # exfiltration to the classifier, but delegating a coding
             # task to the formation-configured coding agent is the
             # delegate_coding tool's normal use (never downgrades
-            # prompt_injection / jailbreak).
-            if (
-                analysis.is_security_threat
-                and analysis.threat_type in ("information_extraction", "credential_fishing")
-                and self._heuristic_is_coding_delegation(user_message)
+            # prompt_injection / jailbreak). Gated on the formation
+            # actually having coding delegation configured -- in a
+            # formation with no coding: block there is no legitimate
+            # delegation to protect, so the classifier's verdict stands.
+            if analysis.is_security_threat and self._should_downgrade_coding_delegation(
+                analysis.threat_type, user_message
             ):
                 observability.observe(
                     event_type=observability.ConversationEvents.WORKFLOW_ANALYSIS_FAILED,

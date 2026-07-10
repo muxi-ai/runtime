@@ -701,6 +701,12 @@ class Overlord:
             complexity_method=self.workflow_config.complexity_method,
             complexity_threshold=self.workflow_config.complexity_threshold,
             complexity_weights=self.workflow_config.complexity_weights,
+            # Lazy: the delegation service is created in _async_startup,
+            # after this constructor. Gates the coding-delegation
+            # security-override on the feature actually being configured.
+            coding_delegation_configured=(
+                lambda: getattr(self, "delegation_service", None) is not None
+            ),
         )
 
         # Initialize planning filter now that request_analyzer is available
