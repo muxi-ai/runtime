@@ -40,7 +40,9 @@
 #    period, and raises the per-user event-log size-cap alert.
 # 8. Legacy backfill (Phase B): ``backfill_user`` asks each projector to
 #    synthesize ``source='legacy'`` events for pre-event-log rows so old
-#    data becomes replayable and provenance-complete.
+#    data becomes replayable and provenance-complete. Bounded per pass
+#    (BACKFILL_MAX_ROWS_PER_PASS in projectors.py) with persisted resume
+#    cursors -- large legacy tables need multiple passes.
 # =============================================================================
 
 import asyncio
@@ -64,6 +66,14 @@ MAINTENANCE_INTERVAL_SECONDS = 3600.0
 # Incremental applier defaults (memory.projections in the formation YAML).
 DEFAULT_APPLY_INTERVAL_SECONDS = 5.0
 DEFAULT_LAG_ALERT_THRESHOLD_SECONDS = 300.0
+# Max events applied per lock acquisition in ``project_pending``. The
+# projection lock is released and reacquired between chunks so a long
+# catch-up batch never starves concurrent event-first writers
+# (``apply_event`` shares the same lock). Cursor correctness across the
+# release: each chunk re-reads its checkpoint under the lock before
+# listing events, so work done by an interleaved apply_event is never
+# re-applied and no event is skipped.
+DEFAULT_PROJECT_BATCH_SIZE = 500
 
 
 class MemoryEventService:
@@ -114,6 +124,10 @@ class MemoryEventService:
                 "lag_alert_threshold_seconds", DEFAULT_LAG_ALERT_THRESHOLD_SECONDS
             ),
             "memory.projections.lag_alert_threshold_seconds",
+        )
+        self.project_batch_size = _positive_int(
+            projections_config.get("batch_size", DEFAULT_PROJECT_BATCH_SIZE),
+            "memory.projections.batch_size",
         )
         self.decay = decay if decay is not None else DecaySettings()
 
@@ -313,6 +327,15 @@ class MemoryEventService:
         (the cursor still advances; a rebuild reconciles), keeping one
         poison event from wedging the projection forever.
 
+        Lock hold discipline: events are applied in chunks of at most
+        ``memory.projections.batch_size`` per lock acquisition, with the
+        checkpoint advanced at the end of every chunk. The lock is
+        released between chunks so a long catch-up batch never stalls
+        concurrent event-first writers, and a crash between chunks
+        resumes from the last checkpointed chunk boundary -- every chunk
+        re-reads its cursor under the lock, so no event is skipped or
+        re-applied across the boundary.
+
         Returns {projection: {user: {"events": n, "applied": n, "failed": n}}}.
         """
         users = [str(user_id)] if user_id is not None else await self.storage.list_event_user_ids()
@@ -321,43 +344,63 @@ class MemoryEventService:
             projector = self.projectors[name]
             per_user: Dict[str, Any] = {}
             for uid in users:
-                async with self._projection_lock:
-                    checkpoint = await self.storage.get_checkpoint(name, uid)
-                    after_id = checkpoint["last_event_id"] if checkpoint else None
-                    events = await self.storage.list_events(
-                        uid, event_types=list(projector.event_types), after_id=after_id
-                    )
-                    applied = failed = 0
-                    for event in events:
-                        try:
-                            result = await projector.apply(event)
-                            applied += 1
-                        except Exception as e:
-                            failed += 1
-                            result = None
-                            observability.observe(
-                                event_type=(
-                                    observability.ConversationEvents.MEMORY_PROJECTION_FAILED
-                                ),
-                                level=observability.EventLevel.WARNING,
-                                data={
-                                    "user_id": uid,
-                                    "projection": name,
-                                    "memory_event_id": event["id"],
-                                    "error": str(e),
-                                    "error_type": type(e).__name__,
-                                },
-                                description=f"Applying event {event['id']} to {name} failed: {e}",
-                            )
-                        if result:
-                            await self.record_contradictions(event, result)
-                    if events:
-                        await self.storage.set_checkpoint(name, uid, last_event_id=events[-1]["id"])
-                if events:
-                    per_user[uid] = {"events": len(events), "applied": applied, "failed": failed}
+                totals = {"events": 0, "applied": 0, "failed": 0}
+                while True:
+                    chunk_size = await self._project_pending_chunk(name, projector, uid, totals)
+                    if chunk_size < self.project_batch_size:
+                        break
+                if totals["events"]:
+                    per_user[uid] = totals
             if per_user:
                 report[name] = per_user
         return report
+
+    async def _project_pending_chunk(
+        self, name: str, projector, uid: str, totals: Dict[str, int]
+    ) -> int:
+        """Apply one bounded chunk of pending events under the lock.
+
+        Reads the cursor, applies at most ``project_batch_size`` events
+        past it, and checkpoints the chunk tail -- all while holding the
+        projection lock, which is released when this returns so writers
+        can interleave between chunks. Returns the number of events the
+        chunk contained (a short chunk means the cursor reached the log
+        tail).
+        """
+        async with self._projection_lock:
+            checkpoint = await self.storage.get_checkpoint(name, uid)
+            after_id = checkpoint["last_event_id"] if checkpoint else None
+            events = await self.storage.list_events(
+                uid,
+                event_types=list(projector.event_types),
+                after_id=after_id,
+                limit=self.project_batch_size,
+            )
+            for event in events:
+                try:
+                    result = await projector.apply(event)
+                    totals["applied"] += 1
+                except Exception as e:
+                    totals["failed"] += 1
+                    result = None
+                    observability.observe(
+                        event_type=observability.ConversationEvents.MEMORY_PROJECTION_FAILED,
+                        level=observability.EventLevel.WARNING,
+                        data={
+                            "user_id": uid,
+                            "projection": name,
+                            "memory_event_id": event["id"],
+                            "error": str(e),
+                            "error_type": type(e).__name__,
+                        },
+                        description=f"Applying event {event['id']} to {name} failed: {e}",
+                    )
+                if result:
+                    await self.record_contradictions(event, result)
+            if events:
+                await self.storage.set_checkpoint(name, uid, last_event_id=events[-1]["id"])
+        totals["events"] += len(events)
+        return len(events)
 
     async def record_contradictions(
         self, event: Dict[str, Any], result: Optional[Dict[str, Any]]
@@ -576,7 +619,7 @@ class MemoryEventService:
     # Legacy backfill (Phase B: synthetic events for pre-event-log rows)
     # ------------------------------------------------------------------
 
-    async def backfill_user(self, user_id: Any) -> Dict[str, int]:
+    async def backfill_user(self, user_id: Any) -> Dict[str, Dict[str, Any]]:
         """
         Synthesize legacy events for a user's pre-event-log projection rows.
 
@@ -587,7 +630,14 @@ class MemoryEventService:
         provenance-complete on the next rebuild (their write path inserts
         rather than upserts).
 
-        Returns {projection_name: synthesized_event_count}.
+        BOUNDED PER PASS: each projector scans at most
+        ``BACKFILL_MAX_ROWS_PER_PASS`` rows per table per call (see
+        projectors.py), persisting a resume cursor in
+        ``projection_checkpoints``. A projection whose report says
+        ``complete: false`` still has unscanned rows -- call again until
+        every projection reports ``complete: true``.
+
+        Returns {projection_name: {"synthesized": n, "complete": bool}}.
 
         Raises:
             ValueError: When the substrate is disabled.
@@ -601,18 +651,30 @@ class MemoryEventService:
             data={"user_id": user_id, "projections": sorted(self.projectors)},
             description=f"Legacy memory backfill started for user {user_id}",
         )
-        report: Dict[str, int] = {}
+        report: Dict[str, Dict[str, Any]] = {}
         for name in sorted(self.projectors):
             backfill = getattr(self.projectors[name], "backfill", None)
             if backfill is None:
                 continue
             report[name] = await backfill(user_id, self)
-        observability.observe(
-            event_type=observability.ConversationEvents.MEMORY_BACKFILL_COMPLETED,
-            level=observability.EventLevel.INFO,
-            data={"user_id": user_id, "report": report},
-            description=f"Legacy memory backfill completed for user {user_id}",
-        )
+        incomplete = sorted(name for name, entry in report.items() if not entry["complete"])
+        if incomplete:
+            observability.observe(
+                event_type=observability.ConversationEvents.MEMORY_BACKFILL_COMPLETED,
+                level=observability.EventLevel.WARNING,
+                data={"user_id": user_id, "report": report, "incomplete": incomplete},
+                description=(
+                    f"Legacy memory backfill pass hit its per-pass row bound for "
+                    f"{', '.join(incomplete)}; run another pass to continue"
+                ),
+            )
+        else:
+            observability.observe(
+                event_type=observability.ConversationEvents.MEMORY_BACKFILL_COMPLETED,
+                level=observability.EventLevel.INFO,
+                data={"user_id": user_id, "report": report},
+                description=f"Legacy memory backfill completed for user {user_id}",
+            )
         return report
 
     # ------------------------------------------------------------------
@@ -815,6 +877,17 @@ def _optional_positive_int(value: Any, label: str) -> Optional[int]:
         raise ValueError(f"{label} must be a positive integer or null, got {value!r}")
     if number <= 0:
         raise ValueError(f"{label} must be a positive integer or null, got {value!r}")
+    return number
+
+
+def _positive_int(value: Any, label: str) -> int:
+    """Coerce a config value to a positive integer, failing fast otherwise."""
+    try:
+        number = int(value)
+    except (TypeError, ValueError):
+        raise ValueError(f"{label} must be a positive integer, got {value!r}")
+    if number <= 0:
+        raise ValueError(f"{label} must be a positive integer, got {value!r}")
     return number
 
 

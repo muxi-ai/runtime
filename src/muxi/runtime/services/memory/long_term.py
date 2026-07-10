@@ -1637,7 +1637,10 @@ class LongTermMemory:
             ]
 
     async def list_extracted_orphan_memories(
-        self, external_user_id: Optional[str] = None
+        self,
+        external_user_id: Optional[str] = None,
+        limit: Optional[int] = None,
+        offset: Optional[int] = None,
     ) -> List[Dict[str, Any]]:
         """
         Extraction rows without event provenance (legacy backfill support).
@@ -1646,6 +1649,8 @@ class LongTermMemory:
         ``derived_from_event_id`` predate the memory event substrate; the
         backfill synthesizes fact.extracted events for exactly these so a
         rebuild can recreate them. Non-extraction rows are never listed.
+        ``limit`` / ``offset`` page the stable (created_at, id) ordering
+        for the backfill's bounded multi-pass scan.
         """
         internal_user_id = await self._resolve_user_id_async(external_user_id)
         source_marker = type_coerce(self.MemoryModel.meta_data, JSON)["source"].as_string()
@@ -1660,6 +1665,10 @@ class LongTermMemory:
                 .where(event_marker.is_(None))
                 .order_by(self.MemoryModel.created_at, self.MemoryModel.id)
             )
+            if offset:
+                query = query.offset(offset)
+            if limit is not None:
+                query = query.limit(limit)
             rows = (await session.execute(query)).scalars().all()
             return [
                 {

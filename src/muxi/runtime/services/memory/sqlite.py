@@ -648,7 +648,10 @@ class SQLiteMemory(BaseMemory):
         return memory_id
 
     async def list_extracted_orphan_memories(
-        self, user_id: Optional[str] = None
+        self,
+        user_id: Optional[str] = None,
+        limit: Optional[int] = None,
+        offset: Optional[int] = None,
     ) -> List[Dict[str, Any]]:
         """
         Extraction rows without event provenance (legacy backfill support).
@@ -658,13 +661,25 @@ class SQLiteMemory(BaseMemory):
         backfill synthesizes fact.extracted events for exactly these so a
         rebuild can recreate them. Non-extraction rows (conversations,
         manual user memories, knowledge uploads) are not event-sourced and
-        are never listed.
+        are never listed. ``limit`` / ``offset`` page the stable
+        (created_at, id) ordering for the backfill's bounded multi-pass
+        scan.
         """
         await self._ensure_dim()
         if user_id:
             internal_user_id = await self.get_or_create_user(str(user_id))
         else:
             internal_user_id = self.default_user_id
+        paging = ""
+        params: list = [internal_user_id]
+        if limit is not None:
+            paging += " LIMIT ?"
+            params.append(limit)
+        if offset:
+            if limit is None:
+                paging += " LIMIT -1"
+            paging += " OFFSET ?"
+            params.append(offset)
         rows = self.conn.execute(
             f"""
             SELECT id, text, collection, metadata, created_at
@@ -673,8 +688,9 @@ class SQLiteMemory(BaseMemory):
               AND json_extract(metadata, '$.source') = 'extraction'
               AND json_extract(metadata, '$.derived_from_event_id') IS NULL
             ORDER BY created_at, id
+            {paging}
             """,
-            (internal_user_id,),
+            tuple(params),
         ).fetchall()
         return [
             {

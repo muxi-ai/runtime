@@ -264,12 +264,16 @@ class ArtifactMemoryStorage:
         include_deleted: bool = False,
         limit: Optional[int] = None,
         order_by_last_accessed: bool = False,
+        after_id: Optional[int] = None,
     ) -> List[Dict[str, Any]]:
         """List a user's artifacts, newest first.
 
         ``order_by_last_accessed`` switches to the manifest ordering
         (PRD 2.1: ``last_accessed_at DESC``); ``limit`` caps the fetch so
         the manifest never pulls a user's entire artifact history.
+        ``after_id`` switches to keyset pagination -- rows with id greater
+        than the cursor, oldest first (the legacy backfill's stable
+        multi-pass scan ordering).
         """
         async with self.db_manager.get_async_session() as session:
             stmt = select(Artifact).filter_by(user_id=str(user_id), formation_id=self.formation_id)
@@ -279,7 +283,9 @@ class ArtifactMemoryStorage:
                 stmt = stmt.filter_by(is_latest=True)
             if not include_deleted:
                 stmt = stmt.filter(Artifact.deleted_at.is_(None))
-            if order_by_last_accessed:
+            if after_id is not None:
+                stmt = stmt.filter(Artifact.id > after_id).order_by(Artifact.id.asc())
+            elif order_by_last_accessed:
                 stmt = stmt.order_by(Artifact.last_accessed_at.desc(), Artifact.id.desc())
             else:
                 stmt = stmt.order_by(Artifact.id.desc())

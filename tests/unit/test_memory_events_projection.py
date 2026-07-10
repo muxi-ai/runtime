@@ -156,6 +156,111 @@ class TestProjectPending:
         assert checkpoint["last_event_id"] == good["id"]  # not wedged
 
 
+class TestChunkedProjectPending:
+    """Bounded lock holds: project_pending applies events in chunks of
+    ``memory.projections.batch_size`` per lock acquisition, checkpointing
+    every chunk. No event is skipped or duplicated across chunk
+    boundaries, and a crash between chunks resumes from the last
+    checkpointed boundary."""
+
+    @pytest.fixture
+    def chunked_events(self, db_manager):
+        return MemoryEventService(db_manager, FORMATION_ID, projections_config={"batch_size": 2})
+
+    async def test_all_events_applied_exactly_once_across_chunks(self, chunked_events):
+        events = chunked_events
+        long_term = FakeLongTermMemory()
+        events.register_projector(FlatFactProjector(long_term))
+        recorded = [await record_fact(events, f"Fact {index}") for index in range(5)]
+
+        report = await events.project_pending(USER)
+        assert report["flat_facts"][USER] == {"events": 5, "applied": 5, "failed": 0}
+        # Exactly once each: 5 rows, 5 distinct contents.
+        assert sorted(row["content"] for row in long_term.rows.values()) == [
+            f"Fact {index}" for index in range(5)
+        ]
+        checkpoint = await events.storage.get_checkpoint("flat_facts", USER)
+        assert checkpoint["last_event_id"] == recorded[-1]["id"]
+
+        # Nothing pending on a second pass.
+        assert await events.project_pending(USER) == {}
+
+    async def test_crash_between_chunks_resumes_without_skip_or_duplicate(
+        self, chunked_events, monkeypatch
+    ):
+        events = chunked_events
+        long_term = FakeLongTermMemory()
+        events.register_projector(FlatFactProjector(long_term))
+        recorded = [await record_fact(events, f"Fact {index}") for index in range(5)]
+
+        # Crash the pass at the second chunk's read -- AFTER chunk one
+        # was applied and checkpointed, BEFORE chunk two touched anything.
+        original_list_events = events.storage.list_events
+        calls = {"count": 0}
+
+        async def crashing_list_events(*args, **kwargs):
+            calls["count"] += 1
+            if calls["count"] == 2:
+                raise RuntimeError("process died between chunks")
+            return await original_list_events(*args, **kwargs)
+
+        monkeypatch.setattr(events.storage, "list_events", crashing_list_events)
+        with pytest.raises(RuntimeError, match="between chunks"):
+            await events.project_pending(USER)
+
+        # Chunk one landed and was checkpointed at the chunk boundary.
+        assert len(long_term.rows) == 2
+        checkpoint = await events.storage.get_checkpoint("flat_facts", USER)
+        assert checkpoint["last_event_id"] == recorded[1]["id"]
+
+        # Recovery pass: only the remaining events apply -- none skipped,
+        # none re-applied.
+        monkeypatch.undo()
+        report = await events.project_pending(USER)
+        assert report["flat_facts"][USER] == {"events": 3, "applied": 3, "failed": 0}
+        assert sorted(row["content"] for row in long_term.rows.values()) == [
+            f"Fact {index}" for index in range(5)
+        ]
+
+    async def test_lock_released_between_chunks(self, chunked_events):
+        """The projection lock is free between chunks, so a concurrent
+        writer acquires it mid-batch instead of waiting for the tail."""
+        events = chunked_events
+        long_term = FakeLongTermMemory()
+        projector = FlatFactProjector(long_term)
+        events.register_projector(projector)
+        for index in range(6):
+            await record_fact(events, f"Fact {index}")
+
+        import asyncio
+
+        rows_seen_under_lock = []
+
+        async def contender():
+            # Queued behind the running pass; asyncio.Lock is FIFO, so
+            # this wakes at the first chunk boundary -- mid-batch --
+            # rather than after the whole batch (the old monolithic hold).
+            async with events._projection_lock:
+                rows_seen_under_lock.append(len(long_term.rows))
+
+        pending_task = asyncio.create_task(events.project_pending(USER))
+        await asyncio.sleep(0)  # let the pass take the lock first
+        contender_task = asyncio.create_task(contender())
+        await asyncio.wait_for(asyncio.gather(pending_task, contender_task), timeout=5.0)
+
+        assert len(long_term.rows) == 6
+        # The contender got the lock while the batch was still running.
+        assert 0 < rows_seen_under_lock[0] < 6
+
+    async def test_batch_size_config_validation(self, db_manager):
+        with pytest.raises(ValueError, match="memory.projections.batch_size"):
+            MemoryEventService(db_manager, FORMATION_ID, projections_config={"batch_size": 0})
+        with pytest.raises(ValueError, match="memory.projections.batch_size"):
+            MemoryEventService(db_manager, FORMATION_ID, projections_config={"batch_size": "lots"})
+        service = MemoryEventService(db_manager, FORMATION_ID)
+        assert service.project_batch_size == 500  # documented default
+
+
 class TestApplyEvent:
     async def test_apply_event_projects_and_checkpoints(self, events):
         long_term = FakeLongTermMemory()
