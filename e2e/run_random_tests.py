@@ -9,6 +9,7 @@ import random
 import sys
 import time
 
+from provision_keys import provision_keys
 from run_all_tests import (
     AREAS,
     EVIDENCE_DIR,
@@ -35,6 +36,12 @@ def main():
     args = parser.parse_args()
     n = args.n
 
+    try:
+        provision_keys()
+    except Exception as exc:
+        print(f"[provision_keys] error: {exc}", file=sys.stderr)
+        sys.exit(1)
+
     excluded = set()
     if args.exclude_file:
         with open(args.exclude_file) as f:
@@ -53,7 +60,9 @@ def main():
 
     if excluded:
         before = len(all_tests)
-        all_tests = [t for t in all_tests if str(t.relative_to(t.parent.parent.parent)) not in excluded]
+        all_tests = [
+            t for t in all_tests if str(t.relative_to(t.parent.parent.parent)) not in excluded
+        ]
         print(f"Excluded {before - len(all_tests)} already-passing tests from pool")
 
     if n > len(all_tests):

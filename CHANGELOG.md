@@ -664,6 +664,7 @@ sandbox. No inner LLM loop, no orchestration, no new execution paths.
   ``failure_kind`` breakdown. Disable via ``skills.disable_builtin``;
   degrades like any scripted skill when no RCE is configured.
 
+### Fixes (#229, #231, #234, #235, #240, #241, #249, #269)
 ### Performance: local embeddings on macOS (#258)
 
 The CoreML execution provider is now off by default on macOS for the
@@ -679,6 +680,14 @@ classifier warmup halves its embed calls. Set
   e2e ceilings (360s, thread method) -- this was the real cause of the
   "ONNX load timeout" failures in area 15 (#257).
 
+- The e2e harness self-provisions the gitignored formation ``.key``
+  symlinks (``e2e/provision_keys.py``, run automatically by
+  ``run_all_tests.py``/``run_random_tests.py``): fresh checkouts and git
+  worktrees no longer hit ``InvalidSignature`` failures from
+  SecretsManager auto-generating a wrong key next to the committed
+  ``secrets.enc``. Stale auto-generated keys over the shared symlinked
+  ``secrets.enc`` are replaced; formation-owned key/secrets pairs are
+  never touched (#269).
 - Scheduler due-job queries are scoped to the owning formation:
   formations sharing one database no longer execute each other's
   scheduled jobs (``get_active_jobs_batch`` and its pagination count

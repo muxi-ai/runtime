@@ -50,7 +50,31 @@ cp .env.example .env
 # Edit .env and add your API keys (especially OPENAI_API_KEY)
 ```
 
-### 2. Run Tests with Docker
+### 2. Provision Formation Keys
+
+Formation directories under `e2e/tests/` pair a committed `secrets.enc`
+with a gitignored `.key` symlink to the shared `e2e/assets/.key`. Fresh
+checkouts and git worktrees are missing every `.key` symlink; without
+one, SecretsManager auto-generates a wrong key that cannot decrypt the
+committed `secrets.enc` (confusing `InvalidToken`/`InvalidSignature`
+failures).
+
+`run_all_tests.py` and `run_random_tests.py` provision the symlinks
+automatically at startup. For direct single-test runs, provision once
+first:
+
+```bash
+cd e2e && uv run python provision_keys.py
+```
+
+The script is idempotent, only touches `e2e/tests/`, and never
+overwrites a formation-owned `.key`/`secrets.enc` pair (it only replaces
+stale auto-generated keys sitting over the shared symlinked
+`secrets.enc`). It requires `e2e/assets/.key` to exist (gitignored --
+copy it from a provisioned checkout). Verify the logic with
+`uv run python provision_keys.py --self-test`.
+
+### 3. Run Tests with Docker
 
 #### Build and Start Services
 
