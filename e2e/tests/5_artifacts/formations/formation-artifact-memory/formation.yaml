@@ -36,3 +36,12 @@ logging:
       - transport: "stdout"
         level: "info"
         format: "jsonl"
+
+# REST read surface (Artifact Memory Phase 2): server enabled so the e2e
+# can exercise GET /v1/artifacts over real HTTP.
+server:
+  enabled: true
+  port: 8275
+  api_keys:
+    admin_key: test-admin-key-123
+    client_key: test-client-key-456

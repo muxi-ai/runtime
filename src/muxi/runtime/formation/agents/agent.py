@@ -1668,6 +1668,16 @@ class Agent:
                     }
                     tools.append(record_lesson_tool)
 
+                # Built-in artifact retrieval tools (Artifact Memory Phase 2):
+                # registered only when the overlord carries an enabled
+                # artifact memory service. Formations without artifact
+                # memory (no persistent memory, or artifacts.enabled: false)
+                # see no artifact tools at all.
+                from .artifact_dispatch import artifact_tools_available, build_artifact_tools
+
+                if self.overlord and artifact_tools_available(self.overlord):
+                    tools.extend(build_artifact_tools())
+
                 # Always add the built-in generate_file tool if artifact service is available
                 if self.overlord and hasattr(self.overlord, "artifact_service"):
                     generate_file_tool = {
@@ -4195,6 +4205,29 @@ class Agent:
                     "hits": lesson["hits"],
                     "message": "Lesson recorded; it will be applied in future sessions.",
                 }
+
+            if (
+                tool_name in ("get_artifact", "get_artifact_content", "get_artifact_history")
+                and self.overlord
+            ):
+                # Artifact retrieval built-ins (Artifact Memory Phase 2).
+                # User-scoped: handlers only ever see the calling user's
+                # artifacts, and every failure returns a friendly error
+                # instead of raising into the turn.
+                from .artifact_dispatch import (
+                    handle_get_artifact,
+                    handle_get_artifact_content,
+                    handle_get_artifact_history,
+                )
+
+                artifact_handlers = {
+                    "get_artifact": handle_get_artifact,
+                    "get_artifact_content": handle_get_artifact_content,
+                    "get_artifact_history": handle_get_artifact_history,
+                }
+                return await artifact_handlers[tool_name](
+                    self.agent_id, parameters, self.overlord, user_id=user_id
+                )
 
             if tool_name == "generate_file" and self.overlord:
                 code = parameters.get("code", "")
