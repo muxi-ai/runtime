@@ -209,7 +209,7 @@
   "results": [
     {
       "category": "evicted_recall",
-      "elapsed_seconds": 1.487,
+      "elapsed_seconds": 1.658,
       "error": null,
       "evidence_evicted": true,
       "evidence_session_ids": [
@@ -237,7 +237,7 @@
     },
     {
       "category": "evicted_recall",
-      "elapsed_seconds": 0.022,
+      "elapsed_seconds": 0.03,
       "error": null,
       "evidence_evicted": true,
       "evidence_session_ids": [
@@ -296,7 +296,7 @@
     },
     {
       "category": "evicted_recall",
-      "elapsed_seconds": 1.539,
+      "elapsed_seconds": 2.002,
       "error": null,
       "evidence_evicted": true,
       "evidence_session_ids": [
@@ -324,7 +324,7 @@
     },
     {
       "category": "evicted_recall",
-      "elapsed_seconds": 0.025,
+      "elapsed_seconds": 0.161,
       "error": null,
       "evidence_evicted": true,
       "evidence_session_ids": [
@@ -382,7 +382,7 @@
     },
     {
       "category": "evicted_recall",
-      "elapsed_seconds": 1.153,
+      "elapsed_seconds": 1.7,
       "error": null,
       "evidence_evicted": true,
       "evidence_session_ids": [
@@ -408,7 +408,7 @@
     },
     {
       "category": "evicted_recall",
-      "elapsed_seconds": 0.02,
+      "elapsed_seconds": 0.037,
       "error": null,
       "evidence_evicted": true,
       "evidence_session_ids": [
@@ -465,7 +465,7 @@
     },
     {
       "category": "evicted_recall",
-      "elapsed_seconds": 1.353,
+      "elapsed_seconds": 1.626,
       "error": null,
       "evidence_evicted": true,
       "evidence_session_ids": [
@@ -493,7 +493,7 @@
     },
     {
       "category": "evicted_recall",
-      "elapsed_seconds": 0.025,
+      "elapsed_seconds": 0.137,
       "error": null,
       "evidence_evicted": true,
       "evidence_session_ids": [
@@ -552,7 +552,7 @@
     },
     {
       "category": "recent_recall",
-      "elapsed_seconds": 1.529,
+      "elapsed_seconds": 1.929,
       "error": null,
       "evidence_evicted": false,
       "evidence_session_ids": [
@@ -580,7 +580,7 @@
     },
     {
       "category": "recent_recall",
-      "elapsed_seconds": 0.019,
+      "elapsed_seconds": 0.043,
       "error": null,
       "evidence_evicted": false,
       "evidence_session_ids": [
@@ -639,7 +639,7 @@
     },
     {
       "category": "recent_recall",
-      "elapsed_seconds": 1.618,
+      "elapsed_seconds": 1.853,
       "error": null,
       "evidence_evicted": false,
       "evidence_session_ids": [
@@ -667,7 +667,7 @@
     },
     {
       "category": "recent_recall",
-      "elapsed_seconds": 0.029,
+      "elapsed_seconds": 0.035,
       "error": null,
       "evidence_evicted": false,
       "evidence_session_ids": [
@@ -726,7 +726,7 @@
     },
     {
       "category": "evicted_recall",
-      "elapsed_seconds": 2.805,
+      "elapsed_seconds": 1.611,
       "error": null,
       "evidence_evicted": null,
       "evidence_session_ids": [
@@ -750,7 +750,7 @@
     },
     {
       "category": "evicted_recall",
-      "elapsed_seconds": 0.02,
+      "elapsed_seconds": 0.044,
       "error": null,
       "evidence_evicted": null,
       "evidence_session_ids": [
@@ -805,10 +805,10 @@
     }
   ],
   "run": {
-    "git_commit": "04736f7960212883e1f851c735714fbcb8ff60d4",
+    "git_commit": "28912ca727011da682788ed39b322970e6349e08",
     "python": "3.11.13",
-    "started_at": "2026-07-09T23:42:09Z",
-    "wall_seconds": 32.05
+    "started_at": "2026-07-10T01:29:37Z",
+    "wall_seconds": 64.84
   },
   "schema_version": "1.0",
   "usage": {

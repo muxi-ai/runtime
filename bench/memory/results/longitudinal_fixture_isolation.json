@@ -53,10 +53,10 @@
   "mode": "isolation",
   "results": [],
   "run": {
-    "git_commit": "04736f7960212883e1f851c735714fbcb8ff60d4",
+    "git_commit": "28912ca727011da682788ed39b322970e6349e08",
     "python": "3.11.13",
-    "started_at": "2026-07-09T23:43:33Z",
-    "wall_seconds": 33.56
+    "started_at": "2026-07-10T01:29:37Z",
+    "wall_seconds": 72.16
   },
   "schema_version": "1.0",
   "usage": {

@@ -269,7 +269,11 @@ async def _scenario_buffer_cycle(
 ) -> Tuple[Dict[str, Any], List[LongitudinalQuestionResult]]:
     results: List[LongitudinalQuestionResult] = []
     decision_items = []
+    eviction_totals: Dict[str, Any] = {}
+    flush_totals: Dict[str, Any] = {}
     for case in scenario.dataset.cases:
+        # clear_case() resets the adapter's per-case eviction/flush
+        # counters, so each case's snapshot is summed here.
         adapter.clear_case()
         user_id = f"bench-{BENCHMARK_NAME}-{case.case_id}"
         truth = scenario.ground_truth[case.case_id]
@@ -314,9 +318,21 @@ async def _scenario_buffer_cycle(
 
         decision_items.extend(await adapter.audit_decisions(user_id, truth))
 
-    metrics = aggregate_buffer_cycle(
-        results, args.k, adapter.eviction_stats(), adapter.flush_stats(), decision_items
-    )
+        for totals, snapshot in (
+            (eviction_totals, adapter.eviction_stats()),
+            (flush_totals, adapter.flush_stats()),
+        ):
+            for key, value in snapshot.items():
+                if (
+                    key == "max_memory_mb"  # run config, not a counter
+                    or isinstance(value, bool)
+                    or not isinstance(value, (int, float))
+                ):
+                    totals[key] = value
+                else:
+                    totals[key] = totals.get(key, 0) + value
+
+    metrics = aggregate_buffer_cycle(results, args.k, eviction_totals, flush_totals, decision_items)
     return metrics, results
 
 
@@ -418,6 +434,20 @@ async def _scenario_isolation(
 # ---------------------------------------------------------------------------
 
 
+def merge_rebuild_report(totals: Dict[str, Any], rebuild: Dict[str, Any]) -> Dict[str, int]:
+    """Sum one rebuild response into the running per-case totals.
+
+    The service response can carry explicit ``None`` values for
+    events/applied/failed (not just missing keys), so ``or 0`` guards
+    the ``int()`` conversion — ``dict.get(key, 0)`` alone would raise
+    ``TypeError`` and kill the scenario mid-run.
+    """
+    return {
+        key: int(totals.get(key) or 0) + int(rebuild.get(key) or 0)
+        for key in ("events", "applied", "failed")
+    }
+
+
 async def _scenario_contradiction(
     adapter: LongitudinalMemoryAdapter,
     scenario: LongitudinalScenario,
@@ -448,15 +478,12 @@ async def _scenario_contradiction(
         detected_total = sum(pair.detected for pair in live_pairs) + len(live_fps)
         events = await adapter.contradiction_event_stats(user_id, detected_total)
         events_available = events_available or bool(events.get("available"))
-        events_total += int(events.get("events", 0))
+        events_total += int(events.get("events") or 0)
 
         rebuild = await adapter.rebuild_knowledge_graph(user_id)
         if rebuild.get("available"):
             rebuild_available = True
-            rebuild_report = {
-                key: rebuild_report.get(key, 0) + int(rebuild.get(key, 0))
-                for key in ("events", "applied", "failed")
-            }
+            rebuild_report = merge_rebuild_report(rebuild_report, rebuild)
             rebuild_pairs, rebuild_fps = await adapter.audit_contradiction_pairs(user_id, truth)
             all_rebuild_pairs.extend(rebuild_pairs)
             all_rebuild_fps.extend(rebuild_fps)
@@ -639,24 +666,40 @@ def _scenario_argv(args: argparse.Namespace, key: str) -> List[str]:
     return argv
 
 
+async def _run_scenario_subprocess(args: argparse.Namespace, key: str) -> Tuple[str, int, str]:
+    """Run one scenario subprocess; returns (key, exit code, output)."""
+    process = await asyncio.create_subprocess_exec(
+        sys.executable,
+        "-m",
+        "bench.memory.longitudinal_runner",
+        *_scenario_argv(args, key),
+        cwd=str(REPO_ROOT),
+        stdout=asyncio.subprocess.PIPE,
+        stderr=asyncio.subprocess.STDOUT,
+    )
+    output, _ = await process.communicate()
+    return key, process.returncode or 0, output.decode(errors="replace")
+
+
 async def _run_all_scenarios(args: argparse.Namespace) -> int:
     """Run every scenario in its own subprocess (fresh formation each).
 
-    The runtime's database manager is a process-level singleton keyed
-    to the first connection string it sees, so a second formation in
-    the same process would reuse the first scenario's (already
-    removed) run-local SQLite path.
+    One subprocess per scenario because the runtime's database manager
+    is a process-level singleton keyed to the first connection string
+    it sees — a second formation in the same process would reuse the
+    first scenario's (already removed) run-local SQLite path. The
+    subprocesses run CONCURRENTLY (each has its own temp run dir and
+    report file); output is buffered per scenario and printed whole as
+    each finishes, so summaries never interleave.
     """
+    tasks = [asyncio.create_task(_run_scenario_subprocess(args, key)) for key in SCENARIOS]
     exit_code = 0
-    for key in SCENARIOS:
-        process = await asyncio.create_subprocess_exec(
-            sys.executable,
-            "-m",
-            "bench.memory.longitudinal_runner",
-            *_scenario_argv(args, key),
-            cwd=str(REPO_ROOT),
-        )
-        exit_code = max(exit_code, await process.wait())
+    for completed in asyncio.as_completed(tasks):
+        key, code, output = await completed
+        print(f"[membench] ===== {key} finished (exit {code}) =====")
+        sys.stdout.write(output)
+        sys.stdout.flush()
+        exit_code = max(exit_code, code)
     return exit_code
 
 

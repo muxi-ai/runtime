@@ -110,6 +110,20 @@ class LongitudinalMemoryAdapter(StructuredMemoryAdapter):
             # no-ops on a None model by design.
             flush_service._model_getter = lambda: None
 
+    def clear_case(self) -> None:
+        """Reset per-case state, including the Scenario A counters.
+
+        The eviction/flush counters are per-case measurements; without
+        the reset they would accumulate across cases and misreport
+        every case after the first (the runner sums per-case snapshots
+        itself).
+        """
+        super().clear_case()
+        self.buffer_ingested_turns = 0
+        self.cleanup_passes = 0
+        self.flush_hand_offs = 0
+        self.flush_items_handed = 0
+
     # -- Scenario A: buffer ingestion under a cycling budget -------------------
 
     async def ingest_session_buffer(self, user_id: str, session: Session) -> None:

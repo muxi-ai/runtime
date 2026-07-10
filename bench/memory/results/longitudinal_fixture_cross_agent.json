@@ -115,7 +115,7 @@
   "results": [
     {
       "category": "cross_agent_propagation",
-      "elapsed_seconds": 1.344,
+      "elapsed_seconds": 1.835,
       "error": null,
       "evidence_evicted": null,
       "evidence_session_ids": [
@@ -141,7 +141,7 @@
     },
     {
       "category": "cross_agent_propagation",
-      "elapsed_seconds": 1.665,
+      "elapsed_seconds": 1.799,
       "error": null,
       "evidence_evicted": null,
       "evidence_session_ids": [
@@ -169,7 +169,7 @@
     },
     {
       "category": "cross_agent_propagation",
-      "elapsed_seconds": 1.353,
+      "elapsed_seconds": 1.56,
       "error": null,
       "evidence_evicted": null,
       "evidence_session_ids": [
@@ -195,7 +195,7 @@
     },
     {
       "category": "cross_agent_propagation",
-      "elapsed_seconds": 1.662,
+      "elapsed_seconds": 2.52,
       "error": null,
       "evidence_evicted": null,
       "evidence_session_ids": [
@@ -221,7 +221,7 @@
     },
     {
       "category": "cross_agent_propagation",
-      "elapsed_seconds": 1.54,
+      "elapsed_seconds": 1.628,
       "error": null,
       "evidence_evicted": null,
       "evidence_session_ids": [
@@ -249,7 +249,7 @@
     },
     {
       "category": "cross_agent_propagation",
-      "elapsed_seconds": 1.305,
+      "elapsed_seconds": 2.232,
       "error": null,
       "evidence_evicted": null,
       "evidence_session_ids": [
@@ -275,7 +275,7 @@
     },
     {
       "category": "cross_agent_propagation",
-      "elapsed_seconds": 1.254,
+      "elapsed_seconds": 1.517,
       "error": null,
       "evidence_evicted": null,
       "evidence_session_ids": [
@@ -301,7 +301,7 @@
     },
     {
       "category": "cross_agent_propagation",
-      "elapsed_seconds": 1.522,
+      "elapsed_seconds": 1.479,
       "error": null,
       "evidence_evicted": null,
       "evidence_session_ids": [
@@ -329,7 +329,7 @@
     },
     {
       "category": "cross_agent_propagation",
-      "elapsed_seconds": 1.383,
+      "elapsed_seconds": 1.739,
       "error": null,
       "evidence_evicted": null,
       "evidence_session_ids": [
@@ -355,7 +355,7 @@
     },
     {
       "category": "cross_agent_propagation",
-      "elapsed_seconds": 1.46,
+      "elapsed_seconds": 1.611,
       "error": null,
       "evidence_evicted": null,
       "evidence_session_ids": [
@@ -381,7 +381,7 @@
     },
     {
       "category": "cross_agent_propagation",
-      "elapsed_seconds": 1.355,
+      "elapsed_seconds": 1.636,
       "error": null,
       "evidence_evicted": null,
       "evidence_session_ids": [
@@ -409,7 +409,7 @@
     },
     {
       "category": "cross_agent_propagation",
-      "elapsed_seconds": 2.776,
+      "elapsed_seconds": 1.675,
       "error": null,
       "evidence_evicted": null,
       "evidence_session_ids": [
@@ -435,7 +435,7 @@
     },
     {
       "category": "cross_agent_propagation",
-      "elapsed_seconds": 1.576,
+      "elapsed_seconds": 1.509,
       "error": null,
       "evidence_evicted": null,
       "evidence_session_ids": [
@@ -448,7 +448,7 @@
       "exact_strings": [],
       "is_abstention": false,
       "layer": "structured",
-      "qa_answer": "The competitor teardown was produced by the research-agent.",
+      "qa_answer": "The research-agent produced the competitor teardown.",
       "qa_correct": true,
       "question_id": "seq_cross_agent_000_q013_cross_agent_propagation",
       "question_type": "cross_agent_propagation",
@@ -461,7 +461,7 @@
     },
     {
       "category": "cross_agent_propagation",
-      "elapsed_seconds": 1.482,
+      "elapsed_seconds": 1.991,
       "error": null,
       "evidence_evicted": null,
       "evidence_session_ids": [
@@ -476,7 +476,7 @@
       ],
       "is_abstention": false,
       "layer": "structured",
-      "qa_answer": "The competitor teardown was filed under reference number DOC-1450-NX.",
+      "qa_answer": "The competitor teardown was filed under the reference number DOC-1450-NX.",
       "qa_correct": true,
       "question_id": "seq_cross_agent_000_q014_cross_agent_propagation",
       "question_type": "cross_agent_propagation",
@@ -489,7 +489,7 @@
     },
     {
       "category": "cross_agent_propagation",
-      "elapsed_seconds": 1.281,
+      "elapsed_seconds": 1.466,
       "error": null,
       "evidence_evicted": null,
       "evidence_session_ids": [
@@ -515,7 +515,7 @@
     },
     {
       "category": "cross_agent_propagation",
-      "elapsed_seconds": 1.928,
+      "elapsed_seconds": 1.452,
       "error": null,
       "evidence_evicted": null,
       "evidence_session_ids": [
@@ -541,7 +541,7 @@
     },
     {
       "category": "cross_agent_propagation",
-      "elapsed_seconds": 1.478,
+      "elapsed_seconds": 1.752,
       "error": null,
       "evidence_evicted": null,
       "evidence_session_ids": [
@@ -569,7 +569,7 @@
     },
     {
       "category": "cross_agent_propagation",
-      "elapsed_seconds": 1.447,
+      "elapsed_seconds": 2.514,
       "error": null,
       "evidence_evicted": null,
       "evidence_session_ids": [
@@ -595,7 +595,7 @@
     },
     {
       "category": "cross_agent_propagation",
-      "elapsed_seconds": 1.797,
+      "elapsed_seconds": 1.793,
       "error": null,
       "evidence_evicted": null,
       "evidence_session_ids": [
@@ -621,7 +621,7 @@
     },
     {
       "category": "cross_agent_propagation",
-      "elapsed_seconds": 1.493,
+      "elapsed_seconds": 1.596,
       "error": null,
       "evidence_evicted": null,
       "evidence_session_ids": [
@@ -636,7 +636,7 @@
       ],
       "is_abstention": false,
       "layer": "structured",
-      "qa_answer": "The brand refresh brief was filed under the reference number DOC-4146-JH.",
+      "qa_answer": "The brand refresh brief was filed under reference number DOC-4146-JH.",
       "qa_correct": true,
       "question_id": "seq_cross_agent_000_q020_cross_agent_propagation",
       "question_type": "cross_agent_propagation",
@@ -649,7 +649,7 @@
     },
     {
       "category": "cross_agent_propagation",
-      "elapsed_seconds": 1.269,
+      "elapsed_seconds": 1.657,
       "error": null,
       "evidence_evicted": null,
       "evidence_session_ids": [
@@ -675,7 +675,7 @@
     },
     {
       "category": "cross_agent_propagation",
-      "elapsed_seconds": 1.436,
+      "elapsed_seconds": 1.713,
       "error": null,
       "evidence_evicted": null,
       "evidence_session_ids": [
@@ -688,7 +688,7 @@
       "exact_strings": [],
       "is_abstention": false,
       "layer": "structured",
-      "qa_answer": "The engineering agent produced the API design document.",
+      "qa_answer": "The API design document was produced by the engineering-agent.",
       "qa_correct": true,
       "question_id": "seq_cross_agent_000_q022_cross_agent_propagation",
       "question_type": "cross_agent_propagation",
@@ -701,7 +701,7 @@
     },
     {
       "category": "cross_agent_propagation",
-      "elapsed_seconds": 1.556,
+      "elapsed_seconds": 1.925,
       "error": null,
       "evidence_evicted": null,
       "evidence_session_ids": [
@@ -729,7 +729,7 @@
     },
     {
       "category": "cross_agent_propagation",
-      "elapsed_seconds": 1.268,
+      "elapsed_seconds": 1.64,
       "error": null,
       "evidence_evicted": null,
       "evidence_session_ids": [
@@ -755,10 +755,10 @@
     }
   ],
   "run": {
-    "git_commit": "04736f7960212883e1f851c735714fbcb8ff60d4",
+    "git_commit": "28912ca727011da682788ed39b322970e6349e08",
     "python": "3.11.13",
-    "started_at": "2026-07-09T23:42:42Z",
-    "wall_seconds": 49.92
+    "started_at": "2026-07-10T01:29:37Z",
+    "wall_seconds": 66.33
   },
   "schema_version": "1.0",
   "usage": {

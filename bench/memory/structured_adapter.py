@@ -220,6 +220,34 @@ class StructuredMemoryAdapter(MuxiMemoryAdapter):
         # as 0% exact-string recall on entity-attribute questions).
         items: List[RetrievedItem] = []
         by_turn: Dict[str, RetrievedItem] = {}
+        # Exact fact renderings already carried by each turn's item:
+        # substring checks against the concatenated text would be
+        # fragile (one fact's rendering can be a prefix of another's).
+        texts_by_turn: Dict[str, set] = {}
+
+        def _attach(turn_id: str, session_id: str, text: str, score: float) -> None:
+            existing = by_turn.get(turn_id)
+            if existing is None:
+                item = RetrievedItem(
+                    turn_id=turn_id,
+                    session_id=session_id,
+                    text=text,
+                    score=score,
+                    source="knowledge_graph",
+                )
+                by_turn[turn_id] = item
+                texts_by_turn[turn_id] = {text}
+                items.append(item)
+                return
+            # Several facts can share a provenance turn (an entity card
+            # and the relationship stated by the same utterance). The
+            # turn stays at its best rank, but its TEXT must carry
+            # every fact — dropping later facts starved the QA context
+            # of answers retrieval had already found.
+            if text not in texts_by_turn[turn_id]:
+                texts_by_turn[turn_id].add(text)
+                existing.text = f"{existing.text} | {text}"
+
         for entity in matched:
             attributes = dict(entity.get("attributes") or {})
             if not attributes:
@@ -228,17 +256,7 @@ class StructuredMemoryAdapter(MuxiMemoryAdapter):
             for session_id, turn_id in self._entity_provenance.get(_name_key(entity["name"]), [])[
                 :1
             ]:
-                if turn_id in by_turn:
-                    continue
-                item = RetrievedItem(
-                    turn_id=turn_id,
-                    session_id=session_id,
-                    text=text,
-                    score=float(entity.get("confidence") or 0.0),
-                    source="knowledge_graph",
-                )
-                by_turn[turn_id] = item
-                items.append(item)
+                _attach(turn_id, session_id, text, float(entity.get("confidence") or 0.0))
 
         relationships = await graph.storage.list_relationships(user_id, status=None, limit=1000)
         touching = [
@@ -259,26 +277,7 @@ class StructuredMemoryAdapter(MuxiMemoryAdapter):
                 attributes["status"] = status
             text = f"{from_name} -[{rel['type']}]-> {to_name}{_render_attributes(attributes)}"
             for session_id, turn_id in self._rel_provenance.get(key, []):
-                existing = by_turn.get(turn_id)
-                if existing is not None:
-                    # Several facts can share a provenance turn (an
-                    # entity card and the relationship stated by the
-                    # same utterance). The turn stays at its best rank,
-                    # but its TEXT must carry every fact — dropping the
-                    # relationship here starved the QA context of
-                    # answers retrieval had already found.
-                    if text not in existing.text:
-                        existing.text = f"{existing.text} | {text}"
-                    continue
-                item = RetrievedItem(
-                    turn_id=turn_id,
-                    session_id=session_id,
-                    text=text,
-                    score=float(rel["confidence"] or 0.0),
-                    source="knowledge_graph",
-                )
-                by_turn[turn_id] = item
-                items.append(item)
+                _attach(turn_id, session_id, text, float(rel["confidence"] or 0.0))
             if len(items) >= fetch_limit:
                 break
         return items[:fetch_limit]
