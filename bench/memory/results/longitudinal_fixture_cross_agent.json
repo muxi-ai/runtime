@@ -1,0 +1,794 @@
+{
+  "benchmark": "longitudinal",
+  "config": {
+    "fetch_limit": 25,
+    "flush_digest": false,
+    "formation_yaml": "bench/memory/formation/formation.yaml",
+    "ground_truth_ingestion": "manifest via apply_extraction (no LLM extraction; see README Tier 2)",
+    "max_embed_chars": 6000,
+    "mode": "structured",
+    "qa": true,
+    "structured_backends": [
+      "knowledge_graph",
+      "captains_log"
+    ],
+    "text_model": "openai/gpt-4o-mini",
+    "working_embedding_model": "local/nomic-ai/nomic-embed-text-v1.5"
+  },
+  "dataset": {
+    "cases": 1,
+    "fixture": true,
+    "path": "bench/memory/fixtures/longitudinal_sample.json",
+    "questions": 24,
+    "scenario_config": {
+      "artifact_sets": 2,
+      "filler_exchanges": 2,
+      "sessions": 16,
+      "span_days": 30
+    },
+    "sessions": 16
+  },
+  "k": 5,
+  "metrics": {
+    "artifacts": {
+      "expected": 8,
+      "orphan_names": [],
+      "orphans": 0,
+      "reachable": 8,
+      "zero_orphans_met": true
+    },
+    "contradiction_detection": null,
+    "exact_strings": {
+      "by_category": {
+        "cross_agent_propagation": {
+          "missed_question_ids": [],
+          "questions": 8,
+          "recall@5": 1.0,
+          "recall@fetch": 1.0
+        }
+      },
+      "overall": {
+        "missed_question_ids": [],
+        "questions": 8,
+        "recall@5": 1.0,
+        "recall@fetch": 1.0
+      }
+    },
+    "k": 5,
+    "propagation": {
+      "recall@5": 1.0,
+      "target": 0.8,
+      "target_met": true
+    },
+    "qa": {
+      "by_question_type": {
+        "cross_agent_propagation": {
+          "accuracy": 1.0,
+          "questions": 24
+        }
+      },
+      "overall": {
+        "accuracy": 1.0,
+        "questions": 24
+      }
+    },
+    "questions_abstention": 0,
+    "questions_errored": 0,
+    "questions_scored": 24,
+    "questions_total": 24,
+    "retrieval": {
+      "session_level": {
+        "by_question_type": {
+          "cross_agent_propagation": {
+            "coverage@5": 1.0,
+            "mrr": 1.0,
+            "questions": 24,
+            "recall@5": 1.0
+          }
+        },
+        "overall": {
+          "coverage@5": 1.0,
+          "mrr": 1.0,
+          "questions": 24,
+          "recall@5": 1.0
+        }
+      },
+      "turn_level": {
+        "by_question_type": {
+          "cross_agent_propagation": {
+            "coverage@5": 1.0,
+            "mrr": 1.0,
+            "questions": 24,
+            "recall@5": 1.0
+          }
+        },
+        "overall": {
+          "coverage@5": 1.0,
+          "mrr": 1.0,
+          "questions": 24,
+          "recall@5": 1.0
+        }
+      }
+    }
+  },
+  "mode": "cross_agent",
+  "results": [
+    {
+      "category": "cross_agent_propagation",
+      "elapsed_seconds": 1.835,
+      "error": null,
+      "evidence_evicted": null,
+      "evidence_session_ids": [
+        "seq_cross_agent_000_s001"
+      ],
+      "evidence_turn_ids": [
+        "seq_cross_agent_000_s001:0"
+      ],
+      "exact_string_rank": null,
+      "exact_strings": [],
+      "is_abstention": false,
+      "layer": "structured",
+      "qa_answer": "The market sizing memo was produced by the research-agent.",
+      "qa_correct": true,
+      "question_id": "seq_cross_agent_000_q001_cross_agent_propagation",
+      "question_type": "cross_agent_propagation",
+      "retrieved_session_ids": [
+        "seq_cross_agent_000_s001"
+      ],
+      "retrieved_turn_ids": [
+        "seq_cross_agent_000_s001:0"
+      ]
+    },
+    {
+      "category": "cross_agent_propagation",
+      "elapsed_seconds": 1.799,
+      "error": null,
+      "evidence_evicted": null,
+      "evidence_session_ids": [
+        "seq_cross_agent_000_s001"
+      ],
+      "evidence_turn_ids": [
+        "seq_cross_agent_000_s001:0"
+      ],
+      "exact_string_rank": 1,
+      "exact_strings": [
+        "DOC-3723-MR"
+      ],
+      "is_abstention": false,
+      "layer": "structured",
+      "qa_answer": "The market sizing memo was filed under reference number DOC-3723-MR.",
+      "qa_correct": true,
+      "question_id": "seq_cross_agent_000_q002_cross_agent_propagation",
+      "question_type": "cross_agent_propagation",
+      "retrieved_session_ids": [
+        "seq_cross_agent_000_s001"
+      ],
+      "retrieved_turn_ids": [
+        "seq_cross_agent_000_s001:0"
+      ]
+    },
+    {
+      "category": "cross_agent_propagation",
+      "elapsed_seconds": 1.56,
+      "error": null,
+      "evidence_evicted": null,
+      "evidence_session_ids": [
+        "seq_cross_agent_000_s001"
+      ],
+      "evidence_turn_ids": [
+        "seq_cross_agent_000_s001:2"
+      ],
+      "exact_string_rank": null,
+      "exact_strings": [],
+      "is_abstention": false,
+      "layer": "structured",
+      "qa_answer": "Owen Okafor recommended PostgreSQL for the pricing revamp.",
+      "qa_correct": true,
+      "question_id": "seq_cross_agent_000_q003_cross_agent_propagation",
+      "question_type": "cross_agent_propagation",
+      "retrieved_session_ids": [
+        "seq_cross_agent_000_s001"
+      ],
+      "retrieved_turn_ids": [
+        "seq_cross_agent_000_s001:2"
+      ]
+    },
+    {
+      "category": "cross_agent_propagation",
+      "elapsed_seconds": 2.52,
+      "error": null,
+      "evidence_evicted": null,
+      "evidence_session_ids": [
+        "seq_cross_agent_000_s002"
+      ],
+      "evidence_turn_ids": [
+        "seq_cross_agent_000_s002:0"
+      ],
+      "exact_string_rank": null,
+      "exact_strings": [],
+      "is_abstention": false,
+      "layer": "structured",
+      "qa_answer": "The Q3 revenue forecast was produced by the finance-agent.",
+      "qa_correct": true,
+      "question_id": "seq_cross_agent_000_q004_cross_agent_propagation",
+      "question_type": "cross_agent_propagation",
+      "retrieved_session_ids": [
+        "seq_cross_agent_000_s002"
+      ],
+      "retrieved_turn_ids": [
+        "seq_cross_agent_000_s002:0"
+      ]
+    },
+    {
+      "category": "cross_agent_propagation",
+      "elapsed_seconds": 1.628,
+      "error": null,
+      "evidence_evicted": null,
+      "evidence_session_ids": [
+        "seq_cross_agent_000_s002"
+      ],
+      "evidence_turn_ids": [
+        "seq_cross_agent_000_s002:0"
+      ],
+      "exact_string_rank": 1,
+      "exact_strings": [
+        "DOC-2528-NT"
+      ],
+      "is_abstention": false,
+      "layer": "structured",
+      "qa_answer": "The Q3 revenue forecast was filed under reference number DOC-2528-NT.",
+      "qa_correct": true,
+      "question_id": "seq_cross_agent_000_q005_cross_agent_propagation",
+      "question_type": "cross_agent_propagation",
+      "retrieved_session_ids": [
+        "seq_cross_agent_000_s002"
+      ],
+      "retrieved_turn_ids": [
+        "seq_cross_agent_000_s002:0"
+      ]
+    },
+    {
+      "category": "cross_agent_propagation",
+      "elapsed_seconds": 2.232,
+      "error": null,
+      "evidence_evicted": null,
+      "evidence_session_ids": [
+        "seq_cross_agent_000_s002"
+      ],
+      "evidence_turn_ids": [
+        "seq_cross_agent_000_s002:2"
+      ],
+      "exact_string_rank": null,
+      "exact_strings": [],
+      "is_abstention": false,
+      "layer": "structured",
+      "qa_answer": "Kai Rao recommended Clerk for the enterprise pipeline.",
+      "qa_correct": true,
+      "question_id": "seq_cross_agent_000_q006_cross_agent_propagation",
+      "question_type": "cross_agent_propagation",
+      "retrieved_session_ids": [
+        "seq_cross_agent_000_s002"
+      ],
+      "retrieved_turn_ids": [
+        "seq_cross_agent_000_s002:2"
+      ]
+    },
+    {
+      "category": "cross_agent_propagation",
+      "elapsed_seconds": 1.517,
+      "error": null,
+      "evidence_evicted": null,
+      "evidence_session_ids": [
+        "seq_cross_agent_000_s003"
+      ],
+      "evidence_turn_ids": [
+        "seq_cross_agent_000_s003:0"
+      ],
+      "exact_string_rank": null,
+      "exact_strings": [],
+      "is_abstention": false,
+      "layer": "structured",
+      "qa_answer": "The marketing agent produced the campaign performance report.",
+      "qa_correct": true,
+      "question_id": "seq_cross_agent_000_q007_cross_agent_propagation",
+      "question_type": "cross_agent_propagation",
+      "retrieved_session_ids": [
+        "seq_cross_agent_000_s003"
+      ],
+      "retrieved_turn_ids": [
+        "seq_cross_agent_000_s003:0"
+      ]
+    },
+    {
+      "category": "cross_agent_propagation",
+      "elapsed_seconds": 1.479,
+      "error": null,
+      "evidence_evicted": null,
+      "evidence_session_ids": [
+        "seq_cross_agent_000_s003"
+      ],
+      "evidence_turn_ids": [
+        "seq_cross_agent_000_s003:0"
+      ],
+      "exact_string_rank": 1,
+      "exact_strings": [
+        "DOC-8969-SF"
+      ],
+      "is_abstention": false,
+      "layer": "structured",
+      "qa_answer": "The campaign performance report was filed under the reference number DOC-8969-SF.",
+      "qa_correct": true,
+      "question_id": "seq_cross_agent_000_q008_cross_agent_propagation",
+      "question_type": "cross_agent_propagation",
+      "retrieved_session_ids": [
+        "seq_cross_agent_000_s003"
+      ],
+      "retrieved_turn_ids": [
+        "seq_cross_agent_000_s003:0"
+      ]
+    },
+    {
+      "category": "cross_agent_propagation",
+      "elapsed_seconds": 1.739,
+      "error": null,
+      "evidence_evicted": null,
+      "evidence_session_ids": [
+        "seq_cross_agent_000_s003"
+      ],
+      "evidence_turn_ids": [
+        "seq_cross_agent_000_s003:2"
+      ],
+      "exact_string_rank": null,
+      "exact_strings": [],
+      "is_abstention": false,
+      "layer": "structured",
+      "qa_answer": "Yuki Lindqvist recommended Stripe for the search revamp.",
+      "qa_correct": true,
+      "question_id": "seq_cross_agent_000_q009_cross_agent_propagation",
+      "question_type": "cross_agent_propagation",
+      "retrieved_session_ids": [
+        "seq_cross_agent_000_s003"
+      ],
+      "retrieved_turn_ids": [
+        "seq_cross_agent_000_s003:2"
+      ]
+    },
+    {
+      "category": "cross_agent_propagation",
+      "elapsed_seconds": 1.611,
+      "error": null,
+      "evidence_evicted": null,
+      "evidence_session_ids": [
+        "seq_cross_agent_000_s004"
+      ],
+      "evidence_turn_ids": [
+        "seq_cross_agent_000_s004:0"
+      ],
+      "exact_string_rank": null,
+      "exact_strings": [],
+      "is_abstention": false,
+      "layer": "structured",
+      "qa_answer": "The load test report was produced by the engineering agent.",
+      "qa_correct": true,
+      "question_id": "seq_cross_agent_000_q010_cross_agent_propagation",
+      "question_type": "cross_agent_propagation",
+      "retrieved_session_ids": [
+        "seq_cross_agent_000_s004"
+      ],
+      "retrieved_turn_ids": [
+        "seq_cross_agent_000_s004:0"
+      ]
+    },
+    {
+      "category": "cross_agent_propagation",
+      "elapsed_seconds": 1.636,
+      "error": null,
+      "evidence_evicted": null,
+      "evidence_session_ids": [
+        "seq_cross_agent_000_s004"
+      ],
+      "evidence_turn_ids": [
+        "seq_cross_agent_000_s004:0"
+      ],
+      "exact_string_rank": 1,
+      "exact_strings": [
+        "DOC-6310-PQ"
+      ],
+      "is_abstention": false,
+      "layer": "structured",
+      "qa_answer": "The load test report was filed under the reference number DOC-6310-PQ.",
+      "qa_correct": true,
+      "question_id": "seq_cross_agent_000_q011_cross_agent_propagation",
+      "question_type": "cross_agent_propagation",
+      "retrieved_session_ids": [
+        "seq_cross_agent_000_s004"
+      ],
+      "retrieved_turn_ids": [
+        "seq_cross_agent_000_s004:0"
+      ]
+    },
+    {
+      "category": "cross_agent_propagation",
+      "elapsed_seconds": 1.675,
+      "error": null,
+      "evidence_evicted": null,
+      "evidence_session_ids": [
+        "seq_cross_agent_000_s004"
+      ],
+      "evidence_turn_ids": [
+        "seq_cross_agent_000_s004:2"
+      ],
+      "exact_string_rank": null,
+      "exact_strings": [],
+      "is_abstention": false,
+      "layer": "structured",
+      "qa_answer": "Mara Nakamura recommended Kafka for the partner program.",
+      "qa_correct": true,
+      "question_id": "seq_cross_agent_000_q012_cross_agent_propagation",
+      "question_type": "cross_agent_propagation",
+      "retrieved_session_ids": [
+        "seq_cross_agent_000_s004"
+      ],
+      "retrieved_turn_ids": [
+        "seq_cross_agent_000_s004:2"
+      ]
+    },
+    {
+      "category": "cross_agent_propagation",
+      "elapsed_seconds": 1.509,
+      "error": null,
+      "evidence_evicted": null,
+      "evidence_session_ids": [
+        "seq_cross_agent_000_s005"
+      ],
+      "evidence_turn_ids": [
+        "seq_cross_agent_000_s005:0"
+      ],
+      "exact_string_rank": null,
+      "exact_strings": [],
+      "is_abstention": false,
+      "layer": "structured",
+      "qa_answer": "The research-agent produced the competitor teardown.",
+      "qa_correct": true,
+      "question_id": "seq_cross_agent_000_q013_cross_agent_propagation",
+      "question_type": "cross_agent_propagation",
+      "retrieved_session_ids": [
+        "seq_cross_agent_000_s005"
+      ],
+      "retrieved_turn_ids": [
+        "seq_cross_agent_000_s005:0"
+      ]
+    },
+    {
+      "category": "cross_agent_propagation",
+      "elapsed_seconds": 1.991,
+      "error": null,
+      "evidence_evicted": null,
+      "evidence_session_ids": [
+        "seq_cross_agent_000_s005"
+      ],
+      "evidence_turn_ids": [
+        "seq_cross_agent_000_s005:0"
+      ],
+      "exact_string_rank": 1,
+      "exact_strings": [
+        "DOC-1450-NX"
+      ],
+      "is_abstention": false,
+      "layer": "structured",
+      "qa_answer": "The competitor teardown was filed under the reference number DOC-1450-NX.",
+      "qa_correct": true,
+      "question_id": "seq_cross_agent_000_q014_cross_agent_propagation",
+      "question_type": "cross_agent_propagation",
+      "retrieved_session_ids": [
+        "seq_cross_agent_000_s005"
+      ],
+      "retrieved_turn_ids": [
+        "seq_cross_agent_000_s005:0"
+      ]
+    },
+    {
+      "category": "cross_agent_propagation",
+      "elapsed_seconds": 1.466,
+      "error": null,
+      "evidence_evicted": null,
+      "evidence_session_ids": [
+        "seq_cross_agent_000_s005"
+      ],
+      "evidence_turn_ids": [
+        "seq_cross_agent_000_s005:2"
+      ],
+      "exact_string_rank": null,
+      "exact_strings": [],
+      "is_abstention": false,
+      "layer": "structured",
+      "qa_answer": "Petra Silva recommended Terraform for the pricing revamp.",
+      "qa_correct": true,
+      "question_id": "seq_cross_agent_000_q015_cross_agent_propagation",
+      "question_type": "cross_agent_propagation",
+      "retrieved_session_ids": [
+        "seq_cross_agent_000_s005"
+      ],
+      "retrieved_turn_ids": [
+        "seq_cross_agent_000_s005:2"
+      ]
+    },
+    {
+      "category": "cross_agent_propagation",
+      "elapsed_seconds": 1.452,
+      "error": null,
+      "evidence_evicted": null,
+      "evidence_session_ids": [
+        "seq_cross_agent_000_s006"
+      ],
+      "evidence_turn_ids": [
+        "seq_cross_agent_000_s006:0"
+      ],
+      "exact_string_rank": null,
+      "exact_strings": [],
+      "is_abstention": false,
+      "layer": "structured",
+      "qa_answer": "The budget variance report was produced by the finance-agent.",
+      "qa_correct": true,
+      "question_id": "seq_cross_agent_000_q016_cross_agent_propagation",
+      "question_type": "cross_agent_propagation",
+      "retrieved_session_ids": [
+        "seq_cross_agent_000_s006"
+      ],
+      "retrieved_turn_ids": [
+        "seq_cross_agent_000_s006:0"
+      ]
+    },
+    {
+      "category": "cross_agent_propagation",
+      "elapsed_seconds": 1.752,
+      "error": null,
+      "evidence_evicted": null,
+      "evidence_session_ids": [
+        "seq_cross_agent_000_s006"
+      ],
+      "evidence_turn_ids": [
+        "seq_cross_agent_000_s006:0"
+      ],
+      "exact_string_rank": 1,
+      "exact_strings": [
+        "DOC-9594-JC"
+      ],
+      "is_abstention": false,
+      "layer": "structured",
+      "qa_answer": "The budget variance report was filed under the reference number DOC-9594-JC.",
+      "qa_correct": true,
+      "question_id": "seq_cross_agent_000_q017_cross_agent_propagation",
+      "question_type": "cross_agent_propagation",
+      "retrieved_session_ids": [
+        "seq_cross_agent_000_s006"
+      ],
+      "retrieved_turn_ids": [
+        "seq_cross_agent_000_s006:0"
+      ]
+    },
+    {
+      "category": "cross_agent_propagation",
+      "elapsed_seconds": 2.514,
+      "error": null,
+      "evidence_evicted": null,
+      "evidence_session_ids": [
+        "seq_cross_agent_000_s006"
+      ],
+      "evidence_turn_ids": [
+        "seq_cross_agent_000_s006:2"
+      ],
+      "exact_string_rank": null,
+      "exact_strings": [],
+      "is_abstention": false,
+      "layer": "structured",
+      "qa_answer": "Amara Mensah recommended Snowflake for the enterprise pipeline.",
+      "qa_correct": true,
+      "question_id": "seq_cross_agent_000_q018_cross_agent_propagation",
+      "question_type": "cross_agent_propagation",
+      "retrieved_session_ids": [
+        "seq_cross_agent_000_s006"
+      ],
+      "retrieved_turn_ids": [
+        "seq_cross_agent_000_s006:2"
+      ]
+    },
+    {
+      "category": "cross_agent_propagation",
+      "elapsed_seconds": 1.793,
+      "error": null,
+      "evidence_evicted": null,
+      "evidence_session_ids": [
+        "seq_cross_agent_000_s007"
+      ],
+      "evidence_turn_ids": [
+        "seq_cross_agent_000_s007:0"
+      ],
+      "exact_string_rank": null,
+      "exact_strings": [],
+      "is_abstention": false,
+      "layer": "structured",
+      "qa_answer": "The brand refresh brief was produced by the marketing agent.",
+      "qa_correct": true,
+      "question_id": "seq_cross_agent_000_q019_cross_agent_propagation",
+      "question_type": "cross_agent_propagation",
+      "retrieved_session_ids": [
+        "seq_cross_agent_000_s007"
+      ],
+      "retrieved_turn_ids": [
+        "seq_cross_agent_000_s007:0"
+      ]
+    },
+    {
+      "category": "cross_agent_propagation",
+      "elapsed_seconds": 1.596,
+      "error": null,
+      "evidence_evicted": null,
+      "evidence_session_ids": [
+        "seq_cross_agent_000_s007"
+      ],
+      "evidence_turn_ids": [
+        "seq_cross_agent_000_s007:0"
+      ],
+      "exact_string_rank": 1,
+      "exact_strings": [
+        "DOC-4146-JH"
+      ],
+      "is_abstention": false,
+      "layer": "structured",
+      "qa_answer": "The brand refresh brief was filed under reference number DOC-4146-JH.",
+      "qa_correct": true,
+      "question_id": "seq_cross_agent_000_q020_cross_agent_propagation",
+      "question_type": "cross_agent_propagation",
+      "retrieved_session_ids": [
+        "seq_cross_agent_000_s007"
+      ],
+      "retrieved_turn_ids": [
+        "seq_cross_agent_000_s007:0"
+      ]
+    },
+    {
+      "category": "cross_agent_propagation",
+      "elapsed_seconds": 1.657,
+      "error": null,
+      "evidence_evicted": null,
+      "evidence_session_ids": [
+        "seq_cross_agent_000_s007"
+      ],
+      "evidence_turn_ids": [
+        "seq_cross_agent_000_s007:2"
+      ],
+      "exact_string_rank": null,
+      "exact_strings": [],
+      "is_abstention": false,
+      "layer": "structured",
+      "qa_answer": "Owen Okafor recommended Redis for the search revamp.",
+      "qa_correct": true,
+      "question_id": "seq_cross_agent_000_q021_cross_agent_propagation",
+      "question_type": "cross_agent_propagation",
+      "retrieved_session_ids": [
+        "seq_cross_agent_000_s007"
+      ],
+      "retrieved_turn_ids": [
+        "seq_cross_agent_000_s007:2"
+      ]
+    },
+    {
+      "category": "cross_agent_propagation",
+      "elapsed_seconds": 1.713,
+      "error": null,
+      "evidence_evicted": null,
+      "evidence_session_ids": [
+        "seq_cross_agent_000_s008"
+      ],
+      "evidence_turn_ids": [
+        "seq_cross_agent_000_s008:0"
+      ],
+      "exact_string_rank": null,
+      "exact_strings": [],
+      "is_abstention": false,
+      "layer": "structured",
+      "qa_answer": "The API design document was produced by the engineering-agent.",
+      "qa_correct": true,
+      "question_id": "seq_cross_agent_000_q022_cross_agent_propagation",
+      "question_type": "cross_agent_propagation",
+      "retrieved_session_ids": [
+        "seq_cross_agent_000_s008"
+      ],
+      "retrieved_turn_ids": [
+        "seq_cross_agent_000_s008:0"
+      ]
+    },
+    {
+      "category": "cross_agent_propagation",
+      "elapsed_seconds": 1.925,
+      "error": null,
+      "evidence_evicted": null,
+      "evidence_session_ids": [
+        "seq_cross_agent_000_s008"
+      ],
+      "evidence_turn_ids": [
+        "seq_cross_agent_000_s008:0"
+      ],
+      "exact_string_rank": 1,
+      "exact_strings": [
+        "DOC-1058-MM"
+      ],
+      "is_abstention": false,
+      "layer": "structured",
+      "qa_answer": "The API design document was filed under reference number DOC-1058-MM.",
+      "qa_correct": true,
+      "question_id": "seq_cross_agent_000_q023_cross_agent_propagation",
+      "question_type": "cross_agent_propagation",
+      "retrieved_session_ids": [
+        "seq_cross_agent_000_s008"
+      ],
+      "retrieved_turn_ids": [
+        "seq_cross_agent_000_s008:0"
+      ]
+    },
+    {
+      "category": "cross_agent_propagation",
+      "elapsed_seconds": 1.64,
+      "error": null,
+      "evidence_evicted": null,
+      "evidence_session_ids": [
+        "seq_cross_agent_000_s008"
+      ],
+      "evidence_turn_ids": [
+        "seq_cross_agent_000_s008:2"
+      ],
+      "exact_string_rank": null,
+      "exact_strings": [],
+      "is_abstention": false,
+      "layer": "structured",
+      "qa_answer": "Kai Rao recommended Temporal for the partner program.",
+      "qa_correct": true,
+      "question_id": "seq_cross_agent_000_q024_cross_agent_propagation",
+      "question_type": "cross_agent_propagation",
+      "retrieved_session_ids": [
+        "seq_cross_agent_000_s008"
+      ],
+      "retrieved_turn_ids": [
+        "seq_cross_agent_000_s008:2"
+      ]
+    }
+  ],
+  "run": {
+    "git_commit": "28912ca727011da682788ed39b322970e6349e08",
+    "python": "3.11.13",
+    "started_at": "2026-07-10T01:29:37Z",
+    "wall_seconds": 66.33
+  },
+  "schema_version": "1.0",
+  "usage": {
+    "cost": {
+      "estimated_usd": 0.001305,
+      "note": "List-price estimate for reporting only; local/* models are free.",
+      "per_model_usd": {
+        "openai/gpt-4o-mini": 0.001305
+      },
+      "unpriced_models": []
+    },
+    "ingested_turns": 8,
+    "llm_requests": 48,
+    "searches": 24,
+    "tokens": {
+      "in": 7280,
+      "out": 355,
+      "total": 7635,
+      "total_cached": 0
+    },
+    "tokens_by_model": {
+      "openai/gpt-4o-mini": [
+        7635,
+        7280,
+        355,
+        0,
+        0,
+        0
+      ]
+    },
+    "truncated_turns": 0
+  }
+}

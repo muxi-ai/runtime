@@ -11,11 +11,13 @@ Implements the memory benchmarking PRD
   categories no published system benchmarks (KG relationship recall,
   temporal validity, narrative recall, cross-agent knowledge,
   contradiction detection). See "Tier 2" below.
+- **Tier 3** — multi-session longitudinal: 30-90 day corpora proving
+  buffer-eviction compensation, cross-agent propagation, multi-user
+  isolation, and contradiction detection over time. See "Tier 3"
+  below.
 - **Tier 4** — cost efficiency: tokens-per-accurate-recall, cost per
   1,000 queries, retrieval latency percentiles under load, memory
   footprint. See "Tier 4" below.
-- **Tier 3** (longitudinal) is NOT implemented here yet — see the
-  "Tier 3 seam" section.
 
 ## Tier 1: what it measures
 
@@ -194,28 +196,98 @@ hardware-bound; compare runs on the same machine.
 Pricing lives in `pricing.json` (USD per 1M tokens) — update it as
 providers change list prices; every report echoes the table it used.
 
-## Tier 3 seam (not yet implemented)
+## Tier 3: multi-session longitudinal
 
-The longitudinal benchmark (30-90 day corpora, FIFO buffer-cycling
-compensation, multi-user isolation, cross-agent propagation over
-time) depends on the memory-substrate rebuild that is in flight. The
-seams left for it:
+Simulates 30-90 days of usage across users and agents. The corpus
+comes from the "MemBench Generator" (`longitudinal_corpus.py` —
+seeded, fully deterministic, no LLM), one sub-corpus per PRD scenario:
 
-- `structured_corpus.py` already generates dated, agent-attributed
-  sessions from a deterministic event schedule — the longitudinal
-  generator extends that schedule to 30-90 days and multiple users.
-- `structured` mode ingests ground truth via `apply_extraction`;
-  Tier 3 replays turns through `process_conversation_turn` instead,
-  measuring the full extraction pipeline end-to-end.
-- The report schema (partial-run envelope, per-category blocks)
-  carries over unchanged.
+| Scenario | Proves | PRD target |
+|----------|--------|-----------|
+| `buffer_cycle` (A) | KG + Captain's Log answer day-1 questions at day-30, after the source turns were FIFO-evicted from the buffer | evicted-fact R@5 >= 85%, zero lost decisions |
+| `cross_agent` (B) | Knowledge produced in one agent's sessions is answerable via another agent | R@5 >= 80%, zero artifact orphans |
+| `isolation` (C) | User A's memory never surfaces in user B's retrieval | 0 leaks (pass/fail) |
+| `contradiction` (D) | Conflicting facts across sessions are flagged (conflicted) or superseded, not merged | precision >= 90%, recall >= 80% |
+
+```bash
+# Committed fixture (CI-safe; retrieval-only runs are $0)
+uv run python -m bench.memory.longitudinal_runner --fixture
+uv run python -m bench.memory.longitudinal_runner --fixture --scenario buffer_cycle --qa
+
+# Full corpus (PRD scale: 30-day corpora, 100 isolation users,
+# 10,000 isolation retrieval operations)
+uv run python -m bench.memory.longitudinal_corpus --preset full \
+    --output ~/datasets/membench/longitudinal_full.json
+uv run python -m bench.memory.longitudinal_runner \
+    --dataset ~/datasets/membench/longitudinal_full.json
+```
+
+How each scenario runs (all against the real services, no mocks):
+
+- **A — buffer cycle.** Raw turns are replayed into the real working
+  memory under a small budget (`--buffer-max-mb`, default 0.4MB), and
+  the buffer's own FIFO cleanup runs once per ingested session
+  (benchmark time is compressed; production runs the same pass on a
+  wall-clock interval). That is exactly the path the pre-compaction
+  flush (memory-revamp Phase 3) guards: the runner counts flush
+  hand-offs, and `--flush-digest` additionally lets the silent-turn
+  digest make its real LLM calls (default off: deterministic, $0).
+  The persisted layers get the ground-truth manifest (Tier 2 style —
+  structured recall isolated from extraction quality), questions run
+  against both layers, and the report shows the compensation story:
+  working-baseline R@5 on evicted questions (expected ~0) vs
+  structured R@5, plus a `recent_recall` control group and the
+  zero-lost-decisions audit. `evidence_evicted_fraction` must be 1.0
+  for the scenario to prove anything — below that, raise the corpus
+  size or lower the budget.
+- **B — cross-agent.** Facts and artifacts enter the KG/log from each
+  agent's sessions; every question's evidence lives in a different
+  agent's session than the one nominally asking (`question_meta` in
+  the ground truth records the pair). The zero-orphan audit checks
+  every artifact is reachable in the KG (entity + `produced` edge).
+- **C — isolation.** Every user's corpus is ingested side by side
+  (working + persistent + KG + log; nothing is cleared between
+  users) and follows identical fact templates, differing only in
+  values — so a scoping bug would make another user's near-identical
+  turn the nearest neighbor. Retrieval operations (vector search, KG
+  reads, log reads, cycled to `--isolation-ops`) are audited for
+  foreign `CANARY-*` tokens and foreign session ids. Pass/fail.
+- **D — contradiction over time.** The manifest is replayed
+  per-session, in corpus order, through the live `store_extraction`
+  path with per-fact confidences — the storage layer's contradiction
+  detection fires exactly as in production (confidence delta above
+  0.3 supersedes; otherwise both facts are flagged conflicted), and
+  the event substrate records `fact.contradicted` audit events. The
+  audit measures precision/recall against the injected pairs plus
+  detection-kind accuracy, tallies the substrate events, then
+  rebuilds the knowledge-graph projection from the event log
+  (service layer, same path as the rebuild endpoint) and repeats the
+  audit — `rebuild.consistent_with_live` proves replay determinism.
+  Precision distractors (duplicate re-assertions, non-exclusive
+  predicate changes) are injected and must NOT be flagged.
+
+One process per scenario: `--scenario all` (the default) spawns a
+subprocess per scenario because the runtime's database manager is a
+process-level singleton — two formations in one process would share
+the first run's SQLite path. Reports land one-per-scenario under
+`results/` (`longitudinal_fixture_<scenario>.json`).
+
+The full LLM-extraction replay (raw turns through
+`process_conversation_turn`, measuring extraction quality end-to-end
+rather than structured recall) remains out of scope here: one LLM
+call per turn turns a $0 deterministic run into a multi-dollar
+nondeterministic one. The per-session `store_extraction` replay in
+Scenario D is the same write path with the extraction step supplied
+by the manifest.
 
 ## Datasets and licensing
 
 The committed files under `fixtures/` are small **synthetic** samples
 that follow each dataset's published schema — no third-party data is
-committed (`structured_recall_sample.json` is MUXI's own generated
-dataset, regenerable with `structured_corpus.py --preset fixture`).
+committed (`structured_recall_sample.json` and
+`longitudinal_sample.json` are MUXI's own generated datasets,
+regenerable with `structured_corpus.py --preset fixture` and
+`longitudinal_corpus.py --preset fixture`).
 The full third-party datasets are for local benchmarking only:
 
 | Dataset     | Source                                        | License |
@@ -271,6 +343,11 @@ bench/memory/
 ├── structured_adapter.py        # Tier 2 adapter (KG + Captain's Log mode)
 ├── structured_scoring.py        # Exact-string recall + contradiction metrics
 ├── structured_recall_runner.py  # Tier 2 entry point (K=5, 4 modes)
+├── longitudinal_corpus.py       # Tier 3 "MemBench Generator" (4 scenarios, seeded)
+├── longitudinal_dataset.py      # Tier 3 dataset loader (+ scenario manifests)
+├── longitudinal_adapter.py      # Tier 3 adapter (buffer cycling, audits, rebuild)
+├── longitudinal_scoring.py      # Tier 3 scenario aggregates (targets, leaks)
+├── longitudinal_runner.py       # Tier 3 entry point (one report per scenario)
 ├── cost_model.py                # Tier 4 math (percentiles, projections)
 ├── cost_runner.py               # Tier 4 entry point (latency/tokens/footprint)
 ├── pricing.json                 # Updatable per-model price table (USD/MTok)
@@ -281,5 +358,6 @@ bench/memory/
 ```
 
 Unit tests: `tests/unit/bench_memory/` (loaders, metrics, split,
-report, adapter logic, corpus generator determinism, cost-model math —
+report, adapter logic, corpus generator determinism, longitudinal
+scenario aggregates, cost-model math —
 `uv run python -m pytest tests/unit/bench_memory/`).

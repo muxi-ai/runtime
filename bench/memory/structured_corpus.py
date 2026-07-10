@@ -27,11 +27,11 @@ produce byte-identical dataset files. No LLM is involved; the PRD's
 "automated generation layer" (LLM-expanded questions validated by
 human review) can extend this corpus later without replacing it.
 
-Tier 3 seam: the longitudinal benchmark (30-90 day corpora, buffer
-cycling, multi-user isolation) builds on the same event-scheduling
-skeleton — sessions here already carry real dates and per-agent
-attribution — but requires the memory-substrate rebuild to land
-first. See bench/memory/README.md ("Tier 3").
+Tier 3: the longitudinal benchmark (30-90 day corpora, buffer
+cycling, multi-user isolation) builds on this module's dated,
+agent-attributed session skeleton — see
+:mod:`bench.memory.longitudinal_corpus`, which imports the shared
+pools and ground-truth dataclasses from here.
 
 CLI
 ---
