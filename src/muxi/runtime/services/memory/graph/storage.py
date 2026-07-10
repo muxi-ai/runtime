@@ -190,15 +190,25 @@ class KnowledgeGraphStorage:
         entity_type: Optional[str] = None,
         status: Optional[str] = STATUS_ACTIVE,
         limit: int = 100,
+        after_id: Optional[int] = None,
     ) -> List[Dict[str, Any]]:
-        """List entities for a user, newest first."""
+        """List entities for a user, newest first.
+
+        ``after_id`` switches to keyset pagination: rows with id greater
+        than the cursor, oldest first (the legacy backfill's stable
+        multi-pass scan ordering).
+        """
         async with self.db_manager.get_async_session() as session:
             stmt = select(KGEntity).filter_by(user_id=str(user_id), formation_id=self.formation_id)
             if entity_type:
                 stmt = stmt.filter_by(type=normalize_type(entity_type))
             if status:
                 stmt = stmt.filter_by(status=status)
-            stmt = stmt.order_by(KGEntity.id.desc()).limit(limit)
+            if after_id is not None:
+                stmt = stmt.filter(KGEntity.id > after_id).order_by(KGEntity.id.asc())
+            else:
+                stmt = stmt.order_by(KGEntity.id.desc())
+            stmt = stmt.limit(limit)
             rows = (await session.execute(stmt)).scalars().all()
             return [row.to_dict() for row in rows]
 
@@ -349,8 +359,14 @@ class KnowledgeGraphStorage:
         to_entity_id: Optional[int] = None,
         status: Optional[str] = STATUS_ACTIVE,
         limit: int = 200,
+        after_id: Optional[int] = None,
     ) -> List[Dict[str, Any]]:
-        """List relationships for a user, highest confidence first."""
+        """List relationships for a user, highest confidence first.
+
+        ``after_id`` switches to keyset pagination: rows with id greater
+        than the cursor, oldest first (the legacy backfill's stable
+        multi-pass scan ordering).
+        """
         async with self.db_manager.get_async_session() as session:
             stmt = select(KGRelationship).filter_by(
                 user_id=str(user_id), formation_id=self.formation_id
@@ -363,7 +379,10 @@ class KnowledgeGraphStorage:
                 stmt = stmt.filter_by(to_entity_id=to_entity_id)
             if status:
                 stmt = stmt.filter_by(status=status)
-            stmt = stmt.order_by(KGRelationship.confidence.desc(), KGRelationship.id.desc())
+            if after_id is not None:
+                stmt = stmt.filter(KGRelationship.id > after_id).order_by(KGRelationship.id.asc())
+            else:
+                stmt = stmt.order_by(KGRelationship.confidence.desc(), KGRelationship.id.desc())
             stmt = stmt.limit(limit)
             rows = (await session.execute(stmt)).scalars().all()
             return [row.to_dict() for row in rows]

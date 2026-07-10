@@ -15,6 +15,7 @@ Key Features:
 """
 
 import os
+import threading
 from contextlib import asynccontextmanager
 from typing import Any, Dict, Optional
 from urllib.parse import urlparse
@@ -28,6 +29,40 @@ from . import observability
 
 # Create a shared base for all MUXI models
 Base = declarative_base()
+
+
+def _resolve_connection_string(connection_string: Optional[str]) -> str:
+    """
+    Resolve a connection string to its canonical form.
+
+    Explicit strings are returned as-is, except bare SQLite file paths
+    (e.g. "memory/muxi.db") which are normalized to "sqlite:///" URLs so
+    equivalent spellings resolve to the same registry key. When no string
+    is provided, falls back to environment variables and finally to a
+    SQLite database in the memory directory.
+
+    Returns:
+        str: The resolved database connection string.
+    """
+    if connection_string:
+        if "://" not in connection_string and connection_string.endswith(".db"):
+            return f"sqlite:///{connection_string}"
+        return connection_string
+
+    # Try environment variables
+    postgres_url = os.getenv("POSTGRES_DATABASE_URL")
+    if postgres_url:
+        return postgres_url
+
+    # Try SQLite environment variable
+    sqlite_path = os.getenv("SQLITE_DATABASE_PATH")
+    if sqlite_path:
+        return f"sqlite:///{sqlite_path}"
+
+    # Default to SQLite in memory directory
+    memory_dir = get_memory_dir()
+    default_path = f"{memory_dir}/muxi.db"
+    return f"sqlite:///{default_path}"
 
 
 class AsyncModelMixin:
@@ -220,23 +255,7 @@ class DatabaseManager:
         Returns:
             str: The resolved database connection string.
         """
-        if connection_string:
-            return connection_string
-
-        # Try environment variables
-        postgres_url = os.getenv("POSTGRES_DATABASE_URL")
-        if postgres_url:
-            return postgres_url
-
-        # Try SQLite environment variable
-        sqlite_path = os.getenv("SQLITE_DATABASE_PATH")
-        if sqlite_path:
-            return f"sqlite:///{sqlite_path}"
-
-        # Default to SQLite in memory directory
-        memory_dir = get_memory_dir()
-        default_path = f"{memory_dir}/muxi.db"
-        return f"sqlite:///{default_path}"
+        return _resolve_connection_string(connection_string)
 
     def _detect_database_type(self, connection_string: str) -> str:
         """
@@ -533,10 +552,19 @@ class DatabaseManager:
             )
             raise
 
+    def _evict_from_registry(self) -> None:
+        # A closed manager must not be served to future get_database_manager
+        # callers (its engines are disposed); evict only if the registry entry
+        # is this exact instance -- private managers are never registered.
+        with _db_managers_lock:
+            if _db_managers.get(self.connection_string) is self:
+                del _db_managers[self.connection_string]
+
     async def close_async(self) -> None:
         """
         Asynchronously disposes of the async database engine and releases associated resources.
         """
+        self._evict_from_registry()
         if self._async_engine is not None:
             await self._async_engine.dispose()
 
@@ -548,6 +576,7 @@ class DatabaseManager:
         based on the event loop state. In production, prefer using `close_async()`
         for asynchronous cleanup.
         """
+        self._evict_from_registry()
         if hasattr(self, "engine"):
             self.engine.dispose()
         if self._async_engine is not None:
@@ -572,74 +601,81 @@ class DatabaseManager:
                 pass
 
 
-# Global database manager instance (initialized on first use)
-_db_manager: Optional[DatabaseManager] = None
+# Database managers keyed by resolved connection string (initialized on first use).
+# Each formation resolves its own connection string, so managers are formation-scoped:
+# two formations loaded in one process get independent engines/paths, while the
+# components of a single formation (memory, scheduler, credentials) share one
+# manager and its connection pool.
+_db_managers: Dict[str, DatabaseManager] = {}
+
+# Guards the check-create-store sequence below: concurrent boot paths (e.g. two
+# formations loading on different threads) must not construct two managers for
+# the same connection string.
+_db_managers_lock = threading.Lock()
 
 
 def get_database_manager(
     connection_string: Optional[str] = None, statement_timeout_seconds: int = 30
 ) -> DatabaseManager:
     """
-    Get the global database manager instance (SINGLETON).
+    Get the shared database manager for a connection string.
 
-    **Important**: This function uses a module-level singleton. The FIRST call's parameters
-    are authoritative and will be used to initialize the DatabaseManager. Subsequent calls
-    with different parameters will be IGNORED and will return the existing instance.
-    A warning will be logged if parameters differ from the existing instance.
+    Managers are cached per resolved connection string, so repeated calls with
+    the same string (or with None, which resolves via environment variables or
+    the default SQLite path) return the same instance and share its connection
+    pool, while different connection strings get independent managers.
+
+    **Important**: The FIRST call for a given connection string is authoritative
+    for the remaining parameters. Subsequent calls for the same connection string
+    with a different statement_timeout_seconds will be IGNORED and will return
+    the existing instance; a warning is logged.
 
     Args:
-        connection_string: Optional connection string for initialization (only used on first call)
-        statement_timeout_seconds: Maximum time for individual SQL queries (default: 30, only used on first call)
+        connection_string: Optional connection string (None resolves via
+            environment variables or the default SQLite path)
+        statement_timeout_seconds: Maximum time for individual SQL queries
+            (default: 30, only used when creating the manager)
 
     Returns:
-        DatabaseManager instance (singleton)
+        DatabaseManager instance shared across callers using the same connection string
 
     Note:
-        If you need multiple DatabaseManager instances with different configurations,
-        create them directly using DatabaseManager() instead of this singleton function.
+        If you need a private DatabaseManager instance (e.g. with a different
+        timeout for an already-registered connection string), create it directly
+        using DatabaseManager() instead of this function.
     """
-    global _db_manager
+    key = _resolve_connection_string(connection_string)
+    with _db_managers_lock:
+        db_manager = _db_managers.get(key)
+        if db_manager is None:
+            db_manager = DatabaseManager(key, statement_timeout_seconds)
+            _db_managers[key] = db_manager
+            return db_manager
 
-    if _db_manager is None:
-        _db_manager = DatabaseManager(connection_string, statement_timeout_seconds)
-    else:
-        # Check if parameters differ from existing instance and log warning
-        params_differ = False
-        differences = []
+    if statement_timeout_seconds != db_manager.statement_timeout_seconds:
+        import logging
 
-        if connection_string is not None and connection_string != _db_manager.connection_string:
-            params_differ = True
-            differences.append(
-                f"connection_string (provided: {connection_string!r}, existing: {_db_manager.connection_string!r})"
-            )
+        logger = logging.getLogger(__name__)
+        logger.warning(
+            "get_database_manager called with different parameters than the existing "
+            "instance for this connection string. Using existing instance and IGNORING "
+            "new parameters. Differences: statement_timeout_seconds (provided: %s, existing: %s)",
+            statement_timeout_seconds,
+            db_manager.statement_timeout_seconds,
+        )
 
-        if statement_timeout_seconds != _db_manager.statement_timeout_seconds:
-            params_differ = True
-            differences.append(
-                f"statement_timeout_seconds (provided: {statement_timeout_seconds}, "
-                f"existing: {_db_manager.statement_timeout_seconds})"
-            )
-
-        if params_differ:
-            import logging
-
-            logger = logging.getLogger(__name__)
-            logger.warning(
-                "get_database_manager called with different parameters than existing instance. "
-                "Using existing instance and IGNORING new parameters. "
-                "Differences: %s",
-                ", ".join(differences),
-            )
-
-    return _db_manager
+    return db_manager
 
 
 def set_database_manager(db_manager: DatabaseManager) -> None:
     """
-    Set the global database manager instance.
+    Register a database manager for its connection string.
+
+    Subsequent get_database_manager() calls that resolve to the same
+    connection string return this instance.
 
     Args:
-        db_manager: DatabaseManager instance to set as global
+        db_manager: DatabaseManager instance to register
     """
-    global _db_manager
-    _db_manager = db_manager
+    with _db_managers_lock:
+        _db_managers[db_manager.connection_string] = db_manager

@@ -223,14 +223,16 @@ class TestMemoryProvenanceAndRebuild(BaseMemoryTest):
                 effective_user_id, "company", "LegacyCorp"
             )
             legacy_events = await memory_events.list_events(effective_user_id, source="legacy")
+            kg_backfill = backfill_report.get("knowledge_graph") or {}
             if (
-                backfill_report.get("knowledge_graph", 0) >= 1
+                kg_backfill.get("synthesized", 0) >= 1
+                and kg_backfill.get("complete") is True
                 and stamped["derived_from_event_ids"]
                 and legacy_events
             ):
                 print(
-                    f"  ✓ Backfill synthesized {backfill_report['knowledge_graph']} legacy "
-                    "event(s) and stamped provenance in place"
+                    f"  ✓ Backfill synthesized {kg_backfill['synthesized']} legacy "
+                    "event(s) (complete pass) and stamped provenance in place"
                 )
                 checks_passed.append("Backfill synthesizes legacy events")
             else:

@@ -2,6 +2,25 @@
 
 ## [unreleased]
 
+### Fixes
+
+- Hardened the memory event substrate's operational paths (#259 review
+  follow-ups): `project_pending` now applies events in bounded chunks
+  (`memory.projections.batch_size`, default 500) per projection-lock
+  acquisition, releasing the lock between chunks so long catch-up
+  batches never stall concurrent event-first writers (checkpoint per
+  chunk; no event skipped or re-applied across chunk boundaries, crash
+  between chunks resumes at the last boundary); the GDPR
+  `POST /memory/forget` endpoint now runs its projection rebuild as a
+  tracked background job by default (202 + `job_id` pollable at
+  `GET /memory/forget/{job_id}`; the soft delete still runs inline,
+  `background: false` or `?sync=true` keeps the blocking behavior); and
+  the legacy backfill's silent 100,000-row ceiling became a documented
+  per-pass bound with persisted resume cursors - tables of any size
+  backfill across multiple passes, and the report now returns
+  `{"synthesized": n, "complete": bool}` per projection so operators
+  know when another pass is needed.
+
 ### Memory ingestion maturation - tier heuristics, entity resolution, synthesis cadences
 
 Completes the memory-ingestion PRD's remaining scope on top of the
@@ -631,6 +650,20 @@ sandbox. No inner LLM loop, no orchestration, no new execution paths.
   degrades like any scripted skill when no RCE is configured.
 
 ### Fixes (#229, #231, #234, #235, #240, #241, #249, #269)
+### Performance: local embeddings on macOS (#258)
+
+The CoreML execution provider is now off by default on macOS for the
+local ONNX embedding models -- partition negotiation cost far more than
+it saved (observed: e2e p50 retrieval latency dropped ~27%) -- and the
+classifier warmup halves its embed calls. Set
+``ONELLM_COREML_DISABLED=false`` to opt back in.
+
+### Fixes (#229, #231, #234, #235, #240, #241, #249, #257)
+
+- Pytest-based e2e tests no longer inherit the unit-test 60-second
+  pytest-timeout through rootdir discovery: ``e2e/pytest.ini`` now owns
+  e2e ceilings (360s, thread method) -- this was the real cause of the
+  "ONNX load timeout" failures in area 15 (#257).
 
 - The e2e harness self-provisions the gitignored formation ``.key``
   symlinks (``e2e/provision_keys.py``, run automatically by

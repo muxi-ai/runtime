@@ -536,20 +536,26 @@ class Memobase:
         return await self.long_term_memory.delete_extracted_memories(external_user_id)
 
     async def list_extracted_orphan_memories(
-        self, external_user_id: Optional[str] = None
+        self,
+        external_user_id: Optional[str] = None,
+        limit: Optional[int] = None,
+        offset: Optional[int] = None,
     ) -> List[Dict[str, Any]]:
         """
         Extraction rows without event provenance (legacy backfill support).
 
-        Delegates to the wrapped LongTermMemory. Anonymous users store
-        nothing, so the call returns [] for them.
+        Delegates to the wrapped LongTermMemory (``limit`` / ``offset``
+        page the backfill's bounded multi-pass scan). Anonymous users
+        store nothing, so the call returns [] for them.
         """
         external_user_id = (
             external_user_id if external_user_id is not None else self.default_external_user_id
         )
         if external_user_id in ["default", "anonymous", "0"]:
             return []
-        return await self.long_term_memory.list_extracted_orphan_memories(external_user_id)
+        return await self.long_term_memory.list_extracted_orphan_memories(
+            external_user_id, limit=limit, offset=offset
+        )
 
     def clear_user_memory(self, external_user_id: Optional[str] = None) -> None:
         """
