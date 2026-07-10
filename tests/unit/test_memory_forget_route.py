@@ -13,6 +13,7 @@ job polling, and the substrate-unavailable 503.
 from __future__ import annotations
 
 import asyncio
+import time
 from types import SimpleNamespace
 
 import pytest
@@ -75,15 +76,22 @@ async def seed_two_sources(graph):
     await graph.store_extraction(USER, extraction("MailCorp"), source="gmail")
 
 
-def poll_until_terminal(client, job_id, attempts=50):
-    """Poll the forget job until it leaves 'processing' (each request
-    gives the shared test event loop cycles to run the job task)."""
-    for _ in range(attempts):
+def poll_until_terminal(client, job_id, deadline_seconds=30.0):
+    """Poll the forget job until it leaves 'processing'.
+
+    The job task runs on the TestClient portal loop (a separate thread),
+    so sleeping here does not starve it -- it gives the background rebuild
+    real wall-time. Sleep-less polling raced the job on loaded CI runners
+    and flaked with "never reached a terminal status".
+    """
+    deadline = time.monotonic() + deadline_seconds
+    while time.monotonic() < deadline:
         response = client.get(f"/memory/forget/{job_id}")
         assert response.status_code == 200
         data = response.json()["data"]
         if data["status"] != "processing":
             return data
+        time.sleep(0.05)
     raise AssertionError("forget job never reached a terminal status")
 
 
