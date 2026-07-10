@@ -1719,9 +1719,10 @@ class ChatOrchestrator:
 
         async def _fetch_graph_context() -> str:
             # Knowledge graph context injection (Memory Revamp Phase 1):
-            # strongest 1-hop facts plus multi-hop exploration when the
-            # message mentions a known entity. Failure-safe by contract
-            # (returns "" on any error or when the graph is empty).
+            # strongest 1-hop facts and entity attribute cards, plus
+            # multi-hop exploration when the message mentions a known
+            # entity. Failure-safe by contract (returns "" on any error
+            # or when the graph is empty).
             knowledge_graph = getattr(self.overlord, "knowledge_graph", None)
             if knowledge_graph and user_id is not None:
                 try:
@@ -1784,7 +1785,7 @@ class ChatOrchestrator:
             buffer_turns = context_pruner.prune_turns(user_id, session_id, buffer_turns)
 
         if graph_context:
-            graph_block = f"Known entity relationships:\n{graph_context}"
+            graph_block = f"Known entities and relationships:\n{graph_context}"
             user_profile_text = (
                 f"{user_profile_text}\n\n{graph_block}" if user_profile_text else graph_block
             )

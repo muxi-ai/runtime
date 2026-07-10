@@ -297,6 +297,89 @@ class TestQuerySurface:
         monkeypatch.setattr(service.storage, "list_relationships", broken)
         assert await service.get_context_block("u1") == ""
 
+    async def test_context_block_renders_entity_attributes(self, service):
+        storage = service.storage
+        user = await storage.upsert_entity(
+            "u1", "person", "User", attributes={"email": "jordan@automaze.io"}, confidence=0.95
+        )
+        acme = await storage.upsert_entity("u1", "company", "Acme", confidence=0.95)
+        await storage.upsert_relationship("u1", user["id"], acme["id"], "founded", confidence=0.95)
+
+        block = await service.get_context_block("u1")
+        lines = block.splitlines()
+        assert lines[0] == "User -[founded]-> Acme"  # relationship facts stay first
+        assert "User (person): email: jordan@automaze.io" in lines
+
+    async def test_context_block_attributes_without_relationships(self, service):
+        # An attribute-only graph must still surface its facts (the Tier 2
+        # bench gap: attribute facts were invisible in graph context).
+        await service.storage.upsert_entity(
+            "u1", "person", "User", attributes={"email": "jordan@automaze.io"}, confidence=0.95
+        )
+        block = await service.get_context_block("u1")
+        assert block == "User (person): email: jordan@automaze.io"
+
+    async def test_context_block_without_attributes_is_unchanged(self, service):
+        # Entities carrying no attributes add nothing: the block keeps the
+        # exact pre-attributes shape (no formatting churn downstream).
+        await self._seed(service)
+        block = await service.get_context_block("u1")
+        assert block.splitlines() == [
+            "User -[founded]-> Acme",
+            "Acme -[building]-> MUXI",
+        ]
+
+    async def test_context_block_attribute_budget_and_relevance(self, service):
+        storage = service.storage
+        user = await storage.upsert_entity(
+            "u1", "person", "User", attributes={"email": "a@b.c"}, confidence=0.95
+        )
+        acme = await storage.upsert_entity(
+            "u1", "company", "Acme", attributes={"industry": "robotics"}, confidence=0.9
+        )
+        await storage.upsert_relationship("u1", user["id"], acme["id"], "works_at", confidence=0.95)
+        for i in range(5):
+            await storage.upsert_entity(
+                "u1", "project", f"Project {i}", attributes={"code": f"P-{i}"}, confidence=0.5
+            )
+
+        block = await service.get_context_block("u1", limit=3)
+        attribute_lines = [line for line in block.splitlines() if "-[" not in line]
+        assert len(attribute_lines) == 3  # card budget mirrors the relationship budget
+        # Connected entities lead (relationship rank order) ...
+        assert attribute_lines[0].startswith("User (person):")
+        assert attribute_lines[1].startswith("Acme (company):")
+        # ... then the newest attribute-bearing entity from the scan.
+        assert attribute_lines[2].startswith("Project 4 (project):")
+
+    async def test_context_block_skips_internal_and_empty_attributes(self, service):
+        await service.storage.upsert_entity(
+            "u1",
+            "person",
+            "User",
+            attributes={"possible_duplicates": ["Jordan"], "nickname": "", "email": "a@b.c"},
+            confidence=0.95,
+        )
+        block = await service.get_context_block("u1")
+        assert block == "User (person): email: a@b.c"
+
+    async def test_context_block_clips_long_attribute_lines(self, service):
+        from muxi.runtime.services.memory.graph.service import MAX_ATTRIBUTE_LINE_CHARS
+
+        await service.storage.upsert_entity(
+            "u1", "document", "Spec", attributes={"summary": "x" * 500}, confidence=0.9
+        )
+        block = await service.get_context_block("u1")
+        assert len(block) == MAX_ATTRIBUTE_LINE_CHARS
+        assert block.endswith("...")
+
+    async def test_context_block_renders_list_attribute_values(self, service):
+        await service.storage.upsert_entity(
+            "u1", "person", "User", attributes={"aliases": ["Jordan", "J"]}, confidence=0.9
+        )
+        block = await service.get_context_block("u1")
+        assert block == "User (person): aliases: Jordan, J"
+
     async def test_explain_path_renders_edge_chain(self, service):
         await self._seed(service)
         rendered = await service.explain_path("u1", "User", "MUXI")

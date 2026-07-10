@@ -2,6 +2,24 @@
 
 ## [unreleased]
 
+### Fixes
+
+- Knowledge graph entity ATTRIBUTES now render in the graph context
+  block: facts stored on the entity itself (emails, roles, tracking
+  codes) were invisible to the LLM because ``get_context_block``
+  rendered relationships only (found by the Tier 2 structured-recall
+  benchmark). Attribute facts render as compact entity cards
+  (``Name (type): key: value; ...``) after the relationship lines,
+  most relevant entities first (relationship-connected, then newest),
+  budgeted like the relationship lines and hard-clipped per card;
+  entities without attributes render nothing, so attribute-free
+  graphs keep the exact prior format. The clarification analyzer's
+  recall-question memory gate also consults the knowledge graph, so
+  recall questions whose answer lives only on a KG entity reach the
+  agent instead of bouncing to a clarification prompt. The knowledge
+  index deliberately stays name-only (it is a ~300-token orientation
+  catalog; the graph context block carries the attribute values).
+
 ### Memory ingestion maturation - tier heuristics, entity resolution, synthesis cadences
 
 Completes the memory-ingestion PRD's remaining scope on top of the
