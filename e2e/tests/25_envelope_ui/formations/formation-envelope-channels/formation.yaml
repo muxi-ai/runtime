@@ -1,0 +1,60 @@
+schema: "1.0.0"
+id: "envelope-channels-test"
+description: "Formation for testing channel-native widget rendering (Response Envelope UI, P3)"
+
+llm:
+  api_keys:
+    openai: "${{ secrets.OPENAI_API_KEY }}"
+  models:
+    - text: "openai/gpt-4o-mini"
+    - embedding: "openai/text-embedding-3-small"
+
+runtime:
+  built_in_mcps: false
+  mcp_server_startup_timeout: 30
+
+agents:
+  - example_agent
+
+overlord:
+  workflow:
+    auto_decomposition: false
+
+# Dynamic mode allows multi-account clarification (the enumerable
+# interpretations that produce an options widget)
+user_credentials:
+  mode: "dynamic"
+
+mcp:
+  servers:
+    - github-mcp
+  max_tool_calls: 10
+  max_tool_iterations: 5
+
+memory:
+  working:
+    max_memory_mb: 1
+    fifo_interval_min: 5
+    vector_dimension: 1536
+    mode: "local"
+
+  buffer:
+    size: 50
+    multiplier: 10
+    vector_search: false
+
+  persistent:
+    connection_string: "${{ secrets.POSTGRES_URI }}"
+    embedding_model: "openai/text-embedding-3-small"
+
+server:
+  enabled: true
+  port: 18253
+  api_keys:
+    admin_key: envelope-admin-key
+    client_key: envelope-client-key
+
+logging:
+  system:
+    level: "error"
+    destination: "stdout"

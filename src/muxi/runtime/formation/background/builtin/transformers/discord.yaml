@@ -8,11 +8,24 @@
 # Discord renders markdown natively, so content passes through unchanged,
 # capped at Discord's 2000-character message limit.
 #
+# Envelope UI widgets (Response Envelope UI, P3): when the response
+# carries a `ui` array, `components` renders it as native message
+# components (`options` -> action rows of buttons whose custom_id
+# carries the reply callback, `action_link` -> link buttons). Without
+# widgets the placeholder resolves to None and the key is dropped, so
+# text-only deliveries stay byte-identical. The content always ships;
+# buttons are additive. Note: plain Discord webhooks cannot send
+# components -- the bridge must post via a bot/application endpoint to
+# surface them. Button presses arrive back as component interactions
+# -- point a trigger's `parse.ui_response` at `$.data.custom_id` to
+# complete the round trip.
+#
 # Shadow this template by placing transformers/discord.yaml in the formation.
 name: discord
 headers:
   Content-Type: application/json
 body:
   content: "${{ response.content }}"
+  components: "${{ ui.discord.components }}"
 content_transform:
   max_length: 2000

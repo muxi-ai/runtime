@@ -11,6 +11,15 @@
 # Markdown is stripped (Telegram's default parse mode renders plain text)
 # and messages are capped at Telegram's 4096-character limit.
 #
+# Envelope UI widgets (Response Envelope UI, P3): when the response
+# carries a `ui` array, `reply_markup` renders it as a native inline
+# keyboard (`options` -> callback buttons, `action_link` -> url
+# buttons). Without widgets the placeholder resolves to None and the
+# key is dropped, so text-only deliveries stay byte-identical. The
+# text always ships; buttons are additive. Button presses arrive back
+# as callback_query updates -- point a trigger's `parse.ui_response`
+# at `$.callback_query.data` to complete the round trip.
+#
 # Shadow this template by placing transformers/telegram.yaml in the formation.
 name: telegram
 headers:
@@ -18,6 +27,7 @@ headers:
 body:
   chat_id: "${{ context.chat_id }}"
   text: "${{ response.content }}"
+  reply_markup: "${{ ui.telegram.reply_markup }}"
 content_transform:
   format: text
   max_length: 4096

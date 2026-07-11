@@ -50,8 +50,34 @@ reference a bundled name are completely unaffected.
 Template values use the runtime-wide ``${{ ... }}`` syntax (the same syntax
 used by trigger templates and formation secrets interpolation). Available
 variables: ``response.content``, ``response.files``, ``response.metadata.*``,
-``request.message``, ``request.user_id``, ``request.files``, ``context.*``,
-``secrets.*``, ``agent.name``, and ``timestamp``.
+``response.ui``, ``request.message``, ``request.user_id``, ``request.files``,
+``context.*``, ``secrets.*``, ``agent.name``, ``timestamp``, and the
+channel-native widget renderings under ``ui.*`` (below).
+
+Envelope UI widgets (Response Envelope UI PRD, P3): when the response
+carries a ``ui`` array, the template namespace additionally exposes
+
+    response.ui                   the raw widget array (None when absent)
+    ui.telegram.reply_markup      Telegram inline_keyboard markup
+    ui.slack.blocks               Slack Block Kit blocks (text + buttons)
+    ui.discord.components         Discord message components
+
+Every ``ui.*`` entry is None when the response carries no widgets, and
+dict entries rendering to None are dropped (the ``thread_ts`` idiom), so
+a template line like ``reply_markup: "${{ ui.telegram.reply_markup }}"``
+is strictly additive: without widgets the delivered payload stays
+byte-identical to a template without the line. The text body always
+ships regardless — widgets augment the channel message, never replace
+it (the envelope's text-fallback duty).
+
+A channel button press re-enters through the channel's trigger route
+like any other platform payload: the trigger's ``parse:`` spec may
+declare ``ui_response: <path>`` pointing at the button's callback data
+(Telegram ``$.callback_query.data``, Slack ``$.actions[0].value``,
+Discord ``$.data.custom_id``). The extracted string is decoded from the
+``<widget_id>#<option_index>`` encoding (see ``datatypes.ui``) into the
+``{id, index}`` hint that rides the chat re-entry and hits the existing
+deterministic ``ui_response`` pinning.
 
 Triggers without frontmatter are completely unaffected: parsing returns the
 content unchanged and no transformer machinery is invoked.
@@ -90,7 +116,7 @@ _ALLOWED_FRONTMATTER_KEYS = {"name", "type", "webhook", "transformer", "parse", 
 # only, no URLs). Formation-local transformers/<name>.yaml shadows a bundled
 # template of the same name.
 BUILTIN_TRANSFORMERS_DIR = Path(__file__).parent / "builtin" / "transformers"
-_ALLOWED_PARSE_KEYS = {"message", "user_id", "context", "files"}
+_ALLOWED_PARSE_KEYS = {"message", "user_id", "context", "files", "ui_response"}
 
 
 # ---------------------------------------------------------------------------
@@ -190,7 +216,7 @@ def _validate_parse_spec(parse_spec: Any) -> None:
             f"unknown 'parse' key(s): {sorted(unknown)}. "
             f"Allowed keys: {sorted(_ALLOWED_PARSE_KEYS)}"
         )
-    for key in ("message", "user_id", "files"):
+    for key in ("message", "user_id", "files", "ui_response"):
         value = parse_spec.get(key)
         if value is not None and not isinstance(value, str):
             raise ValueError(f"'parse.{key}' must be a path string (e.g. '$.event.text')")
@@ -251,15 +277,27 @@ def extract_parse_values(parse_spec: Optional[Dict[str, Any]], data: Any) -> Dic
     """
     Extract request values from trigger data per the frontmatter ``parse:`` spec.
 
+    ``ui_response`` extracts the channel button callback string (e.g.
+    Telegram's ``$.callback_query.data``) and decodes the
+    ``<widget_id>#<option_index>`` encoding into a ``{id, index}``
+    reply hint. Callback payloads MUXI did not produce decode to None
+    — the message stands alone, exactly like an absent hint.
+
     Args:
         parse_spec: The (already validated) parse section, or None
         data: The raw trigger request data
 
     Returns:
-        Dict with keys: message, user_id, files, context
+        Dict with keys: message, user_id, files, context, ui_response
     """
     if not parse_spec:
-        return {"message": None, "user_id": None, "files": None, "context": {}}
+        return {
+            "message": None,
+            "user_id": None,
+            "files": None,
+            "context": {},
+            "ui_response": None,
+        }
 
     _validate_parse_spec(parse_spec)
 
@@ -283,7 +321,19 @@ def extract_parse_values(parse_spec: Optional[Dict[str, Any]], data: Any) -> Dic
     if parse_spec.get("files"):
         files = extract_path(data, parse_spec["files"])
 
-    return {"message": message, "user_id": user_id, "files": files, "context": context}
+    ui_response = None
+    if parse_spec.get("ui_response"):
+        from ...datatypes.ui import decode_ui_callback
+
+        ui_response = decode_ui_callback(extract_path(data, parse_spec["ui_response"]))
+
+    return {
+        "message": message,
+        "user_id": user_id,
+        "files": files,
+        "context": context,
+        "ui_response": ui_response,
+    }
 
 
 # ---------------------------------------------------------------------------
@@ -758,11 +808,191 @@ def extract_response_files(response: Any) -> List[Dict[str, Any]]:
     return []
 
 
+def extract_response_ui(response: Any) -> List[Dict[str, Any]]:
+    """
+    Extract envelope UI widgets from an agent response, when present.
+
+    Supports response dicts (a ``ui`` key) and objects exposing a ``ui``
+    attribute (MuxiResponse). Returns an empty list otherwise — the
+    common case, and the one that keeps every existing delivery
+    byte-identical.
+    """
+    if isinstance(response, dict):
+        widgets = response.get("ui")
+    else:
+        widgets = getattr(response, "ui", None)
+    if isinstance(widgets, list):
+        return [w for w in widgets if isinstance(w, dict)]
+    return []
+
+
+# ---------------------------------------------------------------------------
+# Channel-native widget rendering (Response Envelope UI PRD, P3)
+# ---------------------------------------------------------------------------
+#
+# The template substitution engine has no loops, so an options widget
+# cannot be unrolled into buttons by the template itself. These helpers
+# pre-compute the channel-native structures once per delivery; templates
+# opt in with a single whole-string placeholder (native dict/list
+# substitution) that resolves to None — and is therefore dropped from
+# the payload — when the response carries no widgets. The runtime still
+# renders nothing: these are payload shapes for the platform APIs the
+# bundled templates already speak, delivered through the developer's
+# bridge exactly like the text-only payloads before them.
+
+# Discord allows at most 5 action rows of 5 buttons each.
+_DISCORD_MAX_ROWS = 5
+_DISCORD_ROW_SIZE = 5
+
+# Slack Block Kit section text is capped at 3000 characters.
+_SLACK_SECTION_TEXT_MAX = 3000
+
+
+def _ui_option_buttons(widget: Dict[str, Any]) -> List[Tuple[str, str]]:
+    """Yield (label, callback_data) pairs for an options widget."""
+    from ...datatypes.ui import encode_ui_callback
+
+    widget_id = widget.get("id") or ""
+    buttons = []
+    for index, option in enumerate(widget.get("options") or []):
+        if not isinstance(option, dict):
+            continue
+        label = str(option.get("label") or option.get("value") or "")
+        if not label:
+            continue
+        buttons.append((label, encode_ui_callback(widget_id, index)))
+    return buttons
+
+
+def _ui_telegram_reply_markup(widgets: List[Dict[str, Any]]) -> Optional[Dict[str, Any]]:
+    """Render widgets as a Telegram ``InlineKeyboardMarkup`` object."""
+    rows: List[List[Dict[str, Any]]] = []
+    for widget in widgets:
+        if widget.get("type") == "options":
+            for label, callback_data in _ui_option_buttons(widget):
+                rows.append([{"text": label, "callback_data": callback_data}])
+        elif widget.get("type") == "action_link":
+            label = str(widget.get("label") or widget.get("url") or "")
+            url = widget.get("url")
+            if label and url:
+                rows.append([{"text": label, "url": url}])
+    if not rows:
+        return None
+    return {"inline_keyboard": rows}
+
+
+def _ui_slack_blocks(widgets: List[Dict[str, Any]], text: str) -> Optional[List[Dict[str, Any]]]:
+    """
+    Render widgets as Slack Block Kit blocks.
+
+    The first block is a section carrying the response text: when
+    ``blocks`` is present Slack renders blocks INSTEAD of the top-level
+    ``text`` (which becomes notification fallback), so the text must
+    ride inside the blocks to keep the text-fallback duty intact.
+    """
+    button_blocks: List[Dict[str, Any]] = []
+    for widget in widgets:
+        if widget.get("type") == "options":
+            elements = [
+                {
+                    "type": "button",
+                    "text": {"type": "plain_text", "text": label},
+                    "action_id": callback_data,
+                    "value": callback_data,
+                }
+                for label, callback_data in _ui_option_buttons(widget)
+            ]
+            if elements:
+                button_blocks.append(
+                    {
+                        "type": "actions",
+                        "block_id": widget.get("id") or "",
+                        "elements": elements,
+                    }
+                )
+        elif widget.get("type") == "action_link":
+            label = str(widget.get("label") or widget.get("url") or "")
+            url = widget.get("url")
+            if label and url:
+                button_blocks.append(
+                    {
+                        "type": "actions",
+                        "block_id": widget.get("id") or "",
+                        "elements": [
+                            {
+                                "type": "button",
+                                "text": {"type": "plain_text", "text": label},
+                                "action_id": widget.get("id") or "",
+                                "url": url,
+                            }
+                        ],
+                    }
+                )
+    if not button_blocks:
+        return None
+    section_text = (
+        text
+        if len(text) <= _SLACK_SECTION_TEXT_MAX
+        else (text[: _SLACK_SECTION_TEXT_MAX - 3] + "...")
+    )
+    return [
+        {"type": "section", "text": {"type": "mrkdwn", "text": section_text}},
+        *button_blocks,
+    ]
+
+
+def _ui_discord_components(widgets: List[Dict[str, Any]]) -> Optional[List[Dict[str, Any]]]:
+    """
+    Render widgets as Discord message components (action rows of
+    buttons, chunked 5 per row, at most 5 rows — overflow buttons are
+    dropped; the text fallback always carries every choice in prose).
+    """
+    buttons: List[Dict[str, Any]] = []
+    for widget in widgets:
+        if widget.get("type") == "options":
+            for label, callback_data in _ui_option_buttons(widget):
+                # type 2 = button, style 2 = secondary
+                buttons.append({"type": 2, "style": 2, "label": label, "custom_id": callback_data})
+        elif widget.get("type") == "action_link":
+            label = str(widget.get("label") or widget.get("url") or "")
+            url = widget.get("url")
+            if label and url:
+                # style 5 = link button (url, no custom_id)
+                buttons.append({"type": 2, "style": 5, "label": label, "url": url})
+    if not buttons:
+        return None
+    buttons = buttons[: _DISCORD_MAX_ROWS * _DISCORD_ROW_SIZE]
+    rows = [
+        # type 1 = action row
+        {"type": 1, "components": buttons[i : i + _DISCORD_ROW_SIZE]}
+        for i in range(0, len(buttons), _DISCORD_ROW_SIZE)
+    ]
+    return rows
+
+
+def build_ui_variables(
+    response_ui: Optional[List[Dict[str, Any]]], response_content: str
+) -> Dict[str, Any]:
+    """
+    Build the ``ui.*`` template namespace: channel-native renderings of
+    the response envelope's widget array. Every entry is None when the
+    response carries no widgets so templating drops the keys and
+    text-only deliveries stay byte-identical.
+    """
+    widgets = [w for w in (response_ui or []) if isinstance(w, dict)]
+    return {
+        "telegram": {"reply_markup": _ui_telegram_reply_markup(widgets)},
+        "slack": {"blocks": _ui_slack_blocks(widgets, response_content)},
+        "discord": {"components": _ui_discord_components(widgets)},
+    }
+
+
 def build_transformer_variables(
     *,
     response_content: str,
     response_files: Optional[List[Dict[str, Any]]] = None,
     response_metadata: Optional[Dict[str, Any]] = None,
+    response_ui: Optional[List[Dict[str, Any]]] = None,
     request_message: Optional[str] = None,
     request_user_id: Optional[str] = None,
     request_files: Optional[Any] = None,
@@ -770,12 +1000,19 @@ def build_transformer_variables(
     agent_name: Optional[str] = None,
     secrets: Optional[Dict[str, str]] = None,
 ) -> Dict[str, Any]:
-    """Assemble the template variable namespace for transformer rendering."""
+    """Assemble the template variable namespace for transformer rendering.
+
+    ``response.ui`` is None (not ``[]``) when the response carries no
+    widgets so a template referencing it stays additive: the key drops
+    out of dict bodies instead of shipping an empty array on every
+    text-only delivery.
+    """
     return {
         "response": {
             "content": response_content,
             "files": response_files or [],
             "metadata": response_metadata or {},
+            "ui": response_ui or None,
         },
         "request": {
             "message": request_message,
@@ -785,6 +1022,7 @@ def build_transformer_variables(
         "context": context or {},
         "agent": {"name": agent_name},
         "secrets": secrets or {},
+        "ui": build_ui_variables(response_ui, response_content),
         "timestamp": datetime.now(timezone.utc).isoformat(),
     }
 
@@ -833,6 +1071,7 @@ async def deliver_via_transformer(
         variables = build_transformer_variables(
             response_content=content,
             response_files=extract_response_files(response),
+            response_ui=extract_response_ui(response),
             response_metadata=response_metadata,
             request_message=request_message,
             request_user_id=request_user_id,

@@ -12,17 +12,24 @@ from urllib.parse import parse_qs
 import pytest
 from aiohttp import web
 
+from muxi.runtime.datatypes.ui import (
+    UIProvenance,
+    build_action_link_widget,
+    build_options_widget,
+)
 from muxi.runtime.formation.background.transformers import (
     BUILTIN_TRANSFORMERS_DIR,
     ContentTransform,
     TransformerConfig,
     apply_content_transform,
     build_transformer_variables,
+    build_ui_variables,
     collect_secret_names,
     deliver_via_transformer,
     extract_parse_values,
     extract_path,
     extract_response_files,
+    extract_response_ui,
     load_transformer,
     parse_trigger_frontmatter,
     render_template_string,
@@ -158,7 +165,13 @@ class TestExtractPath:
 class TestExtractParseValues:
     def test_no_spec_returns_empty_defaults(self):
         result = extract_parse_values(None, {"anything": 1})
-        assert result == {"message": None, "user_id": None, "files": None, "context": {}}
+        assert result == {
+            "message": None,
+            "user_id": None,
+            "files": None,
+            "context": {},
+            "ui_response": None,
+        }
 
     def test_full_extraction(self):
         spec = {
@@ -171,6 +184,33 @@ class TestExtractParseValues:
         assert result["message"] == "hello"
         assert result["user_id"] == "42"  # coerced to string
         assert result["context"] == {"channel": "C1", "thread_ts": None}
+        assert result["ui_response"] is None
+
+    def test_ui_response_callback_decoded(self):
+        # A Telegram-style callback_query carrying MUXI button callback
+        # data decodes into the {id, index} reply hint.
+        spec = {"user_id": "$.callback_query.from.id", "ui_response": "$.callback_query.data"}
+        data = {"callback_query": {"from": {"id": 7}, "data": "ui_abc123#1"}}
+        result = extract_parse_values(spec, data)
+        assert result["ui_response"] == {"id": "ui_abc123", "index": 1}
+        assert result["user_id"] == "7"
+
+    def test_ui_response_foreign_callback_is_none(self):
+        # Callback payloads MUXI did not produce must not become hints.
+        spec = {"ui_response": "$.callback_query.data"}
+        data = {"callback_query": {"data": "some-other-bots-callback"}}
+        assert extract_parse_values(spec, data)["ui_response"] is None
+
+    def test_ui_response_missing_path_is_none(self):
+        spec = {"message": "$.message.text", "ui_response": "$.callback_query.data"}
+        data = {"message": {"text": "an ordinary message"}}
+        result = extract_parse_values(spec, data)
+        assert result["ui_response"] is None
+        assert result["message"] == "an ordinary message"
+
+    def test_ui_response_must_be_path_string(self):
+        with pytest.raises(ValueError, match="parse.ui_response"):
+            extract_parse_values({"ui_response": {"id": "$.x"}}, {})
 
 
 # ---------------------------------------------------------------------------
@@ -557,6 +597,193 @@ class TestExtractResponseFiles:
 
     def test_plain_string_has_no_files(self):
         assert extract_response_files("just text") == []
+
+
+# ---------------------------------------------------------------------------
+# Channel-native widget rendering (Response Envelope UI, P3)
+# ---------------------------------------------------------------------------
+
+
+def _options_widget():
+    return build_options_widget(
+        prompt="Which account?",
+        options=[{"value": "acme-prod", "label": "Prod"}, {"value": "acme-dev", "label": "Dev"}],
+    )
+
+
+def _link_widget():
+    return build_action_link_widget(
+        label="Connect GitHub",
+        url="https://auth.acme.com/connect/github",
+        source=UIProvenance.FORMATION_CONFIG,
+    )
+
+
+class TestExtractResponseUI:
+    def test_object_with_ui_attribute(self):
+        class Response:
+            ui = [{"type": "options", "id": "ui_x"}]
+
+        assert extract_response_ui(Response()) == [{"type": "options", "id": "ui_x"}]
+
+    def test_dict_with_ui_key(self):
+        assert extract_response_ui({"ui": [{"type": "options"}]}) == [{"type": "options"}]
+
+    def test_no_ui_is_empty(self):
+        assert extract_response_ui({"response": []}) == []
+        assert extract_response_ui("just text") == []
+        assert extract_response_ui(None) == []
+
+    def test_non_dict_entries_dropped(self):
+        assert extract_response_ui({"ui": ["junk", None, {"type": "options"}]}) == [
+            {"type": "options"}
+        ]
+
+
+class TestBuildUIVariables:
+    def test_no_widgets_yields_all_none(self):
+        # The zero-change discipline: every channel entry is None so
+        # templating drops the keys from dict bodies.
+        variables = build_ui_variables(None, "text")
+        assert variables["telegram"]["reply_markup"] is None
+        assert variables["slack"]["blocks"] is None
+        assert variables["discord"]["components"] is None
+        assert build_ui_variables([], "text") == variables
+
+    def test_telegram_inline_keyboard(self):
+        widget = _options_widget()
+        link = _link_widget()
+        markup = build_ui_variables([widget, link], "text")["telegram"]["reply_markup"]
+        assert markup == {
+            "inline_keyboard": [
+                [{"text": "Prod", "callback_data": f"{widget['id']}#0"}],
+                [{"text": "Dev", "callback_data": f"{widget['id']}#1"}],
+                [{"text": "Connect GitHub", "url": "https://auth.acme.com/connect/github"}],
+            ]
+        }
+
+    def test_telegram_callback_data_within_limit(self):
+        widget = build_options_widget(
+            prompt="?", options=[{"value": "v" * 300, "label": "L" * 300}] * 3
+        )
+        markup = build_ui_variables([widget], "text")["telegram"]["reply_markup"]
+        for row in markup["inline_keyboard"]:
+            for button in row:
+                if "callback_data" in button:
+                    assert len(button["callback_data"].encode("utf-8")) <= 64
+
+    def test_slack_blocks_carry_text_and_buttons(self):
+        widget = _options_widget()
+        blocks = build_ui_variables([widget], "The text fallback")["slack"]["blocks"]
+        # Section first: Slack renders blocks INSTEAD of top-level text,
+        # so the text-fallback duty requires the text inside the blocks.
+        assert blocks[0] == {
+            "type": "section",
+            "text": {"type": "mrkdwn", "text": "The text fallback"},
+        }
+        actions = blocks[1]
+        assert actions["type"] == "actions"
+        assert actions["block_id"] == widget["id"]
+        assert [e["text"]["text"] for e in actions["elements"]] == ["Prod", "Dev"]
+        assert [e["value"] for e in actions["elements"]] == [
+            f"{widget['id']}#0",
+            f"{widget['id']}#1",
+        ]
+
+    def test_slack_action_link_is_url_button(self):
+        link = _link_widget()
+        blocks = build_ui_variables([link], "text")["slack"]["blocks"]
+        button = blocks[1]["elements"][0]
+        assert button["url"] == "https://auth.acme.com/connect/github"
+        assert "value" not in button  # nothing to reply with; the link IS the action
+
+    def test_slack_section_text_clamped(self):
+        blocks = build_ui_variables([_options_widget()], "x" * 4000)["slack"]["blocks"]
+        assert len(blocks[0]["text"]["text"]) <= 3000
+
+    def test_discord_components_rows_of_five(self):
+        widget = build_options_widget(
+            prompt="?", options=[{"value": f"v{i}", "label": f"L{i}"} for i in range(7)]
+        )
+        components = build_ui_variables([widget], "text")["discord"]["components"]
+        assert [len(row["components"]) for row in components] == [5, 2]
+        first = components[0]["components"][0]
+        assert first == {"type": 2, "style": 2, "label": "L0", "custom_id": f"{widget['id']}#0"}
+
+    def test_discord_row_cap_drops_overflow(self):
+        # Two full options widgets exceed Discord's 5-row limit; overflow
+        # buttons are dropped (the text fallback carries every choice).
+        widgets = [
+            build_options_widget(prompt="?", options=[{"value": f"w{n}o{i}"} for i in range(20)])
+            for n in range(2)
+        ]
+        components = build_ui_variables(widgets, "text")["discord"]["components"]
+        assert len(components) == 5
+        assert sum(len(row["components"]) for row in components) == 25
+
+    def test_discord_action_link_is_link_button(self):
+        link = _link_widget()
+        components = build_ui_variables([link], "text")["discord"]["components"]
+        button = components[0]["components"][0]
+        assert button["style"] == 5
+        assert button["url"] == "https://auth.acme.com/connect/github"
+        assert "custom_id" not in button
+
+    def test_unknown_widget_types_skipped(self):
+        variables = build_ui_variables([{"type": "hologram", "id": "ui_x"}], "text")
+        assert variables["telegram"]["reply_markup"] is None
+        assert variables["slack"]["blocks"] is None
+        assert variables["discord"]["components"] is None
+
+
+class TestBundledTemplateWidgetRendering:
+    """The updated bundled templates: widgets additive, text-only unchanged."""
+
+    def _render_bundled_body(self, tmp_path, name, response_ui, content="Pick one"):
+        config = load_transformer(tmp_path, name)
+        variables = build_transformer_variables(
+            response_content=content,
+            response_ui=response_ui,
+            context={"chat_id": "42", "channel": "C1", "thread_ts": None},
+        )
+        return render_template_value(config.body, variables)
+
+    def test_telegram_text_only_body_unchanged(self, tmp_path):
+        # The zero-change pin: without widgets the rendered payload is
+        # key-for-key what the pre-P3 template produced.
+        body = self._render_bundled_body(tmp_path, "telegram", response_ui=None)
+        assert body == {"chat_id": "42", "text": "Pick one"}
+
+    def test_telegram_widgets_render_inline_keyboard(self, tmp_path):
+        widget = _options_widget()
+        body = self._render_bundled_body(tmp_path, "telegram", response_ui=[widget])
+        assert body["text"] == "Pick one"  # text always ships
+        labels = [b["text"] for row in body["reply_markup"]["inline_keyboard"] for b in row]
+        assert labels == ["Prod", "Dev"]
+
+    def test_slack_text_only_body_unchanged(self, tmp_path):
+        body = self._render_bundled_body(tmp_path, "slack", response_ui=[])
+        assert body == {"channel": "C1", "text": "Pick one"}
+
+    def test_slack_widgets_render_blocks(self, tmp_path):
+        body = self._render_bundled_body(tmp_path, "slack", response_ui=[_options_widget()])
+        assert body["text"] == "Pick one"  # notification fallback stays
+        assert body["blocks"][0]["text"]["text"] == "Pick one"
+        assert body["blocks"][1]["type"] == "actions"
+
+    def test_discord_text_only_body_unchanged(self, tmp_path):
+        body = self._render_bundled_body(tmp_path, "discord", response_ui=None)
+        assert body == {"content": "Pick one"}
+
+    def test_discord_widgets_render_components(self, tmp_path):
+        body = self._render_bundled_body(tmp_path, "discord", response_ui=[_link_widget()])
+        assert body["content"] == "Pick one"
+        assert body["components"][0]["components"][0]["style"] == 5
+
+    def test_email_template_has_no_widget_placeholders(self, tmp_path):
+        # Email stays text (explicit P3 ruling).
+        config = load_transformer(tmp_path, "email")
+        assert "ui." not in str(config.body)
 
 
 # ---------------------------------------------------------------------------

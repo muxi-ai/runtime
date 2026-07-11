@@ -403,6 +403,13 @@ async def execute_trigger(
     # memory; the header user remains the authenticated principal for GBAC.
     chat_user_id = parsed_request.get("user_id") or user_id
 
+    # Channel button press -> ui_response reply hint (Response Envelope UI,
+    # P3): when the parse spec extracts button callback data, the decoded
+    # {id, index} hint rides the chat re-entry and hits the existing
+    # deterministic pinning. None for ordinary messages and for callback
+    # payloads MUXI did not produce (the message stands alone).
+    ui_response: Optional[Dict[str, Any]] = parsed_request.get("ui_response")
+
     # Render template with provided data
     try:
         rendered_message = render_trigger_template(template, trigger_request.data)
@@ -503,6 +510,7 @@ async def execute_trigger(
                         source_context=parsed_request.get("context"),
                         route_class="trigger",
                         middleware_applied=True,
+                        ui_response=ui_response,
                     )
                 elif webhook_override is not None:
                     # Webhook routing: force async so the standard MUXI
@@ -520,6 +528,7 @@ async def execute_trigger(
                         source_context=parsed_request.get("context"),
                         route_class="trigger",
                         middleware_applied=True,
+                        ui_response=ui_response,
                     )
                 else:
                     # Default routing: unchanged trigger behavior
@@ -536,6 +545,7 @@ async def execute_trigger(
                         source_context=parsed_request.get("context"),
                         route_class="trigger",
                         middleware_applied=True,
+                        ui_response=ui_response,
                     )
 
                 observability.observe(
@@ -601,6 +611,7 @@ async def execute_trigger(
                 source_context=parsed_request.get("context"),
                 route_class="trigger",
                 middleware_applied=True,
+                ui_response=ui_response,
             )
 
             # Extract content from response (handles async generators, MuxiResponse, strings, etc.)

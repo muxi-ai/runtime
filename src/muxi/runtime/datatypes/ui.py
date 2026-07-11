@@ -18,6 +18,7 @@ Size discipline: widgets are clamped per-widget and per-envelope
 bloat every response.
 """
 
+import re
 from enum import Enum
 from typing import Any, Dict, List, Optional
 
@@ -41,6 +42,45 @@ UI_ENVELOPE_MAX_BYTES = 16384
 
 # Maximum number of options in a single options widget.
 UI_OPTIONS_MAX_ITEMS = 25
+
+# ===================================================================
+# CHANNEL CALLBACK ENCODING (Response Envelope UI PRD, P3)
+# ===================================================================
+#
+# When a channel template renders an options widget as native buttons
+# (Telegram inline keyboard, Slack Block Kit, Discord components), each
+# button carries an opaque callback string that must round-trip the
+# widget id back through the channel's trigger route. The encoding is
+# ``<widget_id>#<option_index>`` — index, not value, so the string is
+# fixed-small and always fits Telegram's 64-byte callback_data limit
+# (widget ids are ``ui_`` + 21-char nanoid = 24 bytes; the index adds
+# at most 3 more). The index resolves back to the option value against
+# the conversation's pending-clarification record (the same state
+# ``resolve_ui_response`` already consults), keeping the runtime
+# stateless: no server-side widget store, ever.
+_UI_CALLBACK_PATTERN = re.compile(r"^(ui_[0-9A-Za-z_]+)#(\d{1,3})$")
+
+
+def encode_ui_callback(widget_id: str, option_index: int) -> str:
+    """Encode a widget option as channel button callback data."""
+    return f"{widget_id}#{option_index}"
+
+
+def decode_ui_callback(data: Any) -> Optional[Dict[str, Any]]:
+    """
+    Decode channel button callback data into a ``ui_response`` hint.
+
+    Returns ``{"id": <widget_id>, "index": <option_index>}`` when the
+    string matches the encoding, or None for anything else (channels
+    routinely deliver callback payloads MUXI did not produce — those
+    are not hints and must not become ones).
+    """
+    if not isinstance(data, str):
+        return None
+    match = _UI_CALLBACK_PATTERN.match(data)
+    if not match:
+        return None
+    return {"id": match.group(1), "index": int(match.group(2))}
 
 
 class UIProvenance(Enum):
@@ -182,12 +222,23 @@ def resolve_ui_response(
     and the message stands alone). The runtime stays stateless: the id
     resolves against conversation state that already exists, never a
     server-side widget store.
+
+    Hints from channel button presses carry ``index`` instead of
+    ``value`` (the ``decode_ui_callback`` shape): the index resolves
+    against ``option_values`` — the same order the widget offered and
+    the channel template rendered — and then follows the identical
+    value-membership check.
     """
     if not ui_response or not widget_id or not option_values:
         return None
     if ui_response.get("id") != widget_id:
         return None
     value = ui_response.get("value")
+    if value is None:
+        index = ui_response.get("index")
+        if isinstance(index, int) and not isinstance(index, bool):
+            if 0 <= index < len(option_values):
+                value = option_values[index]
     if value in option_values:
         return value
     return None
