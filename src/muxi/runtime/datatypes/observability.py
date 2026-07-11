@@ -1443,6 +1443,30 @@ class ConversationEvents(Enum):
     DELEGATION_ORPHANED = "delegation.orphaned"
     # When a running delegation's record survives a runtime restart/shutdown
 
+    # ===================================================================
+    # WATCH JOBS (remote async tools -- watch_job over MCP tools)
+    # ===================================================================
+    WATCH_STARTED = "watch.started"
+    # When a watch is registered and its poll loop starts
+
+    WATCH_POLL = "watch.poll"
+    # Per poll of the watched MCP tool (debug tier; zero-token deterministic)
+
+    WATCH_COMPLETED = "watch.completed"
+    # When a watch's done_when condition is met and the result is extracted
+
+    WATCH_FAILED = "watch.failed"
+    # When a watch fails (max consecutive poll failures, or permission loss)
+
+    WATCH_TIMED_OUT = "watch.timed_out"
+    # When a watch exceeds the formation's watch deadline without completing
+
+    WATCH_CANCELLED = "watch.cancelled"
+    # When a watch is cancelled via /jobs (polling stops, no re-entry)
+
+    WATCH_ORPHANED = "watch.orphaned"
+    # When a watching record survives a runtime restart/shutdown
+
 
 class ServerEvents(Enum):
     """Server event types for MUXI observability"""

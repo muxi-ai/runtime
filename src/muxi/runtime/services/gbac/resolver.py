@@ -78,6 +78,22 @@ class ResolvedPermissions:
         return bool(self._groups)
 
     @property
+    def watch_max_concurrent(self) -> Optional[int]:
+        """The user's watch quota override: highest across groups, or None.
+
+        Grants are additive (same semantics as every other GBAC list): a
+        user in multiple groups gets the HIGHEST of their groups'
+        ``mcp.watch.max_concurrent`` values; None means no group sets one
+        (the formation default applies). Governs watches ONLY.
+        """
+        quotas = [
+            group.watch_max_concurrent
+            for group in self._groups
+            if group.watch_max_concurrent is not None
+        ]
+        return max(quotas) if quotas else None
+
+    @property
     def memory_write_scopes(self) -> Tuple[str, ...]:
         """Union of ``memory.write`` scopes across groups (parsed, not enforced)."""
         scopes: List[str] = []

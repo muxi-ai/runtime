@@ -2,6 +2,49 @@
 
 ## [unreleased]
 
+### Remote async tools - `watch_job` for MCP job-id + poll services
+
+MCP-reachable work that outlives a turn (image/video generation, long
+renders, batch jobs) can now be collected instead of forgotten: the new
+built-in `watch_job` tool registers a deterministic poll loop over any
+MCP tool the calling user can see (remote-async-tools PRD, P1). MUXI
+never classifies tools as async -- the agent recognizes a job-shaped
+response contextually, guided by a bundled SOP fragment:
+
+- `watch_job` built-in: `tool` (any visible MCP tool; `server.tool`,
+  `server__tool`, or bare name), `args`, `done_when` (`path` +
+  `equals`/`in`, evaluated mechanically -- no LLM in the poll loop,
+  polls cost zero tokens), optional `result` selector and `label`.
+  Always asynchronous: returns a job handle immediately; no interval/
+  timeout arguments exist (cadence and deadline are formation config).
+- WatchService (DelegationService lifecycle idiom): tracked jobs on
+  `/jobs` (list/cancel/logs; cancel stops polling with no re-entry),
+  per-user concurrency clamp, write-through persistence to `watch_jobs`,
+  orphan marking on boot/shutdown. Completion/timeout/failure re-enter
+  the conversation via `route_class: watch` (same middleware + RBAC
+  pipeline as delegations) with the payload wrapped in the runtime #274
+  untrusted-content fencing, delivered via the proactiveness
+  NotificationRouter (user channel > formation default).
+- GBAC (D5): polls run under the ORIGINAL user's stored permission
+  context -- a user who cannot call the status tool cannot watch it
+  (rejected at creation, fail-closed per poll). Group templates may
+  override the quota (`mcp: {watch: {max_concurrent: N}}`; the highest
+  of the user's groups wins; governs watches only).
+- Config: `mcp.watch` sub-block (`interval` 30s, `timeout` 7200s,
+  `max_concurrent` 10/user, `max_consecutive_failures` 3), closed key
+  set, fail-fast at load. Default ON whenever the formation declares
+  MCP servers; `mcp: {watch: false}` removes the tool entirely.
+- Recognition SOP fragment: bundled markdown appended to agent
+  instructions whenever watch_job registers; a formation-local
+  `sops/watch_job.md` shadows it (empty file removes it).
+- Events: `watch.started/poll/completed/failed/timed_out/cancelled/
+  orphaned` (validated enums, `delegation.*` discipline).
+- Docs: `contributing/remote-async-tools.md` -- the four long-running
+  patterns (slow-sync timeout, watch_job, app-level webhook trigger,
+  per-call webhook trigger) with a worked image-generation example.
+- E2E: new `25_watch/` area (fixture stdio MCP job server) -- full
+  agent loop, timeout path, /jobs cancel mid-watch, GBAC + cross-user
+  isolation, and D6 channel-delivery resolution.
 ### Response envelope UI - typed affordances (options, action_link)
 
 The chat response envelope gains an optional, typed `ui` array of

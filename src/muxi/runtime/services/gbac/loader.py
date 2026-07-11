@@ -49,7 +49,7 @@ import yaml
 LIST_SECTIONS = ("agents", "triggers", "sops", "native_apps")
 
 _VALID_TOP_KEYS = frozenset(
-    {"name", "description", "inherits", "mcp_servers", "memory", *LIST_SECTIONS}
+    {"name", "description", "inherits", "mcp_servers", "mcp", "memory", *LIST_SECTIONS}
 )
 _VALID_RULE_KEYS = frozenset({"allow", "deny"})
 
@@ -104,6 +104,9 @@ class ResolvedGroup:
     # mcp_id -> ToolRules (group-wide cascade level)
     mcp_servers: Dict[str, ToolRules] = field(default_factory=dict)
     memory_write: Tuple[str, ...] = ()
+    # Group-level watch quota override (mcp: {watch: {max_concurrent: N}});
+    # None = no override (formation default applies). Governs watches ONLY.
+    watch_max_concurrent: Optional[int] = None
 
     def section(self, kind: str) -> SectionRules:
         """Return the SectionRules for ``kind`` (one of LIST_SECTIONS)."""
@@ -292,6 +295,43 @@ def _parse_section(
     )
 
 
+def _parse_group_mcp_block(block: Any, *, path: str) -> Optional[int]:
+    """Parse a group's ``mcp:`` block (watch quota override only).
+
+    Mirrors the formation's ``mcp.watch`` shape so overrides look like
+    the thing they override (remote-async-tools PRD, owner ruling
+    2026-07-11). Closed key sets at both levels; only
+    ``watch.max_concurrent`` is supported.
+    """
+    if not isinstance(block, dict) or not block:
+        raise GroupPermissionError(
+            f"{path}: mcp must be a mapping with a 'watch' key, " f"got: {type(block).__name__}"
+        )
+    unknown = set(block) - {"watch"}
+    if unknown:
+        raise GroupPermissionError(
+            f"{path}: mcp has unknown key(s) {sorted(unknown)}; only 'watch' is supported"
+        )
+    watch = block.get("watch")
+    if not isinstance(watch, dict) or not watch:
+        raise GroupPermissionError(
+            f"{path}: mcp.watch must be a mapping with a 'max_concurrent' key, "
+            f"got: {type(watch).__name__}"
+        )
+    unknown = set(watch) - {"max_concurrent"}
+    if unknown:
+        raise GroupPermissionError(
+            f"{path}: mcp.watch has unknown key(s) {sorted(unknown)}; "
+            "only 'max_concurrent' is supported in group files"
+        )
+    value = watch.get("max_concurrent")
+    if isinstance(value, bool) or not isinstance(value, int) or value < 1:
+        raise GroupPermissionError(
+            f"{path}: mcp.watch.max_concurrent must be an integer >= 1, got: {value!r}"
+        )
+    return value
+
+
 def _parse_group_file(group_id: str, path: str) -> ResolvedGroup:
     """Parse one group YAML file into an (unresolved) ResolvedGroup."""
     try:
@@ -350,6 +390,9 @@ def _parse_group_file(group_id: str, path: str) -> ResolvedGroup:
             raw["mcp_servers"], context="mcp_servers", path=path
         )
 
+    if "mcp" in raw:
+        group.watch_max_concurrent = _parse_group_mcp_block(raw["mcp"], path=path)
+
     if "memory" in raw:
         memory_block = raw["memory"]
         if not isinstance(memory_block, dict):
@@ -403,6 +446,11 @@ def _merge_groups(base: ResolvedGroup, overlay: ResolvedGroup) -> ResolvedGroup:
     memory_write = list(base.memory_write)
     memory_write.extend(s for s in overlay.memory_write if s not in memory_write)
 
+    # Watch quota: grants are additive, so inheritance keeps the highest
+    # value (same semantics as the multi-group merge at request time).
+    quotas = [q for q in (base.watch_max_concurrent, overlay.watch_max_concurrent) if q is not None]
+    watch_max_concurrent = max(quotas) if quotas else None
+
     return ResolvedGroup(
         group_id=overlay.group_id,
         source_path=overlay.source_path,
@@ -416,6 +464,7 @@ def _merge_groups(base: ResolvedGroup, overlay: ResolvedGroup) -> ResolvedGroup:
         agent_tool_overrides=merged_agent_overrides,
         mcp_servers={**base.mcp_servers, **overlay.mcp_servers},
         memory_write=tuple(memory_write),
+        watch_max_concurrent=watch_max_concurrent,
     )
 
 

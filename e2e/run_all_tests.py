@@ -37,6 +37,10 @@ AREA_TIMEOUT_OVERRIDES = {
     # droid) end to end: each delegation is a full agentic run (git init,
     # clone, commit, push against local fixtures) that takes minutes.
     "24_coding": 900,
+    # Watch tests run real LLM turns (submit -> watch_job recognition,
+    # completion re-entry) around fixed-cadence poll loops; the full-loop
+    # test alone is ~2 LLM turns + ~6s of polling + channel delivery.
+    "25_watch": 300,
     # Envelope UI tests drive multi-turn clarification flows (LLM
     # analysis + MCP credential resolution + retry of the original
     # request) against real OpenAI; three rounds regularly exceed 120s.

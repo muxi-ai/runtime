@@ -470,6 +470,11 @@ class Overlord:
         # tool is registered and the feature stays inert).
         self.delegation_service = None
 
+        # Watch service (remote async tools; created in _async_startup when
+        # the formation declares MCP servers and mcp.watch is not false;
+        # None means no watch_job tool is registered).
+        self.watch_service = None
+
         # Initialize credential resolver if database is configured
         self.credential_resolver = None
         if configured_services:
@@ -1588,6 +1593,12 @@ class Overlord:
         # router. No-op for formations without a 'coding' block.
         await self._initialize_delegation_service()
 
+        # Start the watch service (remote async tools) right after the
+        # delegation service for the same reason: completion re-entry
+        # delivers through the notification router. No-op for formations
+        # without declared MCP servers (or 'mcp: { watch: false }').
+        await self._initialize_watch_service()
+
         # Register periodic re-sync of remote knowledge sources (Phase 3)
         # after the scheduler for the same reason. No-op for formations
         # without url-based knowledge sources.
@@ -1726,6 +1737,37 @@ class Overlord:
                 f"client {coding_config.client or 'inline'}, "
                 f"{len(coding_config.workdirs)} workdir root(s), "
                 f"cleanup {coding_config.cleanup}",
+            )
+        )
+
+    async def _initialize_watch_service(self) -> None:
+        """
+        Create + start the WatchService (remote async tools).
+
+        Inert when unconfigured: formations without declared MCP servers
+        (or with the 'mcp: { watch: false }' escape hatch) get no service
+        and no watch_job tool. The parsed config arrives from
+        Formation._setup_mcp_config via the configured-services bundle --
+        every fail-fast check already ran at formation load.
+        """
+        watch_config = (
+            self._configured_services.get("watch_config") if self._configured_services else None
+        )
+        if watch_config is None:
+            return
+
+        from ...datatypes.observability import InitEventFormatter
+        from ...services.watch import WatchService
+
+        self.watch_service = WatchService(config=watch_config, overlord=self)
+        await self.watch_service.start()
+
+        print(
+            InitEventFormatter.format_ok(
+                "Watch service initialized",
+                f"interval {int(watch_config.interval_seconds)}s, "
+                f"timeout {int(watch_config.timeout_seconds)}s, "
+                f"max {watch_config.max_concurrent} watch(es)/user",
             )
         )
 

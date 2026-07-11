@@ -122,6 +122,22 @@ class Agent:
             "Provide detailed, factual responses and be transparent about uncertainty."
         )
 
+        # Watch SOP fragment (remote async tools, default ON): teaches the
+        # recognition behavior for job-shaped tool responses. Appended to
+        # the agent's OWN system message (not just the seeded context) so
+        # both the direct chat path and the planning prompt ("Agent
+        # operating instructions") carry it. Present whenever the
+        # formation registers watch_job; a formation-local
+        # sops/watch_job.md shadows the bundled text.
+        try:
+            from .watch_dispatch import watch_sop_fragment
+
+            _watch_fragment = watch_sop_fragment(overlord) if overlord else None
+            if _watch_fragment:
+                self.system_message = f"{self.system_message}\n\n{_watch_fragment}"
+        except Exception:
+            pass  # a broken fragment must never block agent creation
+
         # Set up A2A configuration (single source of truth)
         self.a2a_internal = a2a_internal
         self.a2a_external = a2a_external
@@ -1760,6 +1776,16 @@ class Agent:
 
                 if self.overlord and coding_tools_available(self.overlord):
                     tools.extend(build_coding_tools(self.overlord))
+
+                # Built-in watch_job tool (remote async tools): registered
+                # only when the overlord carries a WatchService (default ON
+                # whenever the formation declares MCP servers; removable
+                # via 'mcp: { watch: false }'). Formations without MCP
+                # servers see no tool at all.
+                from .watch_dispatch import build_watch_tools, watch_tools_available
+
+                if self.overlord and watch_tools_available(self.overlord):
+                    tools.extend(build_watch_tools())
 
             except Exception as e:
                 # Log but don't fail if we can't get tools
@@ -4345,6 +4371,21 @@ class Agent:
                 from .coding_dispatch import handle_delegate_coding
 
                 return await handle_delegate_coding(
+                    self.agent_id,
+                    parameters,
+                    self.overlord,
+                    user_id=user_id,
+                    session_id=getattr(self, "_current_session_id", None),
+                )
+
+            if tool_name == "watch_job" and self.overlord:
+                # Watch-job built-in (always async: returns a watch handle
+                # immediately; polls run under the calling user's stored
+                # GBAC context). User-scoped and failure-isolated -- every
+                # rejection is a friendly error dict.
+                from .watch_dispatch import handle_watch_job
+
+                return await handle_watch_job(
                     self.agent_id,
                     parameters,
                     self.overlord,
