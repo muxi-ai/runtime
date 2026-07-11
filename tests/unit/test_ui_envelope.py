@@ -207,8 +207,22 @@ class TestUICallbackEncoding:
 
     def test_foreign_callback_data_decodes_to_none(self):
         # Channels routinely deliver callback payloads MUXI did not
-        # produce; those must not become reply hints.
-        for data in ("approve", "ui_abc", "ui_abc#x", "not-ui#1", "", None, 7, {"id": "x"}):
+        # produce; those must not become reply hints. Indexes beyond two
+        # digits are also not ours: options are capped at 25, so a
+        # three-digit index (e.g. ui_abc#999) must not decode at all
+        # rather than decode and silently resolve to None downstream.
+        for data in (
+            "approve",
+            "ui_abc",
+            "ui_abc#x",
+            "not-ui#1",
+            "ui_abc#999",
+            "ui_abc#100",
+            "",
+            None,
+            7,
+            {"id": "x"},
+        ):
             assert decode_ui_callback(data) is None
 
     def test_decoded_hint_pins_through_resolve(self):

@@ -54,11 +54,13 @@ UI_OPTIONS_MAX_ITEMS = 25
 # ``<widget_id>#<option_index>`` — index, not value, so the string is
 # fixed-small and always fits Telegram's 64-byte callback_data limit
 # (widget ids are ``ui_`` + 21-char nanoid = 24 bytes; the index adds
-# at most 3 more). The index resolves back to the option value against
-# the conversation's pending-clarification record (the same state
-# ``resolve_ui_response`` already consults), keeping the runtime
-# stateless: no server-side widget store, ever.
-_UI_CALLBACK_PATTERN = re.compile(r"^(ui_[0-9A-Za-z_]+)#(\d{1,3})$")
+# at most 2 more — options are capped at ``UI_OPTIONS_MAX_ITEMS`` (25),
+# so 0-99 is ample and anything longer is not ours). The index resolves
+# back to the option value against the conversation's
+# pending-clarification record (the same state ``resolve_ui_response``
+# already consults), keeping the runtime stateless: no server-side
+# widget store, ever.
+_UI_CALLBACK_PATTERN = re.compile(r"^(ui_[0-9A-Za-z_]+)#(\d{1,2})$")
 
 
 def encode_ui_callback(widget_id: str, option_index: int) -> str:

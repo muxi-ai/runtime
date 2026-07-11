@@ -92,6 +92,7 @@ from typing import Any, Dict, List, Optional, Set, Tuple
 
 import yaml
 
+from ...datatypes.ui import decode_ui_callback, encode_ui_callback
 from ...services import observability
 
 # Trigger/transformer names: same charset as trigger name validation in the
@@ -323,8 +324,6 @@ def extract_parse_values(parse_spec: Optional[Dict[str, Any]], data: Any) -> Dic
 
     ui_response = None
     if parse_spec.get("ui_response"):
-        from ...datatypes.ui import decode_ui_callback
-
         ui_response = decode_ui_callback(extract_path(data, parse_spec["ui_response"]))
 
     return {
@@ -850,8 +849,6 @@ _SLACK_SECTION_TEXT_MAX = 3000
 
 def _ui_option_buttons(widget: Dict[str, Any]) -> List[Tuple[str, str]]:
     """Yield (label, callback_data) pairs for an options widget."""
-    from ...datatypes.ui import encode_ui_callback
-
     widget_id = widget.get("id") or ""
     buttons = []
     for index, option in enumerate(widget.get("options") or []):
