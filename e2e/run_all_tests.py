@@ -37,6 +37,10 @@ AREA_TIMEOUT_OVERRIDES = {
     # droid) end to end: each delegation is a full agentic run (git init,
     # clone, commit, push against local fixtures) that takes minutes.
     "24_coding": 900,
+    # Envelope UI tests drive multi-turn clarification flows (LLM
+    # analysis + MCP credential resolution + retry of the original
+    # request) against real OpenAI; three rounds regularly exceed 120s.
+    "25_envelope_ui": 300,
 }
 E2E_DIR = Path(__file__).parent
 TESTS_DIR = E2E_DIR / "tests"

@@ -1300,6 +1300,15 @@ class ConversationEvents(Enum):
     # When clarification is skipped (disabled or not needed)
 
     # ===================================================================
+    # RESPONSE ENVELOPE UI AFFORDANCES
+    # ===================================================================
+    UI_EMITTED = "ui.emitted"
+    # When a UI widget is attached to a response envelope (type, producer)
+
+    UI_RESPONSE_RECEIVED = "ui.response.received"
+    # When an inbound message carries a ui_response hint (type, matched)
+
+    # ===================================================================
     # CREDENTIAL HANDLING
     # ===================================================================
     CREDENTIAL_PROVIDED = "credential.provided"

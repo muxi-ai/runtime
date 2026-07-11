@@ -2,6 +2,42 @@
 
 ## [unreleased]
 
+### Response envelope UI - typed affordances (options, action_link)
+
+The chat response envelope gains an optional, typed `ui` array of
+affordances (P1 of the Response Envelope UI PRD; muxi#39 respec). The
+runtime never renders anything: clients that understand a widget type
+render it natively, everyone else gets the always-complete `text`:
+
+- Envelope: optional `ui` on the response message; strictly additive --
+  responses without widgets stay byte-identical to before (pinned by
+  unit + e2e regression tests). SSE gains a dedicated `ui` event
+  emitted at end-of-turn alongside the existing `done`/`error`
+  vocabulary.
+- `options` widget: clarifications with enumerable choices (credential
+  account selection) carry `{id, prompt, options[{value,label}],
+  multi:false}` plus prose listing the same choices (text carries the
+  fallback duty).
+- Reply path: chat requests accept an optional `ui_response: {id,
+  value}` hint. A hint matching the clarification-produced widget pins
+  the selection deterministically (no re-interpretation); unknown or
+  stale ids are ignored and the message stands alone. Stateless: ids
+  resolve against the conversation's pending-clarification record, no
+  server-side widget store.
+- `action_link` widget with structural provenance: URLs can only enter
+  a widget through a producer naming their source (formation config,
+  tool result, or trigger payload) -- the LLM cannot fabricate one.
+  P1 producers: a new top-level `links:` formation section (name ->
+  {label, url, hint}) surfaced on credential-redirect responses, and a
+  `_link` tool-result convention mirroring `_artifact`.
+- Size clamps (per-widget and per-envelope caps) and observability
+  events `ui.emitted` (type, producer) / `ui.response.received`
+  (type, matched); channels ignore `ui` in P1 (text IS the channel
+  experience).
+- E2E: new `25_envelope_ui` area (options + deterministic pinning,
+  action_link provenance + injection resistance, stale hint handling,
+  byte-identical no-widget regression pin, channel delivery).
+
 ### Episodic memory - session-end digests + time-anchored recall tool
 
 Closes the two residual gaps from the muxi#32 episodic memory audit

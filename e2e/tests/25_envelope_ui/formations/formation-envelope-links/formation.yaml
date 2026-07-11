@@ -1,0 +1,64 @@
+schema: "1.0.0"
+id: "envelope-ui-links-test"
+description: "Formation for testing action_link provenance (declared credential portal)"
+
+llm:
+  api_keys:
+    openai: "${{ secrets.OPENAI_API_KEY }}"
+  models:
+    - text: "openai/gpt-4o-mini"
+    - embedding: "openai/text-embedding-3-small"
+
+runtime:
+  built_in_mcps: false
+  mcp_server_startup_timeout: 30
+
+agents:
+  - example_agent
+
+overlord:
+  workflow:
+    auto_decomposition: false
+
+# Redirect mode: credentials are configured outside the chat; the
+# declared portal below becomes an action_link widget on the redirect
+# response (formation-config provenance).
+user_credentials:
+  mode: "redirect"
+  redirect_message: "Please configure your credentials in the company credential portal."
+
+# Declared links/portals map (Response Envelope UI). Only these URLs —
+# plus tool-returned ones — can become action_link widgets; the LLM
+# cannot fabricate one.
+links:
+  github:
+    label: "Connect GitHub"
+    url: "https://auth.acme-example.com/connect/github"
+    hint: "Opens your company's credential portal"
+
+mcp:
+  servers:
+    - github-mcp
+  max_tool_calls: 10
+  max_tool_iterations: 5
+
+memory:
+  working:
+    max_memory_mb: 1
+    fifo_interval_min: 5
+    vector_dimension: 1536
+    mode: "local"
+
+  buffer:
+    size: 50
+    multiplier: 10
+    vector_search: false
+
+  persistent:
+    connection_string: "${{ secrets.POSTGRES_URI }}"
+    embedding_model: "openai/text-embedding-3-small"
+
+logging:
+  system:
+    level: "error"
+    destination: "stdout"

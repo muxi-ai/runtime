@@ -2,7 +2,7 @@ import logging
 import re
 import time
 from dataclasses import dataclass
-from typing import Dict, Optional
+from typing import Dict, List, Optional
 
 from ...services import observability
 from ...utils.fastjson import json
@@ -28,6 +28,13 @@ class ClarificationResult:
     request: Optional[str] = None
     context: Optional[Dict] = None
     mode: Optional[str] = None
+    # Enumerable choices behind a clarify question, as
+    # [{"value": ..., "label": ...}]. Set only when the interpretations
+    # are enumerable (e.g. credential account selection); the producer
+    # turns these into an `options` widget on the response envelope.
+    # The question text MUST still list the same choices in prose
+    # (text carries the fallback duty).
+    options: Optional[List[Dict[str, str]]] = None
 
 
 class UnifiedClarificationSystem:
@@ -149,7 +156,12 @@ class UnifiedClarificationSystem:
 
         await self._store_state(request_id, state)
 
-        return ClarificationResult(action="clarify", question=question, mode="credential")
+        return ClarificationResult(
+            action="clarify",
+            question=question,
+            mode="credential",
+            options=[{"value": name, "label": name} for name in display_accounts],
+        )
 
     async def handle_mcp_credential_request(
         self, service_id: str, user_id: str, request_id: str
@@ -181,18 +193,27 @@ class UnifiedClarificationSystem:
         return ClarificationResult(action="clarify", question=redirect_message, mode="redirect")
 
     async def needs_clarification(
-        self, message: str, request_id: str, session_id: str = None, context: Optional[Dict] = None
+        self,
+        message: str,
+        request_id: str,
+        session_id: str = None,
+        context: Optional[Dict] = None,
+        pinned_value: Optional[str] = None,
     ) -> ClarificationResult:
         """
         Main entry point - analyzes if clarification is needed.
         Uses request_id as primary identifier.
+
+        ``pinned_value`` carries a machine-certain selection resolved
+        from a ``ui_response`` hint that matched this clarification's
+        options widget — see handle_response.
         """
         # Check for existing clarification
 
         has_active = await self.has_active_clarification(request_id)
 
         if has_active:
-            return await self.handle_response(request_id, message)
+            return await self.handle_response(request_id, message, pinned_value=pinned_value)
 
         # Analyze new request
         analysis = await self._analyze_request(message, context or {})
@@ -215,15 +236,37 @@ class UnifiedClarificationSystem:
                     state["available_accounts"] = analysis["available_accounts"]
                 await self._store_state(request_id, state)
             return ClarificationResult(
-                action="clarify", question=analysis["question"], mode=analysis["mode"]
+                action="clarify",
+                question=analysis["question"],
+                mode=analysis["mode"],
+                context=(
+                    {"mcp_service": analysis["mcp_service"]}
+                    if analysis.get("mcp_service")
+                    else None
+                ),
+                options=(
+                    [
+                        {"value": name, "label": name}
+                        for name in analysis.get("available_accounts", [])
+                    ]
+                    or None
+                ),
             )
 
         # No clarification needed
         return ClarificationResult(action="execute", request=message, mode="direct")
 
-    async def handle_response(self, request_id: str, response: str) -> ClarificationResult:
+    async def handle_response(
+        self, request_id: str, response: str, pinned_value: Optional[str] = None
+    ) -> ClarificationResult:
         """
         Handle clarification response and determine next action.
+
+        ``pinned_value`` is a deterministic selection resolved from a
+        ``ui_response`` hint whose id matched the options widget this
+        clarification produced. When present and valid for the stored
+        options, it bypasses selection re-interpretation entirely; an
+        unmatched hint never reaches here (the message stands alone).
         """
 
         state = await self._get_state(request_id)
@@ -284,9 +327,15 @@ class UnifiedClarificationSystem:
             if self._is_help_request(response):
                 return await self._provide_credential_help(state)
 
-            selected_account = await self._parse_credential_selection(
-                response, state["available_accounts"]
-            )
+            # Deterministic pinning (Response Envelope UI): a ui_response
+            # hint that matched this clarification's options widget pins
+            # the selection without re-interpretation.
+            if pinned_value and pinned_value in state["available_accounts"]:
+                selected_account = pinned_value
+            else:
+                selected_account = await self._parse_credential_selection(
+                    response, state["available_accounts"]
+                )
 
             if selected_account:
                 # Store the selected account in state
@@ -776,13 +825,25 @@ class UnifiedClarificationSystem:
                 except Exception:
                     pass
 
-                # Check if we have credential resolver to get available accounts
+                # Check if we have credential resolver to get available accounts.
+                # The LLM may echo the server id (e.g. "github-mcp") while
+                # credentials are stored under the bare service name
+                # ("github") — try both.
+                service_candidates = [mcp_service]
+                normalized_service = mcp_service.replace("mcp", "").strip("-").strip()
+                if normalized_service and normalized_service != mcp_service:
+                    service_candidates.append(normalized_service)
+
                 available_accounts = []
                 if hasattr(self.overlord, "credential_resolver"):
                     try:
-                        credentials = await self.overlord.credential_resolver.resolve(
-                            user_id, mcp_service
-                        )
+                        credentials = None
+                        for service_candidate in service_candidates:
+                            credentials = await self.overlord.credential_resolver.resolve(
+                                user_id, service_candidate
+                            )
+                            if credentials:
+                                break
                         if credentials:
                             if isinstance(credentials, list):
                                 available_accounts = [

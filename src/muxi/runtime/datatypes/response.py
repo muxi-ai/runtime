@@ -7,7 +7,7 @@ modes (sync, async, webhooks) with multi-modal support and OpenAI compatibility.
 
 from typing import Any, Dict, List, Literal, Optional, TypedDict, Union
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, model_serializer
 
 from .artifacts import MuxiArtifact
 from .mcp import FunctionCallModel
@@ -162,6 +162,28 @@ class MuxiResponse(BaseModel):
     )
     artifacts: Optional[List[MuxiArtifact]] = None
     metadata: Optional[Dict[str, Any]] = None
+    # Optional typed UI affordances (Response Envelope UI PRD). Additive:
+    # absent for the common case, and omitted from serialization when
+    # empty so responses without widgets stay byte-identical to before.
+    # Widgets are built exclusively by runtime producers via
+    # datatypes.ui builder functions, never from free-form LLM output.
+    ui: Optional[List[Dict[str, Any]]] = None
+
+    @model_serializer(mode="wrap")
+    def _serialize_omitting_empty_ui(self, handler):
+        """
+        Keep the wire format byte-identical to the pre-``ui`` envelope.
+
+        When MuxiResponse is nested inside another model (e.g. the API
+        response ``data`` dict), pydantic uses the core serializer —
+        NOT the overridden ``model_dump`` below — so without this hook
+        every response would grow a ``"ui": null`` key. The ``ui`` key
+        appears only when widgets are present.
+        """
+        data = handler(self)
+        if isinstance(data, dict) and not data.get("ui"):
+            data.pop("ui", None)
+        return data
 
     def model_dump(self, **kwargs):
         """
@@ -198,5 +220,9 @@ class MuxiResponse(BaseModel):
         # Include metadata if present
         if self.metadata:
             result["metadata"] = self.metadata
+
+        # Include UI affordances only when present (additive envelope field)
+        if self.ui:
+            result["ui"] = self.ui
 
         return result
