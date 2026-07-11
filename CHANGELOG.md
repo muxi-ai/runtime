@@ -36,6 +36,35 @@ ships; widgets are strictly additive to the channel message:
 - E2E: telegram inline-keyboard delivery + simulated callback_query
   pinning round trip (25A6); slack Block Kit variant + text-only
   template zero-change pin (25A7).
+### Response envelope UI - `mcp_resource` passthrough widget (P2)
+
+The third envelope widget type lands: when an external MCP server's
+tool result carries an embedded MCP Apps UI resource (a `ui://`-scheme
+embedded resource block), MUXI relays it verbatim to the client as an
+`mcp_resource` widget -- gateway, not app: no rendering, no
+interpretation, no execution (Response Envelope UI PRD, P2):
+
+- Widget shape: `{type: "mcp_resource", id, resource (the ui:// URI),
+  mime_type?, data (embedded content, verbatim), encoding?
+  ("base64" for blob resources; omitted for text), server, tool}`.
+  Provenance is structural and on the widget itself: the producing
+  server + tool are mandatory builder arguments.
+- Detection (honest v1): embedded-resource content blocks
+  (`type: "resource"`) whose URI uses the `ui://` scheme, text or
+  blob contents. `resource_link` blocks are not relayed (no data;
+  MUXI does not proxy `ui://` fetches).
+- Untrusted-content posture: the resource is external data. It is
+  carried outside the LLM-bound result dict, kept out of the flattened
+  tool text, and stripped from tool messages -- the widget extractor is
+  its only consumer; the server's accompanying text blocks remain the
+  model-facing summary. Text keeps the fallback duty: the response is
+  complete without the widget.
+- Size clamps: own budgets (64KB/widget, 128KB/envelope for
+  mcp_resource) so whole UI documents fit without touching the P1
+  budgets for standard widgets; oversized resources are dropped whole,
+  never truncated.
+- Works on both agent execution paths (tool-chain and planning);
+  `ui.emitted` observability reused with the new type value.
 
 ### Remote async tools - `watch_job` for MCP job-id + poll services
 

@@ -28,13 +28,101 @@
 # Streamable HTTP implementation plan Phase 2.3.
 # =============================================================================
 
-from typing import Any, Dict
+from typing import Any, Dict, List, Optional
 
 
 class ModernProtocolFeatures:
     """
     Support for MCP 2025-06-18 protocol enhancements.
     """
+
+    @staticmethod
+    def _ui_resource_entry(item: Any) -> Optional[Dict[str, Any]]:
+        """
+        Recognize an MCP Apps UI resource inside a tool-result content
+        block (Response Envelope UI PRD, P2 — the gateway passthrough).
+
+        v1 detection is deliberately narrow and honest: an *embedded
+        resource* block (``type: "resource"``, the SDK's
+        ``EmbeddedResource``) whose resource URI uses the ``ui://``
+        scheme — the MCP Apps convention for UI resources. Both text
+        (``TextResourceContents``) and binary (``BlobResourceContents``,
+        base64) contents are relayed. ``resource_link`` blocks are NOT
+        relayed: they carry no data, and MUXI does not proxy ``ui://``
+        resource fetches.
+
+        Handles both dict-shaped blocks (``model_dump()`` output from
+        the transports) and attribute-shaped SDK objects.
+
+        Returns:
+            ``{"uri", "data", "encoding", "mime_type"?}`` with the
+            content relayed verbatim, or None when the block is not a
+            UI resource.
+        """
+        if isinstance(item, dict):
+            block_type = item.get("type")
+            resource = item.get("resource")
+        else:
+            block_type = getattr(item, "type", None)
+            resource = getattr(item, "resource", None)
+        if block_type != "resource" or resource is None:
+            return None
+
+        if isinstance(resource, dict):
+            uri = resource.get("uri")
+            mime_type = resource.get("mimeType")
+            text = resource.get("text")
+            blob = resource.get("blob")
+        else:
+            uri = getattr(resource, "uri", None)
+            mime_type = getattr(resource, "mimeType", None)
+            text = getattr(resource, "text", None)
+            blob = getattr(resource, "blob", None)
+
+        # Transports hand us model_dump() output where uri is a
+        # pydantic AnyUrl — normalize to the plain string.
+        uri = str(uri) if uri is not None else ""
+        if not uri.startswith("ui://"):
+            return None
+
+        if isinstance(text, str) and text:
+            entry: Dict[str, Any] = {"uri": uri, "data": text, "encoding": "text"}
+        elif isinstance(blob, str) and blob:
+            entry = {"uri": uri, "data": blob, "encoding": "base64"}
+        else:
+            return None
+        if mime_type:
+            entry["mime_type"] = str(mime_type)
+        return entry
+
+    @staticmethod
+    def extract_ui_resources(result: Any) -> List[Dict[str, Any]]:
+        """
+        Extract MCP Apps UI resources (``ui://`` embedded resources)
+        from a raw tool result, before content flattening loses the
+        block structure.
+
+        Args:
+            result: Raw tool result (dict from ``model_dump()`` or a
+                CallToolResult-shaped object).
+
+        Returns:
+            List of relay entries (see ``_ui_resource_entry``), empty
+            when the result carries none.
+        """
+        if isinstance(result, dict):
+            content = result.get("content")
+        else:
+            content = getattr(result, "content", None)
+        if not isinstance(content, list):
+            return []
+
+        entries = []
+        for item in content:
+            entry = ModernProtocolFeatures._ui_resource_entry(item)
+            if entry is not None:
+                entries.append(entry)
+        return entries
 
     @staticmethod
     def extract_display_name(tool_info: Dict[str, Any]) -> str:
@@ -82,6 +170,14 @@ class ModernProtocolFeatures:
             if isinstance(content, list):
                 content_parts = []
                 for item in content:
+                    # UI resources (ui:// embedded resources) are
+                    # untrusted external content relayed verbatim to the
+                    # client as mcp_resource widgets — they are never
+                    # flattened into the LLM-visible text. The server's
+                    # accompanying text blocks carry the model-facing
+                    # summary.
+                    if ModernProtocolFeatures._ui_resource_entry(item) is not None:
+                        continue
                     if isinstance(item, dict):
                         text_value = item.get("text")
                         content_parts.append(
