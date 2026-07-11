@@ -40,7 +40,7 @@ AREA_TIMEOUT_OVERRIDES = {
     # Watch tests run real LLM turns (submit -> watch_job recognition,
     # completion re-entry) around fixed-cadence poll loops; the full-loop
     # test alone is ~2 LLM turns + ~6s of polling + channel delivery.
-    "25_watch": 300,
+    "26_watch": 300,
     # Envelope UI tests drive multi-turn clarification flows (LLM
     # analysis + MCP credential resolution + retry of the original
     # request) against real OpenAI; three rounds regularly exceed 120s.

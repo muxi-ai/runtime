@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """One-file stdio MCP server simulating an async job service.
 
-The fixture for the 25_watch e2e area (remote async tools): ``submit``
+The fixture for the 26_watch e2e area (remote async tools): ``submit``
 returns a job handle immediately (``{"job_id": ..., "status":
 "queued"}``) and ``check_status`` flips to ``succeeded`` after N status
 checks. The runtime uses ephemeral connections (a fresh process per

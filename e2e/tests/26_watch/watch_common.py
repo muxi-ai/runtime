@@ -1,5 +1,5 @@
 """
-Shared helpers for the 25_watch e2e area (remote async tools).
+Shared helpers for the 26_watch e2e area (remote async tools).
 
 Every test generates its formation at runtime into a temp directory
 (the scheduler-area standalone pattern): the fixture MCP job server

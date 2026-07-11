@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-Test 25A4: cross-user isolation + GBAC context on polls (PRD D5).
+Test 26A4: cross-user isolation + GBAC context on polls (PRD D5).
 
 Against a formation with real group files loaded by the GBAC resolver:
 
@@ -51,11 +51,11 @@ mcp_servers:
 
 
 async def main():
-    print("MUXI Runtime - Test 25A4: cross-user isolation + GBAC on polls")
+    print("MUXI Runtime - Test 26A4: cross-user isolation + GBAC on polls")
     print("=" * 60)
 
     formation = None
-    tmp = Path(tempfile.mkdtemp(prefix="muxi-watch-25a4-"))
+    tmp = Path(tempfile.mkdtemp(prefix="muxi-watch-26a4-"))
     try:
         formation_dir = build_formation(
             tmp,
@@ -145,7 +145,7 @@ async def main():
         print("\nUser (alice/watchers): watch check_status")
         print(f"System: watch {watch_id} completed with {job.result!r}")
 
-        print("\nTest 25A4 PASSED")
+        print("\nTest 26A4 PASSED")
         return True
 
     except Exception as e:

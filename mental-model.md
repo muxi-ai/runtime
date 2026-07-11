@@ -4189,7 +4189,7 @@ resolver quota; service: always-async, done_when matrix, timeout,
 consecutive failures, cancel, GBAC stored-context restoration,
 re-entry fencing/route_class, /jobs surface; dispatch: SOP shadowing)
 and `TestJobsWatch` in `tests/unit/test_builtin_commands.py`; e2e area
-`e2e/tests/25_watch/` -- five standalone tests over a generated
+`e2e/tests/26_watch/` -- five standalone tests over a generated
 formation + fixture stdio MCP job server (state in a JSON file because
 ephemeral connections spawn a fresh server process per call).
 
