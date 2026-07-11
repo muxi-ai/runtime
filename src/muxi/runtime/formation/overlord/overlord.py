@@ -217,7 +217,11 @@ from .a2a_coordinator import A2ACoordinator
 from .active_agents_tracker import ActiveAgentsTracker
 from .agent_router import AgentRouter
 from .chat_orchestrator import ChatOrchestrator
-from .clarification import UnifiedClarificationSystem
+from .clarification import (
+    UnifiedClarificationSystem,
+    build_credential_clarification_request,
+    parse_credential_clarification_response,
+)
 from .input_validation import InputLimits, InputValidationError, InputValidator
 from .mcp_coordinator import MCPCoordinator
 
@@ -11998,14 +12002,10 @@ Agent response: {raw_response}"""
                 )
                 return None
 
-            # Import credential handler
-            from ..clarification.credential_handler import CredentialClarificationHandler
-
-            # Create credential clarification handler
-            handler = CredentialClarificationHandler()
-
-            # Generate clarification request
-            clarification_request = handler.generate_credential_request(
+            # Generate clarification request (the standalone credential
+            # clarification handler was folded into overlord/clarification.py
+            # when the unified clarification system landed)
+            clarification_request = build_credential_clarification_request(
                 service=service, user_id=user_id, agent_id="system", context=context
             )
 
@@ -12021,7 +12021,6 @@ Agent response: {raw_response}"""
                     "service": service,
                     "user_id": user_id,
                     "request": clarification_request,
-                    "handler": handler,
                     "timestamp": time.time(),
                 }
 
@@ -12083,77 +12082,74 @@ Agent response: {raw_response}"""
                     clarification_info.get("type") == "credential"
                     and clarification_info.get("service") == service
                 ):
-                    handler = clarification_info.get("handler")
-
                     # Parse the credential from the response
-                    if handler:
-                        credential_data = handler.parse_credential_response(response, service)
+                    credential_data = parse_credential_clarification_response(response, service)
 
-                        if credential_data and self.credential_resolver:
-                            # Validate credential data structure before storing
-                            if self.credential_handler.validate_credential_data(
-                                credential_data, service
-                            ):
-                                # Store the credential
-                                await self.credential_resolver.store_credential(
-                                    user_id=user_id,
-                                    service=service,
-                                    credentials=credential_data,
-                                    mcp_service=self.mcp_service,
-                                )
+                    if credential_data and self.credential_resolver:
+                        # Validate credential data structure before storing
+                        if self.credential_handler.validate_credential_data(
+                            credential_data, service
+                        ):
+                            # Store the credential
+                            await self.credential_resolver.store_credential(
+                                user_id=user_id,
+                                service=service,
+                                credentials=credential_data,
+                                mcp_service=self.mcp_service,
+                            )
 
-                                # Asynchronously update credential name with smart discovery
-                                async def update_name():
-                                    with suppress(Exception):
-                                        # Attempt to update credential name, but don't fail if it doesn't work
-                                        await self.credential_resolver.update_credential_name_with_discovery(
-                                            user_id=user_id,
-                                            service=service,
-                                            mcp_service=self.mcp_service,
-                                        )
+                            # Asynchronously update credential name with smart discovery
+                            async def update_name():
+                                with suppress(Exception):
+                                    # Attempt to update credential name, but don't fail if it doesn't work
+                                    await self.credential_resolver.update_credential_name_with_discovery(
+                                        user_id=user_id,
+                                        service=service,
+                                        mcp_service=self.mcp_service,
+                                    )
 
-                                self._create_tracked_task(
-                                    update_name(), name=f"update_cred_name_{service}_{user_id}"
-                                )
-                            else:
-                                observability.observe(
-                                    event_type=observability.ErrorEvents.VALIDATION_FAILED,
-                                    level=observability.EventLevel.ERROR,
-                                    data={
-                                        "service": service,
-                                        "user_id": user_id,
-                                        "credential_keys": (
-                                            list(credential_data.keys())
-                                            if isinstance(credential_data, dict)
-                                            else "invalid_type"
-                                        ),
-                                        "validation_error": "invalid_credential_structure",
-                                    },
-                                    description=f"Invalid credential data structure for {service}",
-                                )
-                                return False
-
-                            # Clean up pending clarification
-                            self._delete_pending_clarification(session_id)
-
+                            self._create_tracked_task(
+                                update_name(), name=f"update_cred_name_{service}_{user_id}"
+                            )
+                        else:
                             observability.observe(
-                                event_type=observability.ConversationEvents.CREDENTIAL_PROVIDED,
-                                level=observability.EventLevel.INFO,
+                                event_type=observability.ErrorEvents.VALIDATION_FAILED,
+                                level=observability.EventLevel.ERROR,
                                 data={
                                     "service": service,
                                     "user_id": user_id,
-                                    "credential_type": (
-                                        list(credential_data.keys())[0]
-                                        if credential_data
-                                        else "unknown"
+                                    "credential_keys": (
+                                        list(credential_data.keys())
+                                        if isinstance(credential_data, dict)
+                                        else "invalid_type"
                                     ),
-                                    "via_clarification": True,
-                                    "session_id": session_id,
+                                    "validation_error": "invalid_credential_structure",
                                 },
-                                description=f"User provided {service} credentials via clarification",
+                                description=f"Invalid credential data structure for {service}",
                             )
+                            return False
 
-                            return True
+                        # Clean up pending clarification
+                        self._delete_pending_clarification(session_id)
+
+                        observability.observe(
+                            event_type=observability.ConversationEvents.CREDENTIAL_PROVIDED,
+                            level=observability.EventLevel.INFO,
+                            data={
+                                "service": service,
+                                "user_id": user_id,
+                                "credential_type": (
+                                    list(credential_data.keys())[0]
+                                    if credential_data
+                                    else "unknown"
+                                ),
+                                "via_clarification": True,
+                                "session_id": session_id,
+                            },
+                            description=f"User provided {service} credentials via clarification",
+                        )
+
+                        return True
 
             return False
 

@@ -2,8 +2,15 @@ import logging
 import re
 import time
 from dataclasses import dataclass
-from typing import Dict, List, Optional
+from typing import Any, Dict, List, Optional
 
+from ...datatypes.clarification import (
+    ClarificationQuestion,
+    ClarificationRequest,
+    ClarificationResponse,
+    QuestionStyle,
+    RequestType,
+)
 from ...services import observability
 from ...utils.fastjson import json
 
@@ -35,6 +42,118 @@ class ClarificationResult:
     # The question text MUST still list the same choices in prose
     # (text carries the fallback duty).
     options: Optional[List[Dict[str, str]]] = None
+
+
+# Display names for services whose brand casing differs from .title()
+_SERVICE_DISPLAY_NAMES = {
+    "github": "GitHub",
+    "gitlab": "GitLab",
+    "openai": "OpenAI",
+    "mongodb": "MongoDB",
+    "postgresql": "PostgreSQL",
+    "mysql": "MySQL",
+    "aws": "AWS",
+    "gcp": "GCP",
+}
+
+
+def _format_service_name(service: str) -> str:
+    return _SERVICE_DISPLAY_NAMES.get(
+        service.lower(), service.replace("_", " ").replace("-", " ").title()
+    )
+
+
+# Known services by the credential field name their APIs expect. Unknown
+# services fall back to suffix matches on the service name (exact/suffix
+# only — plain substring checks misfire on names like "monkey").
+_TOKEN_SERVICES = {"github", "gitlab", "slack", "discord", "bitbucket"}
+_API_KEY_SERVICES = {"openai", "anthropic", "cohere", "pinecone"}
+
+
+def _credential_field_name(service: str) -> str:
+    """Pick the credential field name most APIs of this service expect."""
+    service_lower = service.lower()
+    if service_lower in _TOKEN_SERVICES or service_lower.endswith("token"):
+        return "token"
+    if service_lower in _API_KEY_SERVICES or service_lower.endswith(
+        ("_api", "-api", "_key", "-key")
+    ):
+        return "api_key"
+    return "token"
+
+
+def build_credential_clarification_request(
+    service: str,
+    user_id: str,
+    agent_id: str = "system",
+    context: Optional[Dict[str, Any]] = None,
+) -> ClarificationRequest:
+    """
+    Build a clarification request for a missing credential.
+
+    Replaces the standalone CredentialClarificationHandler that was removed
+    with the unified clarification system; the overlord's
+    handle_missing_credential path uses this to ask the user for a service
+    credential when a tool raises MissingCredentialError.
+    """
+    display_name = _format_service_name(service)
+    tool_name = context.get("tool_name") if context else None
+
+    message_parts = [f"I need your {display_name} credentials to continue."]
+    if tool_name:
+        message_parts.append(f"This is required to use the '{tool_name}' tool.")
+    message_parts.append(
+        f"Please provide your {display_name} credentials "
+        f"(API key, token, or authentication details)."
+    )
+
+    question = ClarificationQuestion(
+        question_id=f"credential_{service}",
+        question_text=" ".join(message_parts),
+        parameter_name="credential",
+        parameter_type="credential",
+        parameter_description=f"{display_name} credential",
+        required=True,
+        validation_rules={"min_length": 8},
+        context_hints=[f"This credential is needed for {display_name} integration"],
+        style=QuestionStyle.CONVERSATIONAL,
+    )
+
+    return ClarificationRequest(
+        user_id=user_id,
+        agent_id=agent_id,
+        request_type=RequestType.TOOL_CALL,
+        tool_name=tool_name,
+        intent=f"Request {service} credentials",
+        missing_info=[f"{service}_credential"],
+        clarification_plan=[question],
+        context={"reason": "missing_credential", "service": service, **(context or {})},
+    )
+
+
+def parse_credential_clarification_response(
+    response: ClarificationResponse, service: str
+) -> Optional[Dict[str, Any]]:
+    """
+    Extract credential data from a user's clarification response.
+
+    Returns a single-field dict (e.g. {"token": ...}) or None if the
+    response carries no usable credential.
+    """
+    field_name = _credential_field_name(service)
+
+    for answer in response.answers or []:
+        if answer.get("id") == f"credential_{service}":
+            value = (answer.get("answer") or "").strip()
+            if value:
+                return {field_name: value}
+
+    # Users often just paste the credential as free text
+    raw = (response.raw_response or "").strip()
+    if raw:
+        return {field_name: raw}
+
+    return None
 
 
 class UnifiedClarificationSystem:
