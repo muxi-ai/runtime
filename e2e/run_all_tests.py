@@ -41,6 +41,10 @@ AREA_TIMEOUT_OVERRIDES = {
     # completion re-entry) around fixed-cadence poll loops; the full-loop
     # test alone is ~2 LLM turns + ~6s of polling + channel delivery.
     "25_watch": 300,
+    # Envelope UI tests drive multi-turn clarification flows (LLM
+    # analysis + MCP credential resolution + retry of the original
+    # request) against real OpenAI; three rounds regularly exceed 120s.
+    "25_envelope_ui": 300,
 }
 E2E_DIR = Path(__file__).parent
 TESTS_DIR = E2E_DIR / "tests"

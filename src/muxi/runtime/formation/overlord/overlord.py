@@ -6489,6 +6489,9 @@ Agent response: {raw_response}"""
         ] = None,  # Addressing context captured from the inbound payload
         route_class: str = "chat",  # Request origin for the middleware payload
         middleware_applied: bool = False,  # Entry point already ran the request middleware
+        ui_response: Optional[
+            Dict[str, Any]
+        ] = None,  # Structured widget reply hint {id, value} (Response Envelope UI)
     ) -> Union[str, Dict[str, Any], AsyncGenerator[str, None]]:
         """
         Enhanced chat with async support for long-running agentic tasks and file attachments.
@@ -6726,6 +6729,7 @@ Agent response: {raw_response}"""
             bypass_workflow_approval=bypass_workflow_approval,
             is_scheduled_execution=is_scheduled_execution,
             model_override=model_override,
+            ui_response=ui_response,
         )
 
     async def audiochat(
@@ -7371,8 +7375,15 @@ Agent response: {raw_response}"""
             if not matching_server:
                 return False
 
-            # Resolve the selected account's credential data from the database
+            # Resolve the selected account's credential data from the database.
+            # Callers may pass the server id (e.g. "github-mcp") while
+            # credentials are stored under the bare service name ("github") —
+            # try both.
             resolved = await self.credential_resolver.resolve(user_id, service_name)
+            if not resolved:
+                normalized_service = service_name.replace("mcp", "").strip("-").strip()
+                if normalized_service and normalized_service != service_name:
+                    resolved = await self.credential_resolver.resolve(user_id, normalized_service)
             cred_data = None
             if isinstance(resolved, list):
                 for cred_entry in resolved:
@@ -7409,6 +7420,127 @@ Agent response: {raw_response}"""
         except Exception:
             return False
 
+    # ===================================================================
+    # RESPONSE ENVELOPE UI AFFORDANCES (Response Envelope UI PRD, P1)
+    # ===================================================================
+
+    def _attach_ui(self, response, widgets, producer: str):
+        """
+        Clamp and attach UI widgets to a response envelope, emitting one
+        ``ui.emitted`` event per widget (type, producer).
+
+        Widgets are built by runtime producers via ``datatypes.ui``
+        builders — never from free-form LLM output — so this is the
+        single choke point where affordances enter the envelope.
+
+        Returns the clamped widget list (or None when nothing attaches).
+        """
+        from ...datatypes.ui import clamp_ui
+
+        clamped = clamp_ui([w for w in (widgets or []) if w])
+        if not clamped:
+            return None
+
+        response.ui = clamped
+        for widget in clamped:
+            observability.observe(
+                event_type=observability.ConversationEvents.UI_EMITTED,
+                level=observability.EventLevel.INFO,
+                data={
+                    "type": widget.get("type"),
+                    "producer": producer,
+                    "widget_id": widget.get("id"),
+                },
+                description=f"UI widget '{widget.get('type')}' emitted by {producer}",
+            )
+        return clamped
+
+    def _declared_portal_link(self, service: Optional[str]):
+        """
+        Build an ``action_link`` widget from the formation-declared
+        ``links:`` map (provenance: formation config).
+
+        Looks up ``links.<service>`` first, then the generic
+        ``links.credential_portal`` fallback. Returns None when the
+        formation declares no matching link — the text fallback is
+        always complete without the widget.
+        """
+        from ...datatypes.ui import UIProvenance, build_action_link_widget
+
+        links = (
+            self.formation_config.get("links", {})
+            if getattr(self, "formation_config", None)
+            else {}
+        )
+        if not isinstance(links, dict):
+            return None
+
+        entry = None
+        if service and isinstance(links.get(service), dict):
+            entry = links[service]
+        elif isinstance(links.get("credential_portal"), dict):
+            entry = links["credential_portal"]
+        if not entry:
+            return None
+
+        service_display = (service or "account").capitalize()
+        if service == "github":
+            service_display = "GitHub"
+
+        return build_action_link_widget(
+            label=entry.get("label") or f"Connect {service_display}",
+            url=entry.get("url"),
+            hint=entry.get("hint"),
+            source=UIProvenance.FORMATION_CONFIG,
+        )
+
+    async def _resolve_ui_response_hint(
+        self, ui_response: Optional[Dict[str, Any]], session_id: Optional[str]
+    ) -> Optional[str]:
+        """
+        Resolve an inbound ``ui_response`` hint against the widget the
+        pending clarification for this conversation produced.
+
+        Deterministic pinning applies ONLY to clarification-produced
+        options widgets: a matching id + offered value pins the
+        selection without re-interpretation. Unknown/stale ids are
+        ignored — the message stands alone. Emits ``ui.response.received``
+        (type, matched) either way. Stateless: the id resolves against
+        the conversation's pending-clarification record, never a
+        server-side widget store.
+        """
+        if not ui_response:
+            return None
+
+        from ...datatypes.ui import resolve_ui_response
+
+        pending = await self._get_pending_clarification(session_id) if session_id else None
+        pinned_value = resolve_ui_response(
+            ui_response,
+            (pending or {}).get("ui_id"),
+            (pending or {}).get("ui_options"),
+        )
+
+        observability.observe(
+            event_type=observability.ConversationEvents.UI_RESPONSE_RECEIVED,
+            level=observability.EventLevel.INFO,
+            data={
+                "type": "options",
+                "matched": pinned_value is not None,
+                "widget_id": ui_response.get("id"),
+                "session_id": session_id,
+            },
+            description=(
+                "ui_response hint "
+                + (
+                    "matched pending clarification widget"
+                    if pinned_value
+                    else "ignored (unknown/stale id)"
+                )
+            ),
+        )
+        return pinned_value
+
     async def _process_sync_chat(
         self,
         message: str,
@@ -7423,6 +7555,7 @@ Agent response: {raw_response}"""
         clean_chat_context: Optional[Dict[str, Any]] = None,
         original_message: Optional[str] = None,
         is_scheduled_execution: bool = False,
+        ui_response: Optional[Dict[str, Any]] = None,
     ) -> MuxiResponse:
         """
         Process chat synchronously using existing infrastructure.
@@ -7470,6 +7603,12 @@ Agent response: {raw_response}"""
         if request_id and self.request_tracker.is_cancelled(request_id):
             await self.request_tracker.clear_cancelled(request_id)
             raise RequestCancelledException(request_id)
+
+        # Resolve any inbound ui_response hint against the pending
+        # clarification's options widget (Response Envelope UI). A match
+        # pins the selection deterministically; unknown/stale ids are
+        # ignored and the message stands alone.
+        pinned_ui_value = await self._resolve_ui_response_hint(ui_response, session_id)
 
         # ===================================================================
         # GBAC PERMISSION GATE (Phase 3)
@@ -7741,8 +7880,21 @@ Agent response: {raw_response}"""
                         # extraction here.
                         import re
 
+                        # Deterministic pinning (Response Envelope UI): a
+                        # ui_response hint that matched the clarification's
+                        # options widget selects the credential without
+                        # re-interpretation of the message text.
+                        if pinned_ui_value:
+                            for cred in available_credentials:
+                                cred_name = cred["name"] if isinstance(cred, dict) else cred
+                                if cred_name == pinned_ui_value:
+                                    selected_credential = cred
+                                    break
+
                         numbers = re.findall(r"\d+", actual_message.strip())
-                        if numbers:
+                        if selected_credential:
+                            pass  # Pinned deterministically above
+                        elif numbers:
                             # User selected by number
                             choice_index = int(numbers[0]) - 1  # Convert to 0-based index
                             if ordered_credentials and 0 <= choice_index < len(ordered_credentials):
@@ -7864,6 +8016,7 @@ Agent response: {raw_response}"""
                             response_result = await self.clarification.handle_response(
                                 request_id=clarification_info.get("request_id"),
                                 response=actual_message,
+                                pinned_value=pinned_ui_value,
                             )
 
                             # ALWAYS clear the pending clarification after handling response
@@ -7873,29 +8026,51 @@ Agent response: {raw_response}"""
                                 # Need more clarification - the UnifiedClarificationSystem already
                                 # has the context and knows we need to ask another question
                                 # We just need to store a new pending and return the question
+                                clarify_response = MuxiResponse(
+                                    role="assistant",
+                                    content=response_result.question,
+                                    metadata={"clarification": True},
+                                )
+
+                                # Options widget for enumerable choices
+                                # (Response Envelope UI)
+                                clarify_ui = None
+                                if getattr(response_result, "options", None):
+                                    from ...datatypes.ui import build_options_widget
+
+                                    clarify_ui = self._attach_ui(
+                                        clarify_response,
+                                        [
+                                            build_options_widget(
+                                                prompt=response_result.question,
+                                                options=response_result.options,
+                                            )
+                                        ],
+                                        producer="clarification",
+                                    )
+
                                 if session_id:
                                     # Use the ORIGINAL request_id so the clarification state
                                     # (with depth counter) is preserved across rounds
                                     original_request_id = clarification_info.get(
                                         "request_id", request_id
                                     )
-                                    self._set_pending_clarification(
-                                        session_id,
-                                        {
-                                            "request_id": original_request_id,
-                                            "type": (
-                                                response_result.mode
-                                                if hasattr(response_result, "mode")
-                                                else "direct"
-                                            ),
-                                        },
-                                    )
+                                    new_pending = {
+                                        "request_id": original_request_id,
+                                        "type": (
+                                            response_result.mode
+                                            if hasattr(response_result, "mode")
+                                            else "direct"
+                                        ),
+                                    }
+                                    if clarify_ui:
+                                        new_pending["ui_id"] = clarify_ui[0]["id"]
+                                        new_pending["ui_options"] = [
+                                            o["value"] for o in clarify_ui[0]["options"]
+                                        ]
+                                    self._set_pending_clarification(session_id, new_pending)
 
-                                return MuxiResponse(
-                                    role="assistant",
-                                    content=response_result.question,
-                                    metadata={"clarification": True},
-                                )
+                                return clarify_response
 
                             elif response_result.action == "execute":
                                 # If this was a credential selection, cache the credential
@@ -8333,7 +8508,18 @@ Agent response: {raw_response}"""
                                     },
                                 )
 
-                            return MuxiResponse(role="assistant", content=result["message"])
+                            credential_request_response = MuxiResponse(
+                                role="assistant", content=result["message"]
+                            )
+                            if result.get("action") == "redirect":
+                                # Declared credential portal (Response Envelope
+                                # UI: action_link, formation-config provenance)
+                                self._attach_ui(
+                                    credential_request_response,
+                                    [self._declared_portal_link(service)],
+                                    producer="credential_redirect",
+                                )
+                            return credential_request_response
                         # SERVICE_USE now always returns None from detection
                         # so it won't reach here
 
@@ -8422,6 +8608,7 @@ Agent response: {raw_response}"""
                         request_id=request_id,
                         session_id=session_id,
                         context=clarification_context,
+                        pinned_value=pinned_ui_value,
                     )
 
                 if clarification_result.action == "clarify":
@@ -8441,30 +8628,66 @@ Agent response: {raw_response}"""
                         ),
                         skip_rephrase=True,
                     )
-                    # Store minimal info - just request_id for reuse
-                    if session_id:
-                        self._set_pending_clarification(
-                            session_id,
-                            {
-                                "request_id": request_id,  # Essential for request_id reuse
-                                "type": clarification_result.mode,  # Optional, for observability
-                            },
-                        )
 
-                    # Emit completed event so SDKs/CLIs know it's user's turn
-                    streaming.stream(
-                        "completed",
-                        clarification_result.question,
-                        status="awaiting_clarification",
-                        processing_time_ms=int((time.time() - start_time) * 1000),
-                        clarification=True,
-                    )
-
-                    return MuxiResponse(
+                    clarify_response = MuxiResponse(
                         role="assistant",
                         content=clarification_result.question,
                         metadata={"clarification": True, "mode": clarification_result.mode},
                     )
+
+                    # Response Envelope UI producers: an options widget when
+                    # the interpretations are enumerable, and a declared
+                    # portal action_link when this is a credential redirect.
+                    ui_widgets = []
+                    if clarification_result.options:
+                        from ...datatypes.ui import build_options_widget
+
+                        ui_widgets.append(
+                            build_options_widget(
+                                prompt=clarification_result.question,
+                                options=clarification_result.options,
+                            )
+                        )
+                    if clarification_result.mode == "redirect":
+                        ui_widgets.append(
+                            self._declared_portal_link(
+                                (clarification_result.context or {}).get("mcp_service")
+                            )
+                        )
+                    attached_ui = self._attach_ui(
+                        clarify_response, ui_widgets, producer="clarification"
+                    )
+
+                    # Store minimal info - just request_id for reuse (plus the
+                    # options widget id/values so a ui_response reply can be
+                    # pinned deterministically against conversation state)
+                    if session_id:
+                        pending_data = {
+                            "request_id": request_id,  # Essential for request_id reuse
+                            "type": clarification_result.mode,  # Optional, for observability
+                        }
+                        for widget in attached_ui or []:
+                            if widget.get("type") == "options":
+                                pending_data["ui_id"] = widget["id"]
+                                pending_data["ui_options"] = [o["value"] for o in widget["options"]]
+                                break
+                        self._set_pending_clarification(session_id, pending_data)
+
+                    # Emit completed event so SDKs/CLIs know it's user's turn
+                    completed_kwargs = {
+                        "status": "awaiting_clarification",
+                        "processing_time_ms": int((time.time() - start_time) * 1000),
+                        "clarification": True,
+                    }
+                    if attached_ui:
+                        completed_kwargs["ui"] = attached_ui
+                    streaming.stream(
+                        "completed",
+                        clarification_result.question,
+                        **completed_kwargs,
+                    )
+
+                    return clarify_response
 
                 elif clarification_result.action == "message":
                     # Direct message response (e.g., credential redirect)
@@ -9169,7 +9392,7 @@ Agent response: {raw_response}"""
                                 clarification_result.question, message
                             )
 
-                            return MuxiResponse(
+                            redirect_response = MuxiResponse(
                                 role="assistant",
                                 content=formatted_content,
                                 metadata={
@@ -9179,6 +9402,14 @@ Agent response: {raw_response}"""
                                     "session_id": session_id,
                                 },
                             )
+                            # Declared credential portal (Response Envelope UI:
+                            # action_link with formation-config provenance)
+                            self._attach_ui(
+                                redirect_response,
+                                [self._declared_portal_link(e.service)],
+                                producer="credential_redirect",
+                            )
+                            return redirect_response
 
                         # For dynamic mode (future implementation), would store pending clarification
                         # and handle credential collection
@@ -9261,7 +9492,7 @@ Agent response: {raw_response}"""
                         },
                     )
 
-                return MuxiResponse(
+                missing_credential_response = MuxiResponse(
                     role="assistant",
                     content=formatted_content,
                     metadata={
@@ -9274,6 +9505,15 @@ Agent response: {raw_response}"""
                         "session_id": session_id,
                     },
                 )
+                if cred_config.get("mode", "redirect") == "redirect":
+                    # Declared credential portal (Response Envelope UI:
+                    # action_link with formation-config provenance)
+                    self._attach_ui(
+                        missing_credential_response,
+                        [self._declared_portal_link(e.service)],
+                        producer="credential_redirect",
+                    )
+                return missing_credential_response
 
             elif isinstance(e, AmbiguousCredentialError):
                 # Use unified system to handle credential error
@@ -9289,35 +9529,13 @@ Agent response: {raw_response}"""
                             state["original_request"] = actual_message_for_credential
                             await self.clarification._store_state(request_id, state)
 
-                        # Store pending clarification if we have a session
-                        # Use "ambiguous_credential" (not "credential") so the response
-                        # handler routes to the credential selection handler instead of
-                        # treating the user's selection as a new credential to store.
-                        # Must be synchronous to ensure the pending is stored before the
-                        # response reaches the caller and the next message arrives.
-                        if session_id:
-                            await self._set_pending_clarification_sync(
-                                session_id,
-                                {
-                                    "type": "ambiguous_credential",
-                                    "service": e.service,
-                                    "user_id": e.user_id,
-                                    "timestamp": time.time(),
-                                    "original_message": actual_message_for_credential,
-                                    "available_credentials": e.available_credentials,
-                                    "ordered_credentials": getattr(e, "ordered_credentials", None),
-                                    "request_id": request_id,  # Essential for request_id reuse
-                                },
-                            )
-
-                        # Apply persona to the question
-                        formatted_content = await self._apply_persona(
-                            clarification_result.question, message
-                        )
-
-                        return MuxiResponse(
+                        # Options widget for the enumerable account choices
+                        # (Response Envelope UI). Built before the pending is
+                        # stored so the widget id rides along for the
+                        # deterministic reply path.
+                        credential_options_response = MuxiResponse(
                             role="assistant",
-                            content=formatted_content,
+                            content="",  # Filled after persona formatting below
                             metadata={
                                 "clarification_requested": True,
                                 "clarification_type": "credential",
@@ -9326,6 +9544,65 @@ Agent response: {raw_response}"""
                                 "session_id": session_id,
                             },
                         )
+                        attached_ui = None
+                        if clarification_result.options:
+                            from ...datatypes.ui import build_options_widget
+
+                            attached_ui = self._attach_ui(
+                                credential_options_response,
+                                [
+                                    build_options_widget(
+                                        prompt=clarification_result.question,
+                                        options=clarification_result.options,
+                                    )
+                                ],
+                                producer="clarification",
+                            )
+
+                        # Store pending clarification if we have a session
+                        # Use "ambiguous_credential" (not "credential") so the response
+                        # handler routes to the credential selection handler instead of
+                        # treating the user's selection as a new credential to store.
+                        # Must be synchronous to ensure the pending is stored before the
+                        # response reaches the caller and the next message arrives.
+                        if session_id:
+                            pending_data = {
+                                "type": "ambiguous_credential",
+                                "service": e.service,
+                                "user_id": e.user_id,
+                                "timestamp": time.time(),
+                                "original_message": actual_message_for_credential,
+                                "available_credentials": e.available_credentials,
+                                "ordered_credentials": getattr(e, "ordered_credentials", None),
+                                "request_id": request_id,  # Essential for request_id reuse
+                            }
+                            if attached_ui:
+                                pending_data["ui_id"] = attached_ui[0]["id"]
+                                pending_data["ui_options"] = [
+                                    o["value"] for o in attached_ui[0]["options"]
+                                ]
+                            await self._set_pending_clarification_sync(session_id, pending_data)
+
+                        # Apply persona to the question
+                        formatted_content = await self._apply_persona(
+                            clarification_result.question, message
+                        )
+
+                        # Text carries the fallback duty: if persona
+                        # rephrasing dropped any of the enumerated choices,
+                        # re-append them so the text works without the widget.
+                        if attached_ui:
+                            option_values = [o["value"] for o in attached_ui[0]["options"]]
+                            if not all(value in formatted_content for value in option_values):
+                                option_lines = "\n".join(
+                                    f"{i + 1}. {value}" for i, value in enumerate(option_values)
+                                )
+                                formatted_content = (
+                                    f"{formatted_content}\n\nAvailable accounts:\n{option_lines}"
+                                )
+
+                        credential_options_response.content = formatted_content
+                        return credential_options_response
                     except Exception as unified_error:
                         observability.observe(
                             event_type=observability.ErrorEvents.INTERNAL_ERROR,
@@ -9491,6 +9768,10 @@ Agent response: {raw_response}"""
             "processing_time_ms": int((time.time() - start_time) * 1000),
             "agent_used": agent_name,
         }
+        # Include UI affordances so the SSE route can emit its `ui` event
+        # at end-of-turn (Response Envelope UI)
+        if result and getattr(result, "ui", None):
+            completed_kwargs["ui"] = result.ui
         if result and hasattr(result, "artifacts") and result.artifacts:
             completed_kwargs["artifacts"] = [a.model_dump(mode="json") for a in result.artifacts]
 

@@ -448,6 +448,10 @@ class FormationValidator:
         if "commands" in config:
             self._validate_commands_config(config["commands"])
 
+        # Validate declared links/portals configuration (Response Envelope UI)
+        if "links" in config:
+            self._validate_links_config(config["links"])
+
     def _validate_artifacts_config(self, artifacts_config: Dict[str, Any]) -> None:
         """Validate artifact memory configuration (Artifact Memory Phase 1)."""
         # Reuse the service-level parser so the validator and the runtime
@@ -524,6 +528,32 @@ class FormationValidator:
                 self.result.add_error(
                     "user_credentials.encryption_key must be null or a non-empty string"
                 )
+
+    def _validate_links_config(self, links_config: Dict[str, Any]) -> None:
+        """Validate declared links/portals configuration (Response Envelope UI).
+
+        A map of ``name -> {label, url, hint}`` declaring external
+        destinations (credential portals, dashboards) that producers may
+        surface as ``action_link`` widgets with formation-config
+        provenance. ``url`` is required and must be http(s); ``label``
+        and ``hint`` are optional strings.
+        """
+        if not isinstance(links_config, dict):
+            self.result.add_error("links must be a dictionary of name -> {label, url, hint}")
+            return
+
+        for name, entry in links_config.items():
+            if not isinstance(entry, dict):
+                self.result.add_error(f"links.{name} must be a dictionary with a 'url' field")
+                continue
+
+            url = entry.get("url")
+            if not isinstance(url, str) or not url.startswith(("http://", "https://")):
+                self.result.add_error(f"links.{name}.url must be an http(s) URL")
+
+            for field in ("label", "hint"):
+                if field in entry and not isinstance(entry[field], str):
+                    self.result.add_error(f"links.{name}.{field} must be a string")
 
     def _validate_agents(self, agents_config: List[Dict[str, Any]], is_inline: bool = True) -> None:
         """Validate agents configuration.
