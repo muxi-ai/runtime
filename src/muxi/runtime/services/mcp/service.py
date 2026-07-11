@@ -980,10 +980,29 @@ class MCPService:
                     ),
                 )
 
-                return {
+                response_payload: Dict[str, Any] = {
                     "result": processed_result,
                     "status": "success" if not processed_result["isError"] else "error",
                 }
+
+                # Gateway passthrough of MCP Apps UI resources (Response
+                # Envelope UI PRD, P2): embedded ui:// resources in the
+                # tool result are relayed verbatim to the client as
+                # mcp_resource widgets. They are untrusted external
+                # content, carried at the TOP level of the payload —
+                # deliberately outside ``result`` so the text-rendering
+                # paths (tool messages, planning summaries, raw response
+                # sections) never see them; the widget extractor is
+                # their only consumer. Each entry is tagged with its
+                # provenance (this server + tool).
+                if not processed_result["isError"]:
+                    ui_resources = ModernProtocolFeatures.extract_ui_resources(result)
+                    if ui_resources:
+                        response_payload["_ui_resources"] = [
+                            dict(entry, server=server_id, tool=tool_name) for entry in ui_resources
+                        ]
+
+                return response_payload
 
         except Exception as e:
             # Emit MCP tool invocation failed event
