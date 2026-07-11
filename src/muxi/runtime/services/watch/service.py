@@ -79,9 +79,14 @@ def _iso(value) -> Optional[str]:
 def _values_match(actual: Any, expected: Any) -> bool:
     """Deterministic comparison for done_when: exact, or string-form equal.
 
+    Strictly typed for booleans: Python's ``1 == True`` / ``0 == False``
+    coercion would let a boolean spec value match a numeric result (and
+    vice versa), breaking determinism -- a bool matches ONLY a bool.
     The string-form fallback keeps ``equals: "3"`` matching a numeric 3
     (JSON bodies vary) without any fuzzy semantics.
     """
+    if isinstance(actual, bool) != isinstance(expected, bool):
+        return False
     if actual == expected:
         return True
     return str(actual) == str(expected)
@@ -452,16 +457,6 @@ class WatchService:
                 await asyncio.sleep(self.config.interval_seconds)
                 if job.cancel_requested or self._stopping or job.status != STATUS_WATCHING:
                     return
-                if time.monotonic() - started >= self.config.timeout_seconds:
-                    job.error = (
-                        f"watch exceeded the {int(self.config.timeout_seconds)}s "
-                        "deadline without reaching a terminal state"
-                    )
-                    if last_body is not None:
-                        job.result = self._serialize(last_body)
-                    self._finalize_status(job, STATUS_TIMED_OUT)
-                    await self._after_terminal(job, reenter=True)
-                    return
 
                 ok, body_or_error = await self._poll_once(job)
                 job.polls += 1
@@ -482,13 +477,27 @@ class WatchService:
                         self._finalize_status(job, STATUS_FAILED)
                         await self._after_terminal(job, reenter=True)
                         return
-                    continue
+                else:
+                    job.consecutive_failures = 0
+                    last_body = body_or_error
+                    if self._done_when_met(job, body_or_error):
+                        job.result = self._extract_result(job, body_or_error)
+                        self._finalize_status(job, STATUS_COMPLETED)
+                        await self._after_terminal(job, reenter=True)
+                        return
 
-                job.consecutive_failures = 0
-                last_body = body_or_error
-                if self._done_when_met(job, body_or_error):
-                    job.result = self._extract_result(job, body_or_error)
-                    self._finalize_status(job, STATUS_COMPLETED)
+                # Deadline check AFTER the poll and its evaluation: a job
+                # whose terminal condition is met on the poll at (or just
+                # past) the deadline completes -- the final permitted poll
+                # is never skipped in favor of timed_out.
+                if time.monotonic() - started >= self.config.timeout_seconds:
+                    job.error = (
+                        f"watch exceeded the {int(self.config.timeout_seconds)}s "
+                        "deadline without reaching a terminal state"
+                    )
+                    if last_body is not None:
+                        job.result = self._serialize(last_body)
+                    self._finalize_status(job, STATUS_TIMED_OUT)
                     await self._after_terminal(job, reenter=True)
                     return
         except asyncio.CancelledError:

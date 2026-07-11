@@ -448,7 +448,7 @@ def _merge_groups(base: ResolvedGroup, overlay: ResolvedGroup) -> ResolvedGroup:
 
     # Watch quota: grants are additive, so inheritance keeps the highest
     # value (same semantics as the multi-group merge at request time).
-    quotas = [q for q in (base.watch_max_concurrent, overlay.watch_max_concurrent) if q]
+    quotas = [q for q in (base.watch_max_concurrent, overlay.watch_max_concurrent) if q is not None]
     watch_max_concurrent = max(quotas) if quotas else None
 
     return ResolvedGroup(

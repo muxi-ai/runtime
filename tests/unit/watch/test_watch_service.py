@@ -251,6 +251,59 @@ class TestDoneWhen:
         job = await wait_terminal(service, result["job_id"])
         assert job.status == STATUS_COMPLETED
 
+    def test_bool_matching_is_strictly_typed(self):
+        # Python's 1 == True coercion must not leak into done_when: a
+        # bool spec value matches ONLY a bool result value, and vice
+        # versa (Greptile P2 on #278).
+        from muxi.runtime.services.watch.service import _values_match
+
+        assert _values_match(True, True) is True
+        assert _values_match(False, False) is True
+        assert _values_match(1, True) is False
+        assert _values_match(True, 1) is False
+        assert _values_match(0, False) is False
+        assert _values_match(False, 0) is False
+
+    async def test_bool_equals_ignores_numeric_coercion(self):
+        # equals: true must NOT match {"count": 1}; it matches only a
+        # real boolean true.
+        service, _ = make_service([{"done": 1}, {"done": True}])
+        result = await service.watch(
+            agent_id="agent",
+            user_id="u1",
+            tool="check_status",
+            done_when={"path": "$.done", "equals": True},
+        )
+        job = await wait_terminal(service, result["job_id"])
+        assert job.status == STATUS_COMPLETED
+        assert job.polls == 2  # the numeric 1 on poll 1 did not match
+
+    async def test_numeric_equals_ignores_bool_coercion(self):
+        # equals: 1 must NOT match a boolean true.
+        service, _ = make_service([{"done": True}, {"done": 1}])
+        result = await service.watch(
+            agent_id="agent",
+            user_id="u1",
+            tool="check_status",
+            done_when={"path": "$.done", "equals": 1},
+        )
+        job = await wait_terminal(service, result["job_id"])
+        assert job.status == STATUS_COMPLETED
+        assert job.polls == 2  # the boolean true on poll 1 did not match
+
+    async def test_bool_in_list_ignores_numeric_coercion(self):
+        # in: [true] must NOT match a numeric 1.
+        service, _ = make_service([{"done": 1}, {"done": True}])
+        result = await service.watch(
+            agent_id="agent",
+            user_id="u1",
+            tool="check_status",
+            done_when={"path": "$.done", "in": [True]},
+        )
+        job = await wait_terminal(service, result["job_id"])
+        assert job.status == STATUS_COMPLETED
+        assert job.polls == 2
+
     async def test_result_selector(self):
         service, _ = make_service([{"status": "succeeded", "output": {"url": "u"}}])
         result = await service.watch(
@@ -355,6 +408,20 @@ class TestFailurePaths:
         assert "deadline" in job.error
         assert len(overlord.chat_calls) == 1
         assert "timed_out" in overlord.chat_calls[0]["message"]
+
+    async def test_final_poll_at_deadline_completes(self):
+        # The deadline check runs AFTER each poll: a job whose terminal
+        # condition is met on the poll at (or just past) the deadline
+        # completes -- the final permitted poll is never skipped in
+        # favor of timed_out (Greptile P2 on #278). Here the FIRST poll
+        # only happens after the deadline has already elapsed.
+        service, _ = make_service([{"status": "succeeded"}], interval=0.08, timeout=0.05)
+        result = await service.watch(
+            agent_id="agent", user_id="u1", tool="check_status", done_when=DONE
+        )
+        job = await wait_terminal(service, result["job_id"])
+        assert job.status == STATUS_COMPLETED, job.error
+        assert job.polls == 1
 
     async def test_max_consecutive_failures(self):
         service, overlord = make_service(
