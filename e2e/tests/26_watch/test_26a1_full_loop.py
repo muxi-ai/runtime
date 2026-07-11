@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-Test 25A1: watch_job full loop (remote async tools).
+Test 26A1: watch_job full loop (remote async tools).
 
 The complete PRD flow against a real agent and the fixture stdio MCP job
 server: the user asks for a render -> the agent calls submit (an
@@ -62,12 +62,12 @@ class SinkServer:
 
 
 async def main():
-    print("MUXI Runtime - Test 25A1: watch_job full loop")
+    print("MUXI Runtime - Test 26A1: watch_job full loop")
     print("=" * 60)
 
     formation = None
     sink = SinkServer()
-    tmp = Path(tempfile.mkdtemp(prefix="muxi-watch-25a1-"))
+    tmp = Path(tempfile.mkdtemp(prefix="muxi-watch-26a1-"))
     try:
         await sink.start()
         formation_dir = build_formation(
@@ -135,7 +135,7 @@ async def main():
         print(f"System: {reply}")
         print(f"System (notification): {delivered['text']}")
 
-        print("\nTest 25A1 PASSED")
+        print("\nTest 26A1 PASSED")
         return True
 
     except Exception as e:

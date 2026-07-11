@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-Test 25A5: completion delivery resolution (PRD D6).
+Test 26A5: completion delivery resolution (PRD D6).
 
 The channel variant using the existing channel-template fixture
 machinery: the user has a PREFERRED proactiveness channel (chan-b) that
@@ -52,12 +52,12 @@ class SinkServer:
 
 
 async def main():
-    print("MUXI Runtime - Test 25A5: completion delivery resolution (D6)")
+    print("MUXI Runtime - Test 26A5: completion delivery resolution (D6)")
     print("=" * 60)
 
     formation = None
     sink = SinkServer()
-    tmp = Path(tempfile.mkdtemp(prefix="muxi-watch-25a5-"))
+    tmp = Path(tempfile.mkdtemp(prefix="muxi-watch-26a5-"))
     try:
         await sink.start()
         print(f"Sink server listening on 127.0.0.1:{SINK_PORT}")
@@ -108,7 +108,7 @@ async def main():
         print("\nUser: (service) watch a fixture render job")
         print(f"System (chan-b): {delivered['json']['text']}")
 
-        print("\nTest 25A5 PASSED")
+        print("\nTest 26A5 PASSED")
         return True
 
     except Exception as e:

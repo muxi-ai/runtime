@@ -1,12 +1,12 @@
 #!/usr/bin/env python3
 """
-Test 25A2: watch_job timeout path.
+Test 26A2: watch_job timeout path.
 
 The fixture job never reaches a terminal status (--polls-to-done 0), so
 the watch must resolve as timed_out at the formation-configured deadline
 and re-enter the conversation with that status -- nothing silently
 vanishes. Registered through the service surface for deterministic
-timing (the full agent loop is covered by 25A1).
+timing (the full agent loop is covered by 26A1).
 """
 
 import asyncio
@@ -26,11 +26,11 @@ from watch_common import (
 
 
 async def main():
-    print("MUXI Runtime - Test 25A2: watch_job timeout path")
+    print("MUXI Runtime - Test 26A2: watch_job timeout path")
     print("=" * 60)
 
     formation = None
-    tmp = Path(tempfile.mkdtemp(prefix="muxi-watch-25a2-"))
+    tmp = Path(tempfile.mkdtemp(prefix="muxi-watch-26a2-"))
     try:
         formation_dir = build_formation(tmp, interval=1, timeout=5, polls_to_done=0)
         formation, overlord = await load_formation(formation_dir)
@@ -64,7 +64,7 @@ async def main():
         print("\nUser: (service) watch a job that never finishes")
         print(f"System: watch {result['job_id']} resolved as timed_out and re-entered")
 
-        print("\nTest 25A2 PASSED")
+        print("\nTest 26A2 PASSED")
         return True
 
     except Exception as e:

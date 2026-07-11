@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-Test 25A3: /jobs list + cancel mid-watch.
+Test 26A3: /jobs list + cancel mid-watch.
 
 Watches are tracked jobs (PRD D8): the built-in /jobs command lists an
 active watch, cancel stops polling, and a user-initiated cancel produces
@@ -33,11 +33,11 @@ async def run_command(overlord, message: str):
 
 
 async def main():
-    print("MUXI Runtime - Test 25A3: /jobs list + cancel mid-watch")
+    print("MUXI Runtime - Test 26A3: /jobs list + cancel mid-watch")
     print("=" * 60)
 
     formation = None
-    tmp = Path(tempfile.mkdtemp(prefix="muxi-watch-25a3-"))
+    tmp = Path(tempfile.mkdtemp(prefix="muxi-watch-26a3-"))
     try:
         # Long interval: the watch stays active while we exercise /jobs.
         formation_dir = build_formation(
@@ -99,7 +99,7 @@ async def main():
         print(f"\nUser: /jobs cancel {job_id}")
         print(f"System: {cancel_reply}")
 
-        print("\nTest 25A3 PASSED")
+        print("\nTest 26A3 PASSED")
         return True
 
     except Exception as e:

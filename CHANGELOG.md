@@ -42,7 +42,7 @@ response contextually, guided by a bundled SOP fragment:
 - Docs: `contributing/remote-async-tools.md` -- the four long-running
   patterns (slow-sync timeout, watch_job, app-level webhook trigger,
   per-call webhook trigger) with a worked image-generation example.
-- E2E: new `25_watch/` area (fixture stdio MCP job server) -- full
+- E2E: new `26_watch/` area (fixture stdio MCP job server) -- full
   agent loop, timeout path, /jobs cancel mid-watch, GBAC + cross-user
   isolation, and D6 channel-delivery resolution.
 ### Response envelope UI - typed affordances (options, action_link)
