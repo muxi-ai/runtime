@@ -91,6 +91,8 @@ def decode_ui_callback(data: Any) -> Optional[Dict[str, Any]]:
     if not match:
         return None
     return {"id": match.group(1), "index": int(match.group(2))}
+
+
 # Maximum serialized size of a single mcp_resource widget (bytes). UI
 # resources are whole HTML documents, so the standard per-widget cap
 # would drop nearly all of them; 64KB covers a self-contained MCP App
