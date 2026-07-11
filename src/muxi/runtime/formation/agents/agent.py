@@ -3573,12 +3573,15 @@ class Agent:
             {"_link": {"url": "https://...", "label": "...", "hint": "..."}}
 
         Only URLs a tool actually returned can become widgets; the
-        LLM's text output is never scanned. Emits ``ui.emitted`` per
-        extracted widget.
+        LLM's text output is never scanned. Clamps FIRST, then emits
+        ``ui.emitted`` only for widgets that survive the clamp — same
+        order as ``Overlord._attach_ui``, so emitted counts match what
+        actually ships on the envelope.
         """
         from ...datatypes.ui import UIProvenance, build_action_link_widget, clamp_ui
 
         widgets: List[Dict[str, Any]] = []
+        producer_by_widget_id: Dict[str, str] = {}
         for tool_result in tool_execution_results:
             raw = getattr(tool_result, "result", None)
             if not isinstance(raw, dict):
@@ -3589,30 +3592,33 @@ class Agent:
             if not isinstance(link, dict):
                 continue
 
+            tool_name = getattr(tool_result, "tool_name", None)
             widget = build_action_link_widget(
                 label=link.get("label") or link.get("url"),
                 url=link.get("url"),
                 hint=link.get("hint"),
                 source=UIProvenance.TOOL_RESULT,
-                source_ref=getattr(tool_result, "tool_name", None),
+                source_ref=tool_name,
             )
             if widget:
                 widgets.append(widget)
-                observability.observe(
-                    event_type=observability.ConversationEvents.UI_EMITTED,
-                    level=observability.EventLevel.INFO,
-                    data={
-                        "type": "action_link",
-                        "producer": f"tool_result:{getattr(tool_result, 'tool_name', 'unknown')}",
-                        "widget_id": widget["id"],
-                    },
-                    description=(
-                        "UI widget 'action_link' emitted from tool result "
-                        f"({getattr(tool_result, 'tool_name', 'unknown')})"
-                    ),
-                )
+                producer_by_widget_id[widget["id"]] = f"tool_result:{tool_name or 'unknown'}"
 
-        return clamp_ui(widgets) or None
+        clamped = clamp_ui(widgets)
+        for widget in clamped:
+            producer = producer_by_widget_id.get(widget["id"], "tool_result:unknown")
+            observability.observe(
+                event_type=observability.ConversationEvents.UI_EMITTED,
+                level=observability.EventLevel.INFO,
+                data={
+                    "type": "action_link",
+                    "producer": producer,
+                    "widget_id": widget["id"],
+                },
+                description=f"UI widget 'action_link' emitted from tool result ({producer})",
+            )
+
+        return clamped or None
 
     def _format_recent_documents(self, recent_docs: List[Dict[str, Any]]) -> List[str]:
         """

@@ -203,6 +203,102 @@ class TestEnvelopeAdditivity:
         assert "ui" not in response.model_dump()
 
 
+class _StubToolResult:
+    """Minimal stand-in for ToolExecutionResult (only .result/.tool_name used)."""
+
+    def __init__(self, result, tool_name="portal_tool"):
+        self.result = result
+        self.tool_name = tool_name
+
+
+class TestToolResultLinkExtraction:
+    """Agent._extract_link_widgets: the tool-result action_link producer."""
+
+    def _extract(self, monkeypatch, tool_results):
+        """Run extraction with ui.emitted events captured."""
+        from muxi.runtime.datatypes.observability import ConversationEvents
+        from muxi.runtime.formation.agents import agent as agent_module
+        from muxi.runtime.formation.agents.agent import Agent
+
+        emitted = []
+        real_observe = agent_module.observability.observe
+
+        def capture(event_type=None, **kwargs):
+            if event_type == ConversationEvents.UI_EMITTED:
+                emitted.append(kwargs.get("data"))
+                return None
+            return real_observe(event_type=event_type, **kwargs)
+
+        monkeypatch.setattr(agent_module.observability, "observe", capture)
+
+        stub = object.__new__(Agent)  # method uses no instance state
+        widgets = Agent._extract_link_widgets(stub, tool_results)
+        return widgets, emitted
+
+    def test_link_extracted_and_emitted(self, monkeypatch):
+        widgets, emitted = self._extract(
+            monkeypatch,
+            [
+                _StubToolResult(
+                    {"_link": {"url": "https://portal.acme.com", "label": "Open portal"}}
+                )
+            ],
+        )
+        assert widgets and widgets[0]["type"] == "action_link"
+        assert widgets[0]["url"] == "https://portal.acme.com"
+        assert len(emitted) == 1
+        assert emitted[0]["producer"] == "tool_result:portal_tool"
+        assert emitted[0]["widget_id"] == widgets[0]["id"]
+
+    def test_clamped_widget_not_emitted(self, monkeypatch):
+        # A widget dropped by the size clamp must NOT count as emitted:
+        # clamp first, then emit — same order as Overlord._attach_ui.
+        oversized = _StubToolResult(
+            {
+                "_link": {
+                    "url": "https://portal.acme.com/huge",
+                    "label": "x" * (UI_WIDGET_MAX_BYTES + 1),
+                }
+            }
+        )
+        widgets, emitted = self._extract(monkeypatch, [oversized])
+        assert widgets is None
+        assert emitted == []
+
+    def test_mixed_clamp_emits_survivors_only(self, monkeypatch):
+        small = _StubToolResult(
+            {"_link": {"url": "https://portal.acme.com/ok", "label": "OK"}},
+            tool_name="small_tool",
+        )
+        oversized = _StubToolResult(
+            {
+                "_link": {
+                    "url": "https://portal.acme.com/huge",
+                    "label": "x" * (UI_WIDGET_MAX_BYTES + 1),
+                }
+            },
+            tool_name="huge_tool",
+        )
+        widgets, emitted = self._extract(monkeypatch, [oversized, small])
+        assert len(widgets) == 1
+        assert widgets[0]["url"] == "https://portal.acme.com/ok"
+        assert len(emitted) == 1
+        assert emitted[0]["producer"] == "tool_result:small_tool"
+
+    def test_nested_link_and_non_dict_results_ignored(self, monkeypatch):
+        widgets, emitted = self._extract(
+            monkeypatch,
+            [
+                _StubToolResult("plain string result"),
+                _StubToolResult({"result": {"_link": {"url": "https://nested.acme.com"}}}),
+                _StubToolResult({"_link": "not-a-dict"}),
+            ],
+        )
+        assert len(widgets) == 1
+        assert widgets[0]["url"] == "https://nested.acme.com"
+        assert len(emitted) == 1
+
+
 class TestLinksConfigValidation:
     def _validate(self, links):
         from muxi.runtime.formation.config.validation import FormationValidator
