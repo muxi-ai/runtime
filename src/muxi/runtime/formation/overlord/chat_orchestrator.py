@@ -104,6 +104,7 @@ class ChatOrchestrator:
         bypass_workflow_approval: bool = False,
         clean_chat_context: Optional[Dict[str, Any]] = None,
         is_scheduled_execution: bool = False,
+        ui_response: Optional[Dict[str, Any]] = None,
     ) -> AsyncGenerator[str, None]:
         """
         Create a streaming generator that fires off processing and yields events.
@@ -169,6 +170,7 @@ class ChatOrchestrator:
                     bypass_workflow_approval=bypass_workflow_approval,
                     clean_chat_context=clean_chat_context,
                     is_scheduled_execution=is_scheduled_execution,
+                    ui_response=ui_response,
                 )
             except Exception as exc:
                 observability.observe(
@@ -250,6 +252,7 @@ class ChatOrchestrator:
         bypass_workflow_approval: bool = False,
         is_scheduled_execution: bool = False,
         model_override: Optional[str] = None,
+        ui_response: Optional[Dict[str, Any]] = None,
     ) -> Union[str, Dict[str, Any], AsyncGenerator[str, None], MuxiResponse]:
         """
         Enhanced chat with async support for long-running agentic tasks and file attachments.
@@ -750,6 +753,7 @@ class ChatOrchestrator:
                     bypass_workflow_approval=bypass_workflow_approval,
                     clean_chat_context=clean_chat_context,
                     is_scheduled_execution=is_scheduled_execution,
+                    ui_response=ui_response,
                 )
 
             # Sync processing
@@ -767,6 +771,7 @@ class ChatOrchestrator:
                     bypass_workflow_approval=bypass_workflow_approval,
                     clean_chat_context=clean_chat_context,
                     is_scheduled_execution=is_scheduled_execution,
+                    ui_response=ui_response,
                 )
                 success = True
             except Exception:
@@ -924,6 +929,7 @@ class ChatOrchestrator:
         bypass_workflow_approval: bool = False,
         clean_chat_context: Optional[Dict[str, Any]] = None,
         is_scheduled_execution: bool = False,
+        ui_response: Optional[Dict[str, Any]] = None,
     ) -> Union[str, Dict[str, Any], MuxiResponse]:
         """
         Process a chat request synchronously.
@@ -961,6 +967,7 @@ class ChatOrchestrator:
                 bypass_workflow_approval=bypass_workflow_approval,
                 clean_chat_context=clean_chat_context,
                 is_scheduled_execution=is_scheduled_execution,
+                ui_response=ui_response,
             )
         except RequestCancelledException as e:
             # Request was cancelled by user - log and return empty response
@@ -1055,6 +1062,7 @@ class ChatOrchestrator:
                     result.artifacts if hasattr(result, "artifacts") and result.artifacts else None
                 ),
                 metadata=response_metadata,
+                ui=getattr(result, "ui", None) or None,
             )
         elif isinstance(result, str):
             return MuxiResponse(role="assistant", content=result, metadata=response_metadata)

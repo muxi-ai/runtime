@@ -1,0 +1,16 @@
+schema: "1.0.0"
+id: "example_agent"
+name: "Example Agent"
+description: "AI assistant used to exercise the response envelope UI affordances"
+
+system_message: |
+  You are an AI assistant with access to MCP (Model Context Protocol) tools.
+  Use the available GitHub tools when the user asks about repositories.
+  Be concise and direct.
+
+role: "general"
+specialties:
+  - "mcp"
+  - "github"
+
+mcp_enabled: true

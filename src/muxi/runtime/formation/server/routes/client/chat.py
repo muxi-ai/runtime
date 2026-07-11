@@ -48,6 +48,12 @@ async def _stream_with_keepalive(
 
         iterator = response.__aiter__()
 
+        # UI affordances ride the terminal "completed" runtime event and
+        # are re-emitted as a dedicated SSE `ui` event at end-of-turn
+        # (Response Envelope UI). Without widgets the stream is
+        # byte-identical to before.
+        ui_payload = None
+
         while True:
             current_task = asyncio.create_task(iterator.__anext__())
             try:
@@ -63,8 +69,14 @@ async def _stream_with_keepalive(
             except StopAsyncIteration:
                 break
 
+            if isinstance(token, dict) and token.get("ui"):
+                ui_payload = token.pop("ui")
+
             data = json.dumps({"token": token})
             yield f"data: {data}\n\n"
+
+        if ui_payload:
+            yield f"event: ui\ndata: {json.dumps({'ui': ui_payload})}\n\n"
 
         yield f"event: done\ndata: {json.dumps({'finished': True})}\n\n"
     finally:
@@ -77,6 +89,19 @@ async def _stream_with_keepalive(
             response_task.cancel()
             with suppress(asyncio.CancelledError):
                 await response_task
+
+
+class UIResponseHint(BaseModel):
+    """Structured reply to a UI widget from a previous response envelope.
+
+    A hint alongside the (always sufficient) message text: when the id
+    matches a clarification-produced widget in this conversation's
+    recent history, the runtime pins the selection deterministically;
+    unknown/stale ids are ignored and the message stands alone.
+    """
+
+    id: str  # Widget id from a previous envelope's `ui` array
+    value: Any  # Selected option value
 
 
 class ChatRequest(BaseModel):
@@ -94,6 +119,7 @@ class ChatRequest(BaseModel):
     webhook_url: Optional[str] = None  # Per-request webhook override
     threshold_seconds: Optional[float] = None  # Per-request async threshold override
     source_channel: Optional[str] = None  # Channel this message arrived on (last tracking)
+    ui_response: Optional[UIResponseHint] = None  # Widget reply hint (Response Envelope UI)
 
 
 class AudioChatRequest(BaseModel):
@@ -187,6 +213,9 @@ async def chat(
                 webhook_url=chat_request.webhook_url,
                 threshold_seconds=chat_request.threshold_seconds,
                 source_channel=chat_request.source_channel,
+                ui_response=(
+                    chat_request.ui_response.model_dump() if chat_request.ui_response else None
+                ),
             )
 
             # Return complete response as JSON
@@ -266,6 +295,9 @@ async def chat(
                     webhook_url=chat_request.webhook_url,
                     threshold_seconds=chat_request.threshold_seconds,
                     source_channel=chat_request.source_channel,
+                    ui_response=(
+                        chat_request.ui_response.model_dump() if chat_request.ui_response else None
+                    ),
                 )
             ):
                 yield chunk

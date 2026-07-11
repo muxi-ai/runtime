@@ -3489,6 +3489,24 @@ class Agent:
         # Clean the content to remove sandbox references and download links
         response.content = self._clean_response_content(content)
 
+        # Extract action_link affordances from tool results (Response
+        # Envelope UI). Same posture as artifact extraction below: only
+        # structured data a tool actually returned can become a widget
+        # (tool-result provenance) — the LLM's text can never fabricate
+        # one into the envelope.
+        if total_tool_calls > 0 and all_tool_execution_results:
+            try:
+                link_widgets = self._extract_link_widgets(all_tool_execution_results)
+                if link_widgets:
+                    response.ui = link_widgets
+            except Exception as e:
+                observability.observe(
+                    event_type=observability.ConversationEvents.AGENT_RESPONSE_GENERATED,
+                    level=observability.EventLevel.WARNING,
+                    data={"agent_id": self.agent_id, "error": str(e)},
+                    description=f"Failed to extract action_link widgets: {e}",
+                )
+
         # Extract artifacts from tool results if any tools were executed
         if total_tool_calls > 0 and all_tool_execution_results:
             try:
@@ -3540,6 +3558,67 @@ class Agent:
         self._messages.append({"role": "assistant", "content": content})
 
         return response
+
+    def _extract_link_widgets(
+        self, tool_execution_results: List[Any]
+    ) -> Optional[List[Dict[str, Any]]]:
+        """
+        Extract ``action_link`` widgets from tool results (Response
+        Envelope UI, tool-result provenance).
+
+        A tool opts in by returning a ``_link`` object — mirroring the
+        ``_artifact`` convention — either at the top level of its result
+        or nested under ``result``:
+
+            {"_link": {"url": "https://...", "label": "...", "hint": "..."}}
+
+        Only URLs a tool actually returned can become widgets; the
+        LLM's text output is never scanned. Clamps FIRST, then emits
+        ``ui.emitted`` only for widgets that survive the clamp — same
+        order as ``Overlord._attach_ui``, so emitted counts match what
+        actually ships on the envelope.
+        """
+        from ...datatypes.ui import UIProvenance, build_action_link_widget, clamp_ui
+
+        widgets: List[Dict[str, Any]] = []
+        producer_by_widget_id: Dict[str, str] = {}
+        for tool_result in tool_execution_results:
+            raw = getattr(tool_result, "result", None)
+            if not isinstance(raw, dict):
+                continue
+            link = raw.get("_link")
+            if link is None and isinstance(raw.get("result"), dict):
+                link = raw["result"].get("_link")
+            if not isinstance(link, dict):
+                continue
+
+            tool_name = getattr(tool_result, "tool_name", None)
+            widget = build_action_link_widget(
+                label=link.get("label") or link.get("url"),
+                url=link.get("url"),
+                hint=link.get("hint"),
+                source=UIProvenance.TOOL_RESULT,
+                source_ref=tool_name,
+            )
+            if widget:
+                widgets.append(widget)
+                producer_by_widget_id[widget["id"]] = f"tool_result:{tool_name or 'unknown'}"
+
+        clamped = clamp_ui(widgets)
+        for widget in clamped:
+            producer = producer_by_widget_id.get(widget["id"], "tool_result:unknown")
+            observability.observe(
+                event_type=observability.ConversationEvents.UI_EMITTED,
+                level=observability.EventLevel.INFO,
+                data={
+                    "type": "action_link",
+                    "producer": producer,
+                    "widget_id": widget["id"],
+                },
+                description=f"UI widget 'action_link' emitted from tool result ({producer})",
+            )
+
+        return clamped or None
 
     def _format_recent_documents(self, recent_docs: List[Dict[str, Any]]) -> List[str]:
         """
