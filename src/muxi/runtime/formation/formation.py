@@ -228,6 +228,12 @@ class Formation:
         self._coding_config = None
         self._coding_prepared = False
 
+        # Watch jobs (populated by _setup_mcp_config from the mcp.watch
+        # sub-block; None means no watch_job tool -- no declared MCP
+        # servers, or the 'mcp: { watch: false }' escape hatch)
+        self._watch_config = None
+        self._watch_prepared = False
+
     def set_secrets_manager(self, secrets_manager: SecretsManager) -> None:
         """
         Inject a pre-configured SecretsManager instance.
@@ -1253,6 +1259,7 @@ class Formation:
                 "clarification_config": self._clarification_config,
                 "document_processing_config": self._document_processing_config,
                 "coding_config": self._coding_config,
+                "watch_config": self._watch_config,
                 "scheduler_config": self._scheduler_config,
                 "runtime_config": self._runtime_config,
                 "agents_config": self._agents_config,
@@ -1941,6 +1948,32 @@ class Formation:
         # Validate MCP structure
         if not isinstance(self._mcp_config, dict):
             raise ValueError("MCP configuration must be a dictionary")
+
+        # Parse the mcp.watch sub-block (remote async tools) BEFORE
+        # built-in MCP injection: "the formation has MCP servers" means
+        # DECLARED servers. Default ON with servers; 'watch: false' is
+        # the sole escape hatch; fail fast on any structural problem.
+        # Parsed exactly once -- _setup_mcp_config runs on both load()
+        # and start_overlord(), and by the second run the built-in MCP
+        # injection below has already mutated the servers list.
+        if not self._watch_prepared:
+            from ..services.watch import WatchConfigError, parse_watch_config
+
+            try:
+                self._watch_config = parse_watch_config(self._mcp_config)
+            except WatchConfigError as e:
+                raise ConfigurationValidationError(
+                    [f"Invalid mcp.watch configuration: {e}"],
+                    {
+                        "suggestion": (
+                            "mcp.watch accepts interval, timeout, max_concurrent, "
+                            "max_consecutive_failures (all optional), or 'watch: "
+                            "false' to remove the watch_job tool entirely"
+                        ),
+                        "example": {"mcp": {"watch": {"interval": 30, "timeout": 7200}}},
+                    },
+                ) from e
+            self._watch_prepared = True
 
         # Add built-in MCP servers to the regular MCP servers list
         self._add_builtin_mcps_to_config()
@@ -3390,6 +3423,20 @@ class Formation:
                         level=observability.EventLevel.WARNING,
                         data={"service": "coding_delegation", "error": str(delegation_error)},
                         description=f"Failed to stop delegation service: {delegation_error}",
+                    )
+
+            # Stop the watch service (cancels poll loops and marks the
+            # active watches orphaned; best effort)
+            watch_service = getattr(self._overlord, "watch_service", None)
+            if watch_service is not None:
+                try:
+                    await watch_service.stop()
+                except Exception as watch_error:
+                    observability.observe(
+                        event_type=observability.ErrorEvents.SERVICE_UNAVAILABLE,
+                        level=observability.EventLevel.WARNING,
+                        data={"service": "watch", "error": str(watch_error)},
+                        description=f"Failed to stop watch service: {watch_error}",
                     )
 
             # Disconnect the request middleware before cleanup (best effort)

@@ -60,6 +60,7 @@ _NEVER_CACHE_NAMES = frozenset(
         "activate_skill",  # state mutation on the skill manager
         "run_skill",  # arbitrary code execution
         "delegate_coding",  # spawns a tracked background delegation
+        "watch_job",  # registers a tracked background watch
     }
 )
 

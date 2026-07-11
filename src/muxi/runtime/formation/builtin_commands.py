@@ -114,6 +114,10 @@ def _delegation(ctx: BuiltinCommandContext) -> Any:
     return getattr(ctx.overlord, "delegation_service", None)
 
 
+def _watch(ctx: BuiltinCommandContext) -> Any:
+    return getattr(ctx.overlord, "watch_service", None)
+
+
 def _db_manager(ctx: BuiltinCommandContext) -> Any:
     """The formation database manager (orchestrator's fallback chain)."""
     db = getattr(ctx.overlord, "db_manager", None)
@@ -148,6 +152,19 @@ def _format_coding_job(index: int, job: Dict[str, Any]) -> str:
     """One /jobs listing entry for a coding delegation."""
     lines = [f"{index}. {job.get('title') or 'Coding task'} [{job.get('id')}]"]
     detail = f"   Coding task ({job.get('adapter') or 'inline'}) | Status: {job.get('status')}"
+    if job.get("completed_at"):
+        detail += f" | Finished: {job.get('completed_at')}"
+    lines.append(detail)
+    return "\n".join(lines)
+
+
+def _format_watch_job(index: int, job: Dict[str, Any]) -> str:
+    """One /jobs listing entry for a watch job."""
+    lines = [f"{index}. {job.get('title') or 'Watch'} [{job.get('id')}]"]
+    detail = (
+        f"   Watching {job.get('tool')} | Status: {job.get('status')} "
+        f"| Polls: {job.get('polls', 0)}"
+    )
     if job.get("completed_at"):
         detail += f" | Finished: {job.get('completed_at')}"
     lines.append(detail)
@@ -250,7 +267,8 @@ _JOBS_USAGE = (
 async def _cmd_jobs(ctx: BuiltinCommandContext) -> str:
     scheduler = _scheduler(ctx)
     delegation = _delegation(ctx)
-    if scheduler is None and delegation is None:
+    watch = _watch(ctx)
+    if scheduler is None and delegation is None and watch is None:
         return (
             "Scheduled tasks are not available: the scheduler is not enabled "
             "in this formation ('scheduler.enabled: true' requires persistent memory)."
@@ -262,14 +280,15 @@ async def _cmd_jobs(ctx: BuiltinCommandContext) -> str:
 
     scheduled_jobs = await scheduler.list_user_jobs(user) if scheduler is not None else []
     coding_jobs = await delegation.list_user_jobs(user) if delegation is not None else []
-    # One continuous 1-based index across both listings so <id> resolution
+    watch_jobs = await watch.list_user_jobs(user) if watch is not None else []
+    # One continuous 1-based index across the listings so <id> resolution
     # stays unambiguous.
-    jobs = list(scheduled_jobs) + list(coding_jobs)
+    jobs = list(scheduled_jobs) + list(coding_jobs) + list(watch_jobs)
 
     if action == "list" and len(tokens) <= 1:
         if not jobs:
             if scheduler is None:
-                return "You have no coding tasks running."
+                return "You have no background tasks running."
             return (
                 "You have no scheduled tasks. Ask me to schedule something "
                 "(e.g. 'remind me every Friday at 4pm') to create one."
@@ -286,6 +305,16 @@ async def _cmd_jobs(ctx: BuiltinCommandContext) -> str:
                 _format_coding_job(i, job)
                 for i, job in enumerate(coding_jobs, start=len(scheduled_jobs) + 1)
             )
+        if watch_jobs:
+            if lines:
+                lines.append("")
+            lines.extend([f"You have {len(watch_jobs)} watched job(s):", ""])
+            lines.extend(
+                _format_watch_job(i, job)
+                for i, job in enumerate(
+                    watch_jobs, start=len(scheduled_jobs) + len(coding_jobs) + 1
+                )
+            )
         lines.extend(["", "Commands: /jobs pause <id>, resume <id>, cancel <id>, logs <id>"])
         return "\n".join(lines)
 
@@ -300,6 +329,34 @@ async def _cmd_jobs(ctx: BuiltinCommandContext) -> str:
 
     job_id = job["id"]
     title = job.get("title") or job_id
+
+    if job.get("kind") == "watch":
+        # Watch jobs: pause has no meaning for a fixed-cadence poll loop
+        # (documented, not faked); cancel stops polling with no re-entry.
+        if action in {"pause", "resume"}:
+            return (
+                f"'{action}' is not supported for watched jobs. Use "
+                f"/jobs cancel {tokens[1]} to stop watching (the remote job "
+                "itself keeps running; only the polling stops)."
+            )
+        if action == "cancel":
+            if await watch.cancel_job(job_id, user_id=user):
+                return (
+                    f'Stopped watching "{title}". The remote job itself keeps '
+                    "running; you will not be notified about it."
+                )
+            return f'Could not cancel "{title}" (only active watches can be cancelled).'
+        # logs
+        trail = await watch.get_job_trail(job_id, user_id=user)
+        lines = [f'History for watch "{title}":', ""]
+        lines.append(f"Status: {job.get('status')} | Polls: {job.get('polls', 0)}")
+        if job.get("error"):
+            lines.append(f"Error: {job.get('error')}")
+        if trail:
+            lines.append("Recent activity:")
+            for entry in trail[-5:]:
+                lines.append(f"- {entry.get('timestamp')}: {entry.get('action')}")
+        return "\n".join(lines)
 
     if job.get("kind") == "coding":
         # Coding delegations: pause has no meaning for a one-shot headless

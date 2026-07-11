@@ -609,6 +609,17 @@ class FormationValidator:
                     "MCP 'connection_ttl' must be a non-negative number (seconds)"
                 )
 
+        # Validate the watch sub-block (remote async tools). Reuses the
+        # service-level parser so the validator and the runtime can never
+        # disagree (the coding-block convention).
+        if "watch" in mcp_config:
+            from ...services.watch import WatchConfigError, parse_watch_config
+
+            try:
+                parse_watch_config(mcp_config)
+            except WatchConfigError as e:
+                self.result.add_error(f"Invalid mcp.watch configuration: {e}")
+
         # Validate servers
         if "servers" in mcp_config:
             servers = mcp_config["servers"]

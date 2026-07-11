@@ -22,6 +22,9 @@ recursive-include src/muxi/runtime/formation/background/builtin *.yaml *.yml
 # Include the bundled default heartbeat SOP
 recursive-include src/muxi/runtime/formation/proactive/builtin *.md
 
+# Include the bundled watch SOP fragment (remote async tools)
+recursive-include src/muxi/runtime/formation/agents/builtin *.md
+
 # Include all document processing assets
 recursive-include src/muxi/formation/documents *.md *.txt
 

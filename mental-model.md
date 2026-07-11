@@ -4127,6 +4127,72 @@ parsers, workdir lifecycle/TTL, gating, cancel/timeout, re-entry) and
 file:// bare-repo fixtures (no GitHub, no network; area timeout 900s
 in run_all_tests.py).
 
+### Watch Jobs / Remote Async Tools (2026-07-11, P1)
+
+**PRD:** `engineering/prds/remote-async-tools.md`. **Paths:**
+`services/watch/` (config, models, service),
+`formation/agents/watch_dispatch.py` (tool + SOP fragment),
+`formation/agents/builtin/watch_sop.md` (bundled fragment), wiring in
+`formation.py::_setup_mcp_config` (parses `mcp.watch`, idempotent via
+`_watch_prepared`), `overlord.py::_initialize_watch_service`, `/jobs`
+in `builtin_commands.py`. Docs: `contributing/remote-async-tools.md`.
+
+**The model.** MCP work that outlives a turn (renders, batch jobs) is
+collected by ONE new primitive: the built-in `watch_job` tool. MUXI
+never classifies tools as async (D1) -- async-ness is a property of the
+RESPONSE, recognized by the agent (D2) via a bundled SOP fragment that
+is appended to `Agent.system_message` at construction (NOT just
+`_messages[0]`: the planning prompt reads `self.system_message`, and
+the planner is the path that must chain submit -> watch_job in one
+plan, passing the job id via output placeholders). `watch_job` is
+always async (D3); `done_when` is a mechanical `path` + `equals`/`in`
+selector over the poll body (D4, `extract_path` reused; body =
+structured_content > JSON-parsed content > `{"content": text}`); polls
+run under the ORIGINAL user's stored GBAC context (D5: ResolvedPermissions
++ middleware groups captured at creation, ContextVars restored around
+each poll, per-poll visibility re-check fails closed); delivery = user
+channel via NotificationRouter > formation default (D6); re-entry uses
+`route_class: "watch"` with the #274 fencing (D7, markers extracted to
+`utils/fencing.py`, coding service refactored to share); watches are
+tracked jobs (D8: /jobs list/cancel/logs, `watch_jobs` write-through,
+orphaned on boot/shutdown -- poll loops never survive restarts because
+the GBAC context is request-scoped and unpersisted).
+
+**Config.** `mcp.watch` sub-block (interval 30s / timeout 7200s /
+max_concurrent 10 per user / max_consecutive_failures 3; closed key
+set, numbers only). Default ON iff the formation DECLARES
+`mcp.servers`; `mcp: {watch: false}` is the sole escape hatch (no
+`enabled:` key). Group files may override the quota only:
+`mcp: {watch: {max_concurrent: N}}` on ResolvedGroup; additive-grant
+semantics everywhere (inheritance keeps the highest;
+`ResolvedPermissions.watch_max_concurrent` = max across groups).
+
+**Gotchas:**
+1. `_setup_mcp_config` runs on BOTH load() and start_overlord(), and
+   built-in MCP injection mutates the servers list -- the watch parse
+   must run exactly once (`_watch_prepared`) or a second parse
+   overwrites the block with defaults.
+2. The agent planning prompt truncates tool descriptions to the first
+   sentence, so the planner cannot learn from a submit tool's docs
+   that it returns a job handle -- the SOP fragment carries the
+   plan-two-steps rule (and the `args` placeholder instruction; without
+   it gpt-4o-mini plans watch_job with no job id).
+3. `invoke_tool` error returns come in two shapes: `{"error", "status"}`
+   AND `{"result": processed(isError), "status": "error"}` -- poll
+   failure extraction must read the processed content for the latter.
+4. Single-user formations track watches under user "0" (the /jobs
+   command normalizes the caller the same way) -- e2e must look the
+   job up under the effective user.
+
+**Tests:** `tests/unit/watch/` (config matrix + group override +
+resolver quota; service: always-async, done_when matrix, timeout,
+consecutive failures, cancel, GBAC stored-context restoration,
+re-entry fencing/route_class, /jobs surface; dispatch: SOP shadowing)
+and `TestJobsWatch` in `tests/unit/test_builtin_commands.py`; e2e area
+`e2e/tests/25_watch/` -- five standalone tests over a generated
+formation + fixture stdio MCP job server (state in a JSON file because
+ephemeral connections spawn a fresh server process per call).
+
 ---
 
 ## 9. Testing Infrastructure

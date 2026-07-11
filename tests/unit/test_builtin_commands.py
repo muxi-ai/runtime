@@ -116,6 +116,44 @@ def coding_job(job_id="cdg_abc123", status="running", user_id="0", **extra):
     }
 
 
+class FakeWatch:
+    """Deterministic stand-in for the WatchService surface."""
+
+    def __init__(self, jobs: Optional[List[Dict[str, Any]]] = None):
+        self.jobs = jobs or []
+        self.actions: List[tuple] = []
+
+    async def list_user_jobs(self, user_id: str) -> List[Dict[str, Any]]:
+        return [j for j in self.jobs if j.get("user_id", user_id) == user_id]
+
+    async def cancel_job(self, job_id: str, user_id: str = "0") -> bool:
+        self.actions.append(("cancel", job_id, user_id))
+        job = next((j for j in self.jobs if j["id"] == job_id), None)
+        if job is None or job["status"] != "watching":
+            return False
+        job["status"] = "cancelled"
+        return True
+
+    async def get_job_trail(self, job_id: str, user_id: str = "0"):
+        return [
+            {"timestamp": "2026-07-11T09:00:00", "action": "started"},
+            {"timestamp": "2026-07-11T09:05:00", "action": "poll_failed (1 consecutive)"},
+        ]
+
+
+def watch_job(job_id="wch_abc123", status="watching", user_id="0", **extra):
+    return {
+        "id": job_id,
+        "kind": "watch",
+        "title": "logo render",
+        "status": status,
+        "tool": "image-gen.check_status",
+        "polls": 4,
+        "user_id": user_id,
+        **extra,
+    }
+
+
 class FakeBuffer:
     """Buffer memory double exposing only remove_by_metadata."""
 
@@ -167,6 +205,7 @@ def make_overlord(
     router: Any = None,
     db_manager: Any = None,
     delegation: Any = None,
+    watch: Any = None,
 ) -> Overlord:
     """Bare Overlord carrying only what the command path touches."""
     overlord = Overlord.__new__(Overlord)
@@ -185,6 +224,7 @@ def make_overlord(
     overlord.heartbeat_service = None
     overlord.scheduler_service = scheduler
     overlord.delegation_service = delegation
+    overlord.watch_service = watch
     overlord.buffer_memory = buffer
     overlord.db_manager = db_manager
     overlord.long_term_memory = None
@@ -432,7 +472,7 @@ class TestJobsCoding:
     async def test_coding_only_empty_listing(self):
         overlord = make_overlord(scheduler=None, delegation=FakeDelegation())
         response = await run_command(overlord, "/jobs")
-        assert "no coding tasks" in response.content
+        assert "no background tasks" in response.content
 
     async def test_combined_listing_continuous_index(self):
         scheduler = FakeScheduler(jobs=[_job("job_a", "Check email")])
@@ -485,6 +525,65 @@ class TestJobsCoding:
         overlord = make_overlord(scheduler=None, delegation=None)
         response = await run_command(overlord, "/jobs")
         assert "scheduler is not enabled" in response.content
+
+
+# ===================================================================
+# /jobs x watch jobs (remote async tools)
+# ===================================================================
+
+
+class TestJobsWatch:
+    async def test_watch_only_formation_lists_watches(self):
+        # No scheduler, no delegation, but a watch service: /jobs works.
+        watch = FakeWatch(jobs=[watch_job()])
+        overlord = make_overlord(scheduler=None, watch=watch)
+        response = await run_command(overlord, "/jobs")
+        assert "1 watched job(s)" in response.content
+        assert "logo render [wch_abc123]" in response.content
+        assert "image-gen.check_status" in response.content
+        assert "Polls: 4" in response.content
+
+    async def test_combined_listing_continuous_index(self):
+        scheduler = FakeScheduler(jobs=[_job("job_a", "Check email")])
+        delegation = FakeDelegation(jobs=[coding_job()])
+        watch = FakeWatch(jobs=[watch_job()])
+        overlord = make_overlord(scheduler=scheduler, delegation=delegation, watch=watch)
+        response = await run_command(overlord, "/jobs")
+        assert "1. Check email [job_a]" in response.content
+        assert "2. Fix the login bug [cdg_abc123]" in response.content
+        # The watch section continues the index (3, not 1).
+        assert "3. logo render [wch_abc123]" in response.content
+
+    async def test_cancel_watch_by_continuous_index(self):
+        scheduler = FakeScheduler(jobs=[_job("job_a", "Check email")])
+        watch = FakeWatch(jobs=[watch_job()])
+        overlord = make_overlord(scheduler=scheduler, watch=watch)
+        response = await run_command(overlord, "/jobs cancel 2")
+        assert "Stopped watching" in response.content
+        assert ("cancel", "wch_abc123", "0") in watch.actions
+        assert scheduler.jobs, "the scheduled job must not be touched"
+
+    async def test_cancel_non_active_watch(self):
+        watch = FakeWatch(jobs=[watch_job(status="completed")])
+        overlord = make_overlord(scheduler=None, watch=watch)
+        response = await run_command(overlord, "/jobs cancel wch_abc123")
+        assert "Could not cancel" in response.content
+
+    async def test_pause_and_resume_unsupported_for_watches(self):
+        watch = FakeWatch(jobs=[watch_job()])
+        overlord = make_overlord(scheduler=None, watch=watch)
+        for action in ("pause", "resume"):
+            response = await run_command(overlord, f"/jobs {action} wch_abc123")
+            assert "not supported for watched jobs" in response.content
+        assert watch.actions == []
+
+    async def test_logs_for_watch(self):
+        watch = FakeWatch(jobs=[watch_job()])
+        overlord = make_overlord(scheduler=None, watch=watch)
+        response = await run_command(overlord, "/jobs logs wch_abc123")
+        assert 'History for watch "logo render"' in response.content
+        assert "Polls: 4" in response.content
+        assert "poll_failed" in response.content
 
 
 # ===================================================================
