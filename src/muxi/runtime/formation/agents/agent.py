@@ -58,7 +58,7 @@ from ...utils.id_generator import generate_nanoid
 from ...utils.security import sanitize_message_preview
 from ..artifacts.extractor import extract_artifacts_from_tool_results
 from ..background.cancellation import RequestCancelledException
-from ..credentials import MissingCredentialError
+from ..credentials import AmbiguousCredentialError, MissingCredentialError
 
 
 class Agent:
@@ -2429,10 +2429,6 @@ class Agent:
                         except Exception as e:
                             # Re-raise credential errors to trigger clarification flow
                             from ...services.mcp.service import CredentialSelectionNeededError
-                            from ..credentials import (
-                                AmbiguousCredentialError,
-                                MissingCredentialError,
-                            )
 
                             if isinstance(
                                 e,
@@ -2863,7 +2859,6 @@ class Agent:
             except Exception as e:
                 # Re-raise credential errors to trigger clarification flow
                 from ...services.mcp.service import CredentialSelectionNeededError
-                from ..credentials import AmbiguousCredentialError, MissingCredentialError
 
                 if isinstance(
                     e,
@@ -4695,7 +4690,6 @@ class Agent:
         except Exception as e:
             # Check if this is a credential error
             from ...services.mcp.service import CredentialSelectionNeededError
-            from ..credentials import AmbiguousCredentialError
 
             if isinstance(e, CredentialSelectionNeededError):
                 # Convert to AmbiguousCredentialError and raise to overlord
