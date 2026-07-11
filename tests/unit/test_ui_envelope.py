@@ -1,13 +1,17 @@
 """
-Unit tests for the Response Envelope UI affordances (P1).
+Unit tests for the Response Envelope UI affordances (P1 + P2).
 
 Covers:
-- Widget builders (options, action_link) and the structural provenance rule
-- Size clamps (per-widget and per-envelope, load-validated defaults)
+- Widget builders (options, action_link, mcp_resource) and the
+  structural provenance rules
+- Size clamps (per-widget and per-envelope, load-validated defaults;
+  separate budgets for mcp_resource widgets)
 - ui_response hint resolution (deterministic pinning vs ignored hints)
 - Envelope additivity: responses without widgets serialize byte-identically
   to the pre-feature envelope, both directly and nested inside the API
   response (the critical zero-behavior-change pin)
+- MCP Apps ui:// resource detection on the raw tool-result path
+  (extraction + keeping untrusted content out of the LLM-visible text)
 - links: formation config section validation
 """
 
@@ -19,15 +23,19 @@ from muxi.runtime.datatypes.api import APIEventType, APIObjectType
 from muxi.runtime.datatypes.response import MuxiResponse
 from muxi.runtime.datatypes.ui import (
     UI_ENVELOPE_MAX_BYTES,
+    UI_ENVELOPE_MAX_MCP_RESOURCE_BYTES,
     UI_ENVELOPE_MAX_WIDGETS,
+    UI_MCP_RESOURCE_MAX_BYTES,
     UI_WIDGET_MAX_BYTES,
     UIProvenance,
     build_action_link_widget,
+    build_mcp_resource_widget,
     build_options_widget,
     clamp_ui,
     resolve_ui_response,
 )
 from muxi.runtime.formation.server.responses import create_success_response
+from muxi.runtime.services.mcp.transports.protocol_features import ModernProtocolFeatures
 
 
 class TestOptionsWidget:
@@ -98,6 +106,67 @@ class TestActionLinkWidget:
         assert "hint" not in widget
 
 
+class TestMcpResourceWidget:
+    def test_builds_text_resource_widget(self):
+        widget = build_mcp_resource_widget(
+            uri="ui://dashboard/sales.html",
+            data="<h1>Sales</h1>",
+            server="dashboard-server",
+            tool="show_dashboard",
+            mime_type="text/html",
+        )
+        assert widget["type"] == "mcp_resource"
+        assert widget["id"].startswith("ui_")
+        assert widget["resource"] == "ui://dashboard/sales.html"
+        assert widget["data"] == "<h1>Sales</h1>"  # verbatim
+        assert widget["mime_type"] == "text/html"
+        assert widget["server"] == "dashboard-server"
+        assert widget["tool"] == "show_dashboard"
+        assert "encoding" not in widget  # text is the default
+
+    def test_builds_blob_resource_widget(self):
+        widget = build_mcp_resource_widget(
+            uri="ui://viewer/model.glb",
+            data="aGVsbG8=",
+            server="viewer-server",
+            tool="show_model",
+            encoding="base64",
+        )
+        assert widget["data"] == "aGVsbG8="
+        assert widget["encoding"] == "base64"
+        assert "mime_type" not in widget
+
+    def test_rejects_non_ui_schemes(self):
+        for bad_uri in ("https://evil.example.com/app.html", "file:///etc/passwd", "", None):
+            assert (
+                build_mcp_resource_widget(uri=bad_uri, data="<h1>x</h1>", server="srv", tool="tool")
+                is None
+            )
+
+    def test_provenance_is_structural(self):
+        # No server/tool, no widget — provenance is recorded on the
+        # widget itself and cannot be omitted.
+        for server, tool in ((None, "tool"), ("srv", None), ("", "tool"), ("srv", "")):
+            assert (
+                build_mcp_resource_widget(
+                    uri="ui://x/y.html", data="<p>x</p>", server=server, tool=tool
+                )
+                is None
+            )
+
+    def test_rejects_empty_data_and_bad_encoding(self):
+        assert build_mcp_resource_widget(uri="ui://x/y.html", data="", server="s", tool="t") is None
+        assert (
+            build_mcp_resource_widget(uri="ui://x/y.html", data=None, server="s", tool="t") is None
+        )
+        assert (
+            build_mcp_resource_widget(
+                uri="ui://x/y.html", data="x", server="s", tool="t", encoding="hex"
+            )
+            is None
+        )
+
+
 class TestSizeClamps:
     def test_oversized_widget_dropped(self):
         big = build_options_widget(
@@ -132,6 +201,61 @@ class TestSizeClamps:
 
     def test_none_entries_skipped(self):
         assert clamp_ui([None, None]) == []
+
+    def _resource_widget(self, data_bytes: int):
+        return build_mcp_resource_widget(
+            uri="ui://fixture/page.html",
+            data="x" * data_bytes,
+            server="srv",
+            tool="tool",
+            mime_type="text/html",
+        )
+
+    def test_mcp_resource_survives_beyond_standard_cap(self):
+        # A UI resource bigger than the standard per-widget cap but
+        # under its own cap must survive — the whole point of the
+        # separate budget.
+        widget = self._resource_widget(UI_WIDGET_MAX_BYTES * 4)
+        assert clamp_ui([widget]) == [widget]
+
+    def test_oversized_mcp_resource_dropped(self):
+        widget = self._resource_widget(UI_MCP_RESOURCE_MAX_BYTES + 1)
+        assert clamp_ui([widget]) == []
+
+    def test_mcp_resource_envelope_budget(self):
+        # Widgets individually under the per-resource cap but
+        # collectively over the resource envelope budget: survivors
+        # stay within budget, later smaller widgets are not blocked.
+        resources = [self._resource_widget(UI_MCP_RESOURCE_MAX_BYTES - 200) for _ in range(3)]
+        small_link = build_action_link_widget(
+            label="ok", url="https://portal.acme.com", source=UIProvenance.TOOL_RESULT
+        )
+        clamped = clamp_ui(resources + [small_link])
+        resource_total = sum(
+            len(json.dumps(w).encode("utf-8")) for w in clamped if w["type"] == "mcp_resource"
+        )
+        assert resource_total <= UI_ENVELOPE_MAX_MCP_RESOURCE_BYTES
+        assert sum(1 for w in clamped if w["type"] == "mcp_resource") == 2
+        # The standard widget rides its own budget, untouched by the
+        # fat resources before it.
+        assert small_link in clamped
+
+    def test_budgets_are_independent(self):
+        # A max-size resource must not consume the standard widgets'
+        # byte budget and vice versa.
+        resource = self._resource_widget(UI_MCP_RESOURCE_MAX_BYTES - 200)
+        options = [
+            build_options_widget(prompt=f"q{i}", options=[{"value": "a", "label": "a"}])
+            for i in range(3)
+        ]
+        clamped = clamp_ui([resource] + options)
+        assert len(clamped) == 4
+
+    def test_count_cap_shared_across_types(self):
+        widgets = [self._resource_widget(64) for _ in range(UI_ENVELOPE_MAX_WIDGETS)] + [
+            build_options_widget(prompt="?", options=[{"value": "a", "label": "a"}])
+        ]
+        assert len(clamp_ui(widgets)) == UI_ENVELOPE_MAX_WIDGETS
 
 
 class TestUIResponseResolution:
@@ -211,8 +335,8 @@ class _StubToolResult:
         self.tool_name = tool_name
 
 
-class TestToolResultLinkExtraction:
-    """Agent._extract_link_widgets: the tool-result action_link producer."""
+class _WidgetExtractionMixin:
+    """Shared harness for Agent._extract_tool_widgets tests."""
 
     def _extract(self, monkeypatch, tool_results):
         """Run extraction with ui.emitted events captured."""
@@ -232,8 +356,12 @@ class TestToolResultLinkExtraction:
         monkeypatch.setattr(agent_module.observability, "observe", capture)
 
         stub = object.__new__(Agent)  # method uses no instance state
-        widgets = Agent._extract_link_widgets(stub, tool_results)
+        widgets = Agent._extract_tool_widgets(stub, tool_results)
         return widgets, emitted
+
+
+class TestToolResultLinkExtraction(_WidgetExtractionMixin):
+    """Agent._extract_tool_widgets: the tool-result action_link producer (P1)."""
 
     def test_link_extracted_and_emitted(self, monkeypatch):
         widgets, emitted = self._extract(
@@ -297,6 +425,209 @@ class TestToolResultLinkExtraction:
         assert len(widgets) == 1
         assert widgets[0]["url"] == "https://nested.acme.com"
         assert len(emitted) == 1
+
+
+class TestToolResultMcpResourceExtraction(_WidgetExtractionMixin):
+    """Agent._extract_tool_widgets: the mcp_resource passthrough producer (P2)."""
+
+    ENTRY = {
+        "uri": "ui://dashboard/sales.html",
+        "data": "<h1>Sales</h1>",
+        "encoding": "text",
+        "mime_type": "text/html",
+        "server": "dashboard-server",
+        "tool": "show_dashboard",
+    }
+
+    def test_resource_extracted_verbatim_and_emitted(self, monkeypatch):
+        # The MCP service attaches _ui_resources at the TOP level of
+        # its payload, next to (not inside) the result dict the text
+        # paths render: {"result": {...}, "status": ..., "_ui_resources": [...]}
+        widgets, emitted = self._extract(
+            monkeypatch,
+            [
+                _StubToolResult(
+                    {
+                        "result": {"content": "summary"},
+                        "status": "success",
+                        "_ui_resources": [dict(self.ENTRY)],
+                    },
+                    tool_name="show_dashboard",
+                )
+            ],
+        )
+        assert len(widgets) == 1
+        widget = widgets[0]
+        assert widget["type"] == "mcp_resource"
+        assert widget["resource"] == "ui://dashboard/sales.html"
+        assert widget["data"] == "<h1>Sales</h1>"  # verbatim passthrough
+        assert widget["mime_type"] == "text/html"
+        assert widget["server"] == "dashboard-server"
+        assert widget["tool"] == "show_dashboard"
+        assert len(emitted) == 1
+        assert emitted[0]["type"] == "mcp_resource"
+        assert emitted[0]["producer"] == "tool_result:dashboard-server.show_dashboard"
+        assert emitted[0]["widget_id"] == widget["id"]
+
+    def test_oversized_resource_clamped_not_emitted(self, monkeypatch):
+        oversized = dict(self.ENTRY, data="x" * (UI_MCP_RESOURCE_MAX_BYTES + 1))
+        widgets, emitted = self._extract(
+            monkeypatch,
+            [_StubToolResult({"result": {}, "_ui_resources": [oversized]})],
+        )
+        assert widgets is None
+        assert emitted == []
+
+    def test_mixed_link_and_resource_share_one_clamp_pass(self, monkeypatch):
+        widgets, emitted = self._extract(
+            monkeypatch,
+            [
+                _StubToolResult(
+                    {"_link": {"url": "https://portal.acme.com", "label": "Portal"}},
+                    tool_name="portal_tool",
+                ),
+                _StubToolResult(
+                    {"result": {}, "_ui_resources": [dict(self.ENTRY)]},
+                    tool_name="show_dashboard",
+                ),
+            ],
+        )
+        assert [w["type"] for w in widgets] == ["action_link", "mcp_resource"]
+        assert {e["type"] for e in emitted} == {"action_link", "mcp_resource"}
+
+    def test_malformed_entries_ignored(self, monkeypatch):
+        widgets, emitted = self._extract(
+            monkeypatch,
+            [
+                _StubToolResult({"result": {}, "_ui_resources": "not-a-list"}),
+                _StubToolResult({"result": {}, "_ui_resources": ["not-a-dict"]}),
+                # Missing provenance: the builder refuses it
+                _StubToolResult(
+                    {"result": {}, "_ui_resources": [{"uri": "ui://x/y.html", "data": "<p>x</p>"}]}
+                ),
+            ],
+        )
+        assert widgets is None
+        assert emitted == []
+
+
+class TestMcpUiResourceDetection:
+    """ModernProtocolFeatures: ui:// detection on the raw tool-result path."""
+
+    UI_BLOCK = {
+        "type": "resource",
+        "resource": {
+            "uri": "ui://dashboard/sales.html",
+            "mimeType": "text/html",
+            "text": "<h1>Sales</h1>",
+        },
+    }
+
+    def test_extracts_text_ui_resource(self):
+        result = {"content": [{"type": "text", "text": "summary"}, self.UI_BLOCK]}
+        entries = ModernProtocolFeatures.extract_ui_resources(result)
+        assert entries == [
+            {
+                "uri": "ui://dashboard/sales.html",
+                "data": "<h1>Sales</h1>",
+                "encoding": "text",
+                "mime_type": "text/html",
+            }
+        ]
+
+    def test_extracts_blob_ui_resource(self):
+        result = {
+            "content": [
+                {
+                    "type": "resource",
+                    "resource": {"uri": "ui://viewer/model.glb", "blob": "aGVsbG8="},
+                }
+            ]
+        }
+        entries = ModernProtocolFeatures.extract_ui_resources(result)
+        assert entries == [
+            {"uri": "ui://viewer/model.glb", "data": "aGVsbG8=", "encoding": "base64"}
+        ]
+
+    def test_ignores_non_ui_blocks(self):
+        result = {
+            "content": [
+                {"type": "text", "text": "hello"},
+                # Embedded resource with a non-ui scheme: NOT relayed
+                {
+                    "type": "resource",
+                    "resource": {"uri": "file:///tmp/report.txt", "text": "data"},
+                },
+                # resource_link: carries no data, NOT relayed in v1
+                {"type": "resource_link", "uri": "ui://dashboard/sales.html", "name": "d"},
+            ]
+        }
+        assert ModernProtocolFeatures.extract_ui_resources(result) == []
+
+    def test_handles_sdk_objects(self):
+        # The command transport hands over model_dump() output where
+        # uri is a pydantic AnyUrl; the SDK objects themselves must
+        # also be handled (attribute-shaped blocks).
+        mcp_types = pytest.importorskip("mcp.types")
+        embedded = mcp_types.EmbeddedResource(
+            type="resource",
+            resource=mcp_types.TextResourceContents(
+                uri="ui://dashboard/sales.html", mimeType="text/html", text="<h1>S</h1>"
+            ),
+        )
+        result = mcp_types.CallToolResult(content=[embedded])
+        # model_dump path (dict blocks, AnyUrl uri)
+        dumped = ModernProtocolFeatures.extract_ui_resources(result.model_dump())
+        # object path
+        direct = ModernProtocolFeatures.extract_ui_resources(result)
+        for entries in (dumped, direct):
+            assert len(entries) == 1
+            assert entries[0]["uri"] == "ui://dashboard/sales.html"
+            assert entries[0]["data"] == "<h1>S</h1>"
+
+    def test_ui_resource_kept_out_of_llm_text(self):
+        # Untrusted-content posture: the flattened text the LLM sees
+        # must not contain the UI resource content; ordinary blocks
+        # keep flowing.
+        result = {
+            "content": [{"type": "text", "text": "summary for the model"}, self.UI_BLOCK],
+            "isError": False,
+        }
+        processed = ModernProtocolFeatures.process_structured_output(result)
+        assert "summary for the model" in processed["content"]
+        assert "<h1>Sales</h1>" not in processed["content"]
+        assert "ui://dashboard" not in processed["content"]
+
+
+class TestEnvelopeSerializationWithMcpResource:
+    """Runtime-side pin: mcp_resource + options serialize correctly and
+    the no-widget path stays byte-identical (unknown-type ignorability
+    is a client guarantee; this is its runtime counterpart)."""
+
+    def test_mixed_widget_envelope_serializes(self):
+        options = build_options_widget(prompt="?", options=[{"value": "a", "label": "a"}])
+        resource = build_mcp_resource_widget(
+            uri="ui://dashboard/sales.html",
+            data="<h1>Sales</h1>",
+            server="dashboard-server",
+            tool="show_dashboard",
+            mime_type="text/html",
+        )
+        response = MuxiResponse(role="assistant", content="text", ui=[options, resource])
+        dumped = response.model_dump()
+        assert dumped["ui"] == [options, resource]
+        # The wire form is plain JSON (no enums, no pydantic types)
+        roundtripped = json.loads(json.dumps(dumped["ui"]))
+        assert roundtripped == [options, resource]
+
+    def test_no_widget_path_byte_identical(self):
+        # An empty ui list must serialize byte-identically to a
+        # response that never had the field — the zero-behavior-change
+        # discipline, re-pinned with the P2 type in the registry.
+        base = MuxiResponse(role="assistant", content="hello")
+        with_empty_ui = MuxiResponse(role="assistant", content="hello", ui=[])
+        assert json.dumps(base.model_dump()) == json.dumps(with_empty_ui.model_dump())
+        assert "ui" not in base.model_dump()
 
 
 class TestLinksConfigValidation:

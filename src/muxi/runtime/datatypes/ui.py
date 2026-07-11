@@ -1,5 +1,5 @@
 """
-Response envelope UI affordances (Response Envelope UI PRD, P1).
+Response envelope UI affordances (Response Envelope UI PRD, P1+P2).
 
 The response envelope gains an optional, typed ``ui`` array of
 *affordances*. The runtime never renders anything: clients that
@@ -13,9 +13,17 @@ what makes the ``action_link`` provenance rule structural: a URL can
 only enter a widget through a producer that names its source
 (formation config, tool result, or trigger payload).
 
+``mcp_resource`` (P2) is the gateway passthrough of an MCP App / UI
+resource returned by an external MCP server: MUXI relays the embedded
+``ui://`` resource verbatim — no rendering, no interpretation, no
+execution. It is untrusted external content; the producing server and
+tool are recorded on the widget itself as provenance.
+
 Size discipline: widgets are clamped per-widget and per-envelope
 (defaults validated by unit tests) so a misbehaving producer cannot
-bloat every response.
+bloat every response. ``mcp_resource`` widgets carry whole UI documents
+and get their own, larger budgets; the P1 budgets for standard widgets
+are unchanged.
 """
 
 from enum import Enum
@@ -41,6 +49,18 @@ UI_ENVELOPE_MAX_BYTES = 16384
 
 # Maximum number of options in a single options widget.
 UI_OPTIONS_MAX_ITEMS = 25
+
+# Maximum serialized size of a single mcp_resource widget (bytes). UI
+# resources are whole HTML documents, so the standard per-widget cap
+# would drop nearly all of them; 64KB covers a self-contained MCP App
+# page while still bounding a misbehaving server. Oversized resources
+# are dropped whole (never truncated) — the text fallback stands alone.
+UI_MCP_RESOURCE_MAX_BYTES = 65536
+
+# Maximum combined serialized size of all mcp_resource widgets in one
+# envelope (bytes). A separate budget from UI_ENVELOPE_MAX_BYTES so a
+# fat UI resource can never starve the standard widgets, and vice versa.
+UI_ENVELOPE_MAX_MCP_RESOURCE_BYTES = 131072
 
 
 class UIProvenance(Enum):
@@ -137,16 +157,80 @@ def build_action_link_widget(
     return widget
 
 
+def build_mcp_resource_widget(
+    uri: str,
+    data: str,
+    server: str,
+    tool: str,
+    mime_type: Optional[str] = None,
+    encoding: str = "text",
+) -> Optional[Dict[str, Any]]:
+    """
+    Build an ``mcp_resource`` widget (gateway passthrough of an MCP App /
+    UI resource returned by an external MCP server).
+
+    MUXI relays ``{resource, data}`` VERBATIM — no rendering, no
+    interpretation, no execution. The content is untrusted external
+    data; it is never fed through the LLM. Provenance is structural and
+    recorded on the widget itself: ``server`` and ``tool`` name the
+    producing MCP server and tool, and both are mandatory — a widget
+    cannot exist without them.
+
+    Args:
+        uri: The resource URI. Only the ``ui://`` scheme (the MCP Apps
+            convention for UI resources) is accepted.
+        data: The embedded resource content, verbatim — the ``text`` of
+            a text resource or the base64 ``blob`` of a binary one.
+        server: MCP server id that returned the resource (provenance).
+        tool: Tool name whose result carried the resource (provenance).
+        mime_type: The resource's declared mimeType, when present.
+        encoding: ``"text"`` (default, omitted on the wire) or
+            ``"base64"`` for blob resources.
+
+    Returns:
+        Widget dict, or None when any structural requirement fails
+        (non-``ui://`` URI, empty data, missing provenance).
+    """
+    if not uri or not isinstance(uri, str) or not uri.startswith("ui://"):
+        return None
+    if not data or not isinstance(data, str):
+        return None
+    if not server or not isinstance(server, str) or not tool or not isinstance(tool, str):
+        return None
+    if encoding not in ("text", "base64"):
+        return None
+
+    widget: Dict[str, Any] = {
+        "type": "mcp_resource",
+        "id": f"ui_{generate_nanoid()}",
+        "resource": uri,
+        "data": data,
+        "server": server,
+        "tool": tool,
+    }
+    if mime_type:
+        widget["mime_type"] = str(mime_type)
+    if encoding == "base64":
+        widget["encoding"] = "base64"
+    return widget
+
+
 def clamp_ui(widgets: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
     """
     Enforce per-widget and per-envelope size caps.
 
     Oversized widgets are dropped (the text fallback is always complete
     on its own); the envelope keeps at most ``UI_ENVELOPE_MAX_WIDGETS``
-    widgets and ``UI_ENVELOPE_MAX_BYTES`` combined serialized bytes.
+    widgets. Standard widgets share the P1 byte budgets
+    (``UI_WIDGET_MAX_BYTES`` per widget, ``UI_ENVELOPE_MAX_BYTES``
+    combined); ``mcp_resource`` widgets carry whole UI documents and
+    have their own (``UI_MCP_RESOURCE_MAX_BYTES`` per widget,
+    ``UI_ENVELOPE_MAX_MCP_RESOURCE_BYTES`` combined) so neither family
+    can starve the other.
     """
     clamped: List[Dict[str, Any]] = []
     total_bytes = 0
+    resource_bytes = 0
 
     for widget in widgets:
         if not widget:
@@ -157,12 +241,19 @@ def clamp_ui(widgets: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
             widget_bytes = len(json.dumps(widget).encode("utf-8"))
         except (TypeError, ValueError):
             continue
-        if widget_bytes > UI_WIDGET_MAX_BYTES:
-            continue
-        if total_bytes + widget_bytes > UI_ENVELOPE_MAX_BYTES:
-            break
+        if widget.get("type") == "mcp_resource":
+            if widget_bytes > UI_MCP_RESOURCE_MAX_BYTES:
+                continue
+            if resource_bytes + widget_bytes > UI_ENVELOPE_MAX_MCP_RESOURCE_BYTES:
+                continue
+            resource_bytes += widget_bytes
+        else:
+            if widget_bytes > UI_WIDGET_MAX_BYTES:
+                continue
+            if total_bytes + widget_bytes > UI_ENVELOPE_MAX_BYTES:
+                break
+            total_bytes += widget_bytes
         clamped.append(widget)
-        total_bytes += widget_bytes
 
     return clamped
 

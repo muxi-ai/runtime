@@ -1142,7 +1142,10 @@ class Agent:
                         rendered_keys = [
                             f"{k}: {v}"
                             for k, v in result.items()
-                            if k != "_artifact" and v is not None and v != ""
+                            # _ui_resources is untrusted external content
+                            # (mcp_resource passthrough) — never rendered
+                            # into LLM-bound text.
+                            if k not in ("_artifact", "_ui_resources") and v is not None and v != ""
                         ]
                         if rendered_keys:
                             section_lines.extend(rendered_keys)
@@ -2789,6 +2792,46 @@ class Agent:
                                     description=f"Failed to extract artifacts in planning: {e}",
                                 )
 
+                        # Extract UI affordances (action_link,
+                        # mcp_resource) from the planned tool results
+                        # (Response Envelope UI): same producers and
+                        # clamp-then-emit discipline as the tool-chain
+                        # path — the gateway contract must not depend on
+                        # which execution path ran the tool.
+                        try:
+                            placeholder_tools = {
+                                step.get(
+                                    "output_placeholder",
+                                    f"{{{step.get('tool_name', 'TOOL').upper()}_OUTPUT}}",
+                                ): (step.get("tool_name") or "").split("__")[-1]
+                                for step in execution_plan.get("my_steps", [])
+                            }
+                            widget_results = [
+                                ToolExecutionResult(
+                                    tool_name=placeholder_tools.get(placeholder) or "unknown",
+                                    parameters={},
+                                    result=result,
+                                    execution_time=0.0,
+                                    success=True,
+                                )
+                                for placeholder, result in my_results.items()
+                                if isinstance(result, dict)
+                            ]
+                            tool_widgets = self._extract_tool_widgets(widget_results)
+                            if tool_widgets:
+                                response.ui = tool_widgets
+                        except Exception as e:
+                            observability.observe(
+                                event_type=observability.ConversationEvents.AGENT_RESPONSE_GENERATED,
+                                level=observability.EventLevel.WARNING,
+                                data={
+                                    "agent_id": self.agent_id,
+                                    "error": str(e),
+                                    "phase": "planning_execution",
+                                },
+                                description=f"Failed to extract tool-result widgets: {e}",
+                            )
+
                     # Add response to conversation context
                     self._messages.append(
                         {
@@ -3287,6 +3330,11 @@ class Agent:
                     serializable_result = result.copy() if isinstance(result, dict) else result
                     if isinstance(serializable_result, dict) and "_artifact" in serializable_result:
                         serializable_result.pop("_artifact")
+                    # UI resources (mcp_resource passthrough) are
+                    # untrusted external content relayed verbatim to the
+                    # client — never fed through the LLM.
+                    if isinstance(serializable_result, dict):
+                        serializable_result.pop("_ui_resources", None)
 
                     tool_results.append(
                         {
@@ -3515,22 +3563,22 @@ class Agent:
         # Clean the content to remove sandbox references and download links
         response.content = self._clean_response_content(content)
 
-        # Extract action_link affordances from tool results (Response
-        # Envelope UI). Same posture as artifact extraction below: only
-        # structured data a tool actually returned can become a widget
-        # (tool-result provenance) — the LLM's text can never fabricate
-        # one into the envelope.
+        # Extract UI affordances (action_link, mcp_resource) from tool
+        # results (Response Envelope UI). Same posture as artifact
+        # extraction below: only structured data a tool actually
+        # returned can become a widget (tool-result provenance) — the
+        # LLM's text can never fabricate one into the envelope.
         if total_tool_calls > 0 and all_tool_execution_results:
             try:
-                link_widgets = self._extract_link_widgets(all_tool_execution_results)
-                if link_widgets:
-                    response.ui = link_widgets
+                tool_widgets = self._extract_tool_widgets(all_tool_execution_results)
+                if tool_widgets:
+                    response.ui = tool_widgets
             except Exception as e:
                 observability.observe(
                     event_type=observability.ConversationEvents.AGENT_RESPONSE_GENERATED,
                     level=observability.EventLevel.WARNING,
                     data={"agent_id": self.agent_id, "error": str(e)},
-                    description=f"Failed to extract action_link widgets: {e}",
+                    description=f"Failed to extract tool-result widgets: {e}",
                 )
 
         # Extract artifacts from tool results if any tools were executed
@@ -3585,26 +3633,38 @@ class Agent:
 
         return response
 
-    def _extract_link_widgets(
+    def _extract_tool_widgets(
         self, tool_execution_results: List[Any]
     ) -> Optional[List[Dict[str, Any]]]:
         """
-        Extract ``action_link`` widgets from tool results (Response
-        Envelope UI, tool-result provenance).
+        Extract UI widgets from tool results (Response Envelope UI,
+        tool-result provenance): ``action_link`` (P1) and
+        ``mcp_resource`` (P2).
 
-        A tool opts in by returning a ``_link`` object — mirroring the
-        ``_artifact`` convention — either at the top level of its result
-        or nested under ``result``:
+        A tool opts in to ``action_link`` by returning a ``_link``
+        object — mirroring the ``_artifact`` convention — either at the
+        top level of its result or nested under ``result``:
 
             {"_link": {"url": "https://...", "label": "...", "hint": "..."}}
 
-        Only URLs a tool actually returned can become widgets; the
-        LLM's text output is never scanned. Clamps FIRST, then emits
-        ``ui.emitted`` only for widgets that survive the clamp — same
-        order as ``Overlord._attach_ui``, so emitted counts match what
-        actually ships on the envelope.
+        ``mcp_resource`` widgets come from ``_ui_resources`` entries the
+        MCP service attached at the top level of its payload when the
+        raw tool result carried embedded ``ui://`` resources (MCP
+        Apps). Each entry already names its provenance (server + tool)
+        and is relayed verbatim.
+
+        Only structured data a tool actually returned can become a
+        widget; the LLM's text output is never scanned. All candidates
+        share one clamp pass (clamp FIRST, then emit ``ui.emitted``
+        only for survivors — same order as ``Overlord._attach_ui``, so
+        emitted counts match what actually ships on the envelope).
         """
-        from ...datatypes.ui import UIProvenance, build_action_link_widget, clamp_ui
+        from ...datatypes.ui import (
+            UIProvenance,
+            build_action_link_widget,
+            build_mcp_resource_widget,
+            clamp_ui,
+        )
 
         widgets: List[Dict[str, Any]] = []
         producer_by_widget_id: Dict[str, str] = {}
@@ -3612,23 +3672,47 @@ class Agent:
             raw = getattr(tool_result, "result", None)
             if not isinstance(raw, dict):
                 continue
-            link = raw.get("_link")
-            if link is None and isinstance(raw.get("result"), dict):
-                link = raw["result"].get("_link")
-            if not isinstance(link, dict):
-                continue
-
+            nested = raw.get("result") if isinstance(raw.get("result"), dict) else None
             tool_name = getattr(tool_result, "tool_name", None)
-            widget = build_action_link_widget(
-                label=link.get("label") or link.get("url"),
-                url=link.get("url"),
-                hint=link.get("hint"),
-                source=UIProvenance.TOOL_RESULT,
-                source_ref=tool_name,
-            )
-            if widget:
-                widgets.append(widget)
-                producer_by_widget_id[widget["id"]] = f"tool_result:{tool_name or 'unknown'}"
+
+            # action_link: the _link opt-in convention (P1)
+            link = raw.get("_link")
+            if link is None and nested is not None:
+                link = nested.get("_link")
+            if isinstance(link, dict):
+                widget = build_action_link_widget(
+                    label=link.get("label") or link.get("url"),
+                    url=link.get("url"),
+                    hint=link.get("hint"),
+                    source=UIProvenance.TOOL_RESULT,
+                    source_ref=tool_name,
+                )
+                if widget:
+                    widgets.append(widget)
+                    producer_by_widget_id[widget["id"]] = f"tool_result:{tool_name or 'unknown'}"
+
+            # mcp_resource: ui:// embedded resources the MCP service
+            # extracted from the raw tool result (P2). Top-level only —
+            # that is where the service puts them, deliberately outside
+            # the ``result`` dict the text paths render.
+            ui_resources = raw.get("_ui_resources")
+            if isinstance(ui_resources, list):
+                for entry in ui_resources:
+                    if not isinstance(entry, dict):
+                        continue
+                    widget = build_mcp_resource_widget(
+                        uri=entry.get("uri"),
+                        data=entry.get("data"),
+                        server=entry.get("server"),
+                        tool=entry.get("tool"),
+                        mime_type=entry.get("mime_type"),
+                        encoding=entry.get("encoding") or "text",
+                    )
+                    if widget:
+                        widgets.append(widget)
+                        producer_by_widget_id[widget["id"]] = (
+                            f"tool_result:{widget['server']}.{widget['tool']}"
+                        )
 
         clamped = clamp_ui(widgets)
         for widget in clamped:
@@ -3637,11 +3721,11 @@ class Agent:
                 event_type=observability.ConversationEvents.UI_EMITTED,
                 level=observability.EventLevel.INFO,
                 data={
-                    "type": "action_link",
+                    "type": widget["type"],
                     "producer": producer,
                     "widget_id": widget["id"],
                 },
-                description=f"UI widget 'action_link' emitted from tool result ({producer})",
+                description=(f"UI widget '{widget['type']}' emitted from tool result ({producer})"),
             )
 
         return clamped or None
