@@ -91,12 +91,26 @@ async def test_atomic_update_yaml_deprecation_warning():
             warnings.simplefilter("always")
             await atomic_update_yaml(file_path, {"key": "updated"})
 
-            # Verify warning
-            assert len(w) == 1
-            assert issubclass(w[0].category, DeprecationWarning)
-            assert "atomic_update_yaml is deprecated" in str(w[0].message)
-            assert "update_yaml" in str(w[0].message)
-            assert "NOT safe for concurrent" in str(w[0].message)
+        # Order-independent assertion: with simplefilter("always"), the
+        # recorded list also captures unrelated warnings whose emission
+        # depends on suite ordering (e.g. lazy first-imports happening
+        # inside this block), so asserting len(w) == 1 flakes under
+        # reordering. Pin the SPECIFIC deprecation this test exists for:
+        # the deprecated alias warns exactly once and points at the new
+        # name.
+        matches = [
+            record
+            for record in w
+            if issubclass(record.category, DeprecationWarning)
+            and "atomic_update_yaml is deprecated" in str(record.message)
+        ]
+        assert len(matches) == 1, (
+            f"expected exactly one atomic_update_yaml DeprecationWarning, "
+            f"got {len(matches)} among: {[str(record.message) for record in w]}"
+        )
+        message = str(matches[0].message)
+        assert "update_yaml" in message
+        assert "NOT safe for concurrent" in message
 
         # Verify it still works
         result = await atomic_read_yaml(file_path)
