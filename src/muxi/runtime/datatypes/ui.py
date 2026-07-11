@@ -250,8 +250,12 @@ def clamp_ui(widgets: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
         else:
             if widget_bytes > UI_WIDGET_MAX_BYTES:
                 continue
+            # Skip over (never terminate) on budget exhaustion — same
+            # as the mcp_resource branch above: each family's budget
+            # running out must not drop later widgets from the OTHER
+            # family, whose ledger may still have headroom.
             if total_bytes + widget_bytes > UI_ENVELOPE_MAX_BYTES:
-                break
+                continue
             total_bytes += widget_bytes
         clamped.append(widget)
 

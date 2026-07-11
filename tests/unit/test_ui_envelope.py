@@ -257,6 +257,39 @@ class TestSizeClamps:
         ]
         assert len(clamp_ui(widgets)) == UI_ENVELOPE_MAX_WIDGETS
 
+    def test_standard_budget_exhaustion_does_not_drop_later_resource(self):
+        # Budget exhaustion in one family skips over, never terminates:
+        # enough near-cap standard widgets to blow the standard byte
+        # budget, THEN an in-budget mcp_resource — the resource's own
+        # ledger has headroom, so it must survive.
+        links = [
+            build_action_link_widget(
+                label="x" * (UI_WIDGET_MAX_BYTES - 200),
+                url=f"https://portal.acme.com/{i}",
+                source=UIProvenance.TOOL_RESULT,
+            )
+            for i in range(6)  # ~6 x ~3.9KB > 16KB standard budget
+        ]
+        resource = self._resource_widget(1024)
+        clamped = clamp_ui(links + [resource])
+        assert resource in clamped, "resource dropped by the OTHER family's budget exhaustion"
+        standard_total = sum(
+            len(json.dumps(w).encode("utf-8")) for w in clamped if w["type"] != "mcp_resource"
+        )
+        assert standard_total <= UI_ENVELOPE_MAX_BYTES
+        assert 0 < len(clamped) - 1 < len(links)  # some links clamped, not all
+
+    def test_resource_budget_exhaustion_does_not_drop_later_standard(self):
+        # The mirror case: resources blow the mcp_resource budget, then
+        # an in-budget standard widget follows — it must survive.
+        resources = [self._resource_widget(UI_MCP_RESOURCE_MAX_BYTES - 200) for _ in range(3)]
+        link = build_action_link_widget(
+            label="ok", url="https://portal.acme.com", source=UIProvenance.TOOL_RESULT
+        )
+        clamped = clamp_ui(resources + [link])
+        assert link in clamped, "standard widget dropped by the resource budget exhaustion"
+        assert sum(1 for w in clamped if w["type"] == "mcp_resource") == 2
+
 
 class TestUIResponseResolution:
     def test_matching_hint_pins_value(self):
