@@ -2,6 +2,40 @@
 
 ## [unreleased]
 
+### Response envelope UI - channel-native widget rendering (P3)
+
+The bundled slack/telegram/discord transformer templates now render
+envelope UI widgets natively (Response Envelope UI PRD, P3 -- owner
+ruling 2026-07-11), and channel button presses round-trip into the
+existing deterministic `ui_response` pinning. The text body always
+ships; widgets are strictly additive to the channel message:
+
+- Template namespace: transformer substitution gains `response.ui`
+  (raw widget array) and channel-native renderings under `ui.*`
+  (`ui.telegram.reply_markup`, `ui.slack.blocks`,
+  `ui.discord.components`). Every entry is None without widgets, so
+  the existing None-dropping dict rendering keeps text-only deliveries
+  byte-identical (pinned by tests). Formations with their own
+  templates see zero change.
+- Bundled templates updated in place (not forked): telegram renders
+  `options` as an inline keyboard and `action_link` as url buttons;
+  slack renders Block Kit (a section carrying the full text -- Slack
+  shows blocks INSTEAD of top-level text -- plus actions buttons);
+  discord renders component action rows (5x5 clamp). Email stays text.
+- Button callback encoding: `<widget_id>#<option_index>` -- index, not
+  value, so the string always fits Telegram's 64-byte callback_data
+  limit; the index resolves against the pending clarification's
+  offered options (no server-side widget state, runtime stays
+  stateless).
+- Inbound: trigger `parse:` specs accept a `ui_response:` path
+  (Telegram `$.callback_query.data`, Slack `$.actions[0].value`,
+  Discord `$.data.custom_id`); the decoded `{id, index}` hint rides
+  the chat re-entry and hits the existing pinning, emitting
+  `ui.response.received` as before. Foreign callback payloads decode
+  to None -- the message stands alone.
+- E2E: telegram inline-keyboard delivery + simulated callback_query
+  pinning round trip (25A6); slack Block Kit variant + text-only
+  template zero-change pin (25A7).
 ### Response envelope UI - `mcp_resource` passthrough widget (P2)
 
 The third envelope widget type lands: when an external MCP server's

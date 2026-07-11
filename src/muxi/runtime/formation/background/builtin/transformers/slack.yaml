@@ -10,6 +10,19 @@
 #   context.thread_ts  optional thread timestamp (dropped from the payload
 #                      when absent, so top-level messages stay top-level)
 #
+# Envelope UI widgets (Response Envelope UI, P3): when the response
+# carries a `ui` array, `blocks` renders it as Block Kit -- a section
+# block carrying the response text (Slack renders blocks INSTEAD of
+# top-level `text` when present, so the text must ride inside them)
+# followed by actions blocks (`options` -> buttons whose action_id and
+# value carry the reply callback, `action_link` -> url buttons). The
+# top-level `text` stays regardless (Slack's notification fallback).
+# Without widgets the placeholder resolves to None and the key is
+# dropped, so text-only deliveries stay byte-identical. Button presses
+# arrive back as block_actions interaction payloads -- point a
+# trigger's `parse.ui_response` at `$.actions[0].value` to complete
+# the round trip.
+#
 # Shadow this template by placing transformers/slack.yaml in the formation.
 name: slack
 headers:
@@ -18,3 +31,4 @@ body:
   channel: "${{ context.channel }}"
   thread_ts: "${{ context.thread_ts }}"
   text: "${{ response.content }}"
+  blocks: "${{ ui.slack.blocks }}"

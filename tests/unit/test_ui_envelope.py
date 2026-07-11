@@ -32,6 +32,8 @@ from muxi.runtime.datatypes.ui import (
     build_mcp_resource_widget,
     build_options_widget,
     clamp_ui,
+    decode_ui_callback,
+    encode_ui_callback,
     resolve_ui_response,
 )
 from muxi.runtime.formation.server.responses import create_success_response
@@ -318,6 +320,73 @@ class TestUIResponseResolution:
     def test_no_pending_widget_ignored(self):
         assert resolve_ui_response({"id": "ui_abc", "value": "a"}, None, None) is None
         assert resolve_ui_response(None, "ui_abc", ["a"]) is None
+
+    def test_index_hint_resolves_to_offered_value(self):
+        # Channel button presses carry {id, index} (decode_ui_callback
+        # shape); the index resolves against the offered options in order.
+        assert (
+            resolve_ui_response({"id": "ui_abc", "index": 1}, "ui_abc", ["acme-prod", "acme-dev"])
+            == "acme-dev"
+        )
+
+    def test_index_out_of_range_ignored(self):
+        assert resolve_ui_response({"id": "ui_abc", "index": 5}, "ui_abc", ["a", "b"]) is None
+        assert resolve_ui_response({"id": "ui_abc", "index": -1}, "ui_abc", ["a", "b"]) is None
+
+    def test_index_must_be_int(self):
+        assert resolve_ui_response({"id": "ui_abc", "index": "1"}, "ui_abc", ["a", "b"]) is None
+        assert resolve_ui_response({"id": "ui_abc", "index": True}, "ui_abc", ["a", "b"]) is None
+
+    def test_explicit_value_wins_over_index(self):
+        assert (
+            resolve_ui_response({"id": "ui_abc", "value": "a", "index": 1}, "ui_abc", ["a", "b"])
+            == "a"
+        )
+
+
+class TestUICallbackEncoding:
+    """Channel button callback round-trip (Response Envelope UI, P3)."""
+
+    def test_encode_decode_round_trip(self):
+        widget = build_options_widget(prompt="?", options=[{"value": "a"}, {"value": "b"}])
+        encoded = encode_ui_callback(widget["id"], 1)
+        assert decode_ui_callback(encoded) == {"id": widget["id"], "index": 1}
+
+    def test_encoding_fits_telegram_callback_data_limit(self):
+        # Telegram callback_data is capped at 64 bytes; widget ids are
+        # fixed-length so index encoding always fits, regardless of how
+        # long the option values are.
+        widget = build_options_widget(
+            prompt="?", options=[{"value": "x" * 500, "label": "y" * 500}]
+        )
+        encoded = encode_ui_callback(widget["id"], 24)
+        assert len(encoded.encode("utf-8")) <= 64
+
+    def test_foreign_callback_data_decodes_to_none(self):
+        # Channels routinely deliver callback payloads MUXI did not
+        # produce; those must not become reply hints. Indexes beyond two
+        # digits are also not ours: options are capped at 25, so a
+        # three-digit index (e.g. ui_abc#999) must not decode at all
+        # rather than decode and silently resolve to None downstream.
+        for data in (
+            "approve",
+            "ui_abc",
+            "ui_abc#x",
+            "not-ui#1",
+            "ui_abc#999",
+            "ui_abc#100",
+            "",
+            None,
+            7,
+            {"id": "x"},
+        ):
+            assert decode_ui_callback(data) is None
+
+    def test_decoded_hint_pins_through_resolve(self):
+        widget = build_options_widget(prompt="?", options=[{"value": "a"}, {"value": "b"}])
+        option_values = [o["value"] for o in widget["options"]]
+        hint = decode_ui_callback(encode_ui_callback(widget["id"], 0))
+        assert resolve_ui_response(hint, widget["id"], option_values) == "a"
 
 
 class TestEnvelopeAdditivity:

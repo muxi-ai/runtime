@@ -1,0 +1,8 @@
+# Formation-local text-only template (no widget placeholders): pins the
+# zero-change guarantee for formations that never opted into widgets.
+name: plain
+headers:
+  Content-Type: application/json
+body:
+  room: "${{ context.room }}"
+  reply: "${{ response.content }}"
