@@ -229,3 +229,15 @@ def test_parse_credential_clarification_response_empty_returns_none():
     response = ClarificationResponse(answers=[], raw_response="   ")
 
     assert parse_credential_clarification_response(response, "github") is None
+
+
+def test_parse_credential_field_name_ignores_incidental_substrings():
+    """Only exact service names or explicit suffixes may pick "api_key";
+    incidental substrings ("monkey" contains "key") must not."""
+    monkey = ClarificationResponse(answers=[], raw_response="tok-123456")
+    assert parse_credential_clarification_response(monkey, "monkey") == {"token": "tok-123456"}
+
+    capital = ClarificationResponse(answers=[], raw_response="cap-123456")
+    assert parse_credential_clarification_response(capital, "capital-api") == {
+        "api_key": "cap-123456"
+    }

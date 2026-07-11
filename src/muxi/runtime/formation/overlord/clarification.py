@@ -63,21 +63,20 @@ def _format_service_name(service: str) -> str:
     )
 
 
+# Known services by the credential field name their APIs expect. Unknown
+# services fall back to suffix matches on the service name (exact/suffix
+# only — plain substring checks misfire on names like "monkey").
+_TOKEN_SERVICES = {"github", "gitlab", "slack", "discord", "bitbucket"}
+_API_KEY_SERVICES = {"openai", "anthropic", "cohere", "pinecone"}
+
+
 def _credential_field_name(service: str) -> str:
     """Pick the credential field name most APIs of this service expect."""
     service_lower = service.lower()
-    if "token" in service_lower or service_lower in {
-        "github",
-        "gitlab",
-        "slack",
-        "discord",
-        "bitbucket",
-    }:
+    if service_lower in _TOKEN_SERVICES or service_lower.endswith("token"):
         return "token"
-    if (
-        "api" in service_lower
-        or "key" in service_lower
-        or service_lower in {"openai", "anthropic", "cohere", "pinecone"}
+    if service_lower in _API_KEY_SERVICES or service_lower.endswith(
+        ("_api", "-api", "_key", "-key")
     ):
         return "api_key"
     return "token"
