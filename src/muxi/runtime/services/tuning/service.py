@@ -31,7 +31,7 @@ from .. import observability
 from ..memory.log.formation import lint_formation_lines
 from ..observability.spool import get_event_spool
 from .config import TuningConfig
-from .experiments import STATUS_ACTIVE, STATUS_PENDING, ExperimentStore
+from .experiments import STATUS_ACTIVE, STATUS_DISMISSED, STATUS_PENDING, ExperimentStore
 from .muxi_md import MUXI_MD_MAX_BYTES
 from .tuner import TunerStep
 
@@ -215,6 +215,10 @@ class TuningService:
                 },
                 description="Tuning learning retired: watched metric did not move",
             )
+        # Persist the retirements before the pass yields: the pending
+        # surfaces (apply/dismiss) load the store fresh from disk and could
+        # otherwise run against -- or be overwritten by -- stale state.
+        store.save()
 
         captains_log = getattr(self.overlord, "captains_log", None)
         formation_log_block = ""
@@ -228,7 +232,7 @@ class TuningService:
             active_learnings=store.by_status(STATUS_ACTIVE),
             retired_learnings=retired,
             dismissed_learnings=[
-                record.get("learning", "") for record in store.by_status("dismissed")
+                record.get("learning", "") for record in store.by_status(STATUS_DISMISSED)
             ],
             metric_keys=sorted(metrics),
             max_bytes=MUXI_MD_MAX_BYTES,
@@ -239,8 +243,12 @@ class TuningService:
             await model.generate_text(prompt, temperature=0.0, caching=False)
         )
         if parsed is None:
-            store.save()
             return {"learnings_retired": len(retired), "tuner_skipped": "unparseable_response"}
+
+        # Reload: the pending surfaces may have advanced the store (apply,
+        # dismiss) while the pass was awaiting the LLM; recording onto a
+        # fresh copy respects those decisions instead of overwriting them.
+        store = ExperimentStore(self.experiments_dir)
 
         # Record the distilled learnings; already-known hashes (dismissed,
         # retired, still-watched) are silently skipped -- never re-proposed.
@@ -267,12 +275,14 @@ class TuningService:
         candidate = parsed["muxi_md"]
         if candidate:
             candidate, dropped_lines = lint_formation_lines(candidate, known_user_ids)
-        if not candidate and recorded:
-            # The model sometimes records learnings without producing the
-            # revised file; append them so the file never lags the store.
-            current = muxi_md.read() or ""
+        current = muxi_md.read() or ""
+        if recorded and (not candidate or candidate == current):
+            # The model sometimes records learnings without folding them
+            # into a revision (empty or verbatim file); append them so the
+            # file never lags the store.
+            base = candidate or current
             appended = "\n".join(f"- {record['learning']}" for record in recorded)
-            fallback = f"{current}\n\n{appended}" if current else appended
+            fallback = f"{base}\n\n{appended}" if base else appended
             candidate, dropped_lines = lint_formation_lines(fallback, known_user_ids)
         rejected_oversize = False
         if candidate and len(candidate.encode("utf-8")) > MUXI_MD_MAX_BYTES:

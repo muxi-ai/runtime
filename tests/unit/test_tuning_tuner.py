@@ -271,6 +271,33 @@ class TestTuneStep:
         assert pending.startswith("hand-written")
         assert "- Back off the jira MCP during afternoon spikes." in pending
 
+    def test_verbatim_candidate_falls_back_to_appending_learnings(
+        self, tmp_path, isolated_spool, captains_log
+    ):
+        tuning, muxi_md = make_tuning(tmp_path, captains_log, auto_apply=False)
+        muxi_md.write("hand-written")
+        response = json.dumps(
+            {
+                "muxi_md": "hand-written",
+                "learnings": [
+                    {
+                        "learning": "Back off the jira MCP during afternoon spikes.",
+                        "evidence": "clustered failures",
+                        "metric_key": None,
+                    }
+                ],
+                "recommendations": [],
+            }
+        )
+        isolated_spool.write_lines([json.dumps(spool_event())])
+
+        result = asyncio.run(tuning.run_once(SequencedModel([DIGEST_RESPONSE, response])))
+
+        assert result["muxi_md_suggested"] is True
+        pending = muxi_md.read_pending()
+        assert pending.startswith("hand-written")
+        assert "- Back off the jira MCP during afternoon spikes." in pending
+
     def test_oversized_candidate_is_never_written(self, tmp_path, isolated_spool, captains_log):
         tuning, muxi_md = make_tuning(tmp_path, captains_log, auto_apply=True)
         response = json.dumps(
@@ -313,6 +340,32 @@ class TestTuneStep:
         store = ExperimentStore(tuning.experiments_dir)
         assert len(store.records) == 1
         assert store.records[0]["status"] == "dismissed"
+
+    def test_dismissal_during_llm_await_is_not_overwritten(
+        self, tmp_path, isolated_spool, captains_log
+    ):
+        tuning, muxi_md = make_tuning(tmp_path, captains_log, auto_apply=False)
+
+        isolated_spool.write_lines([json.dumps(spool_event())])
+        asyncio.run(tuning.run_once(SequencedModel([DIGEST_RESPONSE, TUNER_RESPONSE])))
+        assert muxi_md.read_pending() is not None
+
+        class DismissingModel(SequencedModel):
+            """Dismisses the pending suggestion while the tuner awaits."""
+
+            async def generate_text(self, prompt, **kwargs):
+                if not self.responses or self.responses[0] != DIGEST_RESPONSE:
+                    tuning.dismiss_pending()
+                return await super().generate_text(prompt, **kwargs)
+
+        isolated_spool.write_lines([json.dumps(spool_event())])
+        result = asyncio.run(tuning.run_once(DismissingModel([DIGEST_RESPONSE, TUNER_RESPONSE])))
+
+        # The store keeps the dismissal: the pass reloads before recording,
+        # so the stale in-memory copy never overwrites the user's decision.
+        assert result["learnings_recorded"] == 0
+        store = ExperimentStore(tuning.experiments_dir)
+        assert [record["status"] for record in store.records] == ["dismissed"]
 
     def test_no_muxi_md_surface_skips_the_tune_step(self, isolated_spool, captains_log):
         overlord = FakeOverlord(captains_log, muxi_md=None)

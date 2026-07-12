@@ -789,7 +789,7 @@ async def _cmd_learnings(ctx: BuiltinCommandContext) -> str:
         if pending is None:
             return "There is no pending MUXI.md suggestion."
         return (
-            "Suggested MUXI.md revision (diff against the live file):\n\n"
+            "Suggested MUXI.md revision (full replacement for the live file):\n\n"
             f"{pending}\n\n"
             "/learnings apply to accept, /learnings dismiss to discard."
         )
