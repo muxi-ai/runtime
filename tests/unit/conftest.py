@@ -10,11 +10,15 @@ import pytest
 
 from muxi.runtime.services.observability import spool as spool_module
 from muxi.runtime.services.observability.spool import reset_event_spool
+from muxi.runtime.services.tuning import experiments as experiments_module
 
 
 @pytest.fixture(autouse=True)
 def _isolated_event_spool(tmp_path, monkeypatch):
     monkeypatch.setattr(spool_module, "_spool_dir", lambda: str(tmp_path / "event-spool"))
+    monkeypatch.setattr(
+        experiments_module, "_default_experiments_dir", lambda: str(tmp_path / "tuner")
+    )
     reset_event_spool()
     yield
     reset_event_spool()

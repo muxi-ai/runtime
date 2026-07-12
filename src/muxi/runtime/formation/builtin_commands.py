@@ -751,6 +751,77 @@ async def _cmd_reset(ctx: BuiltinCommandContext) -> str:
 
 
 # ===================================================================
+# /learnings (Self-Improving Formation: MUXI.md suggestion flow)
+# ===================================================================
+
+_LEARNINGS_USAGE = "Usage: /learnings [pending | apply | dismiss]"
+
+
+async def _cmd_learnings(ctx: BuiltinCommandContext) -> str:
+    muxi_md = getattr(ctx.overlord, "muxi_md", None)
+    if muxi_md is None:
+        return "Learnings are not available: this formation has no MUXI.md surface."
+
+    tokens = ctx.args.split()
+    action = tokens[0].lower() if tokens else "show"
+    if action not in ("show", "pending", "apply", "dismiss"):
+        return _LEARNINGS_USAGE
+
+    if action == "show":
+        content = muxi_md.read()
+        lines = []
+        if content:
+            lines.append("Live MUXI.md:")
+            lines.append("")
+            lines.append(content)
+        else:
+            lines.append("No MUXI.md exists yet -- the formation has no recorded learnings.")
+        if muxi_md.read_pending() is not None:
+            lines.append("")
+            lines.append(
+                "A suggested revision awaits review: /learnings pending to see it, "
+                "/learnings apply to accept, /learnings dismiss to discard."
+            )
+        return "\n".join(lines)
+
+    if action == "pending":
+        pending = muxi_md.read_pending()
+        if pending is None:
+            return "There is no pending MUXI.md suggestion."
+        return (
+            "Suggested MUXI.md revision (full replacement for the live file):\n\n"
+            f"{pending}\n\n"
+            "/learnings apply to accept, /learnings dismiss to discard."
+        )
+
+    # Mutating verbs. In multi-user mode any chat user could otherwise
+    # steer every user's context; the admin API is the gated surface.
+    if getattr(ctx.overlord, "is_multi_user", False):
+        return (
+            "This formation runs in multi-user mode; applying or dismissing "
+            "suggestions is an operator action (use the admin /tuning API)."
+        )
+    tuning_service = getattr(ctx.overlord, "tuning_service", None)
+    if tuning_service is None:
+        return "Learnings management is not available: tuning is not active."
+
+    try:
+        if action == "apply":
+            result = tuning_service.apply_pending()
+            return (
+                "Applied the suggested MUXI.md revision "
+                f"({result['learnings_activated']} learning(s) now under observation)."
+            )
+        result = tuning_service.dismiss_pending()
+        return (
+            "Dismissed the suggested MUXI.md revision "
+            f"({result['learnings_dismissed']} learning(s) will not be re-proposed)."
+        )
+    except (ValueError, OSError) as e:
+        return f"Could not {action} the suggestion: {e}"
+
+
+# ===================================================================
 # /setup (deterministic multi-step flow)
 # ===================================================================
 
@@ -1055,5 +1126,13 @@ register_builtin(
         description="Clear this session's conversation history",
         usage="/reset",
         handler=_cmd_reset,
+    )
+)
+register_builtin(
+    BuiltinCommand(
+        name="learnings",
+        description="View and manage the formation's learned guidance (MUXI.md)",
+        usage="/learnings [pending|apply|dismiss]",
+        handler=_cmd_learnings,
     )
 )

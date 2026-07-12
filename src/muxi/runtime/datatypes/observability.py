@@ -581,6 +581,18 @@ class SystemEvents(Enum):
     TUNING_RUN = "tuning.run"
     # When one tuning loop pass completes (scheduled or manual trigger)
 
+    TUNING_APPLIED = "tuning.applied"
+    # When a MUXI.md revision goes live (auto_apply or pending accepted)
+
+    TUNING_SUGGESTED = "tuning.suggested"
+    # When the tuner writes a PENDING-MUXI.md suggestion for review
+
+    TUNING_RETIRED = "tuning.retired"
+    # When a learning's watched metric did not move within its window
+
+    TUNING_DISMISSED = "tuning.dismissed"
+    # When a pending suggestion is dismissed (hashes are never re-proposed)
+
     # ===================================================================
     # NETWORK/COMMUNICATION INFRASTRUCTURE
     # ===================================================================

@@ -2,6 +2,54 @@
 
 ## [unreleased]
 
+### Self-improving formation - tuner step, pending flow, /learnings (Phase 2)
+
+The tuning loop now closes the observe-learn-steer cycle (Self-Improving
+Formation PRD, Phase 2): each pass distills the activity report into
+concrete learnings, curates MUXI.md, tracks every learning as an
+experiment with a watch window, and reports to the formation owner:
+
+- Tuner step: after the digest, the same pass asks the LLM to detect
+  patterns (cost hotspots, misrouted request classes, flaky tools) and
+  produce a revised MUXI.md plus structured learnings and prose
+  recommendations. Tuner-written content passes a line-level privacy
+  lint (markdown survives), the bounded-file contract is enforced on
+  the tuner's own writes, and deployment-shaped ideas (yaml edits, plan
+  upgrades) are never written to MUXI.md -- they ship as
+  recommendations for a human. The activity report now names failing
+  tools explicitly so learnings stay specific.
+- Experiments: learnings live in a sidecar store
+  (`observability/tuner/experiments.json`) with content-hash dedup
+  across their whole lifecycle -- pending, active, retired, dismissed.
+  Applying a learning opens a watch window (default 7 days) frozen at
+  the proposal-time baseline; when the watched metric has not improved
+  by 10% at window close, the learning is retired and never
+  re-proposed. Dismissals are equally terminal.
+- Pending flow: with `tuning.auto_apply: false` the tuner writes
+  PENDING-MUXI.md beside the live file and nothing changes until a
+  human acts -- `/learnings` (show/pending/apply/dismiss builtin,
+  mutating verbs refused in multi-user mode), the admin API
+  (`GET`/`PATCH`/`DELETE /tuning/pending`), or the morning report's
+  buttons.
+- Morning report: each pass with anything to say notifies the owner
+  through the formation's proactive channels -- applied or suggested
+  revision, new learnings, retirements, recommendations. Under manual
+  mode the report carries an apply/dismiss options widget rendered
+  natively on channels (P3 machinery); the button press resolves
+  session-independently.
+- NotificationRouter: `notify()` gains an optional `ui=` widget
+  pass-through into channel rendering and webhook payloads.
+- Spool fix: segment numbering now survives a delete-all commit
+  (checkpoint participates in the sequence scan), so post-digest events
+  can never land in an already-checkpointed name and vanish.
+- Observability: new `tuning.applied`, `tuning.suggested`,
+  `tuning.retired`, `tuning.dismissed` events plus pending-surface API
+  events; `validate_events.py` stays 100%.
+- E2E: 27A5 (auto-apply steering + deterministic watch-window
+  retirement), 27A6 (pending flow through /learnings and the admin
+  API, terminal dismissals), 27A7 (morning report delivery + widget
+  round-trip from an unrelated session).
+
 ### Self-improving formation - spool, formation digest, MUXI.md (Phase 1)
 
 The formation now observes itself (Self-Improving Formation PRD,

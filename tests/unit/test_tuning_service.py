@@ -93,10 +93,11 @@ def tuning(captains_log):
 
 class TestAggregation:
     def test_empty_segments_render_empty_report(self, isolated_spool):
-        report, user_ids, count = _aggregate_segments(isolated_spool, [])
+        report, user_ids, count, metrics = _aggregate_segments(isolated_spool, [])
         assert report == ""
         assert user_ids == []
         assert count == 0
+        assert metrics == {}
 
     def test_report_captures_operational_shape(self, isolated_spool):
         events = [
@@ -120,9 +121,12 @@ class TestAggregation:
         ]
         isolated_spool.write_lines([json.dumps(event) for event in events])
         segments, _ = isolated_spool.read_for_digest()
-        report, user_ids, count = _aggregate_segments(isolated_spool, segments)
+        report, user_ids, count, metrics = _aggregate_segments(isolated_spool, segments)
 
         assert count == 3
+        assert metrics["problem:mcp.tool.failed"] == pytest.approx(1 / 3)
+        assert metrics["warning_rate"] == pytest.approx(1 / 3)
+        assert metrics["error_rate"] == 0.0
         assert user_ids == ["alice", "bob"]
         assert "Window: 3 events" in report
         assert "2 distinct user(s), 1 session(s), 1 tracked request(s)" in report

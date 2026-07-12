@@ -40,6 +40,9 @@ class APIEventType(str, Enum):
     TUNING_RETRIEVED = "tuning.retrieved"
     TUNING_UPDATED = "tuning.updated"
     TUNING_RUN_COMPLETED = "tuning.run.completed"
+    TUNING_PENDING_RETRIEVED = "tuning.pending.retrieved"
+    TUNING_PENDING_APPLIED = "tuning.pending.applied"
+    TUNING_PENDING_DISMISSED = "tuning.pending.dismissed"
 
     MEMORY_CREATED = "memory.created"
     MEMORY_RETRIEVED = "memory.retrieved"

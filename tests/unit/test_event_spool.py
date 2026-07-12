@@ -92,6 +92,20 @@ class TestReadDigestCommit:
         segments, token = spool.read_for_digest()
         assert segments == []
 
+    def test_events_after_delete_commit_stay_visible(self, spool):
+        # After delete=True removes every segment, the numbering must
+        # continue past the checkpoint -- a reset would produce a name
+        # that sorts at/below it, hiding all subsequent events forever.
+        spool.write_lines(['{"event":"a"}'])
+        segments, token = spool.read_for_digest()
+        spool.commit(token, delete=True)
+
+        spool.write_lines(['{"event":"b"}'])
+        segments, token = spool.read_for_digest()
+        events = list(spool.iter_events(segments))
+        assert [event["event"] for event in events] == ["b"]
+        spool.commit(token, delete=True)
+
     def test_commit_keep_preserves_segments_without_rereading(self, spool):
         spool.write_lines(['{"event":"a"}'])
         segments, token = spool.read_for_digest()

@@ -1,5 +1,5 @@
 """
-Shared helpers for the 27_tuning e2e area (Self-Improving Formation, Phase 1).
+Shared helpers for the 27_tuning e2e area (Self-Improving Formation).
 
 Every test generates its formation at runtime into a temp directory (the
 watch-area standalone pattern) with a UNIQUE formation id: the event
@@ -67,6 +67,33 @@ logging:
     enabled: false
 """
 
+MANUAL_TUNING_BLOCK = """
+tuning:
+  auto_apply: false
+"""
+
+COMMANDS_BLOCK = """
+commands:
+  enabled: true
+"""
+
+PROACTIVE_BLOCK = """
+proactive:
+  channels:
+    report-chan:
+      transformer: report-t
+  default_channel: report-chan
+"""
+
+REPORT_TRANSFORMER = """\
+name: report-t
+endpoint:
+  url: {url}
+body:
+  text: "${{{{ response.content }}}}"
+  reply_markup: "${{{{ ui.telegram.reply_markup }}}}"
+"""
+
 SERVER_BLOCK = """
 server:
   enabled: true
@@ -96,6 +123,9 @@ def build_formation(
     file_logging: bool = False,
     server_port: Optional[int] = None,
     muxi_md: Optional[str] = None,
+    manual_tuning: bool = False,
+    commands: bool = False,
+    proactive_url: Optional[str] = None,
 ) -> Path:
     """Generate a tuning e2e formation under ``base_dir`` and return its path."""
     formation_dir = base_dir / "formation"
@@ -106,6 +136,17 @@ def build_formation(
         content += FILE_LOGGING_BLOCK.format(destination=str(base_dir / "system.jsonl"))
     if server_port is not None:
         content += SERVER_BLOCK.format(port=server_port, admin_key=ADMIN_KEY, client_key=CLIENT_KEY)
+    if manual_tuning:
+        content += MANUAL_TUNING_BLOCK
+    if commands:
+        content += COMMANDS_BLOCK
+    if proactive_url is not None:
+        content += PROACTIVE_BLOCK
+        transformers_dir = formation_dir / "transformers"
+        transformers_dir.mkdir()
+        (transformers_dir / "report-t.yaml").write_text(
+            REPORT_TRANSFORMER.format(url=proactive_url)
+        )
     (formation_dir / "formation.yaml").write_text(content)
     if muxi_md is not None:
         (formation_dir / "MUXI.md").write_text(muxi_md)
@@ -166,6 +207,48 @@ async def run_tuning_pass(overlord) -> dict:
         overlord.tuning_service is not None
     ), "tuning service was not initialized (it is on by default)"
     return await overlord.tuning_service.run_once(digest_model(overlord), trigger="manual")
+
+
+def experiments_path_for(formation_id: str) -> Path:
+    """Where the tuner's experiment memories live for this formation id."""
+    return Path.home() / ".muxi" / formation_id / "observability" / "tuner" / "experiments.json"
+
+
+def plant_tool_failures(count: int = 30, tool: str = "jira") -> None:
+    """Write a planted flaky-tool pattern straight into the event spool.
+
+    The PRD's tuner fixture: a tool failing 14:00-16:00. The spool is an
+    internal JSONL buffer, so the fixture writes the same shape the
+    logger tee produces.
+    """
+    import json as json_module
+
+    from muxi.runtime.services.observability.spool import get_event_spool
+
+    base_ts = 1783864800000  # 14:00 UTC
+    # Distinct descriptions: the report keeps a few deduplicated samples
+    # per cluster, so variety keeps the tool name salient in all of them.
+    problems = [
+        f"{tool} MCP request timed out after 30s",
+        f"{tool} MCP returned 429 (rate limited)",
+        f"{tool} MCP connection reset by peer",
+    ]
+    events = []
+    for index in range(count):
+        events.append(
+            json_module.dumps(
+                {
+                    "event": "mcp.tool.failed",
+                    "level": "warning",
+                    "timestamp": base_ts + index * 240_000,  # spread across 2h
+                    "data": {
+                        "description": problems[index % len(problems)],
+                        "tool": tool,
+                    },
+                }
+            )
+        )
+    get_event_spool().write_lines(events)
 
 
 async def teardown(formation, formation_id: Optional[str] = None) -> None:

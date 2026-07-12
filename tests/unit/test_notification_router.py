@@ -232,6 +232,74 @@ class TestConstruction:
         assert router.config.channels["slack"].transformer == "slack"
 
 
+class TestUiWidgets:
+    async def test_channel_delivery_renders_ui_variables(self, tmp_path):
+        from muxi.runtime.datatypes.ui import build_options_widget
+
+        sink = await Sink().start()
+        try:
+            transformers_dir = tmp_path / "transformers"
+            transformers_dir.mkdir(exist_ok=True)
+            (transformers_dir / "t-ui.yaml").write_text(
+                "name: t-ui\n"
+                "endpoint:\n"
+                f"  url: http://127.0.0.1:{sink.port}/notify\n"
+                "body:\n"
+                '  text: "${{ response.content }}"\n'
+                '  reply_markup: "${{ ui.telegram.reply_markup }}"\n'
+            )
+            router, store = _router(tmp_path, {"channels": {"chan-u": {"transformer": "t-ui"}}})
+            await store.set_preferences("ran", preferred_channel="chan-u")
+
+            widget = build_options_widget(
+                "Apply?", [{"value": "apply", "label": "Apply"}, {"value": "dismiss"}]
+            )
+            result = await router.notify(user_id="ran", message="report", ui=[widget])
+
+            assert result["delivered"] == ["chan-u"]
+            payload = json.loads(sink.requests[0]["body"])
+            assert payload["text"] == "report"
+            buttons = payload["reply_markup"]["inline_keyboard"]
+            callbacks = [button["callback_data"] for row in buttons for button in row]
+            assert callbacks == [f"{widget['id']}#0", f"{widget['id']}#1"]
+        finally:
+            await sink.stop()
+
+    async def test_webhook_payload_carries_ui(self, tmp_path):
+        from muxi.runtime.datatypes.ui import build_options_widget
+
+        sink = await Sink().start()
+        try:
+            router, _ = _router(
+                tmp_path,
+                {"channels": {}},
+                async_webhook_url=f"http://127.0.0.1:{sink.port}/hook",
+            )
+            widget = build_options_widget("Apply?", [{"value": "apply"}])
+            result = await router.notify(user_id="ran", message="report", ui=[widget])
+
+            assert result["delivered"] == ["webhook"]
+            payload = json.loads(sink.requests[0]["body"])
+            assert payload["response"] == [{"type": "text", "text": "report"}]
+            assert payload["ui"][0]["id"] == widget["id"]
+        finally:
+            await sink.stop()
+
+    async def test_text_only_notification_is_unchanged(self, tmp_path):
+        sink = await Sink().start()
+        try:
+            router, _ = _router(
+                tmp_path,
+                {"channels": {}},
+                async_webhook_url=f"http://127.0.0.1:{sink.port}/hook",
+            )
+            await router.notify(user_id="ran", message="plain")
+            payload = json.loads(sink.requests[0]["body"])
+            assert "ui" not in payload
+        finally:
+            await sink.stop()
+
+
 class TestDelivery:
     async def test_delivers_to_channel_with_user_context(self, tmp_path):
         sink = await Sink().start()
