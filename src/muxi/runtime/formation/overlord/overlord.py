@@ -6784,6 +6784,15 @@ Agent response: {raw_response}"""
             model_override = model_override or command_result.model
             bypass_workflow_approval = bypass_workflow_approval or command_result.bypass_approval
 
+        # Tuning morning-report widget (Self-Improving Formation): a button
+        # press on the report's apply/dismiss widget resolves against the
+        # tuning service's registered widget id -- session-independent,
+        # since the report is formation-global. Anything else falls
+        # through to the normal per-session ui_response resolution.
+        tuning_result = self._process_tuning_ui_response(ui_response)
+        if tuning_result is not None:
+            return tuning_result
+
         # Get webhook URL from formation config if not provided per-request
         if webhook_url is None:
             webhook_url = self.formation_config.get("async", {}).get("webhook_url")
@@ -7591,6 +7600,62 @@ Agent response: {raw_response}"""
             hint=entry.get("hint"),
             source=UIProvenance.FORMATION_CONFIG,
         )
+
+    def _process_tuning_ui_response(
+        self, ui_response: Optional[Dict[str, Any]]
+    ) -> Optional["MuxiResponse"]:
+        """
+        Resolve an inbound ``ui_response`` against the tuning morning
+        report's apply/dismiss widget, when one is outstanding.
+
+        Returns a terminal MuxiResponse when the hint matches the
+        registered widget (the pending suggestion is applied or
+        dismissed), or None so the hint falls through to the normal
+        per-session clarification resolution. Never raises: a failed
+        apply becomes a friendly error reply.
+        """
+        if not ui_response:
+            return None
+        tuning_service = getattr(self, "tuning_service", None)
+        pending_widget = getattr(tuning_service, "pending_widget", None)
+        if not pending_widget:
+            return None
+
+        from ...datatypes.ui import resolve_ui_response
+
+        pinned_value = resolve_ui_response(
+            ui_response, pending_widget.get("ui_id"), pending_widget.get("ui_options")
+        )
+        if pinned_value not in ("apply", "dismiss"):
+            return None
+
+        observability.observe(
+            event_type=observability.ConversationEvents.UI_RESPONSE_RECEIVED,
+            level=observability.EventLevel.INFO,
+            data={
+                "type": "options",
+                "matched": True,
+                "widget_id": ui_response.get("id"),
+                "producer": "tuning",
+            },
+            description="ui_response hint matched the tuning report widget",
+        )
+        try:
+            if pinned_value == "apply":
+                result = tuning_service.apply_pending()
+                content = (
+                    "Applied the suggested MUXI.md revision "
+                    f"({result['learnings_activated']} learning(s) now under observation)."
+                )
+            else:
+                result = tuning_service.dismiss_pending()
+                content = (
+                    "Dismissed the suggested MUXI.md revision "
+                    f"({result['learnings_dismissed']} learning(s) will not be re-proposed)."
+                )
+        except (ValueError, OSError) as e:
+            content = f"Could not {pinned_value} the suggestion: {e}"
+        return MuxiResponse(role="assistant", content=content, metadata={"producer": "tuning"})
 
     async def _resolve_ui_response_hint(
         self, ui_response: Optional[Dict[str, Any]], session_id: Optional[str]

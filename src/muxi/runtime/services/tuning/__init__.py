@@ -1,9 +1,9 @@
 """
 Self-Improving Formation services (tuning).
 
-Phase 1: the ``tuning:`` config surface, the scheduled digest loop over
-the event spool, and the MUXI.md file contract. Phase 2 adds the tuner
-step (detection, distillation, curation, pending flow, morning report).
+The ``tuning:`` config surface, the scheduled loop over the event spool
+(digest step + tune step), the MUXI.md/PENDING-MUXI.md file contract,
+and the tuner's experiment memories.
 """
 
 from .config import (
@@ -12,15 +12,21 @@ from .config import (
     TuningConfigError,
     parse_tuning_config,
 )
-from .muxi_md import MuxiMdFile
+from .experiments import ExperimentStore, learning_hash
+from .muxi_md import MUXI_MD_MAX_BYTES, MuxiMdFile
 from .service import TuningService, yaml_declares_file_transport
+from .tuner import TunerStep
 
 __all__ = [
     "DEFAULT_INTERVAL_HOURS",
+    "ExperimentStore",
+    "MUXI_MD_MAX_BYTES",
     "MuxiMdFile",
+    "TunerStep",
     "TuningConfig",
     "TuningConfigError",
     "TuningService",
+    "learning_hash",
     "parse_tuning_config",
     "yaml_declares_file_transport",
 ]

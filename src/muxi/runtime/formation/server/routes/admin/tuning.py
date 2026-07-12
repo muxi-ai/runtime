@@ -10,8 +10,15 @@ slice) plus the manual loop trigger, requiring admin API key auth:
   re-reads either way).
 - ``POST /tuning/run`` -- trigger one tuning loop pass (admin/testing).
 
-The pending-file endpoints (``/tuning/pending``) arrive with Phase 2's
-tuner step.
+The pending-suggestion surface (auto_apply: false review flow):
+
+- ``GET /tuning/pending`` -- the tuner's suggested next version of the
+  live file (PENDING-MUXI.md), null when none exists.
+- ``PATCH /tuning/pending`` -- accept: promote pending to live.
+- ``DELETE /tuning/pending`` -- dismiss: discard the suggestion; its
+  learnings are content-hashed away and never re-proposed.
+
+Partial acceptance = edit the pending content and POST it as live.
 """
 
 from fastapi import APIRouter, Request
@@ -19,15 +26,10 @@ from fastapi.responses import JSONResponse
 from pydantic import BaseModel
 
 from .....datatypes.api import APIEventType, APIObjectType
+from .....services.tuning.muxi_md import MUXI_MD_MAX_BYTES
 from ...responses import APIResponse, create_error_response, create_success_response
 
 router = APIRouter(tags=["Tuning"])
-
-# MUXI.md is read on every chat turn and injected into every user's
-# context, so the "bounded file" contract is enforced at the write
-# surface: ~32KB keeps it comparable to a large SOUL.md while bounding
-# per-turn context inflation across all users.
-MUXI_MD_MAX_BYTES = 32_768
 
 
 class TuningUpdate(BaseModel):
@@ -102,13 +104,91 @@ async def replace_tuning(request: Request, update: TuningUpdate) -> JSONResponse
     return JSONResponse(content=response.model_dump(), status_code=200)
 
 
+def _tuning_service(request: Request):
+    """The overlord's tuning service, or None when tuning is inactive."""
+    formation = request.app.state.formation
+    overlord = getattr(formation, "_overlord", None)
+    return getattr(overlord, "tuning_service", None) if overlord else None
+
+
+@router.get("/tuning/pending", response_model=APIResponse)
+async def get_tuning_pending(request: Request) -> JSONResponse:
+    """Get the pending MUXI.md suggestion (null when none exists)."""
+    request_id = getattr(request.state, "request_id", None)
+    muxi_md = _muxi_md(request)
+    if muxi_md is None:
+        response = create_error_response(
+            "SERVICE_UNAVAILABLE", "Overlord not started", None, request_id
+        )
+        return JSONResponse(content=response.model_dump(), status_code=503)
+
+    response = create_success_response(
+        APIObjectType.TUNING,
+        APIEventType.TUNING_PENDING_RETRIEVED,
+        {"content": muxi_md.read_pending(), "path": muxi_md.pending_path()},
+        request_id,
+    )
+    return JSONResponse(content=response.model_dump(), status_code=200)
+
+
+@router.patch("/tuning/pending", response_model=APIResponse)
+async def apply_tuning_pending(request: Request) -> JSONResponse:
+    """Accept the pending suggestion: promote it to the live MUXI.md."""
+    request_id = getattr(request.state, "request_id", None)
+    tuning_service = _tuning_service(request)
+    if tuning_service is None:
+        response = create_error_response(
+            "SERVICE_UNAVAILABLE", "Tuning is not active for this formation", None, request_id
+        )
+        return JSONResponse(content=response.model_dump(), status_code=503)
+
+    try:
+        result = tuning_service.apply_pending()
+    except ValueError as e:
+        response = create_error_response("TUNING_NO_PENDING", str(e), None, request_id)
+        return JSONResponse(content=response.model_dump(), status_code=404)
+    except OSError as e:
+        response = create_error_response(
+            "TUNING_WRITE_FAILED", f"Could not apply the suggestion: {e}", None, request_id
+        )
+        return JSONResponse(content=response.model_dump(), status_code=500)
+
+    response = create_success_response(
+        APIObjectType.TUNING, APIEventType.TUNING_PENDING_APPLIED, result, request_id
+    )
+    return JSONResponse(content=response.model_dump(), status_code=200)
+
+
+@router.delete("/tuning/pending", response_model=APIResponse)
+async def dismiss_tuning_pending(request: Request) -> JSONResponse:
+    """Dismiss the pending suggestion; its ideas are never re-proposed."""
+    request_id = getattr(request.state, "request_id", None)
+    tuning_service = _tuning_service(request)
+    if tuning_service is None:
+        response = create_error_response(
+            "SERVICE_UNAVAILABLE", "Tuning is not active for this formation", None, request_id
+        )
+        return JSONResponse(content=response.model_dump(), status_code=503)
+
+    try:
+        result = tuning_service.dismiss_pending()
+    except ValueError as e:
+        response = create_error_response("TUNING_NO_PENDING", str(e), None, request_id)
+        return JSONResponse(content=response.model_dump(), status_code=404)
+
+    response = create_success_response(
+        APIObjectType.TUNING, APIEventType.TUNING_PENDING_DISMISSED, result, request_id
+    )
+    return JSONResponse(content=response.model_dump(), status_code=200)
+
+
 @router.post("/tuning/run", response_model=APIResponse)
 async def run_tuning(request: Request) -> JSONResponse:
     """Trigger one tuning loop pass now (admin/testing surface)."""
     request_id = getattr(request.state, "request_id", None)
     formation = request.app.state.formation
     overlord = getattr(formation, "_overlord", None)
-    tuning_service = getattr(overlord, "tuning_service", None) if overlord else None
+    tuning_service = _tuning_service(request)
     if tuning_service is None:
         response = create_error_response(
             "SERVICE_UNAVAILABLE",

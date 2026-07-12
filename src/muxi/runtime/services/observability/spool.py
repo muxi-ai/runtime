@@ -113,12 +113,22 @@ class EventSpool:
         return segments[-1] if segments else None
 
     def _next_segment_path(self, today: str) -> Path:
-        """Next per-day sequence number; names sort lexicographically."""
+        """Next per-day sequence number; names sort lexicographically.
+
+        The checkpoint participates in the numbering: after a digest
+        deletes every segment, a fresh file must still sort AFTER the
+        checkpointed name, or its events would be hidden from every
+        future read.
+        """
         prefix = f"{SEGMENT_PREFIX}{today}-"
         max_seq = 0
-        for segment in self._list_segments():
-            if segment.name.startswith(prefix):
-                seq_text = segment.name[len(prefix) : -len(SEGMENT_SUFFIX)]
+        names = [segment.name for segment in self._list_segments()]
+        checkpoint = self._read_checkpoint()
+        if checkpoint is not None:
+            names.append(checkpoint)
+        for name in names:
+            if name.startswith(prefix) and name.endswith(SEGMENT_SUFFIX):
+                seq_text = name[len(prefix) : -len(SEGMENT_SUFFIX)]  # noqa: E203
                 try:
                     max_seq = max(max_seq, int(seq_text))
                 except ValueError:

@@ -20,7 +20,9 @@ Reserved routing names:
 - ``preferred``: the user's preferred channel
 - ``webhook``: the formation's async webhook
 
-v1 notifications are text-only; multi-channel arrays are supported.
+Notifications are text-first (the message must stand alone); envelope UI
+widgets may ride along and render natively where the channel template
+supports them. Multi-channel arrays are supported.
 """
 
 from datetime import datetime, timezone
@@ -178,16 +180,21 @@ class NotificationRouter:
         channels: Optional[List[str]] = None,
         request_id: Optional[str] = None,
         source: str = "notification",
+        ui: Optional[List[Dict[str, Any]]] = None,
     ) -> Dict[str, Any]:
         """
         Route and deliver a text notification to a user.
 
         Args:
             user_id: External user id
-            message: Notification text (v1 is text-only)
+            message: Notification text (text-first: the message MUST stand
+                alone without the widgets)
             channels: Optional explicit channel names (overrides preference)
             request_id: Optional correlation id (generated when absent)
             source: What produced the notification (e.g. "heartbeat", "api")
+            ui: Optional envelope UI widgets riding along; channel
+                templates render them natively (P3), the webhook payload
+                carries them under ``ui``
 
         Returns:
             Dict with ``channels`` (resolved), ``delivered``, ``failed``,
@@ -220,7 +227,11 @@ class NotificationRouter:
             try:
                 if channel == WEBHOOK_TARGET:
                     success = await self._deliver_webhook(
-                        user_id=user_id, message=message, request_id=request_id, source=source
+                        user_id=user_id,
+                        message=message,
+                        request_id=request_id,
+                        source=source,
+                        ui=ui,
                     )
                 else:
                     success = await self._deliver_channel(
@@ -229,6 +240,7 @@ class NotificationRouter:
                         user_id=user_id,
                         message=message,
                         request_id=request_id,
+                        ui=ui,
                     )
             except Exception as e:
                 success = False
@@ -271,6 +283,7 @@ class NotificationRouter:
                 request_id=request_id,
                 source=source,
                 failed_channels=failed,
+                ui=ui,
             ):
                 delivered.append(WEBHOOK_TARGET)
 
@@ -289,6 +302,7 @@ class NotificationRouter:
         user_id: str,
         message: str,
         request_id: str,
+        ui: Optional[List[Dict[str, Any]]] = None,
     ) -> bool:
         """Deliver via the channel's transformer (existing delivery stack)."""
         transformer = self._transformers[channel]
@@ -298,6 +312,7 @@ class NotificationRouter:
             transformer=transformer,
             url_override=self.config.channels[channel].url,
             response_content=message,
+            response={"ui": ui} if ui else None,
             request_user_id=user_id,
             context=context,
             agent_name=self.agent_name,
@@ -317,6 +332,7 @@ class NotificationRouter:
         request_id: str,
         source: str,
         failed_channels: Optional[List[str]] = None,
+        ui: Optional[List[Dict[str, Any]]] = None,
     ) -> bool:
         """Deliver the standard notification payload to the async webhook."""
         if not self.async_webhook_url:
@@ -345,6 +361,8 @@ class NotificationRouter:
             "response": [{"type": "text", "text": message}],
             "timestamp": datetime.now(timezone.utc).isoformat(),
         }
+        if ui:
+            payload["ui"] = ui
         if failed_channels:
             payload["failed_channels"] = failed_channels
 

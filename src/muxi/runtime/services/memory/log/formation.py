@@ -104,7 +104,7 @@ class FormationLogSummarizer:
         if clean.startswith("```"):
             first_newline = clean.find("\n")
             if first_newline > 0:
-                clean = clean[first_newline + 1 :]
+                clean = clean[first_newline + 1 :]  # noqa: E203
             if clean.endswith("```"):
                 clean = clean[:-3].strip()
         try:
@@ -159,6 +159,38 @@ def lint_formation_digest(
     return (cleaned if cleaned else None), dropped
 
 
+def lint_formation_lines(
+    text: Optional[str], known_user_ids: Iterable[str]
+) -> Tuple[Optional[str], int]:
+    """Line-level privacy gate for markdown destined for every user.
+
+    Same predicates as :func:`lint_formation_digest` but drops whole
+    lines instead of joining sentences, preserving markdown structure
+    (the tuner's MUXI.md revisions are markdown, not prose). Returns the
+    cleaned text and the number of dropped lines.
+    """
+    if not text:
+        return text, 0
+
+    user_id_needles = [
+        user_id.lower()
+        for user_id in known_user_ids
+        if isinstance(user_id, str) and len(user_id) >= 3
+    ]
+
+    detector = get_entity_detector()
+    kept: List[str] = []
+    dropped = 0
+    for line in text.splitlines():
+        if line.strip() and _is_private_sentence(line, user_id_needles, detector):
+            dropped += 1
+            continue
+        kept.append(line)
+
+    cleaned = "\n".join(kept).strip()
+    return (cleaned if cleaned else None), dropped
+
+
 def _is_private_sentence(sentence: str, user_id_needles: List[str], detector) -> bool:
     lowered = sentence.lower()
     if any(needle in lowered for needle in user_id_needles):
@@ -187,4 +219,5 @@ __all__ = [
     "FORMATION_LOG_USER_ID",
     "FormationLogSummarizer",
     "lint_formation_digest",
+    "lint_formation_lines",
 ]
