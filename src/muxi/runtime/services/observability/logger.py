@@ -45,6 +45,10 @@ class EventLogger:
     # Max events drained per write batch by the background writer
     _WRITER_BATCH_MAX = 100
 
+    # Spool tee backpressure: past this queue depth, spool writes are
+    # dropped rather than growing the writer queue unboundedly
+    _SPOOL_QUEUE_MAX = 10000
+
     def __init__(
         self,
         level: EventLevel = EventLevel.INFO,
@@ -246,6 +250,18 @@ class EventLogger:
             # JSON-L format for easy parsing
             event_line = json.dumps(event, separators=(",", ":"))
 
+            # Tee every emitted event into the internal spool (Self-
+            # Improving Formation PRD): always on, not configuration,
+            # rides the same background writer so the hot path never
+            # touches disk. The spool singleton owns segment state, so
+            # the logger replacement at server-ready loses nothing.
+            # Drop-aware: a stalled writer must never grow the queue
+            # unboundedly for the spool's sake (the digest is best-effort
+            # telemetry; configured outputs keep their existing behavior).
+            write_queue = self._write_queue
+            if write_queue is None or write_queue.qsize() < self._SPOOL_QUEUE_MAX:
+                self._enqueue_write("spool", event_line)
+
             # Route SystemEvents, ServerEvents, APIEvents and ErrorEvents to system_destination
             if isinstance(event_type, (SystemEvents, ErrorEvents, ServerEvents, APIEvents)):
                 self._emit_to_system(event_line)
@@ -339,7 +355,11 @@ class EventLogger:
         """Write one batch of JSON-L lines to a single destination."""
         payload = "\n".join(event_lines) + "\n"
 
-        if kind == "file":
+        if kind == "spool":
+            from .spool import get_event_spool
+
+            get_event_spool().write_lines(event_lines)
+        elif kind == "file":
             file_path = self.output_config.get("path", f"{get_observability_dir()}/muxi.jsonl")
             with open(file_path, "a") as f:
                 f.write(payload)

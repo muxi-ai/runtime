@@ -400,6 +400,10 @@ class FormationValidator:
         if "coding" in config:
             self._validate_coding_config(config["coding"])
 
+        # Validate self-improvement configuration
+        if "tuning" in config:
+            self._validate_tuning_config(config["tuning"])
+
         # Validate LLM configuration
         if "llm" in config:
             self._validate_llm_config(config["llm"])
@@ -3757,6 +3761,22 @@ class FormationValidator:
             parse_coding_config(coding_config, resolve_client=False)
         except CodingConfigError as e:
             self.result.add_error(f"Invalid coding configuration: {e}")
+
+    def _validate_tuning_config(self, tuning_config: Any) -> None:
+        """Validate the top-level ``tuning`` block (self-improvement).
+
+        Reuses the service-level parser so the validator and the runtime
+        can never disagree: closed key set (active, interval_hours,
+        auto_apply), fail-fast types, booleans rejected where numbers are
+        expected. An absent block is valid (defaults on) and never
+        reaches this method.
+        """
+        from ...services.tuning import TuningConfigError, parse_tuning_config
+
+        try:
+            parse_tuning_config(tuning_config)
+        except TuningConfigError as e:
+            self.result.add_error(f"Invalid tuning configuration: {e}")
 
     def _validate_server_config(self, server_config: Dict[str, Any]) -> None:
         """Validate server configuration."""

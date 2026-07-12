@@ -15,6 +15,7 @@ from . import (
     overlord,
     scheduler,
     secrets,
+    tuning,
 )
 
 __all__ = [
@@ -32,4 +33,5 @@ __all__ = [
     "overlord",
     "scheduler",
     "secrets",
+    "tuning",
 ]

@@ -234,6 +234,11 @@ class Formation:
         self._watch_config = None
         self._watch_prepared = False
 
+        # Self-improvement (populated by _setup_tuning from the top-level
+        # tuning: block; defaults ON when the block is absent, so this is
+        # never None after _prepare_services)
+        self._tuning_config = None
+
     def set_secrets_manager(self, secrets_manager: SecretsManager) -> None:
         """
         Inject a pre-configured SecretsManager instance.
@@ -1118,6 +1123,10 @@ class Formation:
         # of the adapter, binary, workdirs, groups, and the secrets rule)
         self._setup_coding()
 
+        # Self-improvement (top-level tuning: block; defaults ON when the
+        # block is absent -- every formation self-improves out of the box)
+        self._setup_tuning()
+
         # Prepare and validate service configurations
         self._setup_llm_config()
         self._setup_memory_config()
@@ -1260,6 +1269,7 @@ class Formation:
                 "document_processing_config": self._document_processing_config,
                 "coding_config": self._coding_config,
                 "watch_config": self._watch_config,
+                "tuning_config": self._tuning_config,
                 "scheduler_config": self._scheduler_config,
                 "runtime_config": self._runtime_config,
                 "agents_config": self._agents_config,
@@ -1787,6 +1797,35 @@ class Formation:
 
         self._coding_config = coding_config
         self._coding_prepared = True
+
+    def _setup_tuning(self) -> None:
+        """
+        Parse + fail-fast validate the top-level ``tuning:`` block.
+
+        The entire Self-Improving Formation AFS surface. An absent block
+        means the defaults (active, 24h interval, auto_apply) -- every
+        formation self-improves out of the box; ``tuning: {active: false}``
+        is the off switch. Closed key set: any structural problem is a
+        formation-load error, never a tuning-time surprise.
+        """
+        from ..services.tuning import TuningConfigError, parse_tuning_config
+
+        try:
+            self._tuning_config = parse_tuning_config((self.config or {}).get("tuning"))
+        except TuningConfigError as e:
+            raise ConfigurationValidationError(
+                [f"Invalid tuning configuration: {e}"],
+                {
+                    "suggestion": (
+                        "The tuning block supports exactly three keys: "
+                        "'active' (boolean), 'interval_hours' (positive "
+                        "number), and 'auto_apply' (boolean)"
+                    ),
+                    "example": {
+                        "tuning": {"active": True, "interval_hours": 24, "auto_apply": True}
+                    },
+                },
+            ) from e
 
     def _setup_llm_config(self) -> None:
         """Setup and validate LLM configuration."""
