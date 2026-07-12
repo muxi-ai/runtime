@@ -2,6 +2,50 @@
 
 ## [unreleased]
 
+### Self-improving formation - spool, formation digest, MUXI.md (Phase 1)
+
+The formation now observes itself (Self-Improving Formation PRD,
+Phase 1): every observability event is retained in an internal spool,
+a scheduled loop digests it into a formation-scope captain's log entry
+visible to every user, and a curated MUXI.md file (the formation's
+CLAUDE.md) steers behavior -- hand-written on day one, tuner-curated in
+Phase 2:
+
+- Event spool: the EventLogger tees every emitted event into segmented
+  JSONL under the formation's observability directory -- always on,
+  regardless of the `logging:` yaml (which still controls what leaves
+  the runtime). Internal, not configuration: 32MB segments, 512MB cap
+  (oldest closed segments drop with a `spool.overrun` event),
+  checkpointed single-consumer reads. Digested segments are deleted
+  unless the yaml declares its own file transport -- then the files are
+  the dev's and digestion never deletes.
+- Tuning loop: a new in-runtime scheduled job (`tuning:` block --
+  `active`, `interval_hours`, `auto_apply`; on by default, closed-key
+  fail-fast validation) reads the spool since the last checkpoint,
+  aggregates it into a bounded activity report (event/level/problem
+  clusters, token usage, traffic shape -- raw identifiers never reach
+  the LLM), and digests it into today's formation log entry.
+- Formation captain's log: same storage and date-grain as the per-user
+  log, under a reserved formation scope. A sentence-level privacy lint
+  gates every write (user ids, emails, SSNs, card-length digit runs,
+  sensitive keywords, person/address/financial entities) -- dropping
+  the offending sentence, never the digest. The entry is injected into
+  EVERY user's context as a "Formation operations log" block; entries
+  are recorded as formation-scope `log.entry` memory events.
+- MUXI.md: a bounded markdown file of operational guidance living
+  beside SOUL.md -- formation-owned, git-trackable, human-editable.
+  Injected wherever SOUL.md is injected plus at the top of the
+  per-turn context; the mtime-cached handle means hand edits and API
+  replacements land on the next turn without a restart.
+- API: `GET /tuning` (live MUXI.md), `POST /tuning` (replace it),
+  `POST /tuning/run` (trigger one loop pass) -- admin key auth.
+- Observability: new `spool.overrun`, `formation_log.digested`, and
+  `tuning.run` events; `validate_events.py` stays 100%.
+- E2E: new 27_tuning area -- spool lifecycle incl. restart survival
+  (27A1), file-transport retention (27A2), multi-user digest with
+  privacy lint + cross-user context injection (27A3), /tuning API
+  surface + live MUXI.md steering (27A4).
+
 ### Response envelope UI - channel-native widget rendering (P3)
 
 The bundled slack/telegram/discord transformer templates now render

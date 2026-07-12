@@ -479,6 +479,13 @@ class Overlord:
         # None means no watch_job tool is registered).
         self.watch_service = None
 
+        # Tuning service (self-improving formation; created in
+        # _async_startup unless tuning.active is false). The MUXI.md file
+        # handle is created unconditionally in the constructor: a
+        # hand-written MUXI.md is injected even when the tuner is off.
+        self.tuning_service = None
+        self.muxi_md = None
+
         # Initialize credential resolver if database is configured
         self.credential_resolver = None
         if configured_services:
@@ -943,6 +950,16 @@ class Overlord:
 
         # Load overlord soul (intelligence concerns)
         self._load_soul()
+
+        # MUXI.md -- the formation's CLAUDE.md, sibling of SOUL.md
+        # (Self-Improving Formation PRD). The handle re-reads on mtime
+        # change, so hand edits and POST /tuning replacements take effect
+        # on the next turn without a restart.
+        from ...services.tuning import MuxiMdFile
+
+        self.muxi_md = MuxiMdFile(
+            self._configured_services.get("formation_path") if self._configured_services else None
+        )
 
         # ===================================================================
         # POST-INITIALIZATION SETUP
@@ -1603,6 +1620,10 @@ class Overlord:
         # without declared MCP servers (or 'mcp: { watch: false }').
         await self._initialize_watch_service()
 
+        # Start the tuning loop (self-improving formation). On by default;
+        # no-op only when 'tuning: {active: false}'.
+        self._initialize_tuning_service()
+
         # Register periodic re-sync of remote knowledge sources (Phase 3)
         # after the scheduler for the same reason. No-op for formations
         # without url-based knowledge sources.
@@ -1772,6 +1793,50 @@ class Overlord:
                 f"interval {int(watch_config.interval_seconds)}s, "
                 f"timeout {int(watch_config.timeout_seconds)}s, "
                 f"max {watch_config.max_concurrent} watch(es)/user",
+            )
+        )
+
+    def _initialize_tuning_service(self) -> None:
+        """
+        Create + start the TuningService (self-improving formation).
+
+        On by default: an absent 'tuning:' block means the loop runs with
+        defaults; 'tuning: {active: false}' means no service (the event
+        spool stays within its cap and is otherwise inert). Digested spool
+        segments are deleted unless the formation's yaml declares its own
+        file transport -- then the files are the dev's and their rotation
+        config governs.
+        """
+        tuning_config = (
+            self._configured_services.get("tuning_config") if self._configured_services else None
+        )
+        if tuning_config is None:
+            from ...services.tuning import TuningConfig
+
+            tuning_config = TuningConfig()
+        if not tuning_config.active:
+            return
+
+        from ...datatypes.observability import InitEventFormatter
+        from ...services.tuning import TuningService, yaml_declares_file_transport
+
+        logging_config = (
+            self._configured_services.get("logging_config") if self._configured_services else None
+        ) or {}
+        self.tuning_service = TuningService(
+            config=tuning_config,
+            overlord=self,
+            keep_spool_segments=yaml_declares_file_transport(logging_config),
+        )
+        self.tuning_service.start(
+            lambda: getattr(self, "extraction_model", None) or getattr(self, "default_model", None)
+        )
+
+        print(
+            InitEventFormatter.format_ok(
+                "Tuning loop initialized",
+                f"every {tuning_config.interval_hours:g}h, "
+                f"auto_apply {str(tuning_config.auto_apply).lower()}",
             )
         )
 
@@ -2837,6 +2902,23 @@ class Overlord:
                 description="Failed to load soul, using fallback",
             )
 
+    def _persona_with_guidance(self) -> str:
+        """The soul persona plus MUXI.md operational learnings.
+
+        MUXI.md is injected wherever SOUL.md is injected (Self-Improving
+        Formation PRD): the handle is mtime-cached, so hand edits, tuner
+        curation, and POST /tuning replacements all land on the next turn.
+        Returns the bare persona when the file is absent or empty.
+        """
+        persona = self._default_persona
+        try:
+            guidance = self.muxi_md.read() if self.muxi_md else None
+        except Exception:
+            guidance = None
+        if guidance:
+            persona = f"{persona}\n\n=== FORMATION OPERATIONAL GUIDANCE (MUXI.md) ===\n{guidance}"
+        return persona
+
     async def _get_local_classifier(self) -> LocalClassifier:
         """Return the lazily-initialized prototype-similarity classifier
         used by the binary pre-planning gates.
@@ -3292,7 +3374,7 @@ class Overlord:
 
                 system_prompt = PromptLoader.get(
                     "overlord_greeting_response.md",
-                    default_persona=self._default_persona,
+                    default_persona=self._persona_with_guidance(),
                     user_message=actual_user_message,
                 )
 
@@ -3392,7 +3474,7 @@ class Overlord:
                         "'Hey there', 'Hi', 'Hello', etc. Get straight to the answer."
                     )
 
-                system_prompt = f"""{self._default_persona}
+                system_prompt = f"""{self._persona_with_guidance()}
 
 Reformat the agent's response to match your persona while preserving all technical details and information.
 Make it conversational and friendly while keeping accuracy.
@@ -4847,6 +4929,18 @@ Agent response: {raw_response}"""
                     level=observability.EventLevel.WARNING,
                     data={"error": str(e), "service": "knowledge_graph"},
                     description=f"Error stopping knowledge graph service: {e}",
+                )
+
+        # Stop the tuning loop if running
+        if getattr(self, "tuning_service", None):
+            try:
+                await self.tuning_service.stop()
+            except Exception as e:
+                observability.observe(
+                    event_type=observability.ErrorEvents.INTERNAL_ERROR,
+                    level=observability.EventLevel.WARNING,
+                    data={"error": str(e), "service": "tuning"},
+                    description=f"Error stopping tuning service: {e}",
                 )
 
         # Stop the captain's log summarization loop if running

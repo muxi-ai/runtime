@@ -570,6 +570,18 @@ class SystemEvents(Enum):
     # When cron expression timezone is converted
 
     # ===================================================================
+    # SELF-IMPROVEMENT (EVENT SPOOL + TUNING LOOP)
+    # ===================================================================
+    SPOOL_OVERRUN = "spool.overrun"
+    # When the event spool exceeds its internal cap and drops oldest segments
+
+    FORMATION_LOG_DIGESTED = "formation_log.digested"
+    # When the tuning loop digests the spool into the formation captain's log
+
+    TUNING_RUN = "tuning.run"
+    # When one tuning loop pass completes (scheduled or manual trigger)
+
+    # ===================================================================
     # NETWORK/COMMUNICATION INFRASTRUCTURE
     # ===================================================================
     # REMOVED: NETWORK_INTERFACE_INITIALIZED - too granular, not used

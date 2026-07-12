@@ -279,6 +279,8 @@ class MemoryLintService:
 
     async def _list_user_ids(self) -> Set[str]:
         """Every user with knowledge graph or captain's log rows."""
+        from .log.formation import FORMATION_LOG_USER_ID
+
         users: Set[str] = set()
         async with self.db_manager.get_async_session() as session:
             stmt = select(KGEntity.user_id).filter_by(formation_id=self.formation_id).distinct()
@@ -289,6 +291,10 @@ class MemoryLintService:
                 .distinct()
             )
             users.update(str(row[0]) for row in (await session.execute(stmt)).all())
+        # The formation-scope log sentinel is not a user: its cadence is
+        # the tuning interval, so the per-user log-gap check would flag it
+        # spuriously (and per-user lint passes have nothing to audit).
+        users.discard(FORMATION_LOG_USER_ID)
         return users
 
     async def _unresolved_conflicts(self, user_id: str) -> List[str]:

@@ -635,6 +635,7 @@ class FormationServer:
             memory,
             overlord,
             secrets,
+            tuning,
         )
         from .routes.admin.async_routes import router as async_router
 
@@ -657,6 +658,7 @@ class FormationServer:
             # scheduler.router moved to dual_auth_routers (GET /scheduler/jobs needs both keys)
             a2a.router,
             audit.router,
+            tuning.router,
         ]
 
         for router in admin_routers:

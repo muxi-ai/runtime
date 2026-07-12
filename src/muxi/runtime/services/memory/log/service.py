@@ -43,6 +43,11 @@ from ..events.models import (
 )
 from ..graph.extractor import KnowledgeGraphExtractor
 from ..graph.service import _schedule_to_seconds
+from .formation import (
+    FORMATION_LOG_USER_ID,
+    FormationLogSummarizer,
+    lint_formation_digest,
+)
 from .models import SOURCE_TYPE_BUFFER_ITEM
 from .storage import CaptainsLogStorage, LessonStorage
 from .summarizer import CaptainsLogSummarizer
@@ -150,6 +155,7 @@ class CaptainsLogService:
         self.storage = CaptainsLogStorage(db_manager, formation_id)
         self.lessons = LessonStorage(db_manager, formation_id)
         self.summarizer = CaptainsLogSummarizer()
+        self.formation_summarizer = FormationLogSummarizer()
         # The digest response's graph fields are validated with the Phase 1
         # extractor's parser at the periodic-pass confidence threshold.
         self.graph_extractor = KnowledgeGraphExtractor(confidence_threshold=DIGEST_GRAPH_CONFIDENCE)
@@ -576,6 +582,99 @@ class CaptainsLogService:
             description=f"Captain's log entry updated for {entry['date']}",
         )
         return {"entries": 1, "sources": source_counts["added"], "lessons": lessons_stored}
+
+    # ------------------------------------------------------------------
+    # Formation-scope digest (Self-Improving Formation, tuning loop step 1)
+    # ------------------------------------------------------------------
+
+    async def digest_formation(
+        self, activity_report: str, model, known_user_ids: Optional[List[str]] = None
+    ) -> Dict[str, int]:
+        """
+        Digest an aggregated spool report into today's formation log entry.
+
+        Same storage and date-grain as the per-user log, written under the
+        reserved formation user id and recorded as a formation-scope
+        ``log.entry`` event. The privacy lint runs on every write: a
+        rejection drops the offending sentence, never the digest. Driven
+        by the tuning loop (never the per-user summarization pass).
+
+        The returned ``consumed`` flag tells the tuning loop whether the
+        report's events reached a terminal outcome (written, linted out,
+        or nothing to record): only then may spool segments be
+        checkpointed away. Transient failures (no model yet, unparseable
+        LLM response) return ``consumed=False`` so the same segments are
+        retried on the next pass.
+        """
+        if not self.enabled or not (activity_report or "").strip():
+            return {"entries": 0, "dropped_sentences": 0, "consumed": True}
+        if model is None:
+            return {"entries": 0, "dropped_sentences": 0, "consumed": False}
+
+        entry_date = utc_now_naive().date()
+        previous_entry = await self.storage.get_entry(FORMATION_LOG_USER_ID, entry_date)
+        raw_response = await model.generate_text(
+            self.formation_summarizer.build_prompt(
+                activity_report,
+                entry_date=entry_date.isoformat(),
+                previous_entry=previous_entry,
+            ),
+            caching=False,
+        )
+        digest = self.formation_summarizer.parse_response(raw_response)
+        if digest is None:
+            return {"entries": 0, "dropped_sentences": 0, "consumed": False}
+
+        known_user_ids = known_user_ids or []
+        summary, dropped_summary = lint_formation_digest(digest["summary"], known_user_ids)
+        context, dropped_context = lint_formation_digest(digest["context"], known_user_ids)
+        dropped = dropped_summary + dropped_context
+        if summary is None:
+            # Every summary sentence failed the lint; there is nothing
+            # publishable this run. The digest itself is never rejected --
+            # the next run writes a clean entry.
+            return {"entries": 0, "dropped_sentences": dropped, "consumed": True}
+
+        entry_payload = {
+            "date": entry_date.isoformat(),
+            "summary": summary,
+            "decisions": [],
+            "projects": [],
+            "context": context,
+            "sources": [],
+        }
+        event = None
+        if self.event_log is not None:
+            event = await self.event_log.record(
+                user_id=FORMATION_LOG_USER_ID,
+                event_type=EVENT_LOG_ENTRY,
+                payload=entry_payload,
+                source=SOURCE_CAPTAINS_LOG,
+                scope_type="formation",
+                scope_id=self.formation_id,
+            )
+        if event is not None and self.event_log.event_first:
+            await self.event_log.apply_event(event)
+        else:
+            await self.apply_log_entry_event(
+                FORMATION_LOG_USER_ID, entry_payload, event_id=event["id"] if event else None
+            )
+
+        observability.observe(
+            event_type=observability.SystemEvents.FORMATION_LOG_DIGESTED,
+            level=observability.EventLevel.INFO,
+            data={
+                "date": entry_payload["date"],
+                "dropped_sentences": dropped,
+                "merged_existing_entry": previous_entry is not None,
+            },
+            description=f"Formation captain's log entry updated for {entry_payload['date']}",
+        )
+        return {"entries": 1, "dropped_sentences": dropped, "consumed": True}
+
+    async def get_formation_context_block(self, limit: Optional[int] = None) -> str:
+        """Render recent formation-scope entries for every user's context."""
+        return await self.get_context_block(FORMATION_LOG_USER_ID, limit=limit)
 
     async def _store_lessons(
         self,

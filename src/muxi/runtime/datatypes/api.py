@@ -37,6 +37,10 @@ class APIEventType(str, Enum):
     SECRET_LIST = "secret.list"
     SECRET_RELOADED = "secret.reloaded"
 
+    TUNING_RETRIEVED = "tuning.retrieved"
+    TUNING_UPDATED = "tuning.updated"
+    TUNING_RUN_COMPLETED = "tuning.run.completed"
+
     MEMORY_CREATED = "memory.created"
     MEMORY_RETRIEVED = "memory.retrieved"
     MEMORY_DELETED = "memory.deleted"
@@ -204,6 +208,8 @@ class APIObjectType(str, Enum):
     # Configuration objects
     OVERLORD_CONFIG = "overlord_config"
     SOUL = "soul"
+    TUNING = "tuning"
+    TUNING_RUN = "tuning_run"
     MCP_DEFAULTS = "mcp_defaults"
     MCP_SERVER = "mcp_server"
     MCP_SERVER_LIST = "mcp_server_list"

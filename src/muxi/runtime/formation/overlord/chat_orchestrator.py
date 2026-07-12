@@ -1754,6 +1754,19 @@ class ChatOrchestrator:
                     pass
             return ""
 
+        async def _fetch_formation_log_context() -> str:
+            # Formation captain's log injection (Self-Improving Formation):
+            # the formation-scope operational narrative is visible to every
+            # user -- entries are privacy-linted at write time. Failure-safe
+            # by contract (returns "" on any error or when empty).
+            captains_log = getattr(self.overlord, "captains_log", None)
+            if captains_log:
+                try:
+                    return await captains_log.get_formation_context_block()
+                except Exception:
+                    pass
+            return ""
+
         async def _fetch_memory_index() -> str:
             # Knowledge index injection (Memory Revamp Phase 4): the
             # navigable catalog of what exists in memory, injected at the
@@ -1774,6 +1787,7 @@ class ChatOrchestrator:
             buffer_turns,
             graph_context,
             captains_log_context,
+            formation_log_context,
             memory_index_block,
         ) = await asyncio.gather(
             _fetch_user_synopsis(),
@@ -1781,6 +1795,7 @@ class ChatOrchestrator:
             _fetch_buffer_role_turns(),
             _fetch_graph_context(),
             _fetch_captains_log_context(),
+            _fetch_formation_log_context(),
             _fetch_memory_index(),
         )
 
@@ -1805,6 +1820,12 @@ class ChatOrchestrator:
                 f"{user_profile_text}\n\n{log_block}" if user_profile_text else log_block
             )
 
+        if formation_log_context:
+            ops_block = f"Formation operations log:\n{formation_log_context}"
+            user_profile_text = (
+                f"{user_profile_text}\n\n{ops_block}" if user_profile_text else ops_block
+            )
+
         # The knowledge index leads the memory addendum (PRD retrieval
         # flow: "1. Read memory index <- orient: what exists?").
         if memory_index_block:
@@ -1813,6 +1834,24 @@ class ChatOrchestrator:
                 if user_profile_text
                 else memory_index_block
             )
+
+        # MUXI.md leads everything (Self-Improving Formation): prose
+        # operational guidance steering per-turn decisions -- routing,
+        # tool selection, clarification posture. Bounded file, no
+        # retrieval machinery; the mtime-cached read is effectively free.
+        muxi_md = getattr(self.overlord, "muxi_md", None)
+        if muxi_md is not None:
+            try:
+                muxi_guidance = muxi_md.read()
+            except Exception:
+                muxi_guidance = None
+            if muxi_guidance:
+                guidance_block = f"Formation operational guidance (MUXI.md):\n{muxi_guidance}"
+                user_profile_text = (
+                    f"{guidance_block}\n\n{user_profile_text}"
+                    if user_profile_text
+                    else guidance_block
+                )
 
         # Apply the scheduled-execution marker only at the agent's
         # view of the current message. ``buffer_turns`` is left

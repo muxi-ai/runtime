@@ -45,6 +45,9 @@ AREA_TIMEOUT_OVERRIDES = {
     # analysis + MCP credential resolution + retry of the original
     # request) against real OpenAI; three rounds regularly exceed 120s.
     "25_envelope_ui": 300,
+    # Tuning tests seed real multi-user LLM traffic, run the digest pass
+    # (another LLM call), and restart the formation mid-test.
+    "27_tuning": 300,
 }
 E2E_DIR = Path(__file__).parent
 TESTS_DIR = E2E_DIR / "tests"

@@ -4,21 +4,36 @@ Unit tests for the EventLogger background writer.
 File and network destinations previously did a blocking open/write/flush
 or requests.post per event on the emitting thread. Events are now queued
 to a single writer thread that batches per destination. These tests pin:
-ordering, delivery via flush(), NDJSON batching for stream posts, and
-that stdout-only loggers never spawn the writer.
+ordering, delivery via flush(), and NDJSON batching for stream posts.
+
+Since the event spool (Self-Improving Formation), every emitted event is
+teed to disk through the writer, so even stdout-only loggers spawn it on
+first emit; the tests isolate the spool singleton into tmp_path.
 """
 
 from unittest.mock import MagicMock, patch
+
+import pytest
 
 from muxi.runtime.datatypes.observability import (
     ConversationEvents,
     EventLevel,
     SystemEvents,
 )
-from muxi.runtime.services.observability import EventLogger
+from muxi.runtime.services.observability import EventLogger, spool as spool_module
+from muxi.runtime.services.observability.spool import reset_event_spool
 
 CONV_EVENT = ConversationEvents.MEMORY_WORKING_RETRIEVED
 SYS_EVENT = SystemEvents.CONFIG_FORMATION_LOADED
+
+
+@pytest.fixture(autouse=True)
+def isolated_spool(tmp_path, monkeypatch):
+    """Keep the always-on spool tee inside tmp_path for every test here."""
+    monkeypatch.setattr(spool_module, "_spool_dir", lambda: str(tmp_path / "spool"))
+    reset_event_spool()
+    yield
+    reset_event_spool()
 
 
 class TestFileWriter:
@@ -76,12 +91,13 @@ class TestStreamWriter:
 
 
 class TestWriterLifecycle:
-    def test_stdout_output_never_spawns_writer(self, capsys):
+    def test_stdout_output_spawns_writer_for_spool_tee(self, capsys):
         logger = EventLogger(level=EventLevel.DEBUG, output="stdout")
 
         logger.emit_event(CONV_EVENT, level=EventLevel.INFO, data={"seq": 0})
 
-        assert logger._write_queue is None
+        # stdout stays synchronous, but the spool tee rides the writer.
+        assert logger._write_queue is not None
         assert '"seq":0' in capsys.readouterr().out
 
     def test_flush_without_writer_is_noop(self):
