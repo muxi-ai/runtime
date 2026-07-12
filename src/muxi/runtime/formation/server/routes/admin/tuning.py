@@ -23,6 +23,12 @@ from ...responses import APIResponse, create_error_response, create_success_resp
 
 router = APIRouter(tags=["Tuning"])
 
+# MUXI.md is read on every chat turn and injected into every user's
+# context, so the "bounded file" contract is enforced at the write
+# surface: ~32KB keeps it comparable to a large SOUL.md while bounding
+# per-turn context inflation across all users.
+MUXI_MD_MAX_BYTES = 32_768
+
 
 class TuningUpdate(BaseModel):
     """Replacement content for the live MUXI.md."""
@@ -67,6 +73,17 @@ async def replace_tuning(request: Request, update: TuningUpdate) -> JSONResponse
             "SERVICE_UNAVAILABLE", "Overlord not started", None, request_id
         )
         return JSONResponse(content=response.model_dump(), status_code=503)
+
+    content_bytes = len(update.content.encode("utf-8"))
+    if content_bytes > MUXI_MD_MAX_BYTES:
+        response = create_error_response(
+            "TUNING_CONTENT_TOO_LARGE",
+            f"MUXI.md content is {content_bytes} bytes; the bound is "
+            f"{MUXI_MD_MAX_BYTES} bytes (it is injected into every turn)",
+            None,
+            request_id,
+        )
+        return JSONResponse(content=response.model_dump(), status_code=413)
 
     try:
         path = muxi_md.write(update.content)

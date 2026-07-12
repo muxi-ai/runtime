@@ -82,14 +82,26 @@ async def main():
             assert MARKER in response.json()["data"]["content"]
             print("POST /tuning replaced the live file (GET reflects it)")
 
-            # 4. POST /tuning/run triggers one loop pass.
+            # 4. The bounded-file contract is enforced at the write surface.
+            response = await client.post(
+                f"{BASE_URL}/tuning", headers=HEADERS, json={"content": "x" * 40_000}
+            )
+            assert (
+                response.status_code == 413
+            ), f"oversized MUXI.md was accepted: {response.status_code}"
+            assert (
+                MARKER in (formation_dir / "MUXI.md").read_text()
+            ), "oversized POST must not touch the live file"
+            print("Oversized POST /tuning rejected (413), live file untouched")
+
+            # 5. POST /tuning/run triggers one loop pass.
             response = await client.post(f"{BASE_URL}/tuning/run", headers=HEADERS)
             assert response.status_code == 200, response.text
             run = response.json()["data"]
             assert run["spool_committed"] is True, f"manual pass did not commit: {run}"
             print(f"POST /tuning/run pass: {run}")
 
-        # 5. The replaced guidance steers the very next turn -- no restart.
+        # 6. The replaced guidance steers the very next turn -- no restart.
         task = "What is 2 + 2? Answer with the number."
         reply = await chat(overlord, task, USER, "tuning-api-session")
         transcript.append((task, reply))
@@ -103,6 +115,7 @@ async def main():
         print("  SUCCESS: /tuning API + MUXI.md injection work end-to-end")
         print("  - GET /tuning served the hand-written file (admin auth enforced)")
         print("  - POST /tuning atomically replaced the live file")
+        print("  - oversized content rejected at the 32KB bound (413)")
         print("  - POST /tuning/run triggered a committed loop pass")
         print("  - the replaced guidance steered the next turn without a restart")
         print("\n" + "=" * 40)

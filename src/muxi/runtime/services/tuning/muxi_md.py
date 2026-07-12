@@ -92,7 +92,13 @@ class MuxiMdFile:
                 dir=os.path.dirname(path), prefix=".muxi-md-", suffix=".tmp"
             )
             try:
-                with os.fdopen(fd, "w", encoding="utf-8") as f:
+                try:
+                    f = os.fdopen(fd, "w", encoding="utf-8")
+                except BaseException:
+                    # fdopen never took ownership; close the raw fd.
+                    os.close(fd)
+                    raise
+                with f:
                     f.write(content)
                 os.replace(tmp_path, path)
             except BaseException:
