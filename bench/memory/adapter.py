@@ -101,6 +101,7 @@ class MuxiMemoryAdapter:
         secrets_dir: Optional[Path] = None,
         max_embed_chars: int = DEFAULT_MAX_EMBED_CHARS,
         keep_run_dir: bool = False,
+        muxi_md: Optional[Path] = None,
     ):
         if mode not in MODES:
             raise ValueError(f"Unknown mode: {mode} (expected one of {MODES})")
@@ -110,6 +111,8 @@ class MuxiMemoryAdapter:
         self.secrets_dir = Path(secrets_dir or DEFAULT_SECRETS_DIR)
         self.max_embed_chars = max_embed_chars
         self.keep_run_dir = keep_run_dir
+        self.muxi_md = Path(muxi_md) if muxi_md else None
+        self._muxi_md_content: Optional[str] = None
 
         self.formation = None
         self.overlord = None
@@ -170,6 +173,13 @@ class MuxiMemoryAdapter:
         from muxi.runtime.datatypes.observability import RequestContext
         from muxi.runtime.formation import Formation
         from muxi.runtime.services.observability.context import set_request_context
+
+        # An explicitly requested MUXI.md must be readable: silently
+        # scoring a run that ignored its steering file would corrupt the
+        # tuning loop's benchmark evidence. Read fail-fast, before the
+        # formation boots.
+        if self.muxi_md is not None:
+            self._muxi_md_content = self.muxi_md.read_text(encoding="utf-8").strip() or None
 
         rendered = self._prepare_run_dir()
         self.formation = Formation()
@@ -398,10 +408,21 @@ class MuxiMemoryAdapter:
             f"Conversation excerpts (most relevant first):\n{context}\n\n"
             f"Question: {question.question}"
         )
+        # MUXI.md rides the QA system prompt -- the bench equivalent of
+        # the runtime injecting it into every turn's context -- so the
+        # tuning loop's benchmark observation measures the steered
+        # formation, not a bare model.
+        system_prompt = _ANSWER_SYSTEM_PROMPT
+        if self._muxi_md_content:
+            system_prompt = (
+                f"{_ANSWER_SYSTEM_PROMPT}\n\n"
+                "Operational learnings (MUXI.md) steering this formation:\n"
+                f"{self._muxi_md_content}"
+            )
         self.llm_requests += 1
         response = await model.chat(
             messages=[
-                {"role": "system", "content": _ANSWER_SYSTEM_PROMPT},
+                {"role": "system", "content": system_prompt},
                 {"role": "user", "content": user_message},
             ],
             temperature=0.0,
@@ -460,6 +481,8 @@ class MuxiMemoryAdapter:
             "formation_yaml": relativize(self.formation_yaml, REPO_ROOT),
             "max_embed_chars": self.max_embed_chars,
         }
+        if self.muxi_md is not None:
+            config["muxi_md"] = str(self.muxi_md)
         if self.overlord is not None and self.overlord.buffer_memory is not None:
             config["working_embedding_model"] = self.overlord.buffer_memory.embedding_model_name
         capability_models = getattr(self.formation, "_capability_models", None) or {}

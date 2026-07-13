@@ -21,6 +21,11 @@
 #    into a candidate MUXI.md revision (applied directly or written as
 #    PENDING-MUXI.md per auto_apply); retire learnings whose watched
 #    metric did not move; deliver a morning report.
+#
+# Between the two, the benchmark observation (Phase 3, meta-agent): the
+# shipped fixture-scale benchmark suites run against a real formation
+# steered by the live MUXI.md, their scores feeding the tune step as
+# additional lower-is-better metrics and prose evidence.
 # =============================================================================
 
 import asyncio
@@ -30,6 +35,7 @@ from typing import Any, Dict, List, Optional, Set, Tuple
 from .. import observability
 from ..memory.log.formation import lint_formation_lines
 from ..observability.spool import get_event_spool
+from .benchmark import BenchmarkStep
 from .config import TuningConfig
 from .experiments import STATUS_ACTIVE, STATUS_DISMISSED, STATUS_PENDING, ExperimentStore
 from .muxi_md import MUXI_MD_MAX_BYTES
@@ -70,6 +76,9 @@ class TuningService:
         self._run_lock = asyncio.Lock()
         self.last_run: Optional[Dict[str, Any]] = None
         self.tuner = TunerStep()
+        # Phase 3 (meta-agent): the benchmark observation. Tests replace
+        # this with a BenchmarkStep pointed at a scratch directory.
+        self.benchmark = BenchmarkStep()
         # Overrides the experiment store location (tests only; None means
         # the formation's observability directory).
         self.experiments_dir: Optional[str] = None
@@ -144,13 +153,41 @@ class TuningService:
             if committed:
                 spool.commit(token, delete=not self.keep_spool_segments)
 
-            # Step 2: tune. Runs only on a consumed digest with traffic;
-            # a tuner failure never breaks the pass (the digest already
+            # Benchmark observation (Phase 3, meta-agent): the shipped
+            # fixture suites as a second evidence source. Fails soft --
+            # a missing harness or a broken run degrades to the previous
+            # scores and never touches the digest's outcome.
+            bench: Dict[str, Any] = {}
+            try:
+                muxi_md = getattr(self.overlord, "muxi_md", None)
+                bench = await self.benchmark.observe(
+                    muxi_md.resolve_path() if muxi_md is not None else None
+                )
+            except Exception as e:
+                bench = {"skipped": f"{type(e).__name__}: {e}"}
+                observability.observe(
+                    event_type=observability.ErrorEvents.INTERNAL_ERROR,
+                    level=observability.EventLevel.WARNING,
+                    data={"error": str(e), "error_type": type(e).__name__, "service": "tuning"},
+                    description=f"Benchmark observation failed: {e}",
+                )
+            benchmark_metrics: Dict[str, float] = bench.get("metrics") or {}
+
+            # Step 2: tune. Runs on a consumed digest with evidence --
+            # spool traffic or benchmark scores (a cold-start formation
+            # has no users yet, but the benchmarks still measure it); a
+            # tuner failure never breaks the pass (the digest already
             # reached its terminal outcome).
             tune_result: Dict[str, Any] = {}
-            if committed and event_count > 0 and model is not None:
+            if committed and (event_count > 0 or benchmark_metrics) and model is not None:
                 try:
-                    tune_result = await self._tune(model, report, metrics, known_user_ids)
+                    tune_result = await self._tune(
+                        model,
+                        report,
+                        {**metrics, **benchmark_metrics},
+                        known_user_ids,
+                        benchmark_block=bench.get("report_block") or "",
+                    )
                 except Exception as e:
                     tune_result = {"tuner_error": f"{type(e).__name__}: {e}"}
                     observability.observe(
@@ -172,6 +209,8 @@ class TuningService:
                 "dropped_sentences": digest.get("dropped_sentences", 0),
                 "spool_committed": committed,
                 "spool_segments_kept": self.keep_spool_segments,
+                "benchmark_suites_run": bench.get("suites_run") or [],
+                "benchmark_skipped": bench.get("skipped"),
                 **tune_result,
                 "duration_ms": round((time.monotonic() - started) * 1000, 1),
             }
@@ -197,6 +236,7 @@ class TuningService:
         activity_report: str,
         metrics: Dict[str, float],
         known_user_ids: List[str],
+        benchmark_block: str = "",
     ) -> Dict[str, Any]:
         muxi_md = getattr(self.overlord, "muxi_md", None)
         if muxi_md is None:
@@ -229,6 +269,7 @@ class TuningService:
             activity_report=activity_report,
             current_muxi_md=muxi_md.read(),
             formation_log_block=formation_log_block,
+            benchmark_block=benchmark_block,
             active_learnings=store.by_status(STATUS_ACTIVE),
             retired_learnings=retired,
             dismissed_learnings=[
@@ -323,6 +364,7 @@ class TuningService:
             recorded=recorded,
             retired=retired,
             recommendations=parsed["recommendations"],
+            benchmark_block=benchmark_block,
         )
 
         return {
@@ -343,6 +385,7 @@ class TuningService:
         recorded: List[Dict[str, Any]],
         retired: List[Dict[str, Any]],
         recommendations: List[str],
+        benchmark_block: str = "",
     ) -> bool:
         """Deliver the morning report; False when there is nothing/nowhere.
 
@@ -377,6 +420,9 @@ class TuningService:
         if recommendations:
             lines.append("Recommendations requiring a human deployment:")
             lines.extend(f"- {item}" for item in recommendations)
+        if benchmark_block:
+            lines.append("Benchmark scores (fixture suites, live MUXI.md):")
+            lines.append(benchmark_block)
 
         widgets = None
         self.pending_widget = None

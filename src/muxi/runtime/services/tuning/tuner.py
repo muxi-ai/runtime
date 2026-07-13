@@ -8,9 +8,10 @@
 # Author:       Muxi Framework Team
 #
 # Self-Improving Formation PRD, "The loop" step 2. The tuner reads the
-# fresh digest, recent formation-log entries, and its experiment
-# memories; detects patterns worth acting on (cost hotspots, misrouted
-# request classes, flaky tools, model over-provisioning); and distills
+# fresh digest, recent formation-log entries, the latest benchmark
+# scores (Phase 3, meta-agent), and its experiment memories; detects
+# patterns worth acting on (cost hotspots, misrouted request classes,
+# flaky tools, model over-provisioning, capability regressions); and distills
 # behavioral learnings into a candidate MUXI.md revision. It never
 # touches formation config -- config changes are human deployments,
 # surfaced only as prose recommendations.
@@ -46,6 +47,7 @@ class TunerStep:
         dismissed_learnings: List[str],
         metric_keys: List[str],
         max_bytes: int,
+        benchmark_block: str = "",
     ) -> str:
         parts: List[str] = [
             "You are the tuner of an AI formation: you curate MUXI.md, the "
@@ -56,17 +58,23 @@ class TunerStep:
             "operational, and general.\n",
             "Detect patterns worth acting on in the activity below: cost "
             "hotspots, misrouted request classes, flaky tools, model "
-            "over-provisioning. Distill them into learnings and produce a "
-            "revised MUXI.md.\n",
+            "over-provisioning, capability regressions in the benchmark "
+            "results. Distill them into learnings and produce a revised "
+            "MUXI.md.\n",
             "RULES:\n"
-            "- Base every learning ONLY on the activity report and log entries "
-            "below. Do not invent patterns.\n"
+            "- Base every learning ONLY on the activity report, log entries, "
+            "and benchmark results below. Do not invent patterns.\n"
             "- CURATE, never append: rewrite sections, merge overlapping "
             "guidance, retire stale learnings. The revised file MUST stay "
             f"under {max_bytes} bytes.\n"
             "- NEVER suggest configuration or yaml changes inside MUXI.md; "
             "anything requiring a deployment (yaml edits, plan upgrades, new "
-            "tools) goes into 'recommendations' as prose for a human.\n"
+            "tools, memory sizing or retrieval knobs) goes into "
+            "'recommendations' as prose for a human.\n"
+            "- Benchmark-derived learnings must generalize: propose one only "
+            "when it names an operational behavior that would hold beyond the "
+            "benchmark tasks. NEVER encode benchmark answers, question "
+            "keywords, or dataset specifics into MUXI.md.\n"
             "- HARD PRIVACY RULE: MUXI.md is injected into every user's "
             "context. NEVER include user identifiers, user names, prompt or "
             "message content, or any user-derived specifics.\n"
@@ -90,6 +98,12 @@ class TunerStep:
 
         if formation_log_block:
             parts.append(f"\nRecent formation log entries:\n{formation_log_block}")
+
+        if benchmark_block:
+            parts.append(
+                "\nLatest benchmark results (fixture-scale memory/QA suites "
+                "run against this formation with the live MUXI.md):\n" + benchmark_block
+            )
 
         if active_learnings:
             lines = [
@@ -128,7 +142,10 @@ class TunerStep:
             'deployment"]\n'
             "}\n"
         )
-        parts.append(f"\nAggregated activity report:\n{activity_report}\n")
+        parts.append(
+            "\nAggregated activity report:\n"
+            f"{activity_report or '(no traffic in this window)'}\n"
+        )
         return "\n".join(parts)
 
     def parse_response(self, response: str) -> Optional[Dict[str, Any]]:

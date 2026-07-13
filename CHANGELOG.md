@@ -2,6 +2,40 @@
 
 ## [unreleased]
 
+### Self-improving formation - meta-agent benchmark observation (Phase 3)
+
+The tuning loop gains a second evidence source (Self-Improving
+Formation PRD, Phase 3): the shipped memory benchmarks, run by the
+loop itself against a real formation steered by the live MUXI.md. A
+cold-start formation with zero users gets deterministic evidence on
+day one, and MUXI.md regressions surface against a consistent baseline
+instead of drifting traffic:
+
+- Benchmark observation: each pass may run the fixture-scale suites
+  (LongMemEval sample + structured recall, QA on) as subprocesses of a
+  harness checkout -- opt-in via `MUXI_BENCH_ROOT`, at most one attempt
+  per suite per 24h, bounded by a per-suite timeout. The complete
+  report is the verdict, not the exit code (runners can die in
+  native-library teardown after writing it); partial or
+  errored-question reports are never scored.
+- Metrics: scores invert to the watch windows' lower-is-better
+  contract (`benchmark:<suite>.recall_gap`, `benchmark:<suite>.qa_error`)
+  and persist in a sidecar (`observability/tuner/benchmarks.json`).
+  They carry forward through skipped or failed passes, so a broken
+  harness can never false-validate a learning through metric absence.
+- Tune step: runs on benchmark evidence alone (the cold-start case),
+  sees the scores with previous-run deltas as a prompt block, and is
+  bound by an overfitting guard -- benchmark-derived learnings must
+  generalize, and benchmark answers or dataset specifics never enter
+  MUXI.md. Memory-tuning knobs remain human recommendations.
+- Steering seam: the bench runners accept `--muxi-md`; the file rides
+  the QA answer prompt, the bench equivalent of the runtime injecting
+  it into every turn. The benchmark formation declares `tuning: false`
+  (the measuring stick never tunes itself).
+- Observability: new `tuning.benchmark` event per suite attempt;
+  `tuning.run` carries `benchmark_suites_run`/`benchmark_skipped`; the
+  morning report shows the scores when there is something to say.
+
 ### Self-improving formation - tuner step, pending flow, /learnings (Phase 2)
 
 The tuning loop now closes the observe-learn-steer cycle (Self-Improving

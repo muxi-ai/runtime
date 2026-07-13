@@ -152,6 +152,14 @@ def build_arg_parser() -> argparse.ArgumentParser:
     )
     parser.add_argument("--secrets-dir", default=None)
     parser.add_argument(
+        "--muxi-md",
+        default=None,
+        help=(
+            "Path to a live MUXI.md injected into the QA answer prompt "
+            "(the tuning loop's benchmark observation passes the formation's file)."
+        ),
+    )
+    parser.add_argument(
         "--output",
         default=None,
         help=(
@@ -187,6 +195,7 @@ async def run_benchmark(args: argparse.Namespace) -> int:
         run_dir=Path(args.run_dir) if args.run_dir else None,
         secrets_dir=Path(args.secrets_dir) if args.secrets_dir else None,
         keep_run_dir=args.keep_run_dir,
+        muxi_md=Path(args.muxi_md) if args.muxi_md else None,
     )
 
     print(
