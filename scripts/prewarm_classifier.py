@@ -1,17 +1,20 @@
-"""Pre-download and warm the local classifier model before the test suite.
+"""Pre-download the local models the unit suite needs before pytest runs.
 
-The unit suite's ``test_local_classifier.py`` embeds text with the real
-``Xenova/multilingual-e5-small`` ONNX model, which is fetched from the
-HuggingFace Hub on a cold cache (~95 MB). When that download stalls
-(rate limits, XET transfer hiccups) it hangs *inside* a pytest-timeout
-window and takes the whole matrix job down.
+Two unit-test areas embed text with real local ONNX models fetched from
+the HuggingFace Hub on a cold cache:
 
-Running this warmup before pytest moves the download out of the timed
-test, retries transient failures, and primes the on-disk HF cache so the
-tests themselves are fast and offline. A persistent failure here is
-logged as a warning and exits 0 on purpose: the test fixture skips
-gracefully when the Hub is unreachable, so CI reports "skipped" rather
-than a false red.
+* ``test_local_classifier.py`` -> ``Xenova/multilingual-e5-small`` (~95 MB)
+* ``test_sops_search.py``      -> ``nomic-ai/nomic-embed-text-v1.5`` (~140 MB)
+
+When those downloads stall or 403 (HF Hub rate limits / Xet CAS bridge
+outages) they take the whole matrix job down. Running the fetch here
+moves it out of the timed tests, retries transient failures, and primes
+the on-disk HF cache so the tests are fast and offline.
+
+A persistent failure is logged as a warning and exits 0 on purpose: the
+unit suite skips model-download tests gracefully when the Hub is
+unreachable (see ``tests/unit/conftest.py``), so CI reports "skipped"
+rather than a false red.
 """
 
 from __future__ import annotations
@@ -26,10 +29,14 @@ BACKOFF_SECONDS = 10
 
 async def _warm() -> None:
     from muxi.runtime.services.classification import get_classifier
+    from muxi.runtime.services.memory.embedding import DEFAULT_EMBEDDING_MODEL, embed
 
     classifier = await get_classifier()
     if not classifier.is_warmed:
         raise RuntimeError("classifier reported not warmed after get_classifier()")
+
+    # Prime the default embedding model used by the sops-search tests.
+    await embed(DEFAULT_EMBEDDING_MODEL, ["query: warmup"])
 
 
 def main() -> int:
@@ -38,7 +45,7 @@ def main() -> int:
         try:
             asyncio.run(_warm())
             elapsed = time.monotonic() - started
-            print(f"[prewarm] classifier model ready (attempt {attempt}, {elapsed:.1f}s)")
+            print(f"[prewarm] models ready (attempt {attempt}, {elapsed:.1f}s)")
             return 0
         except Exception as exc:  # noqa: BLE001 - report any failure and retry
             elapsed = time.monotonic() - started
@@ -51,7 +58,7 @@ def main() -> int:
                 time.sleep(BACKOFF_SECONDS)
 
     print(
-        "::warning::classifier model prewarm failed after "
+        "::warning::model prewarm failed after "
         f"{RETRIES} attempts; model-download tests will skip if the Hub "
         "stays unreachable",
         file=sys.stderr,

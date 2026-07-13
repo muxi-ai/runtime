@@ -37,39 +37,6 @@ from muxi.runtime.services.classification import (
 )
 
 
-_NETWORK_ERROR_MODULES = ("huggingface_hub", "requests", "httpx", "urllib3", "socket")
-_NETWORK_ERROR_NAMES = (
-    "ConnectionError",
-    "ConnectTimeout",
-    "ReadTimeout",
-    "Timeout",
-    "TimeoutError",
-    "HfHubHTTPError",
-    "LocalEntryNotFoundError",
-    "OfflineModeIsEnabled",
-    "GatedRepoError",
-    "RepositoryNotFoundError",
-)
-
-
-def _is_network_error(exc: BaseException) -> bool:
-    """Walk the exception chain and flag failures that stem from an
-    unreachable HuggingFace Hub / network — as opposed to a genuine
-    classification bug, which must still fail the suite loudly."""
-    seen: set[int] = set()
-    current: BaseException | None = exc
-    while current is not None and id(current) not in seen:
-        seen.add(id(current))
-        module = type(current).__module__.split(".")[0]
-        name = type(current).__name__
-        if module in _NETWORK_ERROR_MODULES or name in _NETWORK_ERROR_NAMES:
-            return True
-        if isinstance(current, (OSError, ConnectionError, TimeoutError)):
-            return True
-        current = current.__cause__ or current.__context__
-    return False
-
-
 # Module-scoped warmed classifier. Every test reuses this instance to
 # amortize the prototype embedding cost (one batched call per intent at
 # warmup, then per-query embeddings only). pytest-asyncio's
@@ -77,20 +44,16 @@ def _is_network_error(exc: BaseException) -> bool:
 # event loop hosts both the fixture and the test that consumes it.
 #
 # The warmup downloads the e5-small ONNX model from the HuggingFace Hub
-# on a cold cache. If the Hub is unreachable (rate limit, transient
-# outage) we skip rather than fail — the model download is an ancillary
-# service, and per project policy tests should not red-fail when an
-# external dependency is simply unavailable. `scripts/prewarm_classifier.py`
-# primes the cache in CI so this path is normally hit warm and offline.
+# on a cold cache. If the Hub is unreachable (rate limit, transient Xet
+# outage) the model-download failure is converted to a skip centrally by
+# ``tests/unit/conftest.py`` — the download is an ancillary service and
+# per project policy tests must not red-fail when it is simply
+# unavailable. ``scripts/prewarm_classifier.py`` primes the cache in CI
+# so this path is normally hit warm and offline.
 @pytest_asyncio.fixture(scope="module", loop_scope="module")
 async def classifier():
     c = LocalClassifier()
-    try:
-        await c.warmup()
-    except Exception as exc:  # noqa: BLE001 - re-raised unless it's a network fault
-        if _is_network_error(exc):
-            pytest.skip(f"HuggingFace Hub unreachable for classifier warmup: {exc}")
-        raise
+    await c.warmup()
     return c
 
 

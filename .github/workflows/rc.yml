@@ -48,12 +48,17 @@ jobs:
         run: |
           python -m pip install --upgrade pip
           pip install -e ".[dev]"
+          # Remove the Xet transfer client so huggingface_hub falls back
+          # to the plain HTTPS download path. The Xet CAS bridge has
+          # 403'd/hung unauthenticated public-model downloads in CI, and
+          # HF_HUB_DISABLE_XET alone did not divert off it.
+          pip uninstall -y hf_xet || true
 
-      - name: Cache HuggingFace model
+      - name: Cache HuggingFace models
         uses: actions/cache@1bd1e32a3bdc45362d1e726936510720a7c30a57 # v4.2.0
         with:
           path: ${{ env.HF_HOME }}
-          key: hf-classifier-${{ runner.os }}-xenova-multilingual-e5-small
+          key: hf-models-${{ runner.os }}-e5small-nomic-v2
 
       - name: Prewarm classifier model
         run: python scripts/prewarm_classifier.py
