@@ -6,15 +6,22 @@ Supports authentication types as defined in the A2A protocol:
 - API Key authentication
 - Bearer token authentication
 - Basic authentication
+- HMAC request signing (per-request timestamp signature)
+- OAuth2 client_credentials (token fetch + cache)
 - No authentication
 
 Now integrated with A2A SDK security schemes for protocol compliance.
 """
 
 import base64
+import hashlib
+import hmac as hmac_lib
+import time
 from dataclasses import dataclass, field
 from enum import Enum
 from typing import Any, Dict, Optional, Tuple
+
+import httpx
 
 # A2A SDK imports
 from a2a.types import (
@@ -26,6 +33,9 @@ from a2a.types import (
 from ... import observability
 from ...secrets import SecretsManager
 
+OAUTH2_TOKEN_REFRESH_MARGIN = 60  # seconds before expiry to refresh
+OAUTH2_DEFAULT_TOKEN_TTL = 3600  # seconds, when the server omits expires_in
+
 
 class AuthType(str, Enum):
     """Supported authentication types for A2A communication"""
@@ -34,6 +44,8 @@ class AuthType(str, Enum):
     API_KEY = "api_key"
     BEARER = "bearer"
     BASIC = "basic"
+    HMAC = "hmac"
+    OAUTH2 = "oauth2"
 
 
 @dataclass
@@ -95,6 +107,32 @@ class AuthCredentials:
                 raise ValueError(
                     "Basic authentication requires 'username' and 'password' " "credentials"
                 )
+        elif self.auth_type == AuthType.HMAC:
+            if "secret" not in self.credentials:
+                observability.observe(
+                    event_type=observability.SystemEvents.A2A_AUTH_VALIDATION_FAILED,
+                    level=observability.EventLevel.ERROR,
+                    description="HMAC authentication validation failed",
+                    data={"auth_type": self.auth_type.value, "missing_credential": "secret"},
+                )
+                raise ValueError("HMAC authentication requires 'secret' credential")
+        elif self.auth_type == AuthType.OAUTH2:
+            missing = [
+                cred
+                for cred in ["client_id", "client_secret", "token_url"]
+                if cred not in self.credentials
+            ]
+            if missing:
+                observability.observe(
+                    event_type=observability.SystemEvents.A2A_AUTH_VALIDATION_FAILED,
+                    level=observability.EventLevel.ERROR,
+                    description="OAuth2 authentication validation failed",
+                    data={"auth_type": self.auth_type.value, "missing_credentials": missing},
+                )
+                raise ValueError(
+                    "OAuth2 authentication requires 'client_id', 'client_secret' "
+                    "and 'token_url' credentials"
+                )
 
         # Log successful validation
         observability.observe(
@@ -127,6 +165,8 @@ class A2AAuthManager:
         self.schemes: Dict[str, SecurityScheme] = {}
         self._credentials: Dict[str, AuthCredentials] = {}
         self._credentials_loaded = False
+        # OAuth2 client_credentials token cache: service_id -> (token, expires_at)
+        self._oauth2_tokens: Dict[str, Tuple[str, float]] = {}
 
         # Log initialization
         observability.observe(
@@ -196,6 +236,19 @@ class A2AAuthManager:
         elif auth_type == "basic":
             return HTTPAuthSecurityScheme(
                 scheme="basic",
+                description=auth_config.get("description", ""),
+            )
+        elif auth_type == "hmac":
+            return APIKeySecurityScheme(
+                name=auth_config.get("signature_header", "X-Signature"),
+                location="header",
+                description=auth_config.get("description", ""),
+            )
+        elif auth_type == "oauth2":
+            # Token is ultimately applied as a Bearer credential
+            return HTTPAuthSecurityScheme(
+                scheme="bearer",
+                bearer_format="OAuth2",
                 description=auth_config.get("description", ""),
             )
 
@@ -486,6 +539,29 @@ class A2AAuthManager:
                                 "password": interpolated_config.get("password"),
                             },
                         )
+                    elif auth_type == AuthType.HMAC:
+                        self.add_credentials(
+                            service_id,
+                            auth_type,
+                            {
+                                "secret": interpolated_config.get("secret"),
+                                "signature_header": interpolated_config.get(
+                                    "signature_header", "X-Signature"
+                                ),
+                                "timestamp_header": interpolated_config.get(
+                                    "timestamp_header", "X-Timestamp"
+                                ),
+                            },
+                        )
+                    elif auth_type == AuthType.OAUTH2:
+                        oauth2_creds = {
+                            "client_id": interpolated_config.get("client_id"),
+                            "client_secret": interpolated_config.get("client_secret"),
+                            "token_url": interpolated_config.get("token_url"),
+                        }
+                        if interpolated_config.get("scope"):
+                            oauth2_creds["scope"] = interpolated_config["scope"]
+                        self.add_credentials(service_id, auth_type, oauth2_creds)
 
                     # Log successful service configuration processing
                     observability.observe(
@@ -600,7 +676,14 @@ class A2AAuthManager:
             # Apply SDK scheme authentication based on type
             updated_headers = headers.copy()
 
-            if isinstance(scheme, APIKeySecurityScheme):
+            creds = self.get_credentials(service_id)
+            if creds and creds.auth_type == AuthType.HMAC:
+                # Fresh signature per request: HMAC-SHA256(secret, timestamp)
+                updated_headers.update(self._build_hmac_headers(creds))
+            elif creds and creds.auth_type == AuthType.OAUTH2:
+                token = await self._get_oauth2_token(service_id, creds)
+                updated_headers["Authorization"] = f"Bearer {token}"
+            elif isinstance(scheme, APIKeySecurityScheme):
                 # APIKeySecurityScheme stores the actual values, not the spec
                 # Get api_key from the stored credentials instead
                 creds = self.get_credentials(service_id)
@@ -769,6 +852,25 @@ class A2AAuthManager:
                     data={"agent_id": agent_id, "auth_type": "basic", "username": username},
                 )
 
+            elif auth_type == AuthType.HMAC:
+                updated_headers.update(self._build_hmac_headers(creds))
+                observability.observe(
+                    event_type=observability.SystemEvents.A2A_AUTH_VALIDATED,
+                    level=observability.EventLevel.DEBUG,
+                    description="A2A HMAC authentication applied successfully",
+                    data={"agent_id": agent_id, "auth_type": "hmac"},
+                )
+
+            elif auth_type == AuthType.OAUTH2:
+                token = await self._get_oauth2_token(agent_id, creds)
+                updated_headers["Authorization"] = f"Bearer {token}"
+                observability.observe(
+                    event_type=observability.SystemEvents.A2A_AUTH_VALIDATED,
+                    level=observability.EventLevel.DEBUG,
+                    description="A2A OAuth2 authentication applied successfully",
+                    data={"agent_id": agent_id, "auth_type": "oauth2"},
+                )
+
             return True, updated_headers
 
         except Exception as e:
@@ -785,6 +887,56 @@ class A2AAuthManager:
                 },
             )
             return False, headers
+
+    def _build_hmac_headers(self, creds: AuthCredentials) -> Dict[str, str]:
+        """Build per-request HMAC signature headers.
+
+        Signs the current unix timestamp with HMAC-SHA256 so each request
+        carries a fresh, replay-bounded signature.
+        """
+        secret = creds.credentials["secret"]
+        timestamp = str(int(time.time()))
+        signature = hmac_lib.new(
+            secret.encode("utf-8"), timestamp.encode("utf-8"), hashlib.sha256
+        ).hexdigest()
+        return {
+            creds.credentials.get("signature_header", "X-Signature"): signature,
+            creds.credentials.get("timestamp_header", "X-Timestamp"): timestamp,
+        }
+
+    async def _get_oauth2_token(self, service_id: str, creds: AuthCredentials) -> str:
+        """Get an OAuth2 client_credentials access token, using the cache when fresh."""
+        cached = self._oauth2_tokens.get(service_id)
+        now = time.time()
+        if cached and cached[1] - OAUTH2_TOKEN_REFRESH_MARGIN > now:
+            return cached[0]
+
+        data = {
+            "grant_type": "client_credentials",
+            "client_id": creds.credentials["client_id"],
+            "client_secret": creds.credentials["client_secret"],
+        }
+        if creds.credentials.get("scope"):
+            data["scope"] = creds.credentials["scope"]
+
+        async with httpx.AsyncClient(timeout=30.0) as client:
+            response = await client.post(creds.credentials["token_url"], data=data)
+            response.raise_for_status()
+            payload = response.json()
+
+        token = payload.get("access_token")
+        if not token:
+            raise ValueError(f"OAuth2 token endpoint returned no access_token for {service_id}")
+        expires_in = int(payload.get("expires_in", OAUTH2_DEFAULT_TOKEN_TTL))
+        self._oauth2_tokens[service_id] = (token, now + expires_in)
+
+        observability.observe(
+            event_type=observability.SystemEvents.A2A_CREDENTIAL_LOADED,
+            level=observability.EventLevel.DEBUG,
+            description="OAuth2 access token obtained for A2A service",
+            data={"service_id": service_id, "expires_in": expires_in},
+        )
+        return token
 
     def remove_credentials(self, agent_id: str):
         """Remove credentials for an agent"""

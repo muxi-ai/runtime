@@ -85,6 +85,7 @@ class A2AServer:
         auth_mode: str = "none",
         shared_key: Optional[str] = None,
         formation_name: str = "default",
+        auth_config: Optional[Dict[str, Any]] = None,
     ):
         """
         Initialize the SDK-compatible A2A Formation Server.
@@ -97,6 +98,8 @@ class A2AServer:
             auth_mode: Authentication mode ("none", "api_key", "bearer", etc.)
             shared_key: Shared key for authentication (if auth_mode requires it)
             formation_name: Name of the formation this server serves
+            auth_config: The formation's ``a2a.inbound.auth`` block (mode-specific
+                settings such as hmac tolerance or openid issuer/audience)
         """
         try:
             self.overlord = overlord
@@ -117,14 +120,18 @@ class A2AServer:
 
             # Pass SecretsManager from overlord if available
             secrets_manager = getattr(overlord, "secrets_manager", None)
-            self.authenticator = A2AInboundAuthenticator(auth_mode, secrets_manager)
+            self.authenticator = A2AInboundAuthenticator(
+                auth_mode, secrets_manager, auth_config=auth_config
+            )
 
             # If we have a shared key, add it to the authenticator
-            if self.shared_key and self.auth_mode in ["bearer", "api_key", "apiKey"]:
+            if self.shared_key and self.auth_mode in ["bearer", "api_key", "apiKey", "hmac"]:
                 if self.auth_mode == "bearer":
                     self.authenticator.bearer_tokens[self.shared_key] = "formation_client"
                 elif self.auth_mode in ["api_key", "apiKey"]:
                     self.authenticator.api_keys[self.shared_key] = "formation_client"
+                elif self.auth_mode == "hmac":
+                    self.authenticator.hmac_secrets[self.shared_key] = "formation_client"
 
             # Initialize FastAPI app
             self._create_app()

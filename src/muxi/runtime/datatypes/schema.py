@@ -225,11 +225,19 @@ class A2AServiceSchema(BaseServiceSchema):
 
     # Security configuration
     require_auth: bool = Field(default=False, description="Require authentication for A2A requests")
-    auth_mode: Literal["none", "api_key", "bearer", "basic"] = Field(
-        default="none", description="Authentication mode (none, api_key, bearer, basic)"
+    auth_mode: Literal["none", "api_key", "bearer", "basic", "hmac", "openid"] = Field(
+        default="none",
+        description="Authentication mode (none, api_key, bearer, basic, hmac, openid)",
     )
     shared_key: Optional[str] = Field(
         default=None, description="Shared key for inbound authentication"
+    )
+    inbound_auth: Optional[Dict[str, Any]] = Field(
+        default=None,
+        description=(
+            "Full inbound auth configuration block with mode-specific settings "
+            "(e.g. hmac timestamp_tolerance, openid issuer/audience/jwks_url)"
+        ),
     )
     allowed_origins: Optional[List[str]] = Field(
         default=None, description="Allowed origins for CORS"
@@ -258,10 +266,14 @@ class A2AServiceSchema(BaseServiceSchema):
             raise ValueError("Server port must be >= 1024 for non-root operation")
 
         # Validate authentication configuration
-        if self.require_auth and self.auth_mode != "none" and not self.shared_key:
+        if self.require_auth and self.auth_mode not in ("none", "openid") and not self.shared_key:
             raise ValueError(
                 f"Shared key is required when auth is enabled with mode '{self.auth_mode}'. "
                 "Either provide a shared_key or set auth_mode to 'none'"
+            )
+        if self.auth_mode == "openid" and not (self.inbound_auth or {}).get("issuer"):
+            raise ValueError(
+                "OpenID auth mode requires an 'issuer' in the inbound auth configuration"
             )
 
         # Normalize registries to RegistryConfig objects

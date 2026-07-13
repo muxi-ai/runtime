@@ -223,6 +223,7 @@ class A2ACoordinator:
                     auth_mode=self.config.auth_mode if self.config.auth_mode else "none",
                     shared_key=self.config.shared_key,
                     formation_name=self.overlord.formation_id,
+                    auth_config=getattr(self.config, "inbound_auth", None),
                 )
 
             # Start the server

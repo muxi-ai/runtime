@@ -13,6 +13,12 @@ marked xfail with a Phase-2 target; Phase 2 must clear them.
 """
 
 import base64
+import hashlib
+import hmac
+import json
+import threading
+import time
+from http.server import BaseHTTPRequestHandler, HTTPServer
 
 import pytest
 
@@ -163,7 +169,7 @@ def test_create_scheme_bearer_is_constructable(auth_manager):
 
 
 def test_create_scheme_unknown_type_returns_none(auth_manager):
-    assert auth_manager.create_scheme({"type": "oauth2"}) is None
+    assert auth_manager.create_scheme({"type": "kerberos"}) is None
 
 
 def test_create_scheme_missing_type_returns_none(auth_manager):
@@ -181,4 +187,124 @@ async def test_apply_sdk_authentication_noop_without_registered_scheme(auth_mana
 
 async def test_apply_sdk_authentication_missing_required_scheme_fails(auth_manager):
     ok, _ = await auth_manager.apply_sdk_authentication("unknown-agent", {}, required=True)
+    assert ok is False
+
+
+# ---------------------------------------------------------------------------
+# HMAC request signing
+# ---------------------------------------------------------------------------
+
+
+def test_auth_credentials_rejects_hmac_without_secret():
+    with pytest.raises(ValueError, match="secret"):
+        AuthCredentials(auth_type=AuthType.HMAC, credentials={})
+
+
+def test_create_scheme_hmac_is_constructable(auth_manager):
+    scheme = auth_manager.create_scheme({"type": "hmac", "secret": "s"})
+    assert scheme is not None
+
+
+async def test_apply_authentication_hmac_signs_current_timestamp(auth_manager):
+    auth_manager.add_credentials("agent-a", AuthType.HMAC, {"secret": "shh"})
+    ok, headers = await auth_manager.apply_authentication("agent-a", AuthType.HMAC, {})
+
+    assert ok is True
+    timestamp = headers["X-Timestamp"]
+    assert abs(int(timestamp) - int(time.time())) <= 5
+    expected = hmac.new(b"shh", timestamp.encode(), hashlib.sha256).hexdigest()
+    assert headers["X-Signature"] == expected
+
+
+async def test_apply_authentication_hmac_honors_custom_header_names(auth_manager):
+    auth_manager.add_credentials(
+        "agent-a",
+        AuthType.HMAC,
+        {"secret": "shh", "signature_header": "X-Sig", "timestamp_header": "X-Ts"},
+    )
+    ok, headers = await auth_manager.apply_authentication("agent-a", AuthType.HMAC, {})
+    assert ok is True
+    assert "X-Sig" in headers
+    assert "X-Ts" in headers
+
+
+async def test_apply_sdk_authentication_hmac_signs_per_request(auth_manager):
+    scheme = auth_manager.create_scheme({"type": "hmac", "secret": "shh"})
+    auth_manager.schemes["agent-a"] = scheme
+    auth_manager.add_credentials("agent-a", AuthType.HMAC, {"secret": "shh"})
+
+    ok, headers = await auth_manager.apply_sdk_authentication("agent-a", {})
+    assert ok is True
+    expected = hmac.new(b"shh", headers["X-Timestamp"].encode(), hashlib.sha256).hexdigest()
+    assert headers["X-Signature"] == expected
+
+
+# ---------------------------------------------------------------------------
+# OAuth2 client_credentials
+# ---------------------------------------------------------------------------
+
+
+def test_auth_credentials_rejects_oauth2_missing_fields():
+    with pytest.raises(ValueError, match="oauth2|OAuth2"):
+        AuthCredentials(auth_type=AuthType.OAUTH2, credentials={"client_id": "c"})
+
+
+def test_create_scheme_oauth2_is_bearer_scheme(auth_manager):
+    scheme = auth_manager.create_scheme(
+        {"type": "oauth2", "client_id": "c", "client_secret": "s", "token_url": "u"}
+    )
+    assert scheme is not None
+    assert getattr(scheme, "scheme", None) == "bearer"
+
+
+async def test_oauth2_token_fetched_from_real_endpoint_and_cached(auth_manager):
+    calls = {"count": 0}
+
+    class TokenHandler(BaseHTTPRequestHandler):
+        def do_POST(self):
+            calls["count"] += 1
+            body = json.dumps({"access_token": "tok-oauth-1", "expires_in": 3600}).encode()
+            self.send_response(200)
+            self.send_header("Content-Type", "application/json")
+            self.send_header("Content-Length", str(len(body)))
+            self.end_headers()
+            self.wfile.write(body)
+
+        def log_message(self, *args):
+            pass
+
+    server = HTTPServer(("127.0.0.1", 0), TokenHandler)
+    thread = threading.Thread(target=server.serve_forever, daemon=True)
+    thread.start()
+    try:
+        token_url = f"http://127.0.0.1:{server.server_port}/token"
+        auth_manager.add_credentials(
+            "svc-oauth",
+            AuthType.OAUTH2,
+            {"client_id": "cid", "client_secret": "cs", "token_url": token_url},
+        )
+
+        ok, headers = await auth_manager.apply_authentication("svc-oauth", AuthType.OAUTH2, {})
+        assert ok is True
+        assert headers["Authorization"] == "Bearer tok-oauth-1"
+
+        # Second call must come from the cache, not the endpoint
+        ok, headers = await auth_manager.apply_authentication("svc-oauth", AuthType.OAUTH2, {})
+        assert ok is True
+        assert headers["Authorization"] == "Bearer tok-oauth-1"
+        assert calls["count"] == 1
+    finally:
+        server.shutdown()
+        server.server_close()
+
+
+async def test_oauth2_expired_cache_triggers_refresh(auth_manager):
+    auth_manager.add_credentials(
+        "svc-oauth",
+        AuthType.OAUTH2,
+        {"client_id": "cid", "client_secret": "cs", "token_url": "http://127.0.0.1:9/token"},
+    )
+    # Seed an expired token; refresh must hit the (unreachable) endpoint and fail
+    auth_manager._oauth2_tokens["svc-oauth"] = ("stale", time.time() - 10)
+    ok, _ = await auth_manager.apply_authentication("svc-oauth", AuthType.OAUTH2, {})
     assert ok is False

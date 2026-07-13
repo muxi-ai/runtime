@@ -328,6 +328,11 @@ class Formation:
             return auth_config.get("token")
         elif auth_type == "api_key":
             return auth_config.get("key")
+        elif auth_type == "hmac":
+            return auth_config.get("secret")
+        elif auth_type == "openid":
+            # OpenID validates JWTs against the issuer's JWKS; no shared key
+            return None
         elif auth_type == "basic":
             # For basic auth, the server handles username/password separately
             return None
@@ -1223,6 +1228,7 @@ class Formation:
                     .get("auth", {})
                     .get("type", "none"),
                     shared_key=self._get_inbound_auth_key(self._a2a_config.get("inbound", {})),
+                    inbound_auth=self._a2a_config.get("inbound", {}).get("auth"),
                     allowed_origins=self._a2a_config.get("security", {}).get("allowed_origins"),
                     # Map outbound configuration
                     default_timeout_seconds=self._a2a_config.get("outbound", {}).get(

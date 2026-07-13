@@ -2,6 +2,33 @@
 
 ## [unreleased]
 
+### A2A extended auth types (hmac, oauth2, openid)
+
+Agent-to-agent authentication grows beyond shared static keys
+(A2A Extended Auth Types PRD), leaning entirely on existing plumbing --
+the strict-mode inbound authenticator, the outbound credential manager,
+and the secrets interpolation the current modes already use:
+
+- Inbound `hmac`: requests carry `X-Signature` (HMAC-SHA256 over the
+  `X-Timestamp` value) and are verified against the configured
+  `secret` with constant-time comparison, a timestamp tolerance
+  (default 300s, `timestamp_tolerance`), and a replay cache that
+  rejects reused signatures within the window.
+- Inbound `openid`: bearer JWTs are validated against the issuer's
+  JWKS (PyJWT + `jwks_url` or the issuer's well-known path) with
+  issuer/audience/algorithm/expiry checks and configurable clock skew;
+  callers authenticate as `openid:<sub>` with no shared key at rest.
+- Outbound `hmac`: each request to an external service is signed
+  fresh (timestamp + signature headers, names configurable), so
+  retries never reuse a stale signature.
+- Outbound `oauth2`: client_credentials tokens are fetched from the
+  service's `token_url`, cached per service, and refreshed 60s before
+  expiry; the token rides as a standard Bearer header.
+- Strict mode matching extends to the new types: an hmac server
+  rejects bearer/api-key attempts and vice versa. Formation validation
+  gains per-type field checks and directional hints (`oauth2` is
+  outbound-only, `openid` inbound-only). mTLS remains out of scope.
+
 ### Self-improving formation - meta-agent benchmark observation (Phase 3)
 
 The tuning loop gains a second evidence source (Self-Improving
