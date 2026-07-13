@@ -189,9 +189,11 @@ class BenchmarkStep:
                     suite, bench_root, muxi_md_path, previous=record
                 )
                 suites_run.append(suite["name"])
+                # Persist per attempt: a pass cancelled between suites
+                # must not lose (and later re-buy) a completed result.
+                self._save_sidecar(sidecar)
             if not suites_run:
                 skipped = "all suites fresh"
-            self._save_sidecar(sidecar)
 
         return {
             "metrics": self._metrics(sidecar),
@@ -263,7 +265,12 @@ class BenchmarkStep:
                 )
             except asyncio.TimeoutError:
                 process.kill()
-                await process.wait()
+                # Drain the stderr pipe (not just wait()) so the killed
+                # child's transport closes cleanly.
+                try:
+                    await process.communicate()
+                except Exception:
+                    await process.wait()
                 record["error"] = f"timed out after {self.suite_timeout_seconds:.0f}s"
                 return self._finish_attempt(suite, record, started)
 
