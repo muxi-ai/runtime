@@ -44,12 +44,9 @@ from muxi.runtime.services.classification import (
 # event loop hosts both the fixture and the test that consumes it.
 #
 # The warmup downloads the e5-small ONNX model from the HuggingFace Hub
-# on a cold cache. If the Hub is unreachable (rate limit, transient Xet
-# outage) the model-download failure is converted to a skip centrally by
-# ``tests/unit/conftest.py`` — the download is an ancillary service and
-# per project policy tests must not red-fail when it is simply
-# unavailable. ``scripts/prewarm_classifier.py`` primes the cache in CI
-# so this path is normally hit warm and offline.
+# on a cold cache (via the authenticated hf_xet client in CI).
+# ``scripts/prewarm_classifier.py`` primes the cache before pytest so
+# this path is normally hit warm and offline.
 @pytest_asyncio.fixture(scope="module", loop_scope="module")
 async def classifier():
     c = LocalClassifier()
