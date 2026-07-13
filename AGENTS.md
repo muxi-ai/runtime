@@ -188,6 +188,7 @@ runtime/
 - **`docker system prune -af` breaks SIF deployments**: This removes the runtime-runner image which contains `/opt/muxi-tools` (node, npx, git, curl, fonts). Rebuild with `docker build -t ghcr.io/muxi-ai/runtime-runner:latest .` from the runtime-runner repo.
 - **LLM ignores generate_file constraints**: Claude Haiku may ignore soft phrasing like "Do NOT import requests". Use stronger language: "NEVER", "WILL BE REJECTED", "offline sandbox". Even so, LLMs will generate networking code when the task implies fetching data—allow networking imports rather than fighting the pattern.
 - **generate_file uses fpdf and fails on Unicode**: fpdf's default font (Helvetica) cannot encode non-ASCII characters. The constraint prompt now says "prefer reportlab over fpdf". If fpdf is used, the code must strip or replace non-ASCII characters.
+- **SyntaxError after an AI edit near secret-like identifiers**: display-layer secret masking can leak `***` strings into the written file. After editing lines containing auth/secret/key identifiers, verify with `python3 -c "import ast; ast.parse(open('<file>').read())"`.
 
 ## Development Patterns
 - **Adding services**: implement in `src/muxi/services/`, wire into formation loading, register with the overlord, and update schemas when configuration is exposed.
@@ -268,6 +269,7 @@ Group-based permission filtering via `muxi-enterprise` package:
 
 ## Operational Notes
 - Secrets live beside formation YAMLs in encrypted `secrets.enc` files (with `secrets` template showing required keys); avoid environment variables for runtime config.
+- Commit hooks may false-positive on auth-related identifiers (e.g. `*Authenticator(`, `_config.get(`). If a commit of reviewed, secret-free code is blocked, the user commits manually; do not reword code to appease the scanner.
 
 ## Running Tests
 - **Unit tests**: `python -m pytest tests/unit/ -v` (standard pytest).
