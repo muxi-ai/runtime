@@ -1,7 +1,7 @@
 # MUXI Runtime Architecture Analysis
 
 **Generated:** 2026-03-10
-**Last Updated:** 2026-05-02 (knowledge-ingest embedding slug now resolved from formation-level capability_models first; onellm CoreML EP gets persistent ModelCacheDirectory so .mlmodelc compile is one-shot per repo+revision; 6_knowledge tests no longer trigger macOS jetsam)
+**Last Updated:** 2026-07-13 (A2A extended auth types: hmac/oauth2/openid across inbound/outbound with strict-mode matching; Idempotency-Key support on POST /chat, /scheduler/jobs, /triggers/{name} via in-memory single-flight cache)
 **Codebase:** `/Users/ran/Projects/muxi/code/runtime`  
 **Scope:** 290 Python files, ~119K lines
 
@@ -973,6 +973,10 @@ A2ARegistryClient(registry_url, api_key) → discovers agents
 - A2A uses separate authentication from formation client/admin keys
 - Registry URL is extracted from `a2a.inbound.registries[0]` or `a2a.outbound.registries[0]`
 - Registry health checks run periodically (configurable interval)
+- The coordinator passes `auth_config=getattr(self.config, "inbound_auth", None)` into
+  `A2AServer` so type-specific inbound options (hmac tolerance, openid issuer/JWKS) reach
+  the authenticator. See "A2A Service → Extended Auth Types" in section 8 for the full
+  auth-type matrix (hmac/oauth2/openid, added 2026-07-13).
 
 #### Agent Planning Robustness (updated 2026-04-21)
 
@@ -3138,6 +3142,49 @@ async def stream_chat(request: ChatRequest):
 }
 ```
 
+### Idempotency-Key Support (2026-07-13)
+
+**Path:** `server/idempotency.py`; decorated endpoints in
+`routes/client/chat.py` (`POST /chat`), `routes/admin/scheduler.py`
+(`POST /scheduler/jobs`), `routes/client/triggers.py` (`POST /triggers/{name}`)
+
+Clients may send an `Idempotency-Key` header (case-insensitive) on the three
+decorated POST endpoints; retries with the same key replay the cached response
+instead of re-executing the handler.
+
+**Architecture (in-memory by design, per PRD scope ruling):**
+```python
+class IdempotencyCache:
+    # TTL 24h default, max 10,000 entries
+    # scoped_key = f"{METHOD path}:{user_id}:{key}"  — per endpoint + per user
+    # get()/store() with lazy TTL eviction + oldest-first overflow pruning
+
+@idempotent  # decorator
+    # 1. No header → plain passthrough (zero overhead)
+    # 2. Per-key asyncio.Lock → single-flight: concurrent duplicates wait,
+    #    then replay the winner's response instead of double-executing
+    # 3. Only 2xx JSON responses are cached; errors and streaming responses
+    #    pass through uncached (a failed request may be retried for real)
+    # 4. Cached replay echoes the key in the response envelope and emits
+    #    ConversationEvents.REQUEST_COMPLETED with metadata idempotency_replay: True
+```
+
+**Key semantics:**
+- Scoping is `endpoint + user + key`: the same key on `/chat` and
+  `/scheduler/jobs` are independent entries; two users sharing a key never
+  collide (multi-user isolation, same spirit as Memobase partitioning).
+- Single-flight matters for the chat endpoint specifically: without the lock,
+  a client timeout-retry racing the original request would run the LLM twice
+  and store duplicate memories.
+- The cache is process-local. Restart clears it; multi-replica deployments
+  would need a shared backend (explicitly out of scope, mirrors the
+  RequestTracker in-memory precedent).
+- No afs-spec surface: this is HTTP API behavior, not formation schema.
+
+**Tests:** `tests/unit/test_idempotency.py` (15 tests) — cache primitives plus
+decorator behavior through a real FastAPI app, including a concurrent
+single-flight test via `httpx.ASGITransport`.
+
 ### API Key Generation
 
 If no keys provided in formation config, auto-generates secure keys:
@@ -3539,6 +3586,51 @@ async def scheduler_worker():
            "version": get_version()
        }
    ```
+
+#### Extended Auth Types (2026-07-13)
+
+**Paths:** `services/a2a/auth/inbound.py`, `services/a2a/auth/outbound.py`,
+`formation/config/validation.py`, `datatypes/schema.py` (runtime PR #286;
+specced in afs-spec PR #8, `specs/formation.md` §2.4)
+
+Beyond the original `none`/`api_key`/`bearer`/`basic`/`custom` set, A2A now
+supports three additional auth types with a deliberate directional asymmetry:
+
+| Type | Direction | Mechanism |
+|------|-----------|-----------|
+| `hmac` | inbound + outbound | HMAC-SHA256 over an `X-Timestamp` header value using a shared `secret`; signature sent in `X-Signature` (headers configurable). Body is unsigned by design. |
+| `oauth2` | outbound only | client_credentials grant against `token_url`; bearer token cached per service with 60s refresh margin (3600s default TTL). |
+| `openid` | inbound only | Bearer JWT validated against the issuer's JWKS (`jwks_url` or `<issuer>/.well-known` discovery); checks issuer, audience, algorithms (default RS256), clock skew (default 30s). |
+
+**Inbound hmac** (`_authenticate_hmac`): recomputes the signature with
+`hmac.compare_digest`, enforces timestamp tolerance (default 300s), and keeps a
+`_seen_signatures` replay cache (rejects reuse; pruned at >1000 entries).
+Strict mode requires both `X-Signature` and `X-Timestamp` to be present.
+
+**Inbound openid** (`_authenticate_openid`): PyJWKClient key resolution runs in
+`asyncio.to_thread` (it does blocking HTTP). Client identity is derived from
+`sub`/`azp`/`client_id` claims and reported as `openid:<sub>`. `shared_key` is
+not required for openid mode; `issuer` is (enforced in
+`schema.py::validate_service_specific`).
+
+**Outbound hmac** (`_build_hmac_headers`): signs a fresh timestamp per request.
+**Outbound oauth2** (`_get_oauth2_token`): httpx POST to `token_url`, token
+cached in a plain dict, safe because refresh is serialized per key.
+
+**Strict-mode matching:** when inbound `strict: true`, a request must
+authenticate with the *configured* type; e.g. a valid bearer token is rejected
+if the mode is `hmac`. Validation (`validation.py`) enforces the direction
+rules at load time with cross-direction hints ("openid is inbound-only, did
+you mean oauth2?") and per-type required fields (hmac: `secret`; openid:
+`issuer`; oauth2: `client_id`/`client_secret`/`token_url`).
+
+**Config plumbing:** `formation.py::_get_inbound_auth_key` maps hmac → secret,
+openid → None; `A2AServiceSchema` carries `inbound_auth` through to the
+coordinator, which hands it to `A2AServer` as `auth_config`.
+
+**Tests:** `tests/unit/test_a2a_auth_inbound.py` (openid tested against a real
+in-test JWKS endpoint with a generated RSA keypair, no mocks) and extended
+`test_a2a_auth_outbound.py` (oauth2 against a real local token endpoint).
 
 ### Secrets Service
 
@@ -4782,6 +4874,25 @@ The codebase is well-structured with clear separation of concerns, comprehensive
 ---
 
 ## Appendix: Lessons Learned (Updated During E2E Testing)
+
+### 2026-07-13: A2A extended auth + idempotency-key implementation notes
+
+- **openid is unit-testable without mocks.** Spinning up a local HTTP server
+  serving a JWKS document built from an in-test RSA keypair lets
+  `_authenticate_openid` run its real PyJWKClient path end-to-end (key fetch,
+  signature verification, issuer/audience/exp checks). Same pattern for
+  oauth2: a real local token endpoint exercises fetch + cache + expiry-refresh.
+- **PyJWKClient blocks.** Its JWKS fetch is synchronous HTTP; wrap in
+  `asyncio.to_thread` or it stalls the event loop on every cold JWT validation.
+- **HMAC replay cache needs bounded pruning.** An unbounded seen-signatures set
+  is a slow leak on a long-lived server; prune when >1000 entries (entries
+  older than the timestamp tolerance are dead weight anyway).
+- **Idempotency single-flight is the hard requirement, not the cache.** The
+  replay cache alone doesn't stop a timeout-retry racing the original request;
+  the per-key asyncio.Lock is what prevents double LLM execution and duplicate
+  memory writes.
+- **Only cache 2xx JSON.** Caching errors would make transient failures sticky
+  for 24h; streaming responses can't be replayed from a buffered body.
 
 ### 2026-05-02: Knowledge ingestion silently routed through local Nomic + CoreML compile-on-every-load thrashed macOS jetsam
 
