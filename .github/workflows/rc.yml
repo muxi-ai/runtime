@@ -29,7 +29,7 @@ jobs:
       # Authenticated downloads avoid HF's unauthenticated 403s so the
       # model-backed tests run instead of skipping. Optional: if the
       # secret is unset the tests skip gracefully (see conftest.py).
-      HF_TOKEN: ${{ secrets.HF_TOKEN }}
+      HF_TOKEN: ${{ secrets.MUXI_HF_TOKEN }}
 
     steps:
       - name: Free disk space
