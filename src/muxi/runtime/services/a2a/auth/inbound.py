@@ -6,8 +6,12 @@ Implements STRICT auth type validation to fix critical security vulnerability.
 Uses SDK security schemes for protocol compliance.
 """
 
+import asyncio
 import base64
+import hashlib
+import hmac as hmac_lib
 import os
+import time
 from dataclasses import dataclass, field
 from enum import Enum
 from typing import Any, Dict, Optional, Tuple
@@ -21,6 +25,10 @@ from ...secrets import SecretsManager
 # We implement SDK-style authentication without importing SDK modules
 # since they're not available on the server side
 
+DEFAULT_HMAC_TIMESTAMP_TOLERANCE = 300  # seconds
+DEFAULT_OPENID_CLOCK_SKEW = 30  # seconds
+DEFAULT_OPENID_ALGORITHMS = ["RS256"]
+
 
 class InboundAuthType(str, Enum):
     """Supported inbound authentication types"""
@@ -29,6 +37,8 @@ class InboundAuthType(str, Enum):
     API_KEY = "api_key"
     BEARER = "bearer"
     BASIC = "basic"
+    HMAC = "hmac"
+    OPENID = "openid"
 
 
 @dataclass
@@ -50,22 +60,36 @@ class A2AInboundAuthenticator:
     were incorrectly accepted.
     """
 
-    def __init__(self, auth_mode: str = "none", secrets_manager: Optional[SecretsManager] = None):
+    def __init__(
+        self,
+        auth_mode: str = "none",
+        secrets_manager: Optional[SecretsManager] = None,
+        auth_config: Optional[Dict[str, Any]] = None,
+    ):
         """
         Initialize the inbound authenticator
 
         Args:
             auth_mode: Authentication mode for the formation (strictly enforced)
             secrets_manager: Optional SecretsManager for credential access
+            auth_config: The formation's raw ``a2a.inbound.auth`` block (secrets
+                already interpolated); carries mode-specific settings such as
+                ``timestamp_tolerance`` (hmac) or ``issuer``/``audience`` (openid)
         """
         try:
             self.auth_mode = InboundAuthType(auth_mode)
             self.secrets_manager = secrets_manager
+            self.auth_config: Dict[str, Any] = auth_config or {}
             self.schemes: Dict[str, Any] = {}  # SDK schemes for validation
             self.credentials: Dict[str, InboundCredential] = {}
             self.api_keys: Dict[str, str] = {}  # api_key -> client_id mapping
             self.bearer_tokens: Dict[str, str] = {}  # token -> client_id mapping
             self.basic_auth: Dict[str, str] = {}  # username -> password mapping
+            self.hmac_secrets: Dict[str, str] = {}  # secret -> client_id mapping
+            # HMAC replay prevention: signature -> expiry timestamp
+            self._seen_signatures: Dict[str, float] = {}
+            # Lazily constructed PyJWKClient for openid mode
+            self._jwks_client: Optional[Any] = None
 
             # Emit initialization event
             observability.observe(
@@ -480,6 +504,11 @@ class A2AInboundAuthenticator:
                     raise ValueError("Basic authentication requires 'username' and 'password'")
                 self.basic_auth[credential_data["username"]] = credential_data["password"]
 
+            elif auth_type == InboundAuthType.HMAC:
+                if "secret" not in credential_data:
+                    raise ValueError("HMAC authentication requires 'secret' in credential_data")
+                self.hmac_secrets[credential_data["secret"]] = client_id
+
             # Store the credential
             self.credentials[client_id] = InboundCredential(
                 auth_type=auth_type,
@@ -576,6 +605,26 @@ class A2AInboundAuthenticator:
                 if not authorization or not authorization.startswith("Basic "):
                     return False, None, "Basic authentication required"
                 result = await self._authenticate_basic(authorization)
+
+            elif self.auth_mode == InboundAuthType.HMAC:
+                if x_api_key:
+                    return False, None, "Server requires HMAC authentication, not API key"
+                if authorization:
+                    return False, None, "Server requires HMAC authentication, not Authorization"
+                if not x_signature or not x_timestamp:
+                    return (
+                        False,
+                        None,
+                        "HMAC authentication requires X-Signature and X-Timestamp headers",
+                    )
+                result = await self._authenticate_hmac(x_signature, x_timestamp)
+
+            elif self.auth_mode == InboundAuthType.OPENID:
+                if x_api_key:
+                    return False, None, "Server requires OpenID authentication, not API key"
+                if not authorization or not authorization.startswith("Bearer "):
+                    return False, None, "OpenID authentication requires a Bearer JWT"
+                result = await self._authenticate_openid(authorization)
 
             else:
                 error_msg = f"Unsupported authentication mode: {self.auth_mode}"
@@ -751,6 +800,141 @@ class A2AInboundAuthenticator:
             )
             return False, None, f"Basic authentication error: {str(e)}"
 
+    async def _authenticate_hmac(
+        self, x_signature: str, x_timestamp: str
+    ) -> Tuple[bool, Optional[str], Optional[str]]:
+        """Authenticate using an HMAC-SHA256 signature over the request timestamp.
+
+        The signature proves possession of the shared secret; the timestamp
+        tolerance plus the replay cache bound reuse. Transport integrity is
+        TLS's job (the body is not signed).
+        """
+        try:
+            tolerance = int(
+                self.auth_config.get("timestamp_tolerance", DEFAULT_HMAC_TIMESTAMP_TOLERANCE)
+            )
+
+            try:
+                timestamp = int(x_timestamp)
+            except (TypeError, ValueError):
+                return False, None, "Invalid X-Timestamp header (expected unix seconds)"
+
+            now = time.time()
+            if abs(now - timestamp) > tolerance:
+                observability.observe(
+                    event_type=observability.SystemEvents.A2A_AUTH_VALIDATION_FAILED,
+                    level=observability.EventLevel.WARNING,
+                    description="HMAC authentication failed: timestamp outside tolerance",
+                    data={"auth_type": "hmac", "tolerance": tolerance},
+                )
+                return False, None, "Timestamp outside accepted tolerance"
+
+            # Replay prevention: a signature is single-use within the window
+            self._prune_seen_signatures(now)
+            if x_signature in self._seen_signatures:
+                observability.observe(
+                    event_type=observability.SystemEvents.A2A_AUTH_VALIDATION_FAILED,
+                    level=observability.EventLevel.WARNING,
+                    description="HMAC authentication failed: signature replay detected",
+                    data={"auth_type": "hmac"},
+                )
+                return False, None, "Signature already used (replay rejected)"
+
+            for secret, client_id in self.hmac_secrets.items():
+                expected = hmac_lib.new(
+                    secret.encode("utf-8"), x_timestamp.encode("utf-8"), hashlib.sha256
+                ).hexdigest()
+                if hmac_lib.compare_digest(expected, x_signature):
+                    self._seen_signatures[x_signature] = now + tolerance
+                    observability.observe(
+                        event_type=observability.SystemEvents.A2A_AUTH_VALIDATED,
+                        level=observability.EventLevel.INFO,
+                        description=f"HMAC authentication successful for client {client_id}",
+                        data={"client_id": client_id, "auth_type": "hmac"},
+                    )
+                    return True, client_id, None
+
+            observability.observe(
+                event_type=observability.SystemEvents.A2A_AUTH_VALIDATION_FAILED,
+                level=observability.EventLevel.WARNING,
+                description="HMAC authentication failed: invalid signature",
+                data={"auth_type": "hmac", "configured_secrets": len(self.hmac_secrets)},
+            )
+            return False, None, "Invalid HMAC signature"
+
+        except Exception as e:
+            observability.observe(
+                event_type=observability.ErrorEvents.AUTHENTICATION_FAILED,
+                level=observability.EventLevel.ERROR,
+                description=f"HMAC authentication error: {str(e)}",
+                data={"auth_type": "hmac", "error": str(e)},
+            )
+            return False, None, f"HMAC authentication error: {str(e)}"
+
+    def _prune_seen_signatures(self, now: float) -> None:
+        """Drop expired entries from the replay cache."""
+        if len(self._seen_signatures) > 1000:
+            self._seen_signatures = {
+                sig: expiry for sig, expiry in self._seen_signatures.items() if expiry > now
+            }
+
+    async def _authenticate_openid(
+        self, authorization: str
+    ) -> Tuple[bool, Optional[str], Optional[str]]:
+        """Authenticate using an OpenID Connect / OAuth2 JWT validated via JWKS."""
+        try:
+            import jwt as pyjwt
+
+            token = authorization[7:]  # Remove "Bearer " prefix
+
+            issuer = self.auth_config.get("issuer")
+            if not issuer:
+                return False, None, "OpenID authentication is not configured (missing issuer)"
+            audience = self.auth_config.get("audience")
+            algorithms = self.auth_config.get("allowed_algorithms", DEFAULT_OPENID_ALGORITHMS)
+            leeway = int(self.auth_config.get("clock_skew_seconds", DEFAULT_OPENID_CLOCK_SKEW))
+
+            if self._jwks_client is None:
+                jwks_url = self.auth_config.get("jwks_url") or (
+                    issuer.rstrip("/") + "/.well-known/jwks.json"
+                )
+                self._jwks_client = pyjwt.PyJWKClient(jwks_url, cache_keys=True)
+
+            # PyJWKClient performs blocking HTTP on first fetch
+            signing_key = await asyncio.to_thread(self._jwks_client.get_signing_key_from_jwt, token)
+            claims = pyjwt.decode(
+                token,
+                signing_key.key,
+                algorithms=algorithms,
+                audience=audience,
+                issuer=issuer,
+                leeway=leeway,
+                # Without this, PyJWT rejects any token carrying an aud claim
+                # when no audience is configured
+                options={"verify_aud": audience is not None},
+            )
+
+            client_id = claims.get("sub") or claims.get("azp") or claims.get("client_id")
+            if not client_id:
+                return False, None, "JWT is valid but carries no subject claim"
+
+            observability.observe(
+                event_type=observability.SystemEvents.A2A_AUTH_VALIDATED,
+                level=observability.EventLevel.INFO,
+                description=f"OpenID authentication successful for subject {client_id}",
+                data={"client_id": client_id, "auth_type": "openid", "issuer": issuer},
+            )
+            return True, f"openid:{client_id}", None
+
+        except Exception as e:
+            observability.observe(
+                event_type=observability.SystemEvents.A2A_AUTH_VALIDATION_FAILED,
+                level=observability.EventLevel.WARNING,
+                description=f"OpenID authentication failed: {str(e)}",
+                data={"auth_type": "openid", "error": str(e)},
+            )
+            return False, None, f"Invalid OpenID token: {str(e)}"
+
     def get_auth_requirements(self) -> Dict[str, Any]:
         """Get authentication requirements for API documentation"""
         try:
@@ -765,6 +949,10 @@ class A2AInboundAuthenticator:
             elif self.auth_mode == InboundAuthType.BEARER:
                 requirements["required_headers"] = ["Authorization"]
             elif self.auth_mode == InboundAuthType.BASIC:
+                requirements["required_headers"] = ["Authorization"]
+            elif self.auth_mode == InboundAuthType.HMAC:
+                requirements["required_headers"] = ["X-Signature", "X-Timestamp"]
+            elif self.auth_mode == InboundAuthType.OPENID:
                 requirements["required_headers"] = ["Authorization"]
 
             # Emit auth requirements request event
@@ -797,6 +985,11 @@ class A2AInboundAuthenticator:
             InboundAuthType.API_KEY: "API key required in X-API-Key header",
             InboundAuthType.BEARER: "Bearer token required in Authorization header",
             InboundAuthType.BASIC: "Basic authentication required in Authorization header",
+            InboundAuthType.HMAC: (
+                "HMAC-SHA256 signature required in X-Signature header "
+                "with unix timestamp in X-Timestamp header"
+            ),
+            InboundAuthType.OPENID: "OpenID Connect JWT required in Authorization header",
         }
         return descriptions.get(self.auth_mode, "Unknown authentication mode")
 

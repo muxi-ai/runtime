@@ -3541,11 +3541,14 @@ class FormationValidator:
 
         # Validate auth type
         auth_type = auth_config.get("type", "none")
-        valid_auth_types = ["api_key", "bearer", "basic", "custom", "none"]
+        valid_auth_types = ["api_key", "bearer", "basic", "custom", "hmac", "oauth2", "none"]
 
         if auth_type not in valid_auth_types:
+            hint = ""
+            if auth_type == "openid":
+                hint = " ('openid' is inbound-only; use 'oauth2' for outbound services)"
             self.result.add_error(
-                f"{service_identifier} auth type '{auth_type}' invalid. "
+                f"{service_identifier} auth type '{auth_type}' invalid{hint}. "
                 f"Valid types are: {valid_auth_types}"
             )
             return
@@ -3577,6 +3580,24 @@ class FormationValidator:
                     f"{service_identifier} custom auth headers must be a dictionary"
                 )
 
+        elif auth_type == "hmac":
+            if "secret" not in auth_config:
+                self.result.add_error(f"{service_identifier} hmac auth requires 'secret' field")
+            for header_field in ["signature_header", "timestamp_header"]:
+                if header_field in auth_config and not isinstance(auth_config[header_field], str):
+                    self.result.add_error(
+                        f"{service_identifier} hmac auth '{header_field}' must be a string"
+                    )
+
+        elif auth_type == "oauth2":
+            for oauth2_field in ["client_id", "client_secret", "token_url"]:
+                if oauth2_field not in auth_config:
+                    self.result.add_error(
+                        f"{service_identifier} oauth2 auth requires '{oauth2_field}' field"
+                    )
+            if "scope" in auth_config and not isinstance(auth_config["scope"], str):
+                self.result.add_error(f"{service_identifier} oauth2 auth scope must be a string")
+
     def _validate_inbound_auth_config(self, auth_config: Dict[str, Any]) -> None:
         """Validate inbound authentication configuration."""
         if not isinstance(auth_config, dict):
@@ -3585,11 +3606,14 @@ class FormationValidator:
 
         # Validate auth type
         auth_type = auth_config.get("type", "none")
-        valid_auth_types = ["api_key", "bearer", "basic", "custom", "none"]
+        valid_auth_types = ["api_key", "bearer", "basic", "custom", "hmac", "openid", "none"]
 
         if auth_type not in valid_auth_types:
+            hint = ""
+            if auth_type == "oauth2":
+                hint = " ('oauth2' is outbound-only; use 'openid' to validate inbound JWTs)"
             self.result.add_error(
-                f"A2A inbound auth type '{auth_type}' invalid. "
+                f"A2A inbound auth type '{auth_type}' invalid{hint}. "
                 f"Valid types are: {valid_auth_types}"
             )
             return
@@ -3616,6 +3640,42 @@ class FormationValidator:
                 self.result.add_error("A2A inbound custom auth requires 'headers' field")
             elif not isinstance(auth_config["headers"], dict):
                 self.result.add_error("A2A inbound custom auth headers must be a dictionary")
+
+        elif auth_type == "hmac":
+            if "secret" not in auth_config:
+                self.result.add_error("A2A inbound hmac auth requires 'secret' field")
+            if "timestamp_tolerance" in auth_config:
+                tolerance = auth_config["timestamp_tolerance"]
+                if not isinstance(tolerance, int) or tolerance <= 0:
+                    self.result.add_error(
+                        "A2A inbound hmac auth 'timestamp_tolerance' must be a positive integer"
+                    )
+
+        elif auth_type == "openid":
+            if "issuer" not in auth_config:
+                self.result.add_error("A2A inbound openid auth requires 'issuer' field")
+            elif not isinstance(auth_config["issuer"], str) or not auth_config["issuer"].startswith(
+                ("http://", "https://")
+            ):
+                self.result.add_error("A2A inbound openid auth 'issuer' must be a URL string")
+            for str_field in ["audience", "jwks_url"]:
+                if str_field in auth_config and not isinstance(auth_config[str_field], str):
+                    self.result.add_error(f"A2A inbound openid auth '{str_field}' must be a string")
+            if "allowed_algorithms" in auth_config:
+                algorithms = auth_config["allowed_algorithms"]
+                if not isinstance(algorithms, list) or not all(
+                    isinstance(alg, str) for alg in algorithms
+                ):
+                    self.result.add_error(
+                        "A2A inbound openid auth 'allowed_algorithms' must be a list of strings"
+                    )
+            if "clock_skew_seconds" in auth_config:
+                skew = auth_config["clock_skew_seconds"]
+                if not isinstance(skew, int) or skew < 0:
+                    self.result.add_error(
+                        "A2A inbound openid auth 'clock_skew_seconds' must be a "
+                        "non-negative integer"
+                    )
 
     def _validate_scheduler_config(self, scheduler_config: Dict[str, Any]) -> None:
         """Validate scheduler configuration."""
