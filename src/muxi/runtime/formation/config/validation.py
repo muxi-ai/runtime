@@ -13,6 +13,7 @@ from typing import Any, Dict, List, Optional, Union
 import yaml
 
 # Import the MCP registry to get valid MCP names dynamically
+from ...services.a2a.identifiers import get_service_identifier
 from ...services.mcp.built_in import BUILTIN_MCP_REGISTRY
 from ...utils.fastjson import json
 
@@ -136,7 +137,7 @@ class FormationValidator:
     REQUIRED_AGENT_FIELDS = ["schema", "id", "name", "description"]
     REQUIRED_MODEL_FIELDS = ["provider"]
     REQUIRED_MCP_SERVER_FIELDS = ["schema", "id", "description", "type"]
-    REQUIRED_A2A_SERVICE_FIELDS = ["schema", "id", "name", "description", "url"]
+    REQUIRED_A2A_SERVICE_FIELDS = ["schema", "name", "description", "url"]
 
     # Known model capabilities (also used to reject alias/capability collisions)
     KNOWN_MODEL_CAPABILITIES = {
@@ -1098,7 +1099,7 @@ class FormationValidator:
                         continue
 
                     # Check for service id and duplicates
-                    service_id = service_config.get("id")
+                    service_id = get_service_identifier(service_config)
                     if service_id:
                         if service_id in service_ids:
                             self.result.add_error(f"Duplicate A2A service id: {service_id}")
@@ -1974,7 +1975,7 @@ class FormationValidator:
                 self._validate_a2a_service_config(a2a_config, a2a_file.name)
 
                 # Check for duplicate service IDs
-                service_id = a2a_config.get("id")
+                service_id = get_service_identifier(a2a_config)
                 if service_id:
                     if service_id in service_ids:
                         self.result.add_error(f"Duplicate A2A service id: {service_id}")
@@ -3393,10 +3394,21 @@ class FormationValidator:
         if schema and not isinstance(schema, str):
             self.result.add_error(f"A2A service {filename} schema must be a string")
 
-        # Validate id
+        # Validate canonical id and deprecated alias
         service_id = service_config.get("id")
-        if service_id and not isinstance(service_id, str):
-            self.result.add_error(f"A2A service {filename} id must be a string")
+        legacy_service_id = service_config.get("service_id")
+        if service_id is None and legacy_service_id is None:
+            self.result.add_error(f"A2A service {filename} missing required field: id")
+        if service_id is not None and (not isinstance(service_id, str) or not service_id.strip()):
+            self.result.add_error(f"A2A service {filename} id must be a non-empty string")
+        if legacy_service_id is not None and (
+            not isinstance(legacy_service_id, str) or not legacy_service_id.strip()
+        ):
+            self.result.add_error(f"A2A service {filename} service_id must be a non-empty string")
+        if service_id is None and legacy_service_id is not None:
+            self.result.add_warning(
+                f"A2A service {filename} uses deprecated service_id; rename it to id"
+            )
 
         # Validate name
         name = service_config.get("name")
@@ -3518,14 +3530,20 @@ class FormationValidator:
             self.result.add_error(f"{service_identifier} configuration must be a dictionary")
             return
 
-        # Check required field: service_id
-        if "service_id" not in service_config:
-            self.result.add_error(f"{service_identifier} missing required field: service_id")
-
-        # Validate service_id
-        service_id = service_config.get("service_id")
-        if service_id and not isinstance(service_id, str):
-            self.result.add_error(f"{service_identifier} service_id must be a string")
+        service_id = service_config.get("id")
+        legacy_service_id = service_config.get("service_id")
+        if service_id is None and legacy_service_id is None:
+            self.result.add_error(f"{service_identifier} missing required field: id")
+        if service_id is not None and (not isinstance(service_id, str) or not service_id.strip()):
+            self.result.add_error(f"{service_identifier} id must be a non-empty string")
+        if legacy_service_id is not None and (
+            not isinstance(legacy_service_id, str) or not legacy_service_id.strip()
+        ):
+            self.result.add_error(f"{service_identifier} service_id must be a non-empty string")
+        if service_id is None and legacy_service_id is not None:
+            self.result.add_warning(
+                f"{service_identifier} uses deprecated service_id; rename it to id"
+            )
 
         # Validate authentication configuration if present
         if "auth" in service_config:

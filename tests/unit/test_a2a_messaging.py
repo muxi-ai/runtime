@@ -14,6 +14,7 @@ from types import SimpleNamespace
 import pytest
 
 from muxi.runtime.formation.overlord.a2a_messaging import UnifiedA2AMessaging
+from muxi.runtime.services.a2a.auth.outbound import A2AAuthManager
 
 
 @pytest.fixture
@@ -160,3 +161,88 @@ def test_convert_from_external_empty_response_is_error(messaging):
     out = messaging._convert_from_a2a_message(sdk)
 
     assert out.get("status") == "error"
+
+
+class _SecretsManager:
+    async def interpolate_secrets(self, value):
+        return value
+
+
+async def _messaging_with_services(services):
+    config = {"a2a": {"outbound": {"services": services}}}
+    auth_manager = A2AAuthManager(_SecretsManager())
+    await auth_manager.load_credentials_from_formation_config(config)
+    overlord = SimpleNamespace(
+        client_factory=None,
+        secrets_manager=_SecretsManager(),
+        formation_config=config,
+        _a2a_auth_manager=auth_manager,
+    )
+    return UnifiedA2AMessaging(overlord)
+
+
+async def test_outbound_auth_matches_canonical_id_by_url():
+    messaging = await _messaging_with_services(
+        [
+            {
+                "id": "analytics",
+                "url": "https://analytics.example.com",
+                "auth": {"type": "bearer", "token": "canonical-token"},
+            }
+        ]
+    )
+
+    headers = await messaging._resolve_outbound_auth_headers(
+        "https://analytics.example.com/agents/reporter/message"
+    )
+
+    assert headers["Authorization"] == "Bearer canonical-token"
+
+
+async def test_outbound_auth_prefers_the_most_specific_url_path():
+    messaging = await _messaging_with_services(
+        [
+            {
+                "id": "generic",
+                "url": "https://agents.example.com",
+                "auth": {"type": "bearer", "token": "generic-token"},
+            },
+            {
+                "id": "analytics",
+                "url": "https://agents.example.com/analytics",
+                "auth": {"type": "bearer", "token": "analytics-token"},
+            },
+        ]
+    )
+
+    headers = await messaging._resolve_outbound_auth_headers(
+        "https://agents.example.com/analytics/agents/reporter/message"
+    )
+
+    assert headers["Authorization"] == "Bearer analytics-token"
+
+
+async def test_outbound_auth_accepts_legacy_service_id_selector():
+    messaging = await _messaging_with_services(
+        [
+            {
+                "service_id": "analytics.example.com",
+                "auth": {"type": "bearer", "token": "legacy-token"},
+            }
+        ]
+    )
+
+    headers = await messaging._resolve_outbound_auth_headers(
+        "https://analytics.example.com/agents/reporter/message"
+    )
+
+    assert headers["Authorization"] == "Bearer legacy-token"
+
+
+def test_outbound_service_match_ignores_invalid_configured_port():
+    match = UnifiedA2AMessaging._match_outbound_service(
+        {"id": "analytics", "url": "https://analytics.example.com:invalid"},
+        "https://analytics.example.com/agents/reporter/message",
+    )
+
+    assert match is None

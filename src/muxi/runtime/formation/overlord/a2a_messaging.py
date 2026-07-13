@@ -26,6 +26,7 @@ from a2a.client import ClientCallContext
 from a2a.types import Message, SendMessageRequest
 
 from ...services.a2a import _sdk_helpers as sdk
+from ...services.a2a.identifiers import get_service_identifier
 from ...utils.id_generator import generate_nanoid
 
 
@@ -36,6 +37,73 @@ class UnifiedA2AMessaging:
         """Initialize with overlord instance that has ClientFactory."""
         self.overlord = overlord
         self._last_was_external: bool = False
+
+    @staticmethod
+    def _match_outbound_service(
+        service: Dict[str, Any],
+        target_agent_url: str,
+    ) -> Optional[tuple[int, int, str]]:
+        credential_id = get_service_identifier(service)
+        if credential_id is None:
+            return None
+
+        target = urlparse(target_agent_url)
+        target_host = target.hostname
+        try:
+            target_port = target.port or (443 if target.scheme == "https" else 80)
+        except ValueError:
+            return None
+        path_parts = target.path.strip("/").split("/")
+        target_agent_id = (
+            path_parts[1]
+            if len(path_parts) >= 3 and path_parts[0] == "agents" and path_parts[2] == "message"
+            else None
+        )
+
+        selector = service.get("service_id")
+        if not isinstance(selector, str) or not selector.strip():
+            selector = credential_id if "url" not in service else None
+        if selector:
+            selector = selector.strip()
+            if (
+                target_agent_id
+                and target_host
+                and selector == f"{target_agent_id}@{target_host}:{target_port}"
+            ):
+                return 0, 0, credential_id
+            if target_host and selector == f"{target_host}:{target_port}":
+                return 2, 0, credential_id
+            if (
+                target_host in ("localhost", "127.0.0.1", "0.0.0.0")
+                and selector == f"localhost:{target_port}"
+            ):
+                return 2, 0, credential_id
+            if target_host and selector == target_host:
+                return 3, 0, credential_id
+            if selector == str(target_port):
+                return 4, 0, credential_id
+
+        configured_url = service.get("url")
+        if not isinstance(configured_url, str) or not configured_url.strip():
+            return None
+        configured = urlparse(configured_url)
+        try:
+            configured_port = configured.port or (443 if configured.scheme == "https" else 80)
+        except ValueError:
+            return None
+        if (
+            configured.scheme != target.scheme
+            or configured.hostname != target_host
+            or configured_port != target_port
+        ):
+            return None
+
+        configured_path = configured.path.rstrip("/")
+        if configured_path and not (
+            target.path == configured_path or target.path.startswith(f"{configured_path}/")
+        ):
+            return None
+        return 1, -len(configured_path), credential_id
 
     async def send_a2a_message(
         self,
@@ -203,47 +271,17 @@ class UnifiedA2AMessaging:
             .get("services", [])
         )
 
-        parsed_url = urlparse(target_agent_url)
-        target_host = parsed_url.hostname
-        target_port = parsed_url.port
-
-        # URL format: http://hostname:port/agents/{agent-id}/message
-        target_agent_id = None
-        if parsed_url.path:
-            path_parts = parsed_url.path.strip("/").split("/")
-            if len(path_parts) >= 3 and path_parts[0] == "agents" and path_parts[2] == "message":
-                target_agent_id = path_parts[1]
-
         matches = []
         for service in outbound_services:
-            service_id = service.get("service_id", "")
-            if not service_id:
-                continue
-            if (
-                target_agent_id
-                and target_host
-                and target_port
-                and service_id == f"{target_agent_id}@{target_host}:{target_port}"
-            ):
-                matches.append((1, service_id))
-            elif target_host and target_port and service_id == f"{target_host}:{target_port}":
-                matches.append((2, service_id))
-            elif target_host and service_id == target_host:
-                matches.append((3, service_id))
-            elif target_port:
-                if service_id == str(target_port):
-                    matches.append((4, service_id))
-                elif (
-                    target_host in ("localhost", "127.0.0.1", "0.0.0.0")
-                    and service_id == f"localhost:{target_port}"
-                ):
-                    matches.append((2, service_id))
+            match = self._match_outbound_service(service, target_agent_url)
+            if match is not None:
+                matches.append(match)
 
         if not matches:
             return {}
-        matches.sort(key=lambda x: x[0])
+        matches.sort()
         success, headers = await auth_manager.apply_sdk_authentication(
-            matches[0][1], {}, required=False
+            matches[0][2], {}, required=False
         )
         return headers if success else {}
 
