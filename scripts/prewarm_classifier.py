@@ -6,15 +6,12 @@ the HuggingFace Hub on a cold cache:
 * ``test_local_classifier.py`` -> ``Xenova/multilingual-e5-small`` (~95 MB)
 * ``test_sops_search.py``      -> ``nomic-ai/nomic-embed-text-v1.5`` (~140 MB)
 
-When those downloads stall or 403 (HF Hub rate limits / Xet CAS bridge
-outages) they take the whole matrix job down. Running the fetch here
-moves it out of the timed tests, retries transient failures, and primes
-the on-disk HF cache so the tests are fast and offline.
-
-A persistent failure is logged as a warning and exits 0 on purpose: the
-unit suite skips model-download tests gracefully when the Hub is
-unreachable (see ``tests/unit/conftest.py``), so CI reports "skipped"
-rather than a false red.
+Running the fetch here (via the authenticated hf_xet client) moves the
+one-time download out of the timed tests, retries transient failures,
+and primes the on-disk HF cache so the tests are fast and offline. If
+every retry fails the script exits non-zero so the failure surfaces here
+as a clear "model download failed" signal rather than as an opaque test
+error downstream.
 """
 
 from __future__ import annotations
@@ -58,12 +55,11 @@ def main() -> int:
                 time.sleep(BACKOFF_SECONDS)
 
     print(
-        "::warning::model prewarm failed after "
-        f"{RETRIES} attempts; model-download tests will skip if the Hub "
-        "stays unreachable",
+        f"::error::model prewarm failed after {RETRIES} attempts; "
+        "the HuggingFace Hub download did not succeed",
         file=sys.stderr,
     )
-    return 0
+    return 1
 
 
 if __name__ == "__main__":
