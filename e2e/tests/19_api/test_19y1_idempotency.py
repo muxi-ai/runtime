@@ -49,7 +49,7 @@ class TestIdempotency(BaseE2ETest):
             "Content-Type": "application/json",
         }
         if idempotency_key:
-            headers["Idempotency-Key"] = idempotency_key
+            headers["X-Muxi-Idempotency-Key"] = idempotency_key
         if user_id:
             headers["X-Muxi-User-Id"] = user_id
         return headers

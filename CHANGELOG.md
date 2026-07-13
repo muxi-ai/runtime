@@ -5,7 +5,7 @@
 ### Idempotency-Key support (chat, scheduler jobs, triggers)
 
 The `idempotency_key` envelope field comes alive: clients can send an
-`Idempotency-Key` header on POST `/chat`, POST `/scheduler/jobs`, and
+`X-Muxi-Idempotency-Key` header on POST `/chat`, POST `/scheduler/jobs`, and
 POST `/triggers/{name}`, and retries within 24h replay the original
 response instead of processing twice:
 

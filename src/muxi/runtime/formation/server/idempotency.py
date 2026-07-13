@@ -1,7 +1,7 @@
 """
 In-memory idempotency-key support for Formation API endpoints.
 
-Clients send an ``Idempotency-Key`` header on mutating requests; retries with
+Clients send an ``X-Muxi-Idempotency-Key`` header on mutating requests; retries with
 the same key within the TTL replay the original JSON response instead of
 processing the request again. Keys are scoped per endpoint and user so
 different callers (or different endpoints) can reuse the same key safely.
@@ -29,7 +29,7 @@ from ...utils.fastjson import json
 from .responses import APIResponse
 from .utils import get_header_case_insensitive
 
-IDEMPOTENCY_HEADER = "Idempotency-Key"
+IDEMPOTENCY_HEADER = "X-Muxi-Idempotency-Key"
 DEFAULT_TTL_SECONDS = 24 * 60 * 60
 MAX_CACHE_ENTRIES = 10_000
 

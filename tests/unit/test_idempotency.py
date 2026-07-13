@@ -119,8 +119,8 @@ def test_duplicate_key_replays_cached_response(app_and_calls):
     app, calls = app_and_calls
     client = TestClient(app)
 
-    first = client.post("/v1/jobs", headers={"Idempotency-Key": "abc"})
-    second = client.post("/v1/jobs", headers={"Idempotency-Key": "abc"})
+    first = client.post("/v1/jobs", headers={"X-Muxi-Idempotency-Key": "abc"})
+    second = client.post("/v1/jobs", headers={"X-Muxi-Idempotency-Key": "abc"})
 
     assert calls["count"] == 1
     assert first.json()["data"]["job_id"] == "job-1"
@@ -130,39 +130,39 @@ def test_duplicate_key_replays_cached_response(app_and_calls):
 def test_key_echoed_in_response_envelope(app_and_calls):
     app, _ = app_and_calls
     client = TestClient(app)
-    response = client.post("/v1/jobs", headers={"Idempotency-Key": "echo-me"})
+    response = client.post("/v1/jobs", headers={"X-Muxi-Idempotency-Key": "echo-me"})
     assert response.json()["request"]["idempotency_key"] == "echo-me"
 
 
 def test_different_keys_process_independently(app_and_calls):
     app, calls = app_and_calls
     client = TestClient(app)
-    client.post("/v1/jobs", headers={"Idempotency-Key": "k1"})
-    client.post("/v1/jobs", headers={"Idempotency-Key": "k2"})
+    client.post("/v1/jobs", headers={"X-Muxi-Idempotency-Key": "k1"})
+    client.post("/v1/jobs", headers={"X-Muxi-Idempotency-Key": "k2"})
     assert calls["count"] == 2
 
 
 def test_same_key_different_users_process_independently(app_and_calls):
     app, calls = app_and_calls
     client = TestClient(app)
-    client.post("/v1/jobs", headers={"Idempotency-Key": "k1", "X-Muxi-User-Id": "alice"})
-    client.post("/v1/jobs", headers={"Idempotency-Key": "k1", "X-Muxi-User-Id": "bob"})
+    client.post("/v1/jobs", headers={"X-Muxi-Idempotency-Key": "k1", "X-Muxi-User-Id": "alice"})
+    client.post("/v1/jobs", headers={"X-Muxi-Idempotency-Key": "k1", "X-Muxi-User-Id": "bob"})
     assert calls["count"] == 2
 
 
 def test_header_is_case_insensitive(app_and_calls):
     app, calls = app_and_calls
     client = TestClient(app)
-    client.post("/v1/jobs", headers={"idempotency-key": "k1"})
-    client.post("/v1/jobs", headers={"IDEMPOTENCY-KEY": "k1"})
+    client.post("/v1/jobs", headers={"x-muxi-idempotency-key": "k1"})
+    client.post("/v1/jobs", headers={"X-MUXI-IDEMPOTENCY-KEY": "k1"})
     assert calls["count"] == 1
 
 
 def test_error_responses_are_not_cached(app_and_calls):
     app, calls = app_and_calls
     client = TestClient(app)
-    first = client.post("/v1/failing", headers={"Idempotency-Key": "k1"})
-    second = client.post("/v1/failing", headers={"Idempotency-Key": "k1"})
+    first = client.post("/v1/failing", headers={"X-Muxi-Idempotency-Key": "k1"})
+    second = client.post("/v1/failing", headers={"X-Muxi-Idempotency-Key": "k1"})
     assert first.status_code == 500
     assert second.status_code == 500
     assert calls["count"] == 2
@@ -171,8 +171,8 @@ def test_error_responses_are_not_cached(app_and_calls):
 def test_streaming_responses_pass_through_uncached(app_and_calls):
     app, calls = app_and_calls
     client = TestClient(app)
-    first = client.post("/v1/stream", headers={"Idempotency-Key": "k1"})
-    second = client.post("/v1/stream", headers={"Idempotency-Key": "k1"})
+    first = client.post("/v1/stream", headers={"X-Muxi-Idempotency-Key": "k1"})
+    second = client.post("/v1/stream", headers={"X-Muxi-Idempotency-Key": "k1"})
     assert first.headers["content-type"].startswith("text/event-stream")
     assert second.headers["content-type"].startswith("text/event-stream")
     assert calls["count"] == 2
@@ -181,7 +181,7 @@ def test_streaming_responses_pass_through_uncached(app_and_calls):
 def test_cache_is_app_scoped(app_and_calls):
     app, _ = app_and_calls
     client = TestClient(app)
-    client.post("/v1/jobs", headers={"Idempotency-Key": "k1"})
+    client.post("/v1/jobs", headers={"X-Muxi-Idempotency-Key": "k1"})
     cache = get_idempotency_cache(app)
     assert isinstance(cache, IdempotencyCache)
     assert len(cache._responses) == 1
@@ -208,8 +208,12 @@ async def test_concurrent_duplicates_are_single_flighted():
 
     transport = httpx.ASGITransport(app=app)
     async with httpx.AsyncClient(transport=transport, base_url="http://test") as client:
-        task1 = asyncio.create_task(client.post("/v1/slow", headers={"Idempotency-Key": "k1"}))
-        task2 = asyncio.create_task(client.post("/v1/slow", headers={"Idempotency-Key": "k1"}))
+        task1 = asyncio.create_task(
+            client.post("/v1/slow", headers={"X-Muxi-Idempotency-Key": "k1"})
+        )
+        task2 = asyncio.create_task(
+            client.post("/v1/slow", headers={"X-Muxi-Idempotency-Key": "k1"})
+        )
         await asyncio.sleep(0.1)
         release.set()
         first, second = await asyncio.gather(task1, task2)

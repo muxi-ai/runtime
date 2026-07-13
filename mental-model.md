@@ -3148,7 +3148,7 @@ async def stream_chat(request: ChatRequest):
 `routes/client/chat.py` (`POST /chat`), `routes/admin/scheduler.py`
 (`POST /scheduler/jobs`), `routes/client/triggers.py` (`POST /triggers/{name}`)
 
-Clients may send an `Idempotency-Key` header (case-insensitive) on the three
+Clients may send an `X-Muxi-Idempotency-Key` header (case-insensitive) on the three
 decorated POST endpoints; retries with the same key replay the cached response
 instead of re-executing the handler.
 
