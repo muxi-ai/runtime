@@ -25,6 +25,7 @@ from ....background.transformers import (
     parse_trigger_frontmatter,
     resolve_transformer_url,
 )
+from ...idempotency import idempotent
 from ...responses import (
     APIResponse,
     create_api_response,
@@ -211,6 +212,7 @@ async def get_trigger(request: Request, trigger_name: str) -> JSONResponse:
 
 
 @router.post("/triggers/{trigger_name}", operation_id="execute_trigger")
+@idempotent("execute_trigger")
 async def execute_trigger(
     trigger_name: str,
     request: Request,

@@ -17,6 +17,7 @@ from fastapi.responses import JSONResponse
 from pydantic import BaseModel, Field
 
 from .....datatypes.api import APIEventType, APIObjectType
+from ...idempotency import idempotent
 from ...responses import (
     APIResponse,
     create_error_response,
@@ -232,6 +233,7 @@ async def list_scheduled_jobs(request: Request) -> JSONResponse:
 
 
 @router.post("/scheduler/jobs", response_model=APIResponse)
+@idempotent("scheduler_jobs_create")
 async def create_scheduled_job(request: Request, job: ScheduledJobCreate) -> JSONResponse:
     """
     Create a new scheduled job. AdminKey only.

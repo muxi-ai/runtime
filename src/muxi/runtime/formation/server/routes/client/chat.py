@@ -15,6 +15,7 @@ from pydantic import BaseModel
 
 from .....services import observability
 from .....utils.fastjson import json
+from ...idempotency import idempotent
 from ...utils import get_header_case_insensitive
 
 router = APIRouter(tags=["Chat"])
@@ -138,6 +139,7 @@ class AudioChatRequest(BaseModel):
 
 
 @router.post("/chat", response_model=None, operation_id="chat")
+@idempotent("chat")
 async def chat(
     request: Request, chat_request: ChatRequest
 ) -> Union[StreamingResponse, JSONResponse]:

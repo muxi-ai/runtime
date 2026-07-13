@@ -2,6 +2,24 @@
 
 ## [unreleased]
 
+### Idempotency-Key support (chat, scheduler jobs, triggers)
+
+The `idempotency_key` envelope field comes alive: clients can send an
+`Idempotency-Key` header on POST `/chat`, POST `/scheduler/jobs`, and
+POST `/triggers/{name}`, and retries within 24h replay the original
+response instead of processing twice:
+
+- Keys are scoped per endpoint path and user, so different callers
+  (or different triggers) can reuse the same key safely.
+- Concurrent duplicates are single-flighted: the second request waits
+  for the first and receives its cached response -- a scheduled job
+  or trigger can never fire twice for one key.
+- Only successful (2xx) JSON responses are cached; errors stay
+  retryable, and SSE streaming responses pass through untouched.
+- The key echoes back in the response envelope (`request.idempotency_key`),
+  storage is in-process with TTL eviction, matching the runtime's
+  async request-state semantics.
+
 ### A2A extended auth types (hmac, oauth2, openid)
 
 Agent-to-agent authentication grows beyond shared static keys
