@@ -42,6 +42,11 @@ from muxi.runtime.services.classification import (
 # warmup, then per-query embeddings only). pytest-asyncio's
 # module-scoped fixtures need a matching ``loop_scope`` so the same
 # event loop hosts both the fixture and the test that consumes it.
+#
+# The warmup downloads the e5-small ONNX model from the HuggingFace Hub
+# on a cold cache (via the authenticated hf_xet client in CI).
+# ``scripts/prewarm_classifier.py`` primes the cache before pytest so
+# this path is normally hit warm and offline.
 @pytest_asyncio.fixture(scope="module", loop_scope="module")
 async def classifier():
     c = LocalClassifier()

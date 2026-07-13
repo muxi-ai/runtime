@@ -190,6 +190,49 @@ async def test_apply_sdk_authentication_missing_required_scheme_fails(auth_manag
     assert ok is False
 
 
+async def test_load_credentials_uses_canonical_service_id(auth_manager):
+    await auth_manager.load_credentials_from_formation_config(
+        {
+            "a2a": {
+                "outbound": {
+                    "services": [
+                        {
+                            "id": "analytics",
+                            "url": "https://analytics.example.com",
+                            "auth": {"type": "bearer", "token": "token-123"},
+                        }
+                    ]
+                }
+            }
+        }
+    )
+
+    ok, headers = await auth_manager.apply_sdk_authentication("analytics", {})
+    assert ok is True
+    assert headers["Authorization"] == "Bearer token-123"
+
+
+async def test_load_credentials_accepts_legacy_service_id(auth_manager):
+    await auth_manager.load_credentials_from_formation_config(
+        {
+            "a2a": {
+                "outbound": {
+                    "services": [
+                        {
+                            "service_id": "analytics.example.com",
+                            "auth": {"type": "bearer", "token": "token-123"},
+                        }
+                    ]
+                }
+            }
+        }
+    )
+
+    ok, headers = await auth_manager.apply_sdk_authentication("analytics.example.com", {})
+    assert ok is True
+    assert headers["Authorization"] == "Bearer token-123"
+
+
 # ---------------------------------------------------------------------------
 # HMAC request signing
 # ---------------------------------------------------------------------------

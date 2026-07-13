@@ -2,6 +2,8 @@
 
 ## [unreleased]
 
+## v0.20260713.0
+
 ### Idempotency-Key support (chat, scheduler jobs, triggers)
 
 The `idempotency_key` envelope field comes alive: clients can send an
@@ -42,6 +44,11 @@ and the secrets interpolation the current modes already use:
 - Outbound `oauth2`: client_credentials tokens are fetched from the
   service's `token_url`, cached per service, and refreshed 60s before
   expiry; the token rides as a standard Bearer header.
+- Outbound service auth now uses the canonical `id` for credential
+  registration and matches requests through the service `url`, removing
+  the previous need to duplicate identifiers in `id` and `service_id`.
+  Legacy `service_id` configurations remain accepted with a deprecation
+  warning.
 - Strict mode matching extends to the new types: an hmac server
   rejects bearer/api-key attempts and vice versa. Formation validation
   gains per-type field checks and directional hints (`oauth2` is
