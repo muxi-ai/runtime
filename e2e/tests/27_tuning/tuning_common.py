@@ -23,10 +23,16 @@ from typing import Optional
 
 sys.path.insert(0, str(Path(__file__).parent.parent.parent.parent / "src"))
 
+# The benchmark observation is opt-in via $MUXI_BENCH_ROOT; a globally
+# exported value must not make every area-27 pass spend minutes (and
+# tokens) on real benchmark suites. 27A8 sets it back explicitly.
+os.environ.pop("MUXI_BENCH_ROOT", None)
+
 from muxi.runtime.formation import Formation  # noqa: E402
 
 AREA_DIR = Path(__file__).parent
 ASSETS_DIR = AREA_DIR.parent.parent / "assets"
+REPO_ROOT = AREA_DIR.parent.parent.parent
 
 FORMATION_TEMPLATE = """\
 schema: "1.0.0"
@@ -212,6 +218,11 @@ async def run_tuning_pass(overlord) -> dict:
 def experiments_path_for(formation_id: str) -> Path:
     """Where the tuner's experiment memories live for this formation id."""
     return Path.home() / ".muxi" / formation_id / "observability" / "tuner" / "experiments.json"
+
+
+def tuner_dir_for(formation_id: str) -> Path:
+    """The tuner sidecar directory (experiments, benchmark scores/reports)."""
+    return Path.home() / ".muxi" / formation_id / "observability" / "tuner"
 
 
 def plant_tool_failures(count: int = 30, tool: str = "jira") -> None:

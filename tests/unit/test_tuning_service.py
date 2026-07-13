@@ -19,6 +19,8 @@ from muxi.runtime.services.memory.log.service import CaptainsLogService
 from muxi.runtime.services.observability import spool as spool_module
 from muxi.runtime.services.observability.spool import reset_event_spool
 from muxi.runtime.services.tuning import MuxiMdFile, TuningConfig, TuningService
+from muxi.runtime.services.tuning.benchmark import BENCH_ROOT_ENV, BenchmarkStep
+from muxi.runtime.services.tuning.experiments import ExperimentStore
 from muxi.runtime.services.tuning.service import (
     MAX_REPORT_CHARS,
     _aggregate_segments,
@@ -70,6 +72,13 @@ def spool_event(
     return event
 
 
+@pytest.fixture(autouse=True)
+def no_bench_harness(tmp_path, monkeypatch):
+    """Keep every pass's benchmark observation inert and hermetic."""
+    monkeypatch.delenv(BENCH_ROOT_ENV, raising=False)
+    yield
+
+
 @pytest.fixture
 def isolated_spool(tmp_path, monkeypatch):
     monkeypatch.setattr(spool_module, "_spool_dir", lambda: str(tmp_path / "spool"))
@@ -87,8 +96,10 @@ def captains_log(tmp_path):
 
 
 @pytest.fixture
-def tuning(captains_log):
-    return TuningService(TuningConfig(), FakeOverlord(captains_log))
+def tuning(captains_log, tmp_path):
+    service = TuningService(TuningConfig(), FakeOverlord(captains_log))
+    service.benchmark = BenchmarkStep(base_dir=str(tmp_path / "tuner"))
+    return service
 
 
 class TestAggregation:
@@ -178,8 +189,9 @@ class TestRunOnce:
         assert "small spike" in asyncio.run(captains_log.get_formation_context_block())
         assert tuning.last_run == result
 
-    def test_keep_spool_segments_preserves_files(self, isolated_spool, captains_log):
+    def test_keep_spool_segments_preserves_files(self, isolated_spool, captains_log, tmp_path):
         tuning = TuningService(TuningConfig(), FakeOverlord(captains_log), keep_spool_segments=True)
+        tuning.benchmark = BenchmarkStep(base_dir=str(tmp_path / "tuner"))
         isolated_spool.write_lines([json.dumps(spool_event())])
         result = asyncio.run(tuning.run_once(FakeModel()))
 
@@ -209,8 +221,9 @@ class TestRunOnce:
         assert result["spool_committed"] is True
         assert model.calls == 0
 
-    def test_missing_captains_log_still_consumes(self, isolated_spool):
+    def test_missing_captains_log_still_consumes(self, isolated_spool, tmp_path):
         tuning = TuningService(TuningConfig(), FakeOverlord(captains_log=None))
+        tuning.benchmark = BenchmarkStep(base_dir=str(tmp_path / "tuner"))
         isolated_spool.write_lines([json.dumps(spool_event())])
         result = asyncio.run(tuning.run_once(FakeModel()))
         assert result["spool_committed"] is True
@@ -283,3 +296,116 @@ class TestMuxiMdFile:
     def test_empty_file_reads_none(self, tmp_path):
         (tmp_path / "MUXI.md").write_text("   \n")
         assert MuxiMdFile(str(tmp_path)).read() is None
+
+
+TUNER_RESPONSE = json.dumps(
+    {
+        "muxi_md": "- Ground every QA answer in the retrieved excerpts.",
+        "learnings": [
+            {
+                "learning": "Ground every QA answer in the retrieved excerpts.",
+                "evidence": "benchmark qa_error at 0.25",
+                "metric_key": "benchmark:longmemeval.qa_error",
+            }
+        ],
+        "recommendations": [],
+    }
+)
+
+
+class TunerModel:
+    """FakeModel variant matching the tune step's generate_text signature."""
+
+    def __init__(self, response=TUNER_RESPONSE):
+        self.response = response
+        self.prompts = []
+
+    async def generate_text(self, prompt, **kwargs):
+        self.prompts.append(prompt)
+        return self.response
+
+
+class StubBenchmark:
+    """Canned benchmark observation (or a raising one)."""
+
+    def __init__(self, metrics=None, block="", error=None):
+        self.metrics = metrics or {}
+        self.block = block
+        self.error = error
+        self.observed_with = "never-called"
+
+    async def observe(self, muxi_md_path=None):
+        self.observed_with = muxi_md_path
+        if self.error is not None:
+            raise self.error
+        return {
+            "metrics": self.metrics,
+            "report_block": self.block,
+            "suites_run": sorted({key.split(":")[1].split(".")[0] for key in self.metrics}),
+            "skipped": None,
+        }
+
+
+class TestBenchmarkWiring:
+    """The meta-agent seam: benchmark scores feeding the tune step."""
+
+    @pytest.fixture
+    def cold_start_tuning(self, captains_log, tmp_path):
+        overlord = FakeOverlord(captains_log)
+        (tmp_path / "formation").mkdir()
+        overlord.muxi_md = MuxiMdFile(str(tmp_path / "formation"))
+        service = TuningService(TuningConfig(), overlord)
+        service.experiments_dir = str(tmp_path / "experiments")
+        return service
+
+    def test_benchmark_evidence_tunes_without_traffic(self, isolated_spool, cold_start_tuning):
+        """Cold start: no users, no events -- benchmarks still drive a tune."""
+        tuning = cold_start_tuning
+        tuning.benchmark = StubBenchmark(
+            metrics={"benchmark:longmemeval.qa_error": 0.25},
+            block="- longmemeval (fixture, QA): recall@5 80.0%, QA accuracy 75.0%",
+        )
+        model = TunerModel()
+        result = asyncio.run(tuning.run_once(model))
+
+        assert result["events_read"] == 0
+        assert result["benchmark_suites_run"] == ["longmemeval"]
+        assert result["learnings_recorded"] == 1
+        assert result["muxi_md_applied"] is True
+        assert "retrieved excerpts" in tuning.overlord.muxi_md.read()
+        assert "Latest benchmark results" in model.prompts[0]
+        assert "QA accuracy 75.0%" in model.prompts[0]
+        assert "benchmark:longmemeval.qa_error" in model.prompts[0]
+        # The watched benchmark metric froze its baseline at proposal time.
+        record = ExperimentStore(tuning.experiments_dir).records[0]
+        assert record["metric_key"] == "benchmark:longmemeval.qa_error"
+        assert record["baseline"] == pytest.approx(0.25)
+
+    def test_live_muxi_md_path_reaches_the_observation(self, isolated_spool, cold_start_tuning):
+        tuning = cold_start_tuning
+        tuning.overlord.muxi_md.write("- Existing learning.")
+        stub = StubBenchmark()
+        tuning.benchmark = stub
+        asyncio.run(tuning.run_once(TunerModel()))
+        assert stub.observed_with == tuning.overlord.muxi_md.resolve_path()
+
+    def test_benchmark_failure_never_breaks_the_pass(self, isolated_spool, cold_start_tuning):
+        tuning = cold_start_tuning
+        tuning.benchmark = StubBenchmark(error=RuntimeError("harness exploded"))
+        isolated_spool.write_lines([json.dumps(spool_event(user_id="alice"))])
+        model = TunerModel(DIGEST_RESPONSE)
+        result = asyncio.run(tuning.run_once(model))
+
+        assert result["spool_committed"] is True
+        assert "harness exploded" in result["benchmark_skipped"]
+        assert result["benchmark_suites_run"] == []
+
+    def test_no_evidence_at_all_skips_the_tuner(self, isolated_spool, cold_start_tuning):
+        tuning = cold_start_tuning
+        tuning.benchmark = StubBenchmark()  # harness skipped, no scores yet
+        model = TunerModel()
+        result = asyncio.run(tuning.run_once(model))
+
+        assert result["events_read"] == 0
+        assert model.prompts == []
+        assert "learnings_recorded" not in result

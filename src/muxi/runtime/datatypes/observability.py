@@ -593,6 +593,9 @@ class SystemEvents(Enum):
     TUNING_DISMISSED = "tuning.dismissed"
     # When a pending suggestion is dismissed (hashes are never re-proposed)
 
+    TUNING_BENCHMARK = "tuning.benchmark"
+    # When a tuning pass attempts one benchmark suite (meta-agent observation)
+
     # ===================================================================
     # NETWORK/COMMUNICATION INFRASTRUCTURE
     # ===================================================================
