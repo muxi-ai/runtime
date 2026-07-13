@@ -1,6 +1,6 @@
 # Changelog
 
-## [unreleased]
+## v0.20260713.0
 
 ### Idempotency-Key support (chat, scheduler jobs, triggers)
 
