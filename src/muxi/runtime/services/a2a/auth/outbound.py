@@ -32,6 +32,7 @@ from a2a.types import (
 
 from ... import observability
 from ...secrets import SecretsManager
+from ..identifiers import get_service_identifier
 
 OAUTH2_TOKEN_REFRESH_MARGIN = 60  # seconds before expiry to refresh
 OAUTH2_DEFAULT_TOKEN_TTL = 3600  # seconds, when the server omits expires_in
@@ -489,8 +490,9 @@ class A2AAuthManager:
         services = outbound_config.get("services", [])
 
         for service_config in services:
+            service_id = None
             try:
-                service_id = service_config.get("id")
+                service_id = get_service_identifier(service_config)
                 auth_config = service_config.get("auth", {})
 
                 if not service_id or not auth_config:
