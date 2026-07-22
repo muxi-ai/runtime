@@ -230,7 +230,7 @@ sftp = [
 # x86_64) should pass ``--index-url https://download.pytorch.org/whl/cpu``.
 pytorch = [
     "onellm[cache,local-pytorch]>=0.20260514.0",
-    "torch>=2.12.0",
+    "torch>=2.0.0",
     "torchvision>=0.27.0",
 ]
 
