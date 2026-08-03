@@ -2,6 +2,38 @@
 
 ## [unreleased]
 
+### Sandboxed document conversion + PDF routing to pdf-inspector
+
+Untrusted documents (chat attachments and knowledge source files) are no
+longer parsed in-process: a hostile PDF/DOCX/HTML file could previously
+hang, crash, or balloon the runtime via MarkItDown. Conversion now runs
+in a spawned subprocess with resource limits and typed quarantine
+outcomes (`services/multimodal/document_converter.py`):
+
+- Out-of-process sandbox: bounded input size checked before spawning,
+  `resource.setrlimit` in the worker (CPU seconds everywhere, address
+  space on Linux, output file size on all platforms), and a hard
+  wall-clock timeout that kills the whole process group. Network
+  isolation is best-effort only (proxy env stripped); the containment
+  win is crash/hang/memory isolation, not egress control.
+- Typed `QuarantineReason` (`timeout`, `memory`, `oversize`,
+  `parser_error`, `encrypted`, `unsupported`) returned to callers --
+  never an unhandled exception into the chat path. Existing graceful
+  degradation is preserved: the attachment fails, the chat continues.
+- `application/pdf` / `.pdf` now routes to `pdf-inspector` (new
+  dependency): local native-text classification and structured markdown
+  extraction. If pdf-inspector cannot parse a given PDF, that file
+  falls back to sandboxed MarkItDown -- PDFs never fail harder than
+  before. All other convertible types stay on MarkItDown, now inside
+  the same sandbox.
+- Both call sites converted: the overlord chat-attachment path and the
+  `FileKnowledge` loader (reused by the knowledge handler and the
+  reasoning tree builder). Well-formed files produce identical text to
+  the previous in-process path.
+- New observability events: `document.conversion.completed`,
+  `document.conversion.quarantined` (with reason), and
+  `document.conversion.fallback`.
+
 ## v0.20260713.0
 
 ### Idempotency-Key support (chat, scheduler jobs, triggers)
