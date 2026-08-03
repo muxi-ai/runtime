@@ -5711,9 +5711,7 @@ Agent response: {raw_response}"""
 
                     chunk_content = chunk.get("content", "")
 
-                    await self.add_to_buffer_memory(
-                        message=chunk_content, metadata=chunk_metadata
-                    )
+                    await self.add_to_buffer_memory(message=chunk_content, metadata=chunk_metadata)
 
                 # Add to processed docs list with actual content
                 processed_docs.append(
