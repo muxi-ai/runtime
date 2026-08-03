@@ -2,6 +2,24 @@
 
 ## [unreleased]
 
+### Dependency security updates: pypdf 6.14.2, nltk held below 3.10
+
+- `pypdf` bumped to `>=6.14.2`, clearing four open advisories (two
+  infinite-loop DoS bugs on unterminated inline images, long runtimes on
+  repeated malformed xref entries, and unbounded memory on wrong image
+  dimensions). Defense in depth on top of the new conversion sandbox --
+  a malicious PDF now has to beat both the patched parser and the
+  subprocess resource limits.
+- `nltk` deliberately pinned `>=3.9.4,<3.10`: the 3.10 line's new
+  `inisec` import guard blocks any nltk-initiated import whose resolved
+  path is inside the current working directory, which breaks every
+  in-project `.venv` layout outright (`import nltk` fails from the repo
+  root, and the `-P` remedy it suggests does not help). MUXI's nltk
+  surface is punkt tokenization plus a fixed-URL `nltk.download("punkt")`;
+  the 3.10.0 advisories (corpus reader traversal/ReDoS, ENFORCE-mode
+  download filtering) are not reachable from that surface. Revisit when
+  upstream fixes the cwd check.
+
 ### Sandboxed document conversion + PDF routing to pdf-inspector
 
 Untrusted documents (chat attachments and knowledge source files) are no
