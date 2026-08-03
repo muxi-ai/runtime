@@ -17,6 +17,7 @@ for the scheduler and buffer memory.
 from types import SimpleNamespace
 from typing import Any, Dict, List, Optional
 
+import pytest
 from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
 
 from muxi.runtime.datatypes.response import MuxiResponse
@@ -744,7 +745,10 @@ class _SqliteDBManager:
         return self._session_maker()
 
 
-async def _make_db_manager() -> _SqliteDBManager:
+@pytest.fixture
+async def sqlite_db_manager():
+    # Disposed on teardown: each pooled aiosqlite connection owns a worker
+    # thread that outlives the test's event loop otherwise.
     engine = create_async_engine("sqlite+aiosqlite://")
     async with engine.begin() as conn:
         await conn.run_sync(
@@ -752,7 +756,8 @@ async def _make_db_manager() -> _SqliteDBManager:
                 sync_conn, tables=[User.__table__, UserIdentifier.__table__]
             )
         )
-    return _SqliteDBManager(async_sessionmaker(engine, expire_on_commit=False))
+    yield _SqliteDBManager(async_sessionmaker(engine, expire_on_commit=False))
+    await engine.dispose()
 
 
 class TestIdentity:
@@ -766,9 +771,8 @@ class TestIdentity:
         response = await run_command(overlord, "/identity")
         assert "requires persistent memory" in response.content
 
-    async def test_link_list_unlink_roundtrip(self):
-        db_manager = await _make_db_manager()
-        overlord = make_overlord(multi_user=True, db_manager=db_manager)
+    async def test_link_list_unlink_roundtrip(self, sqlite_db_manager):
+        overlord = make_overlord(multi_user=True, db_manager=sqlite_db_manager)
 
         response = await run_command(overlord, "/identity", user_id="ran@example.com")
         assert "No other identifiers are linked yet" in response.content
@@ -788,9 +792,8 @@ class TestIdentity:
         response = await run_command(overlord, "/identity", user_id="ran@example.com")
         assert "u12345" not in response.content
 
-    async def test_link_normalizes_mixed_case_type(self):
-        db_manager = await _make_db_manager()
-        overlord = make_overlord(multi_user=True, db_manager=db_manager)
+    async def test_link_normalizes_mixed_case_type(self, sqlite_db_manager):
+        overlord = make_overlord(multi_user=True, db_manager=sqlite_db_manager)
         response = await run_command(
             overlord, "/identity link tg-1 Telegram", user_id="ran@example.com"
         )
@@ -799,9 +802,8 @@ class TestIdentity:
         assert "tg-1 (telegram)" in response.content
         assert "Telegram" not in response.content
 
-    async def test_link_conflict_with_other_user(self):
-        db_manager = await _make_db_manager()
-        overlord = make_overlord(multi_user=True, db_manager=db_manager)
+    async def test_link_conflict_with_other_user(self, sqlite_db_manager):
+        overlord = make_overlord(multi_user=True, db_manager=sqlite_db_manager)
 
         # bob links an identifier to his own account first
         await run_command(overlord, "/identity link shared-handle", user_id="bob@example.com")
@@ -810,17 +812,15 @@ class TestIdentity:
         )
         assert "already linked to a different user" in response.content
 
-    async def test_cannot_unlink_current_identity(self):
-        db_manager = await _make_db_manager()
-        overlord = make_overlord(multi_user=True, db_manager=db_manager)
+    async def test_cannot_unlink_current_identity(self, sqlite_db_manager):
+        overlord = make_overlord(multi_user=True, db_manager=sqlite_db_manager)
         response = await run_command(
             overlord, "/identity unlink ran@example.com", user_id="ran@example.com"
         )
         assert "cannot unlink" in response.content.lower()
 
-    async def test_usage_on_bad_args(self):
-        db_manager = await _make_db_manager()
-        overlord = make_overlord(multi_user=True, db_manager=db_manager)
+    async def test_usage_on_bad_args(self, sqlite_db_manager):
+        overlord = make_overlord(multi_user=True, db_manager=sqlite_db_manager)
         response = await run_command(overlord, "/identity frobnicate", user_id="ran@example.com")
         assert "Usage: /identity" in response.content
 
