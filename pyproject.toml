@@ -76,11 +76,17 @@ dependencies = [
     # though MUXI never imports it.
     "markitdown[docx,pdf,pptx,xls,xlsx]>=0.1.6",  # Convert various file formats to Markdown
     "pdf-inspector>=0.2.6",  # PDF classification + native-text markdown extraction (sandboxed)
-    "pypdf>=6.13.2",  # PDF document processing (successor to PyPDF2); CVE-2026-33123 fixed in 6.9.1
+    "pypdf>=6.14.2",  # PDF document processing (successor to PyPDF2); inline-image loop + xref DoS advisories fixed in 6.14.x
     "python-docx>=1.2.0",  # Word document processing
     "markdownify>=1.2.2",  # HTML to Markdown conversion
     "beautifulsoup4>=4.15.0",  # HTML parsing and validation
-    "nltk>=3.9.4",  # Natural language processing for chunking
+    # nltk held below 3.10: its new inisec guard blocks nltk-initiated imports whose
+    # resolved path sits inside cwd, which breaks any in-project .venv layout outright
+    # (import nltk fails from the repo root, even with -P). The 3.10.0 advisories cover
+    # corpus readers (Framenet/NKJP/Reviews) and pathsec ENFORCE-mode download filtering,
+    # none of which MUXI exercises: our only surface is punkt tokenization plus a
+    # fixed-URL nltk.download("punkt"). Revisit when upstream fixes the cwd check.
+    "nltk>=3.9.4,<3.10",  # Natural language processing for chunking
     "spacy>=3.8.14",  # Advanced NLP for semantic chunking (compatible with NumPy 2.x)
 
     # PII entity redaction (names/addresses/orgs/DOB/financial) for logs,
