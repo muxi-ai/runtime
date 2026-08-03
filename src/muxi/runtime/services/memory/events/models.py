@@ -346,6 +346,14 @@ class MemoryEvent(Base, AsyncModelMixin):
     agent_id = Column(String(255), nullable=True)
     conversation_id = Column(String(255), nullable=True)
 
+    # Observability request that produced this event (RequestContext.id),
+    # captured at record() time from the request-context ContextVar. NULL
+    # for events with no originating request (maintenance, synthesis,
+    # legacy backfill). Not indexed: no read path filters by request_id
+    # today -- provenance resolves event -> request, and the replay /
+    # forwarder paths scan by id cursor.
+    request_id = Column(String(255), nullable=True)
+
     __table_args__ = (
         # Idempotency: the same (source, source_id) cannot be written twice
         # for a scope while live. Partial unique index works on both
@@ -397,6 +405,7 @@ class MemoryEvent(Base, AsyncModelMixin):
             "deleted_reason": self.deleted_reason,
             "agent_id": self.agent_id,
             "conversation_id": self.conversation_id,
+            "request_id": self.request_id,
         }
 
 

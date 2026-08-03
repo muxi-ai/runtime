@@ -11,10 +11,12 @@ from __future__ import annotations
 
 import pytest
 
+from muxi.runtime.datatypes.observability import RequestContext
 from muxi.runtime.services.db import Base, DatabaseManager
 from muxi.runtime.services.memory.events import KnowledgeGraphProjector, MemoryEventService
 from muxi.runtime.services.memory.events.provenance import entity_provenance, event_provenance
 from muxi.runtime.services.memory.graph.service import KnowledgeGraphService
+from muxi.runtime.services.observability.context import _current_request_context
 
 FORMATION_ID = "provenance-test-formation"
 USER = "u1"
@@ -101,6 +103,29 @@ class TestProvenanceChain:
 
     async def test_unknown_event_returns_empty_chain(self, events):
         assert await events.provenance_chain(USER, 424242) == []
+
+    async def test_chain_surfaces_originating_request_id(self, events, graph):
+        # Every hop recorded inside a request carries that request's id,
+        # so a chain answers "which request produced this?".
+        token = _current_request_context.set(RequestContext(id="req_prov1"))
+        try:
+            await seed_conversation(events, graph)
+        finally:
+            _current_request_context.reset(token)
+        graph_events = await events.list_events(USER, event_types=["graph.extracted"])
+        chain = await events.provenance_chain(USER, graph_events[0]["id"])
+        assert [e["request_id"] for e in chain] == ["req_prov1", "req_prov1"]
+
+    async def test_event_provenance_renders_request_id(self, events, graph):
+        token = _current_request_context.set(RequestContext(id="req_prov2"))
+        try:
+            await seed_conversation(events, graph)
+        finally:
+            _current_request_context.reset(token)
+        graph_events = await events.list_events(USER, event_types=["graph.extracted"])
+        result = await event_provenance(events, USER, graph_events[0]["public_id"])
+        assert result["event"]["request_id"] == "req_prov2"
+        assert [e["request_id"] for e in result["chain"]] == ["req_prov2", "req_prov2"]
 
 
 class TestEntityProvenance:

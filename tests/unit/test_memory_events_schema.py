@@ -109,6 +109,7 @@ class TestTableCreation:
             "deleted_reason",
             "agent_id",
             "conversation_id",
+            "request_id",
         }
 
     def test_checkpoint_columns(self, engine):
@@ -162,6 +163,17 @@ class TestIdempotencyIndex:
         session.add(make_event(source_id="turn/1"))
         session.commit()
         session.add(make_event(source_id="turn/1"))
+        with pytest.raises(IntegrityError):
+            session.commit()
+        session.rollback()
+
+    def test_duplicate_source_id_rejected_across_request_ids(self, session):
+        # request_id is not part of the idempotency key: the same
+        # (formation, user, source, source_id) conflicts even when the
+        # duplicate arrives from a different request.
+        session.add(make_event(source_id="turn/1", request_id="req_a"))
+        session.commit()
+        session.add(make_event(source_id="turn/1", request_id="req_b"))
         with pytest.raises(IntegrityError):
             session.commit()
         session.rollback()

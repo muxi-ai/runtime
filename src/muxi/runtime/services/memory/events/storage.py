@@ -77,6 +77,7 @@ class MemoryEventStorage:
         conversation_id: Optional[str] = None,
         scope_type: Optional[str] = None,
         scope_id: Optional[str] = None,
+        request_id: Optional[str] = None,
     ) -> Tuple[Dict[str, Any], bool]:
         """
         Append one event to the log after validating its payload.
@@ -87,6 +88,12 @@ class MemoryEventStorage:
         rows. Default (None) is the implicit user scope with scope_id
         mirroring user_id -- byte-identical to the substrate's Phase 1
         shape.
+
+        ``request_id`` links the event to the observability request that
+        produced it (``RequestContext.id``); None for events with no
+        originating request. It is not part of the idempotency key: a
+        duplicate (source, source_id) append returns the existing event
+        regardless of the request that retried it.
 
         Returns:
             (event dict, created) -- created is False when an idempotent
@@ -134,6 +141,7 @@ class MemoryEventStorage:
                 conversation_id=conversation_id,
                 scope_type=scope_type,
                 scope_id=scope_id,
+                request_id=request_id,
             )
         except IntegrityError:
             # Lost an idempotency race: another appender inserted the same
