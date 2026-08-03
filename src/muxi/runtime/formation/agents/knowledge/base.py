@@ -231,6 +231,25 @@ class FileKnowledge(KnowledgeSource):
         """
         try:
             if self._is_markitdown_supported(file_path):
+                # Enforce max_file_size BEFORE reading the file into memory
+                # (same pre-read guard as process_with_chunk_manager), so the
+                # reasoning-tree path cannot allocate an oversize file either.
+                file_size = os.path.getsize(file_path)
+                if file_size > self.max_file_size:
+                    observability.observe(
+                        event_type=observability.ErrorEvents.RESOURCE_EXHAUSTED,
+                        level=observability.EventLevel.WARNING,
+                        description=(
+                            f"Skipping large file ({file_size} bytes > {self.max_file_size})"
+                        ),
+                        data={
+                            "file_path": file_path,
+                            "file_size": file_size,
+                            "limit": self.max_file_size,
+                        },
+                    )
+                    return f"[Error loading file: {os.path.basename(file_path)}]"
+
                 # Convert supported file types in the sandboxed subprocess
                 # (pdf-inspector for PDFs, MarkItDown for everything else).
                 with open(file_path, "rb") as f:

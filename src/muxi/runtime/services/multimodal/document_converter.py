@@ -22,7 +22,10 @@
 # Honest limits (v1): there is no network namespace or seccomp on a plain POSIX
 # host. Proxy environment variables are stripped from the worker env as a
 # best-effort measure, but the subprocess boundary + rlimits + timeout is the
-# actual containment win; egress control is not claimed.
+# actual containment win; egress control is not claimed. On Windows the
+# resource module does not exist, so only the process boundary, the pre-spawn
+# input cap, the wall-clock timeout (plain kill - no process groups), and the
+# explicit output-size check apply.
 #
 # Routing: application/pdf (or a .pdf extension) goes to pdf-inspector, whose
 # native-text path runs locally and emits structured markdown. Everything else
@@ -127,9 +130,11 @@ def _worker_env() -> dict:
 
 def _classify_signal(sig: int) -> QuarantineReason:
     """Classify a worker killed by a signal (rlimit kills and parser crashes)."""
-    if sig == signal.SIGXCPU:
+    # getattr: SIGXCPU/SIGKILL/SIGXFSZ do not exist on Windows, where negative
+    # return codes cannot occur anyway (no signal deaths).
+    if sig == getattr(signal, "SIGXCPU", -1):
         return QuarantineReason.TIMEOUT
-    if sig == signal.SIGKILL:
+    if sig == getattr(signal, "SIGKILL", -1):
         # RLIMIT_AS hard kill / OOM killer.
         return QuarantineReason.MEMORY
     if sig == getattr(signal, "SIGXFSZ", -1):
@@ -161,6 +166,10 @@ def _run_worker(
         "--max-output-bytes",
         str(max_output_bytes),
     ]
+    # POSIX: give the worker its own process group so the timeout kill also
+    # reaps any helpers it spawned. Windows has neither start_new_session nor
+    # os.killpg; a plain kill() of the worker is the fallback there.
+    posix = os.name == "posix"
     process = subprocess.Popen(  # noqa: S603 - fixed argv, no shell
         cmd,
         stdin=subprocess.DEVNULL,
@@ -168,15 +177,19 @@ def _run_worker(
         stderr=subprocess.PIPE,
         env=_worker_env(),
         cwd=os.path.dirname(input_path),
-        start_new_session=True,  # own process group so we can kill descendants
+        start_new_session=posix,
     )
     try:
         _, stderr = process.communicate(timeout=timeout)
     except subprocess.TimeoutExpired:
-        # Kill the entire process group; the worker may have spawned helpers.
-        try:
-            os.killpg(process.pid, signal.SIGKILL)
-        except (ProcessLookupError, PermissionError):
+        # Kill the entire process group where available; the worker may have
+        # spawned helpers. Fall back to killing just the worker.
+        if posix:
+            try:
+                os.killpg(process.pid, signal.SIGKILL)
+            except (ProcessLookupError, PermissionError):
+                process.kill()
+        else:
             process.kill()
         process.wait()
         return ConversionResult(

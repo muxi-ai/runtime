@@ -14,9 +14,13 @@
 #
 # Isolation model (v1, honest limits):
 #   - Process boundary: parser crashes/hangs kill this process, not the runtime.
-#   - resource.setrlimit: CPU seconds, address space (Linux only - RLIMIT_AS is
-#     unreliable on macOS), and output file size (RLIMIT_FSIZE, all platforms).
-#   - The parent enforces a hard wall-clock timeout and kills the process group.
+#   - resource.setrlimit (POSIX only): CPU seconds, address space (Linux only -
+#     RLIMIT_AS is unreliable on macOS), and output file size (RLIMIT_FSIZE).
+#     On Windows the resource module does not exist, so no rlimits apply; the
+#     parent's wall-clock timeout and the explicit output-length check are the
+#     enforced limits there.
+#   - The parent enforces a hard wall-clock timeout and kills the process group
+#     (plain kill on platforms without process groups).
 #   - Network isolation is best-effort only: proxy env vars are stripped by the
 #     parent, but there is no network namespace/seccomp on a plain POSIX host.
 #     The subprocess CAN technically open sockets; the win at this layer is
@@ -32,8 +36,12 @@
 
 import argparse
 import json
-import resource
 import sys
+
+try:
+    import resource  # POSIX only; unavailable on Windows
+except ImportError:  # pragma: no cover - Windows
+    resource = None
 
 ENGINE_PDF_INSPECTOR = "pdf_inspector"
 ENGINE_MARKITDOWN = "markitdown"
@@ -49,6 +57,10 @@ REASON_UNSUPPORTED = "unsupported"
 
 def _apply_rlimits(cpu_seconds: int, memory_bytes: int, max_output_bytes: int) -> None:
     """Apply resource limits to this process before any parsing happens."""
+    if resource is None:
+        # Windows: no rlimits available. The parent's wall-clock timeout and
+        # the explicit output-length check below are the only limits enforced.
+        return
     # CPU time: hard backstop against parser infinite loops even if the parent
     # dies before its wall-clock timeout fires. SIGXCPU at soft, SIGKILL at hard.
     try:

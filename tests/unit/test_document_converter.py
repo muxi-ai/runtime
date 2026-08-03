@@ -227,6 +227,22 @@ def test_runaway_parse_killed_at_wall_clock_timeout():
 # ---------------------------------------------------------------------------
 
 
+def test_knowledge_loader_skips_oversize_file_before_reading(tmp_path):
+    """FileKnowledge enforces max_file_size by stat BEFORE reading the bytes.
+
+    The vector-ingestion path always had a pre-read size gate; the direct
+    _load_file_content path (used by the reasoning tree builder) must apply
+    the same guard instead of allocating the whole file first.
+    """
+    from muxi.runtime.formation.agents.knowledge.base import FileKnowledge
+
+    big = tmp_path / "big.docx"
+    big.write_bytes(b"x" * 4096)
+    source = FileKnowledge(path=str(big), max_file_size=1024)
+    content = source._load_file_content(str(big))
+    assert content == "[Error loading file: big.docx]"
+
+
 def test_async_wrapper_converts():
     result = asyncio.run(convert_document_async(make_pdf_bytes(), "hello.pdf"))
     assert result.ok
