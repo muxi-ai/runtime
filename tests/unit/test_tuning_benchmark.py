@@ -83,7 +83,10 @@ def build_harness(root: Path, runner_source: str = FAKE_RUNNER) -> Path:
 @pytest.fixture
 def step(tmp_path):
     step = BenchmarkStep(base_dir=str(tmp_path / "tuner"))
-    step.suite_timeout_seconds = 30.0
+    # Generous: hosted CI runners have been seen taking far longer than
+    # local hardware to spawn interpreters. The timeout test overrides
+    # this with its own tight value.
+    step.suite_timeout_seconds = 120.0
     return step
 
 
@@ -155,6 +158,19 @@ class TestObserve:
 
         assert sorted(result["suites_run"]) == sorted(s["name"] for s in SUITES)
         assert result["skipped"] is None
+
+        # The observe path degrades to carried-forward scores by design,
+        # so a broken environment (e.g. a CI runner failing the
+        # subprocess spawn) would otherwise surface as an opaque KeyError
+        # on the metrics. Fail loudly with the attempt's real error first.
+        sidecar = json.loads((tmp_path / "tuner" / "benchmarks.json").read_text())
+        for suite in SUITES:
+            record = sidecar["suites"][suite["name"]]
+            assert record["succeeded"] is True, (
+                f"benchmark suite {suite['name']} soft-failed "
+                f"(exit_code={record.get('exit_code')}): {record.get('error')}"
+            )
+
         for suite in SUITES:
             name = suite["name"]
             assert result["metrics"][f"benchmark:{name}.recall_gap"] == pytest.approx(0.2)
@@ -163,10 +179,8 @@ class TestObserve:
                 result["report_block"]
             )
 
-        sidecar = json.loads((tmp_path / "tuner" / "benchmarks.json").read_text())
         for suite in SUITES:
             record = sidecar["suites"][suite["name"]]
-            assert record["succeeded"] is True
             assert record["scores"]["recall_at_k"] == 0.8
             assert record["previous_scores"] is None
 
