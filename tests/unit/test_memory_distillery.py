@@ -33,6 +33,7 @@ Covers the distillery surface at the unit level:
 
 from __future__ import annotations
 
+import asyncio
 import base64
 import time
 from types import SimpleNamespace
@@ -49,6 +50,8 @@ from muxi.runtime.services.memory.distillery import (
     PROVISIONAL_CONFIDENCE_CAP,
     SOURCE_DISTILLERY,
     DistilleryAuthError,
+    DistilleryQuotaCounter,
+    DistilleryQuotaStore,
     DistilleryRateLimitError,
     DistilleryRevokedError,
     DistilleryUnavailableError,
@@ -76,6 +79,7 @@ TABLES = [
     MemoryEvent.__table__,
     ProjectionCheckpoint.__table__,
     RegisteredDistillery.__table__,
+    DistilleryQuotaCounter.__table__,
 ]
 
 
@@ -830,3 +834,203 @@ class TestQuotaOrdering:
         # The 429 fired before any append: the substrate is untouched and
         # the full batch remains retryable.
         assert await memory_events.list_events("alice@acme.com") == []
+
+
+# ----------------------------------------------------------------------
+# Durable quota counters (DB-backed; restart-proof, replica-safe)
+# ----------------------------------------------------------------------
+
+
+class TestDurableQuota:
+    async def test_quota_survives_service_restart(self, memory_events, keypair):
+        # Exhaust the quota with one service instance...
+        first_overlord = make_overlord(memory_events)
+        first_service = MemoryDistilleryService(first_overlord)
+        record = await register(first_service, keypair, scope={"max_events_per_day": 2})
+        outcome = await accept(
+            first_service,
+            record,
+            make_batch([fact_event(source_id="s1"), fact_event(source_id="s2")]),
+        )
+        await finish_job(first_overlord, outcome["processing_id"])
+
+        # ...then "restart": a brand-new service instance over the same
+        # database must still see the day as exhausted (the old in-process
+        # dict reset to zero here; the DB counter must not).
+        restarted = MemoryDistilleryService(make_overlord(memory_events))
+        with pytest.raises(DistilleryRateLimitError):
+            await accept(restarted, record, make_batch([fact_event(source_id="s3")]))
+
+    async def test_quota_resets_across_days(self, memory_events, keypair, monkeypatch):
+        overlord = make_overlord(memory_events)
+        service = MemoryDistilleryService(overlord)
+        record = await register(service, keypair, scope={"max_events_per_day": 1})
+
+        outcome = await accept(service, record, make_batch([fact_event(source_id="s1")]))
+        await finish_job(overlord, outcome["processing_id"])
+        with pytest.raises(DistilleryRateLimitError):
+            await accept(service, record, make_batch([fact_event(source_id="s2")]))
+
+        # UTC day rollover: the date key changes, so the quota is fresh.
+        monkeypatch.setattr(DistilleryQuotaStore, "today", staticmethod(lambda: "2999-01-01"))
+        rolled = await accept(service, record, make_batch([fact_event(source_id="s2")]))
+        assert rolled["accepted"] == 1
+        await finish_job(overlord, rolled["processing_id"])
+
+    async def test_concurrent_consumes_never_overshoot(self, memory_events):
+        # Hammer the guarded upsert directly: 40 concurrent single-slot
+        # consumers against a limit of 15 -- exactly 15 may win, and the
+        # stored counter must equal the limit (no lost updates, no
+        # overshoot from a check-then-act window).
+        store = DistilleryQuotaStore(memory_events.db_manager, FORMATION_ID)
+        day = DistilleryQuotaStore.today()
+        results = await asyncio.gather(
+            *(store.try_consume("dst-hammer", day, 1, 15) for _ in range(40))
+        )
+        assert sum(results) == 15
+        assert await store.used("dst-hammer", day) == 15
+
+    async def test_concurrent_batches_respect_limit_end_to_end(self, memory_events, keypair):
+        overlord = make_overlord(memory_events)
+        service = MemoryDistilleryService(overlord)
+        record = await register(service, keypair, scope={"max_events_per_day": 3})
+
+        async def submit_one(i):
+            return await accept(service, record, make_batch([fact_event(source_id=f"c{i}")]))
+
+        outcomes = await asyncio.gather(*(submit_one(i) for i in range(6)), return_exceptions=True)
+        accepted = [o for o in outcomes if isinstance(o, dict)]
+        limited = [o for o in outcomes if isinstance(o, DistilleryRateLimitError)]
+        unexpected = [o for o in outcomes if not isinstance(o, (dict, DistilleryRateLimitError))]
+        assert unexpected == []
+        assert len(accepted) == 3 and len(limited) == 3
+        for outcome in accepted:
+            await finish_job(overlord, outcome["processing_id"])
+        assert sum(o["accepted"] for o in accepted) == 3
+
+    async def test_batch_is_all_or_nothing(self, memory_events, keypair):
+        overlord = make_overlord(memory_events)
+        service = MemoryDistilleryService(overlord)
+        record = await register(service, keypair, scope={"max_events_per_day": 2})
+
+        # A 3-event batch against a 2/day limit: rejected as a whole, and
+        # the rejection consumed zero slots.
+        with pytest.raises(DistilleryRateLimitError):
+            await accept(
+                service,
+                record,
+                make_batch([fact_event(source_id=f"s{i}") for i in range(3)]),
+            )
+        used = await service.quota_store.used(record["distillery_id"], DistilleryQuotaStore.today())
+        assert used == 0
+
+        # The full limit is still available for a fitting batch.
+        fits = await accept(
+            service,
+            record,
+            make_batch([fact_event(source_id="s0"), fact_event(source_id="s1")]),
+        )
+        assert fits["accepted"] == 2
+        await finish_job(overlord, fits["processing_id"])
+
+    async def test_within_batch_duplicates_release_reserved_slots(self, memory_events, keypair):
+        overlord = make_overlord(memory_events)
+        service = MemoryDistilleryService(overlord)
+        record = await register(service, keypair, scope={"max_events_per_day": 2})
+
+        # Two events sharing one source_id: pass 1 sees both as net-new
+        # (the key isn't in the DB yet), pass 2 creates one and resolves
+        # the other as a duplicate -- its reserved slot must be returned.
+        outcome = await accept(
+            service,
+            record,
+            make_batch([fact_event(source_id="dup"), fact_event(source_id="dup")]),
+        )
+        assert outcome["accepted"] == 1
+        assert outcome["duplicates"] == 1
+        await finish_job(overlord, outcome["processing_id"])
+        used = await service.quota_store.used(record["distillery_id"], DistilleryQuotaStore.today())
+        assert used == 1
+
+    async def test_crash_leaked_reservation_heals_on_restart(self, memory_events, keypair):
+        overlord = make_overlord(memory_events)
+        service = MemoryDistilleryService(overlord)
+        record = await register(service, keypair, scope={"max_events_per_day": 3})
+
+        # One real accepted event (ground truth = 1)...
+        outcome = await accept(service, record, make_batch([fact_event(source_id="s1")]))
+        await finish_job(overlord, outcome["processing_id"])
+
+        # ...then simulate a crash between reserve and settle: two slots
+        # consumed durably with no events ever appended.
+        day = DistilleryQuotaStore.today()
+        assert await service.quota_store.try_consume(record["distillery_id"], day, 2, 3)
+        assert await service.quota_store.used(record["distillery_id"], day) == 3
+
+        # A restarted process reconciles the counter down to ground truth
+        # (1 accepted event) on first touch, so a submission within the
+        # real headroom succeeds instead of 429ing until day rollover.
+        restarted_overlord = make_overlord(memory_events)
+        restarted = MemoryDistilleryService(restarted_overlord)
+        healed = await accept(restarted, record, make_batch([fact_event(source_id="s2")]))
+        assert healed["accepted"] == 1
+        await finish_job(restarted_overlord, healed["processing_id"])
+        # Counter reflects truth again: 1 healed + 1 newly accepted.
+        assert await restarted.quota_store.used(record["distillery_id"], day) == 2
+
+        # The limit itself still holds against real events (2/3 used).
+        final = await accept(restarted, record, make_batch([fact_event(source_id="s3")]))
+        assert final["accepted"] == 1
+        await finish_job(restarted_overlord, final["processing_id"])
+        with pytest.raises(DistilleryRateLimitError):
+            await accept(restarted, record, make_batch([fact_event(source_id="s4")]))
+
+    async def test_reconcile_never_undercuts_inflight_consumes(self, memory_events):
+        # Old process leaked 5 slots (no events behind them), then died.
+        leaked = DistilleryQuotaStore(memory_events.db_manager, FORMATION_ID)
+        day = DistilleryQuotaStore.today()
+        assert await leaked.try_consume("dst-heal", day, 5, 100)
+
+        # New process: 30 concurrent consumers, each taking the real
+        # reserve path (reconcile-then-consume). Reconcile must run once,
+        # before any of this process's consumes, and never again -- if it
+        # re-ran mid-hammer it would erase in-flight consumes and let more
+        # than the limit through.
+        store = DistilleryQuotaStore(memory_events.db_manager, FORMATION_ID)
+
+        async def one_consume():
+            await store.ensure_reconciled("dst-heal", day)
+            return await store.try_consume("dst-heal", day, 1, 10)
+
+        results = await asyncio.gather(*(one_consume() for _ in range(30)))
+        assert sum(results) == 10  # healed 5 -> 0, then exactly the limit
+        assert await store.used("dst-heal", day) == 10
+
+    async def test_reconcile_never_invents_headroom(self, memory_events, keypair):
+        # Normal path: counter equals ground truth, reconcile is a no-op
+        # -- an exhausted quota backed by real events stays exhausted
+        # across restarts (this is the durable-counter guarantee).
+        overlord = make_overlord(memory_events)
+        service = MemoryDistilleryService(overlord)
+        record = await register(service, keypair, scope={"max_events_per_day": 2})
+        outcome = await accept(
+            service,
+            record,
+            make_batch([fact_event(source_id="s1"), fact_event(source_id="s2")]),
+        )
+        await finish_job(overlord, outcome["processing_id"])
+
+        restarted = MemoryDistilleryService(make_overlord(memory_events))
+        with pytest.raises(DistilleryRateLimitError):
+            await accept(restarted, record, make_batch([fact_event(source_id="s3")]))
+
+    async def test_old_day_counters_are_pruned_on_consume(self, memory_events):
+        store = DistilleryQuotaStore(memory_events.db_manager, FORMATION_ID)
+        await store.try_consume("dst-old", "2020-01-01", 5, 10)
+        assert await store.used("dst-old", "2020-01-01") == 5
+
+        # A consume for today prunes day buckets past the retention window.
+        day = DistilleryQuotaStore.today()
+        assert await store.try_consume("dst-new", day, 1, 10)
+        assert await store.used("dst-old", "2020-01-01") == 0
+        assert await store.used("dst-new", day) == 1

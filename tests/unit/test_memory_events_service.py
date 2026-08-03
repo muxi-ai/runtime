@@ -9,8 +9,11 @@ hard-purge lifecycle.
 
 from __future__ import annotations
 
+from contextlib import contextmanager
+
 import pytest
 
+from muxi.runtime.datatypes.observability import RequestContext
 from muxi.runtime.services.db import Base, DatabaseManager
 from muxi.runtime.services.memory.events.models import (
     EVENT_FACT_EXTRACTED,
@@ -18,6 +21,7 @@ from muxi.runtime.services.memory.events.models import (
     EVENT_USER_DELETION,
 )
 from muxi.runtime.services.memory.events.service import MemoryEventService
+from muxi.runtime.services.observability.context import _current_request_context
 
 FORMATION_ID = "events-test-formation"
 
@@ -49,6 +53,16 @@ class RecordingProjector:
     async def reset(self, user_id):
         self.resets.append(str(user_id))
         self.applied = []
+
+
+@contextmanager
+def request_context(request_id: str):
+    """Activate an observability RequestContext for the enclosed block."""
+    token = _current_request_context.set(RequestContext(id=request_id))
+    try:
+        yield
+    finally:
+        _current_request_context.reset(token)
 
 
 async def record_fact(service, memory="Likes tea", **kwargs):
@@ -96,6 +110,27 @@ class TestRecord:
         service.enabled = True
         assert await service.list_events("u1") == []
 
+    async def test_record_inside_request_context_stamps_request_id(self, service):
+        with request_context("req_abc123"):
+            event = await record_fact(service)
+        assert event["request_id"] == "req_abc123"
+        assert (await service.list_events("u1"))[0]["request_id"] == "req_abc123"
+
+    async def test_record_outside_request_context_stores_null(self, service):
+        event = await record_fact(service)
+        assert event["request_id"] is None
+
+    async def test_idempotency_unaffected_by_differing_request_ids(self, service):
+        # Same (source, source_id) retried from a different request must
+        # still dedup; the original event's request_id is preserved.
+        with request_context("req_first"):
+            first = await record_fact(service, source_id="conv/1")
+        with request_context("req_retry"):
+            second = await record_fact(service, memory="other", source_id="conv/1")
+        assert second["id"] == first["id"]
+        assert second["request_id"] == "req_first"
+        assert len(await service.list_events("u1")) == 1
+
 
 class TestRebuild:
     async def test_rebuild_resets_replays_and_checkpoints(self, service):
@@ -119,6 +154,19 @@ class TestRebuild:
 
         checkpoint = await service.storage.get_checkpoint("test_projection", "u1")
         assert checkpoint["last_event_id"] == second["id"]
+
+    async def test_rebuild_preserves_request_id(self, service):
+        # Rebuild replays the log read-only: the request_id recorded at
+        # append time survives, and the replayed event carries it.
+        projector = RecordingProjector()
+        service.register_projector(projector)
+        with request_context("req_rebuild"):
+            event = await record_fact(service)
+
+        await service.rebuild("u1")
+        assert projector.applied == [event["id"]]
+        replayed = (await service.list_events("u1"))[0]
+        assert replayed["request_id"] == "req_rebuild"
 
     async def test_rebuild_specific_projection_only(self, service):
         target = RecordingProjector(name="target")

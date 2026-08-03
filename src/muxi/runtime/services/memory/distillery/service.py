@@ -62,7 +62,14 @@ from ..events.models import (
     validate_event_payload,
 )
 from ..events.projectors import apply_fact_event
-from .models import PROVISIONAL_CONFIDENCE_CAP, STATUS_ACTIVE, TRUST_PROVISIONAL, TRUST_VERIFIED
+from .models import (
+    PROVISIONAL_CONFIDENCE_CAP,
+    SOURCE_DISTILLERY,
+    STATUS_ACTIVE,
+    TRUST_PROVISIONAL,
+    TRUST_VERIFIED,
+)
+from .quotas import DistilleryQuotaStore
 from .registry import DistilleryRegistry
 from .verification import (
     DEFAULT_SIGNATURE_MAX_AGE_SECONDS,
@@ -70,9 +77,6 @@ from .verification import (
     check_timestamp,
     verify_signature,
 )
-
-# The substrate source every distilled event carries (PRD "Event Format").
-SOURCE_DISTILLERY = "distillery"
 
 # Event types a distillery may ship: the intersection of the PRD's batch
 # vocabulary and the event types the substrate supports today. The PRD also
@@ -349,11 +353,10 @@ class MemoryDistilleryService:
         )
 
         self._registry: Optional[DistilleryRegistry] = None
-        # Per-(distillery, UTC day) accepted-event counters. Process-local
-        # by design (matches the ingestion in-flight cap posture): the
-        # smallest viable quota guard, documented as per-node.
-        self._daily_counts: Dict[Tuple[str, str], int] = {}
-        self._daily_lock = asyncio.Lock()
+        # Per-(distillery, UTC day) accepted-event counters, DB-backed via
+        # DistilleryQuotaStore: durable across restarts and correct across
+        # replicas sharing the database (guarded-upsert consume).
+        self._quota_store: Optional[DistilleryQuotaStore] = None
 
     @staticmethod
     def _int_config(config: Dict[str, Any], key: str, default: int) -> int:
@@ -392,6 +395,16 @@ class MemoryDistilleryService:
                 memory_events.db_manager, memory_events.formation_id
             )
         return self._registry
+
+    @property
+    def quota_store(self) -> DistilleryQuotaStore:
+        """The durable daily quota counters (requires the substrate's DB)."""
+        if self._quota_store is None:
+            memory_events = self._require_substrate()
+            self._quota_store = DistilleryQuotaStore(
+                memory_events.db_manager, memory_events.formation_id
+            )
+        return self._quota_store
 
     def scope_defaults(self, scope: Optional[Dict[str, Any]]) -> Dict[str, Any]:
         """Fill a registration scope with the formation-level defaults."""
@@ -523,29 +536,57 @@ class MemoryDistilleryService:
         )
 
     # ------------------------------------------------------------------
-    # Daily quota (process-local, per UTC day)
+    # Daily quota (durable, per UTC day; see quotas.py)
     # ------------------------------------------------------------------
 
-    async def _check_quota(self, distillery: Dict[str, Any], incoming: int) -> None:
+    async def _reserve_quota(
+        self, distillery: Dict[str, Any], incoming: int
+    ) -> Optional[Tuple[str, int]]:
+        """Atomically reserve quota slots for ``incoming`` net-new events.
+
+        All-or-nothing: the whole batch's net-new count is consumed in one
+        guarded upsert or the batch is rejected as a whole. Raising happens
+        before anything is appended, so the batch stays safely retryable.
+
+        Returns:
+            The (quota_date, reserved) reservation to settle after the
+            append pass, or None when nothing needed reserving.
+
+        Raises:
+            DistilleryRateLimitError: The day's limit would be exceeded.
+        """
+        if incoming <= 0:
+            return None
         scope = distillery.get("scope") or {}
         max_per_day = int(scope.get("max_events_per_day", self.default_max_events_per_day))
-        today = datetime.now(timezone.utc).strftime("%Y-%m-%d")
-        key = (distillery["distillery_id"], today)
-        async with self._daily_lock:
-            # Prune counters from previous days so the map stays tiny.
-            stale = [k for k in self._daily_counts if k[1] != today]
-            for k in stale:
-                del self._daily_counts[k]
-            if self._daily_counts.get(key, 0) + incoming > max_per_day:
-                raise DistilleryRateLimitError(max_per_day)
+        quota_date = DistilleryQuotaStore.today()
+        # Crash healing: cap the counter at the day's actual accepted-event
+        # count before this process's first consume of the bucket, so a
+        # reservation leaked by a crash between reserve and settle cannot
+        # starve the distillery until day rollover (no-op after the first
+        # call; see DistilleryQuotaStore.ensure_reconciled).
+        await self.quota_store.ensure_reconciled(distillery["distillery_id"], quota_date)
+        consumed = await self.quota_store.try_consume(
+            distillery["distillery_id"], quota_date, incoming, max_per_day
+        )
+        if not consumed:
+            raise DistilleryRateLimitError(max_per_day)
+        return (quota_date, incoming)
 
-    async def _consume_quota(self, distillery: Dict[str, Any], count: int) -> None:
-        if count <= 0:
+    async def _settle_quota(
+        self,
+        distillery: Dict[str, Any],
+        reservation: Optional[Tuple[str, int]],
+        created: int,
+    ) -> None:
+        """Return reserved-but-unused slots (append-time duplicates)."""
+        if reservation is None:
             return
-        today = datetime.now(timezone.utc).strftime("%Y-%m-%d")
-        key = (distillery["distillery_id"], today)
-        async with self._daily_lock:
-            self._daily_counts[key] = self._daily_counts.get(key, 0) + count
+        quota_date, reserved = reservation
+        if created < reserved:
+            await self.quota_store.release(
+                distillery["distillery_id"], quota_date, reserved - created
+            )
 
     # ------------------------------------------------------------------
     # Accept path (event-first, partial acceptance)
@@ -592,40 +633,47 @@ class MemoryDistilleryService:
         # Quota gates the NET-NEW event count only: a full-duplicate retry
         # must always succeed regardless of quota state (the idempotent
         # retry guarantee), and mixed batches only need headroom for the
-        # events they would actually create. Raising here appends nothing
-        # and consumes nothing, so the whole batch stays safely retryable.
-        await self._check_quota(distillery, len(net_new))
+        # events they would actually create. The reservation is one atomic
+        # increment-if-under-limit in the database (durable, replica-safe);
+        # raising here appends nothing and consumes nothing, so the whole
+        # batch stays safely retryable.
+        reservation = await self._reserve_quota(distillery, len(net_new))
 
         # Pass 2: append the net-new events. An append can still resolve
         # to an existing event (a concurrent writer, or the same source_id
-        # appearing twice within this batch) -- those count as duplicates.
+        # appearing twice within this batch) -- those count as duplicates,
+        # and their reserved quota slots are returned when settling.
         to_process: List[Tuple[int, DistilledEvent, Dict[str, Any]]] = []
-        for index, event in net_new:
-            try:
-                stored, created = await memory_events.storage.append(
-                    user_id=event.user_id,
-                    event_type=event.event_type,
-                    payload=event.payload,
-                    source=SOURCE_DISTILLERY,
-                    source_id=event.source_id,
-                    source_confidence=event.source_confidence,
-                    event_version=event.event_version,
-                    occurred_at=event.occurred_at,
-                    decay_rate=event.decay_rate,
-                    expires_at=event.expires_at,
-                    conversation_id=event.conversation_id,
-                )
-            except ValueError as exc:
-                # Defensive: validate_distilled_event mirrors the substrate
-                # checks, so this only fires on drift between the two.
-                rejections.append({"index": index, "reason": str(exc)})
-                continue
-            if created:
-                to_process.append((index, event, stored))
-            else:
-                duplicates += 1
-
-        await self._consume_quota(distillery, len(to_process))
+        try:
+            for index, event in net_new:
+                try:
+                    stored, created = await memory_events.storage.append(
+                        user_id=event.user_id,
+                        event_type=event.event_type,
+                        payload=event.payload,
+                        source=SOURCE_DISTILLERY,
+                        source_id=event.source_id,
+                        source_confidence=event.source_confidence,
+                        event_version=event.event_version,
+                        occurred_at=event.occurred_at,
+                        decay_rate=event.decay_rate,
+                        expires_at=event.expires_at,
+                        conversation_id=event.conversation_id,
+                    )
+                except ValueError as exc:
+                    # Defensive: validate_distilled_event mirrors the substrate
+                    # checks, so this only fires on drift between the two.
+                    rejections.append({"index": index, "reason": str(exc)})
+                    continue
+                if created:
+                    to_process.append((index, event, stored))
+                else:
+                    duplicates += 1
+        finally:
+            # Settle even on a mid-append failure: created events stay
+            # consumed (they exist; a retry sees them as duplicates), the
+            # rest of the reservation is returned.
+            await self._settle_quota(distillery, reservation, len(to_process))
 
         processing_id = None
         if to_process:

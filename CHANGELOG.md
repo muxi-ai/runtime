@@ -34,6 +34,43 @@ outcomes (`services/multimodal/document_converter.py`):
   `document.conversion.quarantined` (with reason), and
   `document.conversion.fallback`.
 
+### Durable distillery daily quotas
+
+The distilled-batch daily quota guard moves from an in-process dict
+(reset on restart, wrong across replicas) to durable DB-backed counters:
+
+- New `distillery_quota_counters` table -- one row per (formation,
+  distillery, UTC day), created with the rest of the runtime tables on
+  both SQLite and PostgreSQL.
+- Check-and-consume is one atomic guarded upsert (`INSERT ... ON
+  CONFLICT ... DO UPDATE ... WHERE count + n <= limit`), so concurrent
+  batches -- across async tasks or replicas sharing the database --
+  can never overshoot `max_events_per_day`; a batch of N events
+  consumes N slots or is rejected as a whole (429 contract unchanged).
+- Counts survive restarts; per-day rollover comes free from the date
+  key; buckets older than 7 days are pruned on the consume path (no
+  maintenance loop needed).
+- The counter is a cache over ground truth: a reservation leaked by a
+  crash between reserve and settle is reconciled downward to the
+  substrate's actual accepted-event count on each process's first
+  consume of a day bucket, so a crashy period cannot starve a
+  distillery with 429s until rollover.
+
+### Memory events carry their originating request_id
+
+Every memory event now records the observability request that produced
+it, seeding answer-to-evidence provenance (a provenance chain shows
+which request produced each hop) and the future event forwarder:
+
+- Additive nullable `request_id` column on `memory_events`; existing
+  rows read NULL and events with no originating request (maintenance,
+  synthesis, legacy backfill) record NULL.
+- Populated at `record()` time from the observability request context
+  (single choke point -- no caller changes), surfaced in event dicts
+  and provenance chain output.
+- Idempotency is unchanged: a duplicate (source, source_id) retried
+  from a different request still dedups to the original event.
+
 ## v0.20260713.0
 
 ### Idempotency-Key support (chat, scheduler jobs, triggers)

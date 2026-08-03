@@ -1398,6 +1398,37 @@ def _migrate_add_derived_from_event_id_column(db_manager, table_name: str) -> No
         pass  # Table may not exist yet on first run; create_tables handles it
 
 
+def _migrate_add_request_id_column(db_manager, table_name: str) -> None:
+    """Add the request_id column to memory_events from older schema versions.
+
+    Additive migration (answer-to-evidence provenance): existing rows read
+    NULL -- no backfill is issued. Rows written after this migration carry
+    the observability RequestContext.id of the request that produced them,
+    or NULL for events with no originating request (maintenance,
+    synthesis, legacy backfill).
+    """
+    from sqlalchemy import text
+
+    try:
+        with db_manager.engine.connect() as conn:
+            if db_manager.database_type == "postgresql":
+                conn.execute(
+                    text(
+                        f"ALTER TABLE {table_name} ADD COLUMN IF NOT EXISTS "
+                        f"request_id VARCHAR(255)"
+                    )
+                )
+            else:
+                # SQLite: check if column exists via PRAGMA, add if missing
+                result = conn.execute(text(f"PRAGMA table_info({table_name})"))
+                columns = [row[1] for row in result]
+                if "request_id" not in columns:
+                    conn.execute(text(f"ALTER TABLE {table_name} ADD COLUMN request_id TEXT"))
+            conn.commit()
+    except Exception:
+        pass  # Table may not exist yet on first run; create_tables handles it
+
+
 def _migrate_add_scope_columns(db_manager, table_name: str) -> None:
     """Add the memory-namespaces scope columns to memories tables from older schema versions.
 
@@ -1503,7 +1534,10 @@ def _create_all_database_tables(db_manager, embedding_dimension: int = 1536) -> 
         # Get Base from db module
         from ..services.db import Base
         from ..services.memory.artifacts.models import Artifact, SystemConfig  # noqa: F401
-        from ..services.memory.distillery.models import RegisteredDistillery  # noqa: F401
+        from ..services.memory.distillery.models import (  # noqa: F401
+            DistilleryQuotaCounter,
+            RegisteredDistillery,
+        )
         from ..services.memory.events.models import (  # noqa: F401
             MemoryEvent,
             ProjectionCheckpoint,
@@ -1562,6 +1596,10 @@ def _create_all_database_tables(db_manager, embedding_dimension: int = 1536) -> 
         # artifacts table created before the artifact-metadata projection
         # shipped (Memory Substrate Phase 2c, additive)
         _migrate_add_derived_from_event_id_column(db_manager, "artifacts")
+        # Migrate: ensure the request_id provenance column exists on
+        # memory_events tables created before answer-to-evidence
+        # provenance shipped (additive; existing rows read NULL)
+        _migrate_add_request_id_column(db_manager, "memory_events")
         # Migrate: ensure the memory-namespaces scope columns exist on
         # memories tables created before the scope substrate shipped.
         # Covers ALL memories_{dim} tables, not just the active dimension's:
