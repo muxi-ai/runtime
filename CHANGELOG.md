@@ -1,5 +1,7 @@
 # Changelog
 
+## [unreleased]
+
 ## v1.20260803.0
 
 ### Dependency security updates: pypdf 6.14.2, nltk held below 3.10
