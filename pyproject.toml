@@ -86,7 +86,7 @@ dependencies = [
     # corpus readers (Framenet/NKJP/Reviews) and pathsec ENFORCE-mode download filtering,
     # none of which MUXI exercises: our only surface is punkt tokenization plus a
     # fixed-URL nltk.download("punkt"). Revisit when upstream fixes the cwd check.
-    "nltk>=3.9.4,<3.10",  # Natural language processing for chunking
+    "nltk>=3.9.4,<3.11",  # Natural language processing for chunking
     "spacy>=3.8.14",  # Advanced NLP for semantic chunking (compatible with NumPy 2.x)
 
     # PII entity redaction (names/addresses/orgs/DOB/financial) for logs,
