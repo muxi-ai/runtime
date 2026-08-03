@@ -75,6 +75,7 @@ dependencies = [
     # declares requires_python='<3.14' and blocks Python 3.14 installs even
     # though MUXI never imports it.
     "markitdown[docx,pdf,pptx,xls,xlsx]>=0.1.6",  # Convert various file formats to Markdown
+    "pdf-inspector>=0.2.6",  # PDF classification + native-text markdown extraction (sandboxed)
     "pypdf>=6.13.2",  # PDF document processing (successor to PyPDF2); CVE-2026-33123 fixed in 6.9.1
     "python-docx>=1.2.0",  # Word document processing
     "markdownify>=1.2.2",  # HTML to Markdown conversion

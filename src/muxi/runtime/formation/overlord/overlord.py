@@ -84,16 +84,12 @@ import os
 import re
 import signal
 import sys
-import threading
 import time
 from collections import OrderedDict
 from contextlib import contextmanager, suppress
 from datetime import datetime
 from pathlib import Path
 from typing import Any, AsyncGenerator, Dict, List, Optional, Set, Tuple, Union
-
-# Import MarkItDown - required dependency
-from markitdown import MarkItDown
 
 # Unified Response Components
 from ...datatypes.clarification import (
@@ -136,6 +132,12 @@ from ...services.multimodal import (
     TaskInputProcessor,
     TaskOutputProcessor,
     WorkflowMultiModalProcessor,
+)
+
+# Sandboxed document conversion (out-of-process MarkItDown / pdf-inspector)
+from ...services.multimodal.document_converter import (
+    ATTACHMENT_CONVERTIBLE_EXTENSIONS,
+    convert_document_async,
 )
 from ...services.scheduler.service import SchedulerService
 
@@ -235,9 +237,6 @@ from .secrets_manager import SecretsInterpolator
 #     ResilienceConfig,
 # )
 
-
-_MARKITDOWN_INSTANCE = None
-_MARKITDOWN_LOCK = threading.Lock()
 
 # Memory collections that should be created for each user/formation
 MEMORY_COLLECTIONS = {
@@ -5602,47 +5601,20 @@ Agent response: {raw_response}"""
                     ]
 
                 else:
-                    # Check if we should use MarkItDown for conversion
-                    should_use_markitdown = False
-                    markitdown_extensions = [".pdf", ".docx", ".pptx", ".xlsx", ".html"]
+                    # Convertible documents go through the sandboxed out-of-process
+                    # conversion service (pdf-inspector for PDFs, MarkItDown for
+                    # the rest); hostile files are quarantined, never parsed here.
                     file_ext = os.path.splitext(filename)[1].lower()
+                    should_convert = file_ext in ATTACHMENT_CONVERTIBLE_EXTENSIONS
 
-                    if file_ext in markitdown_extensions:
-                        global _MARKITDOWN_INSTANCE
-
-                        # Thread-safe singleton initialization
-                        if _MARKITDOWN_INSTANCE is None:
-                            with _MARKITDOWN_LOCK:
-                                # Double-check pattern: check again inside the lock
-                                if _MARKITDOWN_INSTANCE is None:
-                                    _MARKITDOWN_INSTANCE = MarkItDown()
-
-                        markitdown = _MARKITDOWN_INSTANCE
-                        should_use_markitdown = True
-
-                    if should_use_markitdown:
-                        try:
-                            # Convert document to markdown using MarkItDown
-                            # Create a temporary file for binary content
-                            import tempfile
-
-                            tmp_path = None
-                            try:
-                                with tempfile.NamedTemporaryFile(
-                                    suffix=file_ext, delete=False
-                                ) as tmp:
-                                    tmp.write(
-                                        content if isinstance(content, bytes) else content.encode()
-                                    )
-                                    tmp_path = tmp.name
-
-                                # Convert with MarkItDown
-                                result = markitdown.convert(tmp_path)
-                                extracted_content = result.text_content
-                            finally:
-                                # Always clean up temp file
-                                if tmp_path and os.path.exists(tmp_path):
-                                    os.unlink(tmp_path)
+                    if should_convert:
+                        conversion = await convert_document_async(
+                            content if isinstance(content, bytes) else content.encode(),
+                            filename,
+                            media_type=content_type,
+                        )
+                        if conversion.ok:
+                            extracted_content = conversion.text
                             # Now chunk the extracted text
                             if self.document_chunker:
                                 doc_chunks = await self.document_chunker.chunk_document(
@@ -5663,10 +5635,16 @@ Agent response: {raw_response}"""
                                         "metadata": {"filename": filename, "converted": True},
                                     }
                                 ]
-
-                            # REMOVE - line 4148 (DEBUG runtime trace: file processing)
-
-                        except Exception as e:
+                        else:
+                            # Quarantined (timeout/memory/oversize/parser_error/
+                            # encrypted/unsupported). The conversion service already
+                            # emitted DOCUMENT_CONVERSION_QUARANTINED; keep the
+                            # pre-existing graceful degradation for this call site.
+                            quarantine_reason = (
+                                conversion.quarantine_reason.value
+                                if conversion.quarantine_reason
+                                else "unknown"
+                            )
                             observability.observe(
                                 event_type=observability.ErrorEvents.GENERIC_ERROR,
                                 level=observability.EventLevel.WARNING,
@@ -5674,10 +5652,14 @@ Agent response: {raw_response}"""
                                     "service": "document_processing",
                                     "filename": filename,
                                     "file_extension": file_ext,
-                                    "error": str(e),
+                                    "quarantine_reason": quarantine_reason,
+                                    "error": conversion.detail,
                                     "fallback": "binary_chunking",
                                 },
-                                description=f"MarkItDown conversion failed for {filename}: {e}",
+                                description=(
+                                    f"Document conversion quarantined for {filename}: "
+                                    f"{quarantine_reason}"
+                                ),
                             )
                             # Fall back to binary chunking
                             chunks = [{"content": content, "metadata": {"filename": filename}}]
@@ -5729,9 +5711,7 @@ Agent response: {raw_response}"""
 
                     chunk_content = chunk.get("content", "")
 
-                    result = await self.add_to_buffer_memory(
-                        message=chunk_content, metadata=chunk_metadata
-                    )
+                    await self.add_to_buffer_memory(message=chunk_content, metadata=chunk_metadata)
 
                 # Add to processed docs list with actual content
                 processed_docs.append(

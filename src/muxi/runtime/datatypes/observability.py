@@ -710,6 +710,16 @@ class ConversationEvents(Enum):
     DOCUMENT_PROCESSING_FAILED = "document.processing.failed"
     # When document processing fails
 
+    DOCUMENT_CONVERSION_COMPLETED = "document.conversion.completed"
+    # When sandboxed document conversion (pdf-inspector/MarkItDown) succeeds
+
+    DOCUMENT_CONVERSION_QUARANTINED = "document.conversion.quarantined"
+    # When sandboxed conversion is refused/killed (timeout, memory, oversize,
+    # parser_error, encrypted, unsupported) and the document is quarantined
+
+    DOCUMENT_CONVERSION_FALLBACK = "document.conversion.fallback"
+    # When pdf-inspector fails on a PDF and conversion falls back to MarkItDown
+
     CONTENT_EXTRACTION_STARTED = "content.extraction.started"
     # When content extraction from media begins
 

@@ -54,11 +54,11 @@ import glob
 import os
 from typing import Any, Dict, List, Optional
 
-# Import markitdown for document conversion
-from markitdown import MarkItDown
-
 # Import observability
 from ....services import observability
+
+# Sandboxed document conversion (out-of-process MarkItDown / pdf-inspector)
+from ....services.multimodal.document_converter import convert_document
 
 # Import DocumentChunkManager for hybrid architecture integration
 from ...documents.storage.chunk_manager import DocumentChunk, DocumentChunkManager
@@ -205,20 +205,6 @@ class FileKnowledge(KnowledgeSource):
 
         self._files: Optional[List[str]] = None
 
-        # Initialize markitdown converter if available
-        self._markitdown = None
-        if self.enable_markitdown:
-            try:
-                self._markitdown = MarkItDown()
-            except Exception as e:
-                observability.observe(
-                    event_type=observability.ErrorEvents.MARKITDOWN_INITIALIZATION_FAILED,
-                    level=observability.EventLevel.WARNING,
-                    description="Failed to initialize MarkItDown",
-                    data={"error": str(e)},
-                )
-                self.enable_markitdown = False
-
     def _is_markitdown_supported(self, file_path: str) -> bool:
         """Check if file extension is supported by markitdown."""
         if not self.enable_markitdown:
@@ -245,9 +231,55 @@ class FileKnowledge(KnowledgeSource):
         """
         try:
             if self._is_markitdown_supported(file_path):
-                # Use markitdown for supported file types
-                result = self._markitdown.convert(file_path)
-                return result.text_content
+                # Enforce max_file_size BEFORE reading the file into memory
+                # (same pre-read guard as process_with_chunk_manager), so the
+                # reasoning-tree path cannot allocate an oversize file either.
+                file_size = os.path.getsize(file_path)
+                if file_size > self.max_file_size:
+                    observability.observe(
+                        event_type=observability.ErrorEvents.RESOURCE_EXHAUSTED,
+                        level=observability.EventLevel.WARNING,
+                        description=(
+                            f"Skipping large file ({file_size} bytes > {self.max_file_size})"
+                        ),
+                        data={
+                            "file_path": file_path,
+                            "file_size": file_size,
+                            "limit": self.max_file_size,
+                        },
+                    )
+                    return f"[Error loading file: {os.path.basename(file_path)}]"
+
+                # Convert supported file types in the sandboxed subprocess
+                # (pdf-inspector for PDFs, MarkItDown for everything else).
+                with open(file_path, "rb") as f:
+                    raw = f.read()
+                conversion = convert_document(
+                    raw,
+                    os.path.basename(file_path),
+                    max_input_bytes=self.max_file_size,
+                )
+                if conversion.ok:
+                    return conversion.text
+                # Quarantined: the conversion service already emitted a
+                # DOCUMENT_CONVERSION_QUARANTINED event; degrade exactly like
+                # the previous in-process failure path.
+                reason = (
+                    conversion.quarantine_reason.value
+                    if conversion.quarantine_reason
+                    else "unknown"
+                )
+                observability.observe(
+                    event_type=observability.ConversationEvents.DOCUMENT_PROCESSING_FAILED,
+                    level=observability.EventLevel.ERROR,
+                    description=f"Error processing file {os.path.basename(file_path)}",
+                    data={
+                        "file_path": file_path,
+                        "quarantine_reason": reason,
+                        "error": conversion.detail,
+                    },
+                )
+                return f"[Error loading file: {os.path.basename(file_path)}]"
 
             elif self._is_text_file(file_path):
                 # Direct reading for plain text files
