@@ -1,6 +1,6 @@
 # Changelog
 
-## [unreleased]
+## v1.20260803.0
 
 ### Dependency security updates: pypdf 6.14.2, nltk held below 3.10
 
@@ -88,6 +88,22 @@ which request produced each hop) and the future event forwarder:
   and provenance chain output.
 - Idempotency is unchanged: a duplicate (source, source_id) retried
   from a different request still dedups to the original event.
+
+### Reliability and test-infrastructure fixes
+
+- Benchmark observation runs now survive `PYTHONSAFEPATH` / `python -P`
+  deployments: the tuning benchmark spawns its suite runners with an
+  explicit `PYTHONPATH` instead of relying on the implicit
+  current-directory `sys.path` entry, which safe-path mode strips.
+  Previously such deployments silently recorded no benchmark
+  observations.
+- Unit-test teardown disposes lazily created async database engines, so
+  the suite no longer leaks aiosqlite worker threads ("Event loop is
+  closed" noise after the run).
+- New e2e test `2W2` proves distillery quota durability end-to-end:
+  consumption survives a formation restart on the same database, a
+  post-restart batch that would exceed the daily limit is rejected, and
+  a full-duplicate replay consumes no quota.
 
 ## v0.20260713.0
 
