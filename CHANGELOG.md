@@ -2,6 +2,23 @@
 
 ## [unreleased]
 
+### Durable distillery daily quotas
+
+The distilled-batch daily quota guard moves from an in-process dict
+(reset on restart, wrong across replicas) to durable DB-backed counters:
+
+- New `distillery_quota_counters` table -- one row per (formation,
+  distillery, UTC day), created with the rest of the runtime tables on
+  both SQLite and PostgreSQL.
+- Check-and-consume is one atomic guarded upsert (`INSERT ... ON
+  CONFLICT ... DO UPDATE ... WHERE count + n <= limit`), so concurrent
+  batches -- across async tasks or replicas sharing the database --
+  can never overshoot `max_events_per_day`; a batch of N events
+  consumes N slots or is rejected as a whole (429 contract unchanged).
+- Counts survive restarts; per-day rollover comes free from the date
+  key; buckets older than 7 days are pruned on the consume path (no
+  maintenance loop needed).
+
 ## v0.20260713.0
 
 ### Idempotency-Key support (chat, scheduler jobs, triggers)

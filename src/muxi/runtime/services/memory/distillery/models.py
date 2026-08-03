@@ -27,7 +27,7 @@
 #   is the purge path, mirroring the substrate's forgetting model).
 # =============================================================================
 
-from sqlalchemy import Column, DateTime, Index, Integer, String
+from sqlalchemy import Column, DateTime, Index, Integer, String, UniqueConstraint
 
 from ....datatypes.json_type import JSONType
 from ....utils.datetime_utils import utc_now_naive
@@ -46,6 +46,11 @@ PROVISIONAL_CONFIDENCE_CAP = 0.7
 # Registration lifecycle states.
 STATUS_ACTIVE = "active"
 STATUS_REVOKED = "revoked"
+
+# Quota counters older than this many days are pruned opportunistically on
+# the consume path (see DistilleryQuotaStore.try_consume) -- only today's
+# row is ever read, so the window is pure debugging headroom.
+QUOTA_RETENTION_DAYS = 7
 
 
 class RegisteredDistillery(Base, AsyncModelMixin):
@@ -92,3 +97,35 @@ class RegisteredDistillery(Base, AsyncModelMixin):
             "created_at": self.created_at.isoformat() if self.created_at else None,
             "revoked_at": self.revoked_at.isoformat() if self.revoked_at else None,
         }
+
+
+class DistilleryQuotaCounter(Base, AsyncModelMixin):
+    """One (distillery, UTC day) accepted-event counter.
+
+    Durable replacement for the old in-process daily-count dict: the quota
+    guard increments this row with a single guarded upsert
+    (increment-if-under-limit), so counts survive restarts and stay
+    correct across replicas sharing the database. Per-day rollover comes
+    free from the quota_date key; rows older than QUOTA_RETENTION_DAYS are
+    pruned opportunistically on the consume path.
+    """
+
+    __tablename__ = "distillery_quota_counters"
+
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    formation_id = Column(String(255), nullable=False)
+    # The distillery's public id (the X-Distillery-ID header value).
+    distillery_id = Column(String(21), nullable=False)
+    # UTC day bucket, "YYYY-MM-DD".
+    quota_date = Column(String(10), nullable=False)
+    count = Column(Integer, nullable=False, default=0)
+    updated_at = Column(DateTime, nullable=False, default=utc_now_naive)
+
+    __table_args__ = (
+        UniqueConstraint(
+            "formation_id",
+            "distillery_id",
+            "quota_date",
+            name="uq_distillery_quota_counters_day",
+        ),
+    )
