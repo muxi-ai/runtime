@@ -47,6 +47,7 @@ def render_event(event: Dict[str, Any], decay: Optional[DecaySettings] = None) -
         "occurred_at": event["occurred_at"],
         "agent_id": event["agent_id"],
         "conversation_id": event["conversation_id"],
+        "request_id": event["request_id"],
         "payload": event["payload"],
         "deleted_at": event["deleted_at"],
     }

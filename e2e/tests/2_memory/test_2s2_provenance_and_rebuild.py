@@ -82,8 +82,13 @@ class TestMemoryProvenanceAndRebuild(BaseMemoryTest):
                 "My name is Jordan and I live in London. I founded a company "
                 "called Automaze and we are building the MUXI project."
             )
+            chat_request_id = f"req_e2e_prov_{int(time.time())}"
             response = await self.overlord.chat(
-                user_msg, user_id=user_id, use_async=False, stream=False
+                user_msg,
+                user_id=user_id,
+                use_async=False,
+                stream=False,
+                request_id=chat_request_id,
             )
             response_text = response.content if hasattr(response, "content") else str(response)
             transcript.append((user_msg, response_text))
@@ -105,6 +110,20 @@ class TestMemoryProvenanceAndRebuild(BaseMemoryTest):
                 checks_passed.append("Graph extraction events recorded")
             else:
                 print("  ✗ No graph.extracted events recorded")
+                all_passed = False
+
+            # Answer-to-evidence: the extraction event(s) must carry the
+            # request_id of the chat turn that produced them (the same id
+            # the response envelope returns as request.id).
+            if graph_events and all(e.get("request_id") == chat_request_id for e in graph_events):
+                print(f"  ✓ Extraction event(s) carry the turn's request_id ({chat_request_id})")
+                checks_passed.append("Extraction events carry the turn's request_id")
+            else:
+                stamped_ids = [e.get("request_id") for e in graph_events]
+                print(
+                    f"  ✗ Extraction events missing the turn's request_id "
+                    f"(expected {chat_request_id}, got {stamped_ids})"
+                )
                 all_passed = False
 
             # Check 1: provenance query on a real conversation entity.
