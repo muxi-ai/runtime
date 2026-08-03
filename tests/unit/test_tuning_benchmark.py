@@ -184,6 +184,28 @@ class TestObserve:
             assert record["scores"]["recall_at_k"] == 0.8
             assert record["previous_scores"] is None
 
+    def test_run_resolves_harness_under_safe_path_mode(self, step, tmp_path, monkeypatch):
+        # Pins the CI condition behind the longmemeval flake: with
+        # PYTHONSAFEPATH in the inherited environment the child
+        # interpreter drops the implicit-cwd sys.path entry, so
+        # ``-m bench...`` must resolve through the explicit PYTHONPATH
+        # the step builds, not through the subprocess cwd by accident.
+        # A pre-existing PYTHONPATH must be merged, not clobbered.
+        build_harness(tmp_path / "harness")
+        monkeypatch.setenv(BENCH_ROOT_ENV, str(tmp_path / "harness"))
+        monkeypatch.setenv("PYTHONSAFEPATH", "1")
+        monkeypatch.setenv("PYTHONPATH", str(tmp_path / "unrelated"))
+        result = asyncio.run(step.observe())
+
+        sidecar = json.loads((tmp_path / "tuner" / "benchmarks.json").read_text())
+        for suite in SUITES:
+            record = sidecar["suites"][suite["name"]]
+            assert record["succeeded"] is True, (
+                f"benchmark suite {suite['name']} soft-failed "
+                f"(exit_code={record.get('exit_code')}): {record.get('error')}"
+            )
+            assert result["metrics"][f"benchmark:{suite['name']}.qa_error"] == pytest.approx(0.25)
+
     def test_fresh_scores_are_reused_not_rerun(self, step, tmp_path, monkeypatch):
         build_harness(tmp_path / "harness")
         monkeypatch.setenv(BENCH_ROOT_ENV, str(tmp_path / "harness"))
