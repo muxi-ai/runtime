@@ -62,7 +62,13 @@ from ..events.models import (
     validate_event_payload,
 )
 from ..events.projectors import apply_fact_event
-from .models import PROVISIONAL_CONFIDENCE_CAP, STATUS_ACTIVE, TRUST_PROVISIONAL, TRUST_VERIFIED
+from .models import (
+    PROVISIONAL_CONFIDENCE_CAP,
+    SOURCE_DISTILLERY,
+    STATUS_ACTIVE,
+    TRUST_PROVISIONAL,
+    TRUST_VERIFIED,
+)
 from .quotas import DistilleryQuotaStore
 from .registry import DistilleryRegistry
 from .verification import (
@@ -71,9 +77,6 @@ from .verification import (
     check_timestamp,
     verify_signature,
 )
-
-# The substrate source every distilled event carries (PRD "Event Format").
-SOURCE_DISTILLERY = "distillery"
 
 # Event types a distillery may ship: the intersection of the PRD's batch
 # vocabulary and the event types the substrate supports today. The PRD also
@@ -557,6 +560,12 @@ class MemoryDistilleryService:
         scope = distillery.get("scope") or {}
         max_per_day = int(scope.get("max_events_per_day", self.default_max_events_per_day))
         quota_date = DistilleryQuotaStore.today()
+        # Crash healing: cap the counter at the day's actual accepted-event
+        # count before this process's first consume of the bucket, so a
+        # reservation leaked by a crash between reserve and settle cannot
+        # starve the distillery until day rollover (no-op after the first
+        # call; see DistilleryQuotaStore.ensure_reconciled).
+        await self.quota_store.ensure_reconciled(distillery["distillery_id"], quota_date)
         consumed = await self.quota_store.try_consume(
             distillery["distillery_id"], quota_date, incoming, max_per_day
         )

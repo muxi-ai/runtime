@@ -47,6 +47,9 @@ PROVISIONAL_CONFIDENCE_CAP = 0.7
 STATUS_ACTIVE = "active"
 STATUS_REVOKED = "revoked"
 
+# The substrate source every distilled event carries (PRD "Event Format").
+SOURCE_DISTILLERY = "distillery"
+
 # Quota counters older than this many days are pruned opportunistically on
 # the consume path (see DistilleryQuotaStore.try_consume) -- only today's
 # row is ever read, so the window is pure debugging headroom.

@@ -952,6 +952,78 @@ class TestDurableQuota:
         used = await service.quota_store.used(record["distillery_id"], DistilleryQuotaStore.today())
         assert used == 1
 
+    async def test_crash_leaked_reservation_heals_on_restart(self, memory_events, keypair):
+        overlord = make_overlord(memory_events)
+        service = MemoryDistilleryService(overlord)
+        record = await register(service, keypair, scope={"max_events_per_day": 3})
+
+        # One real accepted event (ground truth = 1)...
+        outcome = await accept(service, record, make_batch([fact_event(source_id="s1")]))
+        await finish_job(overlord, outcome["processing_id"])
+
+        # ...then simulate a crash between reserve and settle: two slots
+        # consumed durably with no events ever appended.
+        day = DistilleryQuotaStore.today()
+        assert await service.quota_store.try_consume(record["distillery_id"], day, 2, 3)
+        assert await service.quota_store.used(record["distillery_id"], day) == 3
+
+        # A restarted process reconciles the counter down to ground truth
+        # (1 accepted event) on first touch, so a submission within the
+        # real headroom succeeds instead of 429ing until day rollover.
+        restarted_overlord = make_overlord(memory_events)
+        restarted = MemoryDistilleryService(restarted_overlord)
+        healed = await accept(restarted, record, make_batch([fact_event(source_id="s2")]))
+        assert healed["accepted"] == 1
+        await finish_job(restarted_overlord, healed["processing_id"])
+        # Counter reflects truth again: 1 healed + 1 newly accepted.
+        assert await restarted.quota_store.used(record["distillery_id"], day) == 2
+
+        # The limit itself still holds against real events (2/3 used).
+        final = await accept(restarted, record, make_batch([fact_event(source_id="s3")]))
+        assert final["accepted"] == 1
+        await finish_job(restarted_overlord, final["processing_id"])
+        with pytest.raises(DistilleryRateLimitError):
+            await accept(restarted, record, make_batch([fact_event(source_id="s4")]))
+
+    async def test_reconcile_never_undercuts_inflight_consumes(self, memory_events):
+        # Old process leaked 5 slots (no events behind them), then died.
+        leaked = DistilleryQuotaStore(memory_events.db_manager, FORMATION_ID)
+        day = DistilleryQuotaStore.today()
+        assert await leaked.try_consume("dst-heal", day, 5, 100)
+
+        # New process: 30 concurrent consumers, each taking the real
+        # reserve path (reconcile-then-consume). Reconcile must run once,
+        # before any of this process's consumes, and never again -- if it
+        # re-ran mid-hammer it would erase in-flight consumes and let more
+        # than the limit through.
+        store = DistilleryQuotaStore(memory_events.db_manager, FORMATION_ID)
+
+        async def one_consume():
+            await store.ensure_reconciled("dst-heal", day)
+            return await store.try_consume("dst-heal", day, 1, 10)
+
+        results = await asyncio.gather(*(one_consume() for _ in range(30)))
+        assert sum(results) == 10  # healed 5 -> 0, then exactly the limit
+        assert await store.used("dst-heal", day) == 10
+
+    async def test_reconcile_never_invents_headroom(self, memory_events, keypair):
+        # Normal path: counter equals ground truth, reconcile is a no-op
+        # -- an exhausted quota backed by real events stays exhausted
+        # across restarts (this is the durable-counter guarantee).
+        overlord = make_overlord(memory_events)
+        service = MemoryDistilleryService(overlord)
+        record = await register(service, keypair, scope={"max_events_per_day": 2})
+        outcome = await accept(
+            service,
+            record,
+            make_batch([fact_event(source_id="s1"), fact_event(source_id="s2")]),
+        )
+        await finish_job(overlord, outcome["processing_id"])
+
+        restarted = MemoryDistilleryService(make_overlord(memory_events))
+        with pytest.raises(DistilleryRateLimitError):
+            await accept(restarted, record, make_batch([fact_event(source_id="s3")]))
+
     async def test_old_day_counters_are_pruned_on_consume(self, memory_events):
         store = DistilleryQuotaStore(memory_events.db_manager, FORMATION_ID)
         await store.try_consume("dst-old", "2020-01-01", 5, 10)

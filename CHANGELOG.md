@@ -18,6 +18,11 @@ The distilled-batch daily quota guard moves from an in-process dict
 - Counts survive restarts; per-day rollover comes free from the date
   key; buckets older than 7 days are pruned on the consume path (no
   maintenance loop needed).
+- The counter is a cache over ground truth: a reservation leaked by a
+  crash between reserve and settle is reconciled downward to the
+  substrate's actual accepted-event count on each process's first
+  consume of a day bucket, so a crashy period cannot starve a
+  distillery with 429s until rollover.
 
 ## v0.20260713.0
 
