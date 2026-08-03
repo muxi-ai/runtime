@@ -1534,7 +1534,10 @@ def _create_all_database_tables(db_manager, embedding_dimension: int = 1536) -> 
         # Get Base from db module
         from ..services.db import Base
         from ..services.memory.artifacts.models import Artifact, SystemConfig  # noqa: F401
-        from ..services.memory.distillery.models import RegisteredDistillery  # noqa: F401
+        from ..services.memory.distillery.models import (  # noqa: F401
+            DistilleryQuotaCounter,
+            RegisteredDistillery,
+        )
         from ..services.memory.events.models import (  # noqa: F401
             MemoryEvent,
             ProjectionCheckpoint,
