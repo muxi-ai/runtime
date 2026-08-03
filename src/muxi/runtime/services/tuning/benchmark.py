@@ -236,15 +236,25 @@ class BenchmarkStep:
             "previous_scores": previous.get("previous_scores"),
             "error": None,
         }
-        # A harness checkout carries the runtime under src/; putting it
-        # first lets the benchmark measure that checkout's code and
-        # keeps the subprocess importable when muxi is not installed
-        # into the interpreter.
+        # The child's import path is explicit, never an accident of cwd:
+        # ``-m bench...`` only resolves through the interpreter's
+        # implicit-cwd sys.path entry, which safe-path environments
+        # (PYTHONSAFEPATH, seen on CI runners) and any deployment
+        # launching from elsewhere do not provide. The bench root goes
+        # on PYTHONPATH explicitly, merged in front of any existing
+        # entries. A harness checkout carries the runtime under src/;
+        # putting it first lets the benchmark measure that checkout's
+        # code and keeps the subprocess importable when muxi is not
+        # installed into the interpreter.
         env = os.environ.copy()
+        path_entries = [str(bench_root)]
         src_dir = bench_root / "src"
         if src_dir.is_dir():
-            existing = env.get("PYTHONPATH", "")
-            env["PYTHONPATH"] = str(src_dir) + (os.pathsep + existing if existing else "")
+            path_entries.insert(0, str(src_dir))
+        existing = env.get("PYTHONPATH", "")
+        if existing:
+            path_entries.append(existing)
+        env["PYTHONPATH"] = os.pathsep.join(path_entries)
 
         process = None
         try:

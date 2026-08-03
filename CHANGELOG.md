@@ -2,6 +2,21 @@
 
 ## [unreleased]
 
+### Memory events carry their originating request_id
+
+Every memory event now records the observability request that produced
+it, seeding answer-to-evidence provenance (a provenance chain shows
+which request produced each hop) and the future event forwarder:
+
+- Additive nullable `request_id` column on `memory_events`; existing
+  rows read NULL and events with no originating request (maintenance,
+  synthesis, legacy backfill) record NULL.
+- Populated at `record()` time from the observability request context
+  (single choke point -- no caller changes), surfaced in event dicts
+  and provenance chain output.
+- Idempotency is unchanged: a duplicate (source, source_id) retried
+  from a different request still dedups to the original event.
+
 ## v0.20260713.0
 
 ### Idempotency-Key support (chat, scheduler jobs, triggers)

@@ -186,12 +186,21 @@ class MemoryEventService:
         Volatile events without an explicit ``expires_at`` default to
         occurred_at + memory.decay.volatile_default_ttl_hours.
 
+        The observability ``RequestContext.id`` active in the current
+        ContextVar is stamped onto the event as ``request_id`` (the
+        answer-to-evidence provenance link). This is the single choke
+        point: callers never pass a request id, and paths that run
+        outside a request (maintenance, synthesis, legacy backfill)
+        record NULL.
+
         Returns the event dict (existing one on an idempotent duplicate),
         or None when the substrate is disabled or the append failed. A
         None return must never affect the caller's own write path.
         """
         if not self.enabled:
             return None
+        request_context = observability.get_current_request_context()
+        request_id = request_context.id if request_context is not None else None
         if decay_rate == DECAY_VOLATILE and expires_at is None:
             from ....utils.datetime_utils import utc_now_naive
 
@@ -214,6 +223,7 @@ class MemoryEventService:
                 conversation_id=conversation_id,
                 scope_type=scope_type,
                 scope_id=scope_id,
+                request_id=request_id,
             )
         except Exception as e:
             observability.observe(
