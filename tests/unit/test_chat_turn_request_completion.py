@@ -250,15 +250,28 @@ async def test_cancelled_turn_is_not_marked_completed(tracker):
         {"clarification": True, "mode": "ambiguous"},
         # Workflow plan awaiting approval
         {"workflow_id": "wf_1", "approval_required": True, "requires_user_response": True},
-        # Credential request awaiting the user
-        {"clarification_type": "missing_credential", "service": "github"},
+        # Missing-credential redirect (overlord.py:9642). The default
+        # "redirect" mode sets clarification_requested to False, so the
+        # guard has to catch it on the sibling clarification_type key.
+        {
+            "clarification_requested": False,
+            "clarification_type": "missing_credential",
+            "credential_mode": "redirect",
+            "service": "github",
+        },
         # Agent-initiated clarification (overlord.py:11823) -- carries neither
         # "clarification" nor "clarification_type"
         {"requires_clarification": True, "clarification_source": "agent_request"},
         # Agent response flagged as needing more information
         {"needs_clarification": True, "clarification_type": "information_request"},
     ],
-    ids=["clarification", "approval", "credential", "agent_request", "agent_needs_info"],
+    ids=[
+        "clarification",
+        "approval",
+        "credential_redirect",
+        "agent_request",
+        "agent_needs_info",
+    ],
 )
 async def test_interactive_turn_is_not_marked_completed(tracker, metadata):
     """A turn awaiting a further user response is not a completed turn.
