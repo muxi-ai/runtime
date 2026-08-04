@@ -105,6 +105,13 @@ def main():
                 test.formatter.print_success(
                     f"completed event carries full text ({len(completed_content)} chars)"
                 )
+            # A clean streamed turn never carries the fallback-regeneration
+            # marker (stream_discontinuity is additive, absent-when-false)
+            if completed_events[0].get("stream_discontinuity"):
+                test.formatter.print_failure(
+                    "completed unexpectedly flagged stream_discontinuity on a clean turn"
+                )
+                success = False
 
         # --- (a) at least one content event, all before completed ---
         if not content_events:

@@ -215,6 +215,71 @@ def test_empty_stream_falls_back_to_non_streaming(streaming_request):
     assert result == "".join(CHUNKS)
 
 
+def _emit_completed(content, request_id=REQUEST_ID):
+    """Emit a terminal completed event the way the overlord does and
+    return it (content events are synchronous; completed rides the same
+    emit_event path, called directly here for determinism)."""
+    streaming_manager.emit_event(request_id, "completed", content, status="success")
+    events = _recorded_events(request_id)
+    assert events and events[-1]["type"] == "completed"
+    return events[-1]
+
+
+def test_mid_stream_failure_flags_discontinuity_on_completed(streaming_request):
+    """Fallback regeneration AFTER published deltas: completed must carry
+    stream_discontinuity: true (deltas belong to the abandoned generation)
+    while still carrying the full authoritative text."""
+    llm = _FakeStreamingLLM(stream_error_after=2)
+    overlord = _make_overlord(llm)
+
+    result = asyncio.run(overlord._apply_persona("raw", "msg", stream_deltas=True))
+
+    assert len(_content_events()) == 2, "two deltas published before the failure"
+
+    completed = _emit_completed(result)
+    assert completed["stream_discontinuity"] is True
+    assert completed["content"] == "".join(CHUNKS), "full text stays authoritative"
+
+
+def test_failure_before_first_delta_no_discontinuity_flag(streaming_request):
+    """Zero deltas published before the failure: nothing to invalidate, so
+    the completed event carries no flag (absent, not false)."""
+    llm = _FakeStreamingLLM(stream_error_after=0)
+    overlord = _make_overlord(llm)
+
+    result = asyncio.run(overlord._apply_persona("raw", "msg", stream_deltas=True))
+
+    assert llm.chat_called, "must fall back after the stream errors"
+    assert _content_events() == []
+
+    completed = _emit_completed(result)
+    assert "stream_discontinuity" not in completed
+
+
+def test_empty_stream_fallback_no_discontinuity_flag(streaming_request):
+    """The empty-stream fallback (no error, no deltas) is not a
+    discontinuity either."""
+    llm = _FakeStreamingLLM(chunks=[])
+    overlord = _make_overlord(llm)
+
+    result = asyncio.run(overlord._apply_persona("raw", "msg", stream_deltas=True))
+
+    completed = _emit_completed(result)
+    assert "stream_discontinuity" not in completed
+
+
+def test_normal_path_no_discontinuity_flag(streaming_request):
+    """A clean streamed generation never flags: additive, absent-when-false."""
+    llm = _FakeStreamingLLM()
+    overlord = _make_overlord(llm)
+
+    result = asyncio.run(overlord._apply_persona("raw", "msg", stream_deltas=True))
+
+    assert [e["content"] for e in _content_events()] == CHUNKS
+    completed = _emit_completed(result)
+    assert "stream_discontinuity" not in completed
+
+
 def test_content_events_emitted_synchronously():
     """content events bypass the background emitter thread: they must be
     visible in the event list immediately after stream() returns, or thread

@@ -28,6 +28,11 @@ pass) now runs in streaming mode and emits each provider chunk as a
   no resilience-wrapper retries: replaying a partially consumed stream
   would duplicate text; the overlord falls back to the non-streaming
   call on any stream failure so the turn always answers).
+- If that fallback regenerates AFTER deltas were already published, the
+  terminal `completed` event additionally carries
+  `stream_discontinuity: true` -- clients that render deltas should then
+  discard them and treat `completed.content` as authoritative (the flag
+  is absent on every normal turn).
 - Covered by unit tests (ordering, envelope, config off, rewrite-step
   gating, fallback) and a new e2e test,
   `10_streaming/test_10_a_7` (deltas before `completed`, concatenation

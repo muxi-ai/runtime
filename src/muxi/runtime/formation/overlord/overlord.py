@@ -3322,10 +3322,24 @@ class Overlord:
                 if parts:
                     return "".join(parts)
             except Exception as e:
+                # If deltas were already published, the fallback below runs a
+                # FRESH generation whose text will differ from the streamed
+                # prefix. Mark the discontinuity so the terminal `completed`
+                # event carries `stream_discontinuity: true` and
+                # delta-rendering clients (which normally dedup/suppress
+                # completed.content) know to discard their partial text and
+                # use the authoritative completed.content instead. With zero
+                # deltas published there is nothing to invalidate.
+                if parts:
+                    streaming.mark_stream_discontinuity()
                 observability.observe(
                     event_type=observability.ErrorEvents.INTERNAL_ERROR,
                     level=observability.EventLevel.WARNING,
-                    data={"error": str(e), "stage": "persona_stream_deltas"},
+                    data={
+                        "error": str(e),
+                        "stage": "persona_stream_deltas",
+                        "deltas_published": len(parts),
+                    },
                     description=(
                         f"Streaming persona generation failed, falling back "
                         f"to non-streaming: {e}"

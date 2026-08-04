@@ -47,6 +47,21 @@ class StreamingManager:
             if request_id not in self.event_streams:
                 self.event_streams[request_id] = {"owner": (user_id, session_id), "events": []}
 
+    def mark_discontinuity(self, request_id: str):
+        """
+        Mark this request's published content deltas as invalidated.
+
+        Called when a fallback regeneration runs AFTER content deltas were
+        already published: the deltas belong to an abandoned generation, so
+        the terminal ``completed`` event for this request will carry
+        ``stream_discontinuity: true`` telling delta-rendering clients to
+        discard their accumulated deltas and use ``completed.content``
+        (which stays the full authoritative text) instead.
+        """
+        with self._lock:
+            if request_id in self.event_streams:
+                self.event_streams[request_id]["discontinuity"] = True
+
     def emit_event(self, request_id: str, event_type: str, content: str, **metadata):
         """Simple event storage - just in-memory dict/list operations"""
         with self._lock:
@@ -55,6 +70,11 @@ class StreamingManager:
 
             stream_data = self.event_streams[request_id]
             user_id, session_id = stream_data["owner"]
+
+            # Additive, absent-when-false: only a marked request's terminal
+            # completed event carries the flag (see mark_discontinuity).
+            if event_type == "completed" and stream_data.get("discontinuity"):
+                metadata.setdefault("stream_discontinuity", True)
 
             event = {
                 "request_id": request_id,
@@ -409,6 +429,29 @@ def stream(event_type: str, content: str, **metadata):
 
 
 # Helper functions
+def mark_stream_discontinuity():
+    """
+    Flag the current request's published content deltas as invalidated.
+
+    Used by the final-response fallback path: when a streaming generation
+    fails AFTER deltas were published and a fresh non-streaming generation
+    replaces it, the already-streamed text no longer matches the final
+    text. The terminal ``completed`` event then carries
+    ``stream_discontinuity: true`` so delta-rendering clients know to
+    treat ``completed.content`` as authoritative. No-op when the request
+    is not streaming-enabled.
+    """
+    try:
+        from .observability.context import get_current_request_context
+
+        request_context = get_current_request_context()
+        if request_context and getattr(request_context, "id", None):
+            streaming_manager.mark_discontinuity(request_context.id)
+    except Exception:
+        # Silent failure like the rest of the streaming API
+        pass
+
+
 def enable_streaming(request_id: str, user_id: str, session_id: str):
     """Enable streaming for a request"""
     streaming_manager.enable_streaming(request_id, user_id, session_id)
