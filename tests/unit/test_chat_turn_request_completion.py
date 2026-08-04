@@ -252,8 +252,13 @@ async def test_cancelled_turn_is_not_marked_completed(tracker):
         {"workflow_id": "wf_1", "approval_required": True, "requires_user_response": True},
         # Credential request awaiting the user
         {"clarification_type": "missing_credential", "service": "github"},
+        # Agent-initiated clarification (overlord.py:11823) -- carries neither
+        # "clarification" nor "clarification_type"
+        {"requires_clarification": True, "clarification_source": "agent_request"},
+        # Agent response flagged as needing more information
+        {"needs_clarification": True, "clarification_type": "information_request"},
     ],
-    ids=["clarification", "approval", "credential"],
+    ids=["clarification", "approval", "credential", "agent_request", "agent_needs_info"],
 )
 async def test_interactive_turn_is_not_marked_completed(tracker, metadata):
     """A turn awaiting a further user response is not a completed turn.

@@ -66,6 +66,8 @@ PENDING_INTERACTION_KEYS = (
     "clarification",
     "clarification_requested",
     "clarification_type",
+    "requires_clarification",
+    "needs_clarification",
     "approval_required",
     "requires_user_response",
 )
