@@ -2,6 +2,31 @@
 
 ## [unreleased]
 
+### Inline credential collection no longer orphans its request
+
+Interactive turns are deliberately left PROCESSING, because the follow-up
+turn reuses the same request_id and closes the entry. That reuse depends
+on the turn storing pending-interaction state carrying its request_id --
+and the dynamic-credential "collect" branch was the one interactive path
+that stored none. So asking the user for a token parked the request, the
+token arrived under a brand new request_id, and nothing ever closed the
+original: the stale request reaper rewrote it to FAILED ("Request timed
+out") 600s later, even though the interaction had completed.
+
+- The collect branch now stores continuation state carrying its
+  request_id, the way the sibling redirect branch already did. The
+  follow-up turn runs under the original id and transitions that entry to
+  COMPLETED. The state is written synchronously, since a user replying
+  with their token immediately could otherwise race a fire-and-forget
+  write and start a new request anyway.
+- Continuation state uses a credential-collect type of its own, so the
+  follow-up still falls through to the credential handler's own retry
+  loop rather than being claimed by a clarification branch.
+- Turns that keep the collect loop open (help request, invalid token ->
+  retry) carry the pending-interaction metadata, so they stay PROCESSING
+  like every other mid-interaction turn. Turns that close it (credential
+  stored, duplicate, cancelled) clear the state and complete the request.
+
 ### Chat turns now reach a terminal request status
 
 Ordinary sync and streaming chat turns registered themselves in the

@@ -252,6 +252,17 @@ MEMORY_COLLECTIONS = {
 SUCCESS_STATES = {TaskStatus.COMPLETED, TaskStatus.DONE}
 SUCCESS_STATE_VALUES = {TaskStatus.COMPLETED.value, TaskStatus.DONE.value, "completed", "done"}
 
+# Pending-clarification type for dynamic-mode inline credential collection.
+# It exists purely to carry the originating request_id across the turn that
+# asks for the token and the turn that supplies it, so the follow-up closes
+# the original request-tracker entry instead of orphaning it.
+#
+# Deliberately distinct from every clarification type dispatched in
+# ``_process_sync_chat``: the collect follow-up belongs to the credential
+# handler's own ``_pending`` retry loop, so it must fall through those
+# branches untouched. Do not add it to any of those type lists.
+CREDENTIAL_COLLECT_PENDING_TYPE = "credential_collect"
+
 
 class Overlord:
     """
@@ -8579,6 +8590,14 @@ Agent response: {raw_response}"""
                             session_id=session_id,
                             user_id=user_id,
                         )
+                        # The handler keeps its ``_pending`` entry exactly while
+                        # the collect loop is still open (help request, invalid
+                        # credential -> retry) and drops it once the loop is done
+                        # (stored, duplicate, cancelled, stale). That is the
+                        # signal for whether this turn ends the interaction.
+                        collect_still_open = session_id in self.credential_handler._pending
+                        if not collect_still_open:
+                            await self._delete_pending_clarification_sync(session_id)
                         if response:
                             # Check if this is a dict response with continuation signal
                             if (
@@ -8611,7 +8630,23 @@ Agent response: {raw_response}"""
                                     return success_response
                             else:
                                 # Simple string response (e.g., cancellation or error)
-                                return MuxiResponse(role="assistant", content=response)
+                                # A still-open loop (help, retry) is another turn
+                                # that ends awaiting the user, so it carries the
+                                # pending-interaction metadata that keeps the
+                                # request out of COMPLETED. A closed loop
+                                # (cancellation) is terminal and carries none.
+                                return MuxiResponse(
+                                    role="assistant",
+                                    content=response,
+                                    metadata=(
+                                        {
+                                            "clarification_type": "credential",
+                                            "credential_mode": "collect",
+                                        }
+                                        if collect_still_open
+                                        else None
+                                    ),
+                                )
 
                     # Check for credential needs FIRST (issue #54)
                     # BUT skip if this is a workflow approval response
@@ -8640,13 +8675,35 @@ Agent response: {raw_response}"""
                                 session_id=session_id,
                             )
 
-                            # If this is a redirect, set up pending clarification so we can detect help requests
-                            if result.get("action") == "redirect" and session_id:
-                                self._set_pending_clarification(
+                            # Both credential modes leave the turn awaiting a
+                            # user reply, so both store continuation state
+                            # carrying this request_id: ``chat`` reuses it on
+                            # the follow-up turn, which is what lets that turn
+                            # close the entry ``_mark_turn_terminal`` deliberately
+                            # left PROCESSING here. Without it the follow-up runs
+                            # under a fresh id and the stale reaper rewrites the
+                            # original to FAILED.
+                            #
+                            # ``redirect`` also drives help-request detection.
+                            # ``collect`` uses a type of its own so the follow-up
+                            # still falls through to the credential handler's own
+                            # ``_pending`` loop below rather than being claimed by
+                            # a clarification branch.
+                            if session_id and result.get("action") in ("redirect", "collect"):
+                                # MUST be synchronous: the user is expected to
+                                # reply almost immediately with their token, and a
+                                # fire-and-forget write can lose that race -- the
+                                # reply then reads no pending state and starts a
+                                # new request_id, which is the bug this guards.
+                                await self._set_pending_clarification_sync(
                                     session_id,
                                     {
                                         "request_id": request_id,
-                                        "type": "redirect",
+                                        "type": (
+                                            "redirect"
+                                            if result.get("action") == "redirect"
+                                            else CREDENTIAL_COLLECT_PENDING_TYPE
+                                        ),
                                         "service": service,
                                     },
                                 )
