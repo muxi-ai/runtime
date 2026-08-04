@@ -285,22 +285,42 @@ async def cancel_request(
         )
         return JSONResponse(content=response.model_dump(), status_code=403)
 
-    # Mark for cooperative cancellation (checkpoints will check this)
-    await overlord.request_tracker.mark_cancelled(request_id)
-
-    # Also try asyncio task cancellation
-    result = await overlord.cancel_request(request_id)
-
-    if result["success"]:
-        response = create_success_response(
-            APIObjectType.REQUEST_STATUS,
-            APIEventType.REQUEST_CANCELLED,
-            {"request_id": request_id, "status": "cancelled", "message": "Request cancelled"},
+    # Mark for cooperative cancellation (checkpoints will check this). The
+    # status check and the mark are atomic inside the tracker: if the request
+    # reaches COMPLETED/FAILED before the mark lands, no flag is set and we
+    # report the terminal state honestly instead of promising a cancellation.
+    marked = await overlord.request_tracker.mark_cancelled(request_id)
+    if not marked:
+        current = await overlord.request_tracker.get_request(request_id)
+        final_status = (current or request_state).status.value
+        response = create_error_response(
+            "OPERATION_FAILED",
+            f"Cannot cancel request {request_id}: already {final_status}",
+            None,
             api_request_id,
         )
-        return JSONResponse(content=response.model_dump(), status_code=200)
-    else:
-        response = create_error_response(
-            "OPERATION_FAILED", result["message"], None, api_request_id
-        )
         return JSONResponse(content=response.model_dump(), status_code=400)
+
+    # Also try asyncio task cancellation. Only background workflow executions
+    # carry a task_ref, so this succeeds for those alone -- a normal chat turn
+    # relies entirely on the cooperative flag set above and stops at its next
+    # checkpoint. Either way the cancellation has taken effect.
+    result = await overlord.cancel_request(request_id)
+    immediate = bool(result.get("success"))
+
+    response = create_success_response(
+        APIObjectType.REQUEST_STATUS,
+        APIEventType.REQUEST_CANCELLED,
+        {
+            "request_id": request_id,
+            "status": "cancelled",
+            "cancellation": "immediate" if immediate else "cooperative",
+            "message": (
+                "Request cancelled"
+                if immediate
+                else "Request marked for cancellation; it will stop at the next checkpoint"
+            ),
+        },
+        api_request_id,
+    )
+    return JSONResponse(content=response.model_dump(), status_code=200)

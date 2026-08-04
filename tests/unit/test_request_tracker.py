@@ -128,6 +128,36 @@ async def test_cancelled_requests_retained_then_cleaned(tracker, make_state):
 
 
 @pytest.mark.asyncio
+async def test_mark_cancelled_sets_flag_for_active_request(tracker, make_state):
+    """A PROCESSING request accepts the cooperative flag."""
+    await tracker.track_request("req_active", make_state("req_active"))
+
+    assert await tracker.mark_cancelled("req_active") is True
+    assert tracker.is_cancelled("req_active")
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("status", [RequestStatus.COMPLETED, RequestStatus.FAILED])
+async def test_mark_cancelled_refuses_finished_request(tracker, make_state, status):
+    """A COMPLETED/FAILED request refuses the flag: no stale cancellation."""
+    await tracker.track_request("req_done", make_state("req_done"))
+    await tracker.update_request("req_done", status)
+
+    assert await tracker.mark_cancelled("req_done") is False
+    assert not tracker.is_cancelled("req_done")
+
+
+@pytest.mark.asyncio
+async def test_mark_cancelled_allows_already_cancelled_request(tracker, make_state):
+    """Re-marking an already-CANCELLED request stays a harmless no-op success."""
+    await tracker.track_request("req_recancel", make_state("req_recancel"))
+    await tracker.update_request("req_recancel", RequestStatus.CANCELLED)
+
+    assert await tracker.mark_cancelled("req_recancel") is True
+    assert tracker.is_cancelled("req_recancel")
+
+
+@pytest.mark.asyncio
 async def test_default_ttl():
     """Default TTL is 300 seconds."""
     tracker = RequestTracker()
