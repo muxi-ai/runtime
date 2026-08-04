@@ -23,11 +23,6 @@ from ...responses import (
 
 router = APIRouter(tags=["Requests"])
 
-# A request in one of these states has already run to its end: neither the
-# cooperative cancellation flag nor asyncio task cancellation can affect it.
-# CANCELLED is deliberately absent -- re-cancelling is a no-op, not a failure.
-_UNCANCELLABLE_STATUSES = frozenset({RequestStatus.COMPLETED, RequestStatus.FAILED})
-
 
 def _check_auth_and_user_id(
     request: Request,
@@ -290,18 +285,21 @@ async def cancel_request(
         )
         return JSONResponse(content=response.model_dump(), status_code=403)
 
-    # Nothing to cancel once the request has finished -- report that honestly
-    if request_state.status in _UNCANCELLABLE_STATUSES:
+    # Mark for cooperative cancellation (checkpoints will check this). The
+    # status check and the mark are atomic inside the tracker: if the request
+    # reaches COMPLETED/FAILED before the mark lands, no flag is set and we
+    # report the terminal state honestly instead of promising a cancellation.
+    marked = await overlord.request_tracker.mark_cancelled(request_id)
+    if not marked:
+        current = await overlord.request_tracker.get_request(request_id)
+        final_status = (current or request_state).status.value
         response = create_error_response(
             "OPERATION_FAILED",
-            f"Cannot cancel request {request_id}: already {request_state.status.value}",
+            f"Cannot cancel request {request_id}: already {final_status}",
             None,
             api_request_id,
         )
         return JSONResponse(content=response.model_dump(), status_code=400)
-
-    # Mark for cooperative cancellation (checkpoints will check this)
-    await overlord.request_tracker.mark_cancelled(request_id)
 
     # Also try asyncio task cancellation. Only background workflow executions
     # carry a task_ref, so this succeeds for those alone -- a normal chat turn

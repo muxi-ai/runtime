@@ -74,6 +74,11 @@ _TERMINAL_STATUSES = frozenset(
     {RequestStatus.COMPLETED, RequestStatus.FAILED, RequestStatus.CANCELLED}
 )
 
+# A request in one of these states has already run to its end: neither the
+# cooperative cancellation flag nor asyncio task cancellation can affect it.
+# CANCELLED is deliberately absent -- re-cancelling is a no-op, not a failure.
+UNCANCELLABLE_STATUSES = frozenset({RequestStatus.COMPLETED, RequestStatus.FAILED})
+
 DEFAULT_COMPLETED_TTL_SECONDS = 300  # 5 minutes
 DEFAULT_STALE_REQUEST_TIMEOUT = 600  # 10 minutes -- matches StreamingManager.SUBSCRIBE_TIMEOUT
 
@@ -159,7 +164,7 @@ class RequestTracker:
         async with self._lock:
             return self._requests.get(request_id)
 
-    async def mark_cancelled(self, request_id: str) -> None:
+    async def mark_cancelled(self, request_id: str) -> bool:
         """
         Mark request as cancelled for cooperative cancellation.
 
@@ -167,11 +172,27 @@ class RequestTracker:
         will check. When a checkpoint detects cancellation, it will
         raise RequestCancelledException.
 
+        The status check and the mark happen atomically under the tracker
+        lock: if the tracked request has already finished (COMPLETED or
+        FAILED), the flag is NOT set and False is returned, so a cancel
+        racing a completion cannot leave a stale cancellation flag behind
+        a finished request. Marking an already-CANCELLED request stays a
+        harmless no-op success, and untracked ids are still markable
+        (callers gate existence separately).
+
         Args:
             request_id: Unique identifier for the request to cancel
+
+        Returns:
+            True if the cooperative flag was set, False if the request
+            had already reached COMPLETED/FAILED.
         """
         async with self._lock:
+            state = self._requests.get(request_id)
+            if state is not None and state.status in UNCANCELLABLE_STATUSES:
+                return False
             self._cancelled.add(request_id)
+            return True
 
     def is_cancelled(self, request_id: str) -> bool:
         """

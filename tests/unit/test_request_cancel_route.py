@@ -180,6 +180,42 @@ async def test_cancel_finished_request_still_fails(status: RequestStatus) -> Non
     assert not overlord.request_tracker.is_cancelled("req-done")
 
 
+@pytest.mark.parametrize("status", [RequestStatus.COMPLETED, RequestStatus.FAILED])
+async def test_cancel_racing_completion_reports_terminal_state(status: RequestStatus) -> None:
+    """Request reaches a terminal state between the route's existence check and
+    the cancellation mark: the mark must refuse atomically, the route must not
+    promise a cancellation, and no stale cancellation flag may remain."""
+    overlord = make_overlord()
+    await track(overlord, "req-race")
+
+    tracker = overlord.request_tracker
+    original_get = tracker.get_request
+    calls = {"count": 0}
+
+    async def get_then_finish(request_id: str) -> Optional[RequestState]:
+        state = await original_get(request_id)
+        calls["count"] += 1
+        if calls["count"] == 1:
+            # Simulate the request finishing right after the route's check,
+            # before mark_cancelled runs
+            await tracker.update_request(request_id, status, result="done")
+        return state
+
+    tracker.get_request = get_then_finish
+
+    async with client_for(make_app(overlord)) as client:
+        response = await client.delete("/requests/req-race")
+
+    assert response.status_code == 400
+    body = response.json()
+    assert body["success"] is False
+    assert body["error"]["code"] == "OPERATION_FAILED"
+    assert status.value in body["error"]["message"]
+
+    # The race must not leave a stale cancellation flag behind
+    assert not tracker.is_cancelled("req-race")
+
+
 async def test_cancelling_twice_is_idempotent() -> None:
     """Documented behaviour: re-cancelling is safe, not an error."""
     overlord = make_overlord()
