@@ -23,6 +23,11 @@ from ...responses import (
 
 router = APIRouter(tags=["Requests"])
 
+# A request in one of these states has already run to its end: neither the
+# cooperative cancellation flag nor asyncio task cancellation can affect it.
+# CANCELLED is deliberately absent -- re-cancelling is a no-op, not a failure.
+_UNCANCELLABLE_STATUSES = frozenset({RequestStatus.COMPLETED, RequestStatus.FAILED})
+
 
 def _check_auth_and_user_id(
     request: Request,
@@ -285,22 +290,39 @@ async def cancel_request(
         )
         return JSONResponse(content=response.model_dump(), status_code=403)
 
+    # Nothing to cancel once the request has finished -- report that honestly
+    if request_state.status in _UNCANCELLABLE_STATUSES:
+        response = create_error_response(
+            "OPERATION_FAILED",
+            f"Cannot cancel request {request_id}: already {request_state.status.value}",
+            None,
+            api_request_id,
+        )
+        return JSONResponse(content=response.model_dump(), status_code=400)
+
     # Mark for cooperative cancellation (checkpoints will check this)
     await overlord.request_tracker.mark_cancelled(request_id)
 
-    # Also try asyncio task cancellation
+    # Also try asyncio task cancellation. Only background workflow executions
+    # carry a task_ref, so this succeeds for those alone -- a normal chat turn
+    # relies entirely on the cooperative flag set above and stops at its next
+    # checkpoint. Either way the cancellation has taken effect.
     result = await overlord.cancel_request(request_id)
+    immediate = bool(result.get("success"))
 
-    if result["success"]:
-        response = create_success_response(
-            APIObjectType.REQUEST_STATUS,
-            APIEventType.REQUEST_CANCELLED,
-            {"request_id": request_id, "status": "cancelled", "message": "Request cancelled"},
-            api_request_id,
-        )
-        return JSONResponse(content=response.model_dump(), status_code=200)
-    else:
-        response = create_error_response(
-            "OPERATION_FAILED", result["message"], None, api_request_id
-        )
-        return JSONResponse(content=response.model_dump(), status_code=400)
+    response = create_success_response(
+        APIObjectType.REQUEST_STATUS,
+        APIEventType.REQUEST_CANCELLED,
+        {
+            "request_id": request_id,
+            "status": "cancelled",
+            "cancellation": "immediate" if immediate else "cooperative",
+            "message": (
+                "Request cancelled"
+                if immediate
+                else "Request marked for cancellation; it will stop at the next checkpoint"
+            ),
+        },
+        api_request_id,
+    )
+    return JSONResponse(content=response.model_dump(), status_code=200)
