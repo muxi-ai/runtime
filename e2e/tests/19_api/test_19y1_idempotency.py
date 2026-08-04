@@ -124,6 +124,24 @@ class TestIdempotency(BaseE2ETest):
                 print("✅ No-header passthrough unchanged")
                 checks.append("No-header passthrough")
 
+                print("\n7. Reusing a cached key with stream=true still streams...")
+                async with client.stream(
+                    "POST",
+                    f"{self.base_url}/chat",
+                    json={**payload, "stream": True},
+                    headers=self._headers("e2e-key-1"),
+                ) as r6:
+                    assert r6.status_code == 200
+                    content_type = r6.headers.get("content-type", "")
+                    assert content_type.startswith("text/event-stream"), (
+                        f"stream retry got {content_type!r} -- cached JSON leaked "
+                        "across response modes"
+                    )
+                    async for _ in r6.aiter_bytes():
+                        break
+                print("✅ Stream retry not served from the JSON cache")
+                checks.append("Response-mode key scoping")
+
             formatter.print_test_result(
                 test_name="test_19y1_idempotency",
                 success=True,

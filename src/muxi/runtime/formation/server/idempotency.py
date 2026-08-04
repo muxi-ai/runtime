@@ -3,13 +3,16 @@ In-memory idempotency-key support for Formation API endpoints.
 
 Clients send an ``X-Muxi-Idempotency-Key`` header on mutating requests; retries with
 the same key within the TTL replay the original JSON response instead of
-processing the request again. Keys are scoped per endpoint and user so
-different callers (or different endpoints) can reuse the same key safely.
+processing the request again. Keys are scoped per endpoint, user, and response
+mode so different callers (or different endpoints) can reuse the same key safely.
 
 Semantics:
   - Only successful (2xx) JSON responses are cached; errors are retryable.
   - Streaming (SSE) responses pass through untouched: a token stream cannot
     be replayed from a response cache, and duplicate sync chats are harmless.
+  - Streaming and non-streaming calls never share a cache entry: the scope
+    includes the response mode, so reusing a key with ``stream: true`` after a
+    ``stream: false`` call cannot hand a JSON body to a stream consumer.
   - Concurrent requests with the same key are single-flighted: the second
     caller waits for the first to finish, then receives the cached response.
   - Storage is in-process with a TTL, mirroring the RequestTracker precedent;
@@ -23,6 +26,7 @@ from typing import Any, Dict, Optional, Tuple
 
 from fastapi import Request
 from fastapi.responses import JSONResponse
+from pydantic import BaseModel
 
 from ...services import observability
 from ...utils.fastjson import json
@@ -32,6 +36,9 @@ from .utils import get_header_case_insensitive
 IDEMPOTENCY_HEADER = "X-Muxi-Idempotency-Key"
 DEFAULT_TTL_SECONDS = 24 * 60 * 60
 MAX_CACHE_ENTRIES = 10_000
+
+# Sentinel: distinguishes "body has no stream field" from "stream is None"
+_NO_STREAM_FIELD = object()
 
 
 class IdempotencyCache:
@@ -44,8 +51,8 @@ class IdempotencyCache:
         self._locks: Dict[str, asyncio.Lock] = {}
 
     @staticmethod
-    def scoped_key(endpoint: str, user_id: str, key: str) -> str:
-        return f"{endpoint}:{user_id}:{key}"
+    def scoped_key(endpoint: str, user_id: str, key: str, mode: str = "json") -> str:
+        return f"{endpoint}:{user_id}:{mode}:{key}"
 
     def lock_for(self, scoped_key: str) -> asyncio.Lock:
         """Get (or create) the single-flight lock for a scoped key."""
@@ -104,6 +111,21 @@ def _find_request(args, kwargs) -> Optional[Request]:
     return None
 
 
+def _response_mode(args, kwargs) -> str:
+    """Derive the response mode a request is asking for from its parsed body.
+
+    Handlers treat ``stream is False`` as the only non-streaming case, so this
+    mirrors that check. Bodies with no ``stream`` field (and handlers with no
+    body model at all) are JSON-only endpoints.
+    """
+    for value in list(args) + list(kwargs.values()):
+        if isinstance(value, BaseModel):
+            stream = getattr(value, "stream", _NO_STREAM_FIELD)
+            if stream is not _NO_STREAM_FIELD:
+                return "json" if stream is False else "stream"
+    return "json"
+
+
 def _echo_key(body: Dict[str, Any], key: str) -> None:
     """Echo the idempotency key into the response envelope, if present."""
     request_info = body.get("request")
@@ -147,8 +169,14 @@ def idempotent(endpoint: str):
             user_id = get_header_case_insensitive(request.headers, "X-Muxi-User-Id") or "0"
             cache = get_idempotency_cache(request.app)
             # Scope by the concrete path so path parameters (e.g. trigger
-            # names) get independent key namespaces
-            scoped = cache.scoped_key(f"{request.method} {request.url.path}", user_id, key)
+            # names) get independent key namespaces, and by the response mode
+            # so a stream=true retry never replays a cached JSON body
+            scoped = cache.scoped_key(
+                f"{request.method} {request.url.path}",
+                user_id,
+                key,
+                _response_mode(args, kwargs),
+            )
 
             async with cache.lock_for(scoped):
                 cached = cache.get(scoped)

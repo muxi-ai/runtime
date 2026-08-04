@@ -3,9 +3,9 @@
 Covers:
   - IdempotencyCache: TTL expiry, scoping, prune behavior
   - The @idempotent decorator through a real FastAPI app: replay of cached
-    responses, envelope echo of the key, per-user and per-path scoping,
-    error responses staying retryable, streaming passthrough, and
-    single-flight coalescing of concurrent duplicates
+    responses, envelope echo of the key, per-user, per-path and per-response-
+    mode scoping, error responses staying retryable, streaming passthrough,
+    and single-flight coalescing of concurrent duplicates
 """
 
 import asyncio
@@ -15,6 +15,7 @@ import pytest
 from fastapi import FastAPI, Request
 from fastapi.responses import JSONResponse, StreamingResponse
 from fastapi.testclient import TestClient
+from pydantic import BaseModel
 
 from muxi.runtime.datatypes.api import APIEventType, APIObjectType
 from muxi.runtime.formation.server.idempotency import (
@@ -56,6 +57,12 @@ def test_scoped_key_separates_endpoint_and_user():
     )
 
 
+def test_scoped_key_separates_response_mode():
+    assert IdempotencyCache.scoped_key(
+        "POST /chat", "u1", "abc", "json"
+    ) != IdempotencyCache.scoped_key("POST /chat", "u1", "abc", "stream")
+
+
 def test_prune_evicts_expired_entries_when_full():
     cache = IdempotencyCache()
     from muxi.runtime.formation.server import idempotency as idem_module
@@ -70,6 +77,13 @@ def test_prune_evicts_expired_entries_when_full():
 # ---------------------------------------------------------------------------
 # @idempotent decorator through a real FastAPI app
 # ---------------------------------------------------------------------------
+
+
+class _ChatBody(BaseModel):
+    """Minimal stand-in for ChatRequest: streaming is the default."""
+
+    message: str
+    stream: bool = True
 
 
 @pytest.fixture
@@ -101,6 +115,25 @@ def app_and_calls():
 
         async def gen():
             yield "data: x\n\n"
+
+        return StreamingResponse(gen(), media_type="text/event-stream")
+
+    # Mirrors the real /v1/chat contract: one endpoint, two response shapes
+    # selected by the body's `stream` flag
+    @app.post("/v1/chat")
+    @idempotent("chat")
+    async def chat(request: Request, chat_request: _ChatBody):
+        calls["count"] += 1
+        if chat_request.stream is False:
+            envelope = create_success_response(
+                APIObjectType.REQUEST,
+                APIEventType.REQUEST_COMPLETED,
+                {"reply": f"reply-{calls['count']}"},
+            )
+            return JSONResponse(content=envelope.model_dump(), status_code=200)
+
+        async def gen():
+            yield "data: token\n\n"
 
         return StreamingResponse(gen(), media_type="text/event-stream")
 
@@ -175,6 +208,48 @@ def test_streaming_responses_pass_through_uncached(app_and_calls):
     second = client.post("/v1/stream", headers={"X-Muxi-Idempotency-Key": "k1"})
     assert first.headers["content-type"].startswith("text/event-stream")
     assert second.headers["content-type"].startswith("text/event-stream")
+    assert calls["count"] == 2
+
+
+def test_stream_retry_does_not_replay_cached_json(app_and_calls):
+    """A stream:true retry of a cached stream:false key must not get JSON."""
+    app, calls = app_and_calls
+    client = TestClient(app)
+    headers = {"X-Muxi-Idempotency-Key": "k1"}
+
+    first = client.post("/v1/chat", json={"message": "hi", "stream": False}, headers=headers)
+    second = client.post("/v1/chat", json={"message": "hi", "stream": True}, headers=headers)
+
+    assert first.headers["content-type"].startswith("application/json")
+    assert second.headers["content-type"].startswith("text/event-stream")
+    assert second.text == "data: token\n\n"
+    assert calls["count"] == 2
+
+
+def test_json_retry_still_replays_within_same_mode(app_and_calls):
+    app, calls = app_and_calls
+    client = TestClient(app)
+    headers = {"X-Muxi-Idempotency-Key": "k1"}
+    body = {"message": "hi", "stream": False}
+
+    first = client.post("/v1/chat", json=body, headers=headers)
+    second = client.post("/v1/chat", json=body, headers=headers)
+
+    assert calls["count"] == 1
+    assert second.json() == first.json()
+
+
+def test_json_retry_after_stream_is_not_served_from_stream_scope(app_and_calls):
+    """The reverse order: streaming is never cached, so the JSON call runs."""
+    app, calls = app_and_calls
+    client = TestClient(app)
+    headers = {"X-Muxi-Idempotency-Key": "k1"}
+
+    client.post("/v1/chat", json={"message": "hi", "stream": True}, headers=headers)
+    second = client.post("/v1/chat", json={"message": "hi", "stream": False}, headers=headers)
+
+    assert second.headers["content-type"].startswith("application/json")
+    assert second.json()["data"]["reply"] == "reply-2"
     assert calls["count"] == 2
 
 
