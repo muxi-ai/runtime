@@ -1498,6 +1498,63 @@ class LLM:
                 **kwargs,
             )
 
+    async def chat_stream(
+        self,
+        messages: List[Dict[str, str]],
+        temperature: Optional[float] = None,
+        max_tokens: Optional[int] = None,
+        **kwargs: Any,
+    ):
+        """
+        Stream a text-only chat completion, yielding text deltas as they arrive.
+
+        Deltas are passed through exactly as the provider chunks them — no
+        coalescing or re-chunking happens here (consumers coalesce if needed).
+
+        Notes:
+            - Text-only: files/multimodal are not supported on this path.
+            - Bypasses the resilience wrapper: retrying a partially consumed
+              stream would replay text the consumer already handled, so errors
+              propagate and the caller decides how to fall back.
+            - Token accounting is unavailable for streamed responses (chunks
+              carry no usage block), so MODEL_REQUEST_COMPLETED is not emitted.
+
+        Args:
+            messages: A list of messages in the conversation.
+            temperature: Controls randomness. Overrides the instance setting.
+            max_tokens: The maximum number of tokens to generate.
+            **kwargs: Additional provider-specific parameters (e.g. caching).
+
+        Yields:
+            Non-empty text deltas (str) in generation order.
+        """
+        params = await self._prepare_chat_request(
+            messages,
+            None,
+            temperature=temperature,
+            max_tokens=max_tokens,
+            **kwargs,
+        )
+        params["stream"] = True
+
+        response = await ChatCompletion.acreate(**params)
+
+        # Record telemetry for the streamed LLM request (parity with chat())
+        from ...services.telemetry import get_telemetry
+
+        telemetry = get_telemetry()
+        if telemetry:
+            telemetry.record_llm_request(self._provider, self._model, cache_hit=False)
+
+        async for chunk in response:
+            choices = getattr(chunk, "choices", None)
+            if not choices:
+                continue
+            delta = getattr(choices[0], "delta", None)
+            text = getattr(delta, "content", None) if delta is not None else None
+            if text:
+                yield text
+
     async def _advanced_multimodal_processing(
         self,
         messages: List[Dict[str, str]],

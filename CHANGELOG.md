@@ -27,6 +27,42 @@ out") 600s later, even though the interaction had completed.
   like every other mid-interaction turn. Turns that close it (credential
   stored, duplicate, cancelled) clear the state and complete the request.
 
+### Streaming chat now streams the final response as content deltas
+
+During a streaming chat turn the final assistant text used to arrive
+only once, inside the terminal `completed` event -- clients could not
+render text as it generated. The final-response LLM call (the persona
+pass) now runs in streaming mode and emits each provider chunk as a
+`type: "content"` SSE event, so clients render tokens live.
+
+- Purely additive: the terminal `completed` event still carries the full
+  final text, so clients that only read the terminal event keep working,
+  and clients that render deltas (e.g. the ACP bridge) dedup it.
+- Deltas are emitted only when the generated text IS the delivered text:
+  the fast conversational path and the standard agent/workflow response
+  path stream; turns whose text is rewritten after generation
+  (`response.format: json` wrapping, `html` prettify, credential-option
+  formatting, error formatting) keep today's behavior.
+- Configurable via `overlord.config.response.stream_tokens` (default
+  `true`). Chunking is passed through as the provider yields it; clients
+  coalesce.
+- `content` events bypass the background emitter thread and are appended
+  synchronously, guaranteeing delta ordering; they carry the standard
+  event envelope (request_id, user_id, session_id, timestamp).
+- New `LLM.chat_stream()` async generator on the LLM service (text-only,
+  no resilience-wrapper retries: replaying a partially consumed stream
+  would duplicate text; the overlord falls back to the non-streaming
+  call on any stream failure so the turn always answers).
+- If that fallback regenerates AFTER deltas were already published, the
+  terminal `completed` event additionally carries
+  `stream_discontinuity: true` -- clients that render deltas should then
+  discard them and treat `completed.content` as authoritative (the flag
+  is absent on every normal turn).
+- Covered by unit tests (ordering, envelope, config off, rewrite-step
+  gating, fallback) and a new e2e test,
+  `10_streaming/test_10_a_7` (deltas before `completed`, concatenation
+  equals the final text, clean stream termination).
+
 ### Chat turns now reach a terminal request status
 
 Ordinary sync and streaming chat turns registered themselves in the
@@ -60,6 +96,44 @@ successful turns as failures and leaving
   turn, so their question is not a final result.
 - Covered by unit tests for both paths (including that the reaper leaves a
   finished turn alone) and a new e2e test, `9_async/test_9b2_sync_turn_completion`.
+
+
+### Request cancellation reports success for ordinary chat turns
+
+`DELETE /v1/requests/{request_id}` returned 400 `OPERATION_FAILED` for a
+normal chat turn even though the cancellation had taken effect. The route
+set the cooperative cancellation flag (which processing checkpoints honour,
+aborting the turn at the next safe point) but then keyed its status code off
+`Overlord.cancel_request`, which can only cancel an asyncio task when the
+request carries a `task_ref` -- and only background workflow executions do.
+Clients that check the status code concluded cancellation was unsupported.
+
+- 2xx whenever the request was found and the cancellation flag was set.
+- The response body now carries a `cancellation` field so callers can tell
+  how strong the guarantee is: `immediate` when the underlying task was
+  cancelled outright (background workflows), `cooperative` when the turn
+  will stop at its next checkpoint (ordinary chat turns).
+- 404 for unknown request ids is unchanged. A request that already
+  `completed` or `failed` still returns 400 `OPERATION_FAILED`, now with a
+  message naming the status -- that is the one case where neither
+  cancellation mechanism can apply. Re-cancelling an already-cancelled
+  request stays a successful no-op, as documented.
+
+### Idempotency keys are scoped by response mode
+
+Reusing an idempotency key across streaming and non-streaming calls could
+hand a stream consumer a JSON body. `POST /v1/chat` with `stream: false`
+caches its envelope; a later call with the same key and `stream: true`
+matched the same cache entry and replayed `application/json` to a client
+waiting on `text/event-stream` -- which typically fails to parse or hangs.
+
+The scope key now includes the effective response mode derived from the
+parsed request body (`stream` present and `false` -> `json`, otherwise
+`stream`), so the two modes occupy separate namespaces and can never
+collide. Streaming responses are still never cached: a stream-mode key
+simply has nothing stored under it, and each streaming call runs fresh.
+Single-flight locks are scoped the same way. Endpoints whose body has no
+`stream` field are unaffected.
 
 ## v1.20260803.0
 
