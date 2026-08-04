@@ -243,6 +243,37 @@ async def test_cancelled_turn_is_not_marked_completed(tracker):
     assert state.status == RequestStatus.CANCELLED
 
 
+@pytest.mark.parametrize(
+    "metadata",
+    [
+        # Clarification question (overlord clarification system)
+        {"clarification": True, "mode": "ambiguous"},
+        # Workflow plan awaiting approval
+        {"workflow_id": "wf_1", "approval_required": True, "requires_user_response": True},
+        # Credential request awaiting the user
+        {"clarification_type": "missing_credential", "service": "github"},
+    ],
+    ids=["clarification", "approval", "credential"],
+)
+async def test_interactive_turn_is_not_marked_completed(tracker, metadata):
+    """A turn awaiting a further user response is not a completed turn.
+
+    These turns store pending interaction state and reuse the same
+    request_id on the follow-up turn, so reporting the question as a
+    final result would be wrong.
+    """
+    orch = _make_orchestrator(tracker)
+
+    await _run_sync_turn(
+        orch,
+        MuxiResponse(role="assistant", content="Which repository?", metadata=metadata),
+    )
+
+    state = await tracker.get_request(REQUEST_ID)
+    assert state.status == RequestStatus.PROCESSING
+    assert state.result is None
+
+
 async def test_streaming_chat_turn_marks_request_completed(tracker, streaming_turn):
     """A finished streaming turn reports COMPLETED once the stream terminates."""
     orch = _make_orchestrator(tracker)

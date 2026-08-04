@@ -29,6 +29,10 @@ successful turns as failures and leaving
 - Async hand-offs (background execution, approved workflows) are left in
   PROCESSING for the background task to finish, and cooperatively
   cancelled turns are recorded CANCELLED rather than COMPLETED.
+- Interactive turns -- clarification questions, workflow-approval prompts,
+  credential requests -- are left alone as well. They end awaiting a
+  further user response and reuse the same request_id on the follow-up
+  turn, so their question is not a final result.
 - Covered by unit tests for both paths (including that the reaper leaves a
   finished turn alone) and a new e2e test, `9_async/test_9b2_sync_turn_completion`.
 

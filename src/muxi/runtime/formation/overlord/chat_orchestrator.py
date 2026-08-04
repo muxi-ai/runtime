@@ -57,6 +57,19 @@ TERMINAL_STREAM_EVENTS = frozenset({"completed", "failed", "cancelled"})
 # after it emitted its terminal event, before treating it as stuck.
 PRODUCER_DRAIN_TIMEOUT = 5.0
 
+# Response metadata set by turns that end awaiting a further user response:
+# clarification questions, workflow-approval prompts, and credential
+# requests. Those turns store pending interaction state and reuse the same
+# request_id on the follow-up turn, so they have not finished and their
+# question is not a final result. See ``_mark_turn_terminal``.
+PENDING_INTERACTION_KEYS = (
+    "clarification",
+    "clarification_requested",
+    "clarification_type",
+    "approval_required",
+    "requires_user_response",
+)
+
 
 def _apply_scheduled_marker(message: str, session_id: Optional[str]) -> str:
     """Return ``message`` with the scheduled-execution marker if and only
@@ -843,6 +856,13 @@ class ChatOrchestrator:
         metadata = getattr(result, "metadata", None) or {}
         if metadata.get("cancelled"):
             await self.overlord.request_tracker.update_request(request_id, RequestStatus.CANCELLED)
+            return
+
+        # Interactive turns end awaiting a further user response and reuse
+        # this request_id on the follow-up turn (which re-registers it as
+        # PROCESSING), so the turn is not finished and its question is not
+        # a final result. Left untouched, as before this transition existed.
+        if any(metadata.get(key) for key in PENDING_INTERACTION_KEYS):
             return
 
         content = getattr(result, "content", None)
