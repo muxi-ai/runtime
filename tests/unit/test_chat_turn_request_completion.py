@@ -264,6 +264,13 @@ async def test_cancelled_turn_is_not_marked_completed(tracker):
         {"requires_clarification": True, "clarification_source": "agent_request"},
         # Agent response flagged as needing more information
         {"needs_clarification": True, "clarification_type": "information_request"},
+        # Direct credential request (overlord.py:8654), which used to return
+        # a response with no metadata at all and so could not be recognised
+        {
+            "clarification_type": "credential",
+            "credential_mode": "redirect",
+            "service": "github",
+        },
     ],
     ids=[
         "clarification",
@@ -271,6 +278,7 @@ async def test_cancelled_turn_is_not_marked_completed(tracker):
         "credential_redirect",
         "agent_request",
         "agent_needs_info",
+        "credential_request",
     ],
 )
 async def test_interactive_turn_is_not_marked_completed(tracker, metadata):
