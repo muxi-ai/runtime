@@ -63,6 +63,29 @@ def test_scoped_key_separates_response_mode():
     ) != IdempotencyCache.scoped_key("POST /chat", "u1", "abc", "stream")
 
 
+def test_scoped_key_is_unambiguous_for_colon_containing_components():
+    # Colon-joining would make these distinct tuples collide:
+    #   ("alice", "stream", "json:k") vs ("alice:stream", "json", "k")
+    ambiguous_pairs = [
+        (("POST /chat", "alice", "json:k", "stream"), ("POST /chat", "alice:stream", "k", "json")),
+        (("POST /chat", "alice", "k", "json"), ("POST /chat:alice", "k", "json", "json")),
+        (("POST /chat", "u1", "k:json", "json"), ("POST /chat", "u1:k", "json", "json")),
+    ]
+    for (e1, u1, k1, m1), (e2, u2, k2, m2) in ambiguous_pairs:
+        key_a = IdempotencyCache.scoped_key(e1, u1, k1, m1)
+        key_b = IdempotencyCache.scoped_key(e2, u2, k2, m2)
+        assert key_a != key_b
+
+        # Distinct scope keys must not share cache entries...
+        cache = IdempotencyCache()
+        cache.store(key_a, {"owner": "a"}, 200)
+        assert cache.get(key_b) is None
+        assert cache.get(key_a) == ({"owner": "a"}, 200)
+
+        # ...nor single-flight locks
+        assert cache.lock_for(key_a) is not cache.lock_for(key_b)
+
+
 def test_prune_evicts_expired_entries_when_full():
     cache = IdempotencyCache()
     from muxi.runtime.formation.server import idempotency as idem_module

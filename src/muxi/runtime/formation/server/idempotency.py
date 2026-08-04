@@ -52,7 +52,11 @@ class IdempotencyCache:
 
     @staticmethod
     def scoped_key(endpoint: str, user_id: str, key: str, mode: str = "json") -> str:
-        return f"{endpoint}:{user_id}:{mode}:{key}"
+        # JSON-serialize the components rather than colon-joining them: a
+        # delimiter that can also appear inside a component (e.g. a user id or
+        # idempotency key containing ":") would let distinct tuples collide on
+        # the same scope key, enabling cross-user/cross-mode replay.
+        return json.dumps([endpoint, user_id, mode, key])
 
     def lock_for(self, scoped_key: str) -> asyncio.Lock:
         """Get (or create) the single-flight lock for a scoped key."""
