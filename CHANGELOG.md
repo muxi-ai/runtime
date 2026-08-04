@@ -2,6 +2,42 @@
 
 ## [unreleased]
 
+### Streaming chat now streams the final response as content deltas
+
+During a streaming chat turn the final assistant text used to arrive
+only once, inside the terminal `completed` event -- clients could not
+render text as it generated. The final-response LLM call (the persona
+pass) now runs in streaming mode and emits each provider chunk as a
+`type: "content"` SSE event, so clients render tokens live.
+
+- Purely additive: the terminal `completed` event still carries the full
+  final text, so clients that only read the terminal event keep working,
+  and clients that render deltas (e.g. the ACP bridge) dedup it.
+- Deltas are emitted only when the generated text IS the delivered text:
+  the fast conversational path and the standard agent/workflow response
+  path stream; turns whose text is rewritten after generation
+  (`response.format: json` wrapping, `html` prettify, credential-option
+  formatting, error formatting) keep today's behavior.
+- Configurable via `overlord.config.response.stream_tokens` (default
+  `true`). Chunking is passed through as the provider yields it; clients
+  coalesce.
+- `content` events bypass the background emitter thread and are appended
+  synchronously, guaranteeing delta ordering; they carry the standard
+  event envelope (request_id, user_id, session_id, timestamp).
+- New `LLM.chat_stream()` async generator on the LLM service (text-only,
+  no resilience-wrapper retries: replaying a partially consumed stream
+  would duplicate text; the overlord falls back to the non-streaming
+  call on any stream failure so the turn always answers).
+- If that fallback regenerates AFTER deltas were already published, the
+  terminal `completed` event additionally carries
+  `stream_discontinuity: true` -- clients that render deltas should then
+  discard them and treat `completed.content` as authoritative (the flag
+  is absent on every normal turn).
+- Covered by unit tests (ordering, envelope, config off, rewrite-step
+  gating, fallback) and a new e2e test,
+  `10_streaming/test_10_a_7` (deltas before `completed`, concatenation
+  equals the final text, clean stream termination).
+
 ### Chat turns now reach a terminal request status
 
 Ordinary sync and streaming chat turns registered themselves in the
