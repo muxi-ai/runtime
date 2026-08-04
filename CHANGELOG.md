@@ -2,6 +2,22 @@
 
 ## [unreleased]
 
+### Idempotency keys are scoped by response mode
+
+Reusing an idempotency key across streaming and non-streaming calls could
+hand a stream consumer a JSON body. `POST /v1/chat` with `stream: false`
+caches its envelope; a later call with the same key and `stream: true`
+matched the same cache entry and replayed `application/json` to a client
+waiting on `text/event-stream` -- which typically fails to parse or hangs.
+
+The scope key now includes the effective response mode derived from the
+parsed request body (`stream` present and `false` -> `json`, otherwise
+`stream`), so the two modes occupy separate namespaces and can never
+collide. Streaming responses are still never cached: a stream-mode key
+simply has nothing stored under it, and each streaming call runs fresh.
+Single-flight locks are scoped the same way. Endpoints whose body has no
+`stream` field are unaffected.
+
 ## v1.20260803.0
 
 ### Dependency security updates: pypdf 6.14.2, nltk held below 3.10
