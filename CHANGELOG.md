@@ -36,6 +36,43 @@ successful turns as failures and leaving
 - Covered by unit tests for both paths (including that the reaper leaves a
   finished turn alone) and a new e2e test, `9_async/test_9b2_sync_turn_completion`.
 
+### Request cancellation reports success for ordinary chat turns
+
+`DELETE /v1/requests/{request_id}` returned 400 `OPERATION_FAILED` for a
+normal chat turn even though the cancellation had taken effect. The route
+set the cooperative cancellation flag (which processing checkpoints honour,
+aborting the turn at the next safe point) but then keyed its status code off
+`Overlord.cancel_request`, which can only cancel an asyncio task when the
+request carries a `task_ref` -- and only background workflow executions do.
+Clients that check the status code concluded cancellation was unsupported.
+
+- 2xx whenever the request was found and the cancellation flag was set.
+- The response body now carries a `cancellation` field so callers can tell
+  how strong the guarantee is: `immediate` when the underlying task was
+  cancelled outright (background workflows), `cooperative` when the turn
+  will stop at its next checkpoint (ordinary chat turns).
+- 404 for unknown request ids is unchanged. A request that already
+  `completed` or `failed` still returns 400 `OPERATION_FAILED`, now with a
+  message naming the status -- that is the one case where neither
+  cancellation mechanism can apply. Re-cancelling an already-cancelled
+  request stays a successful no-op, as documented.
+
+### Idempotency keys are scoped by response mode
+
+Reusing an idempotency key across streaming and non-streaming calls could
+hand a stream consumer a JSON body. `POST /v1/chat` with `stream: false`
+caches its envelope; a later call with the same key and `stream: true`
+matched the same cache entry and replayed `application/json` to a client
+waiting on `text/event-stream` -- which typically fails to parse or hangs.
+
+The scope key now includes the effective response mode derived from the
+parsed request body (`stream` present and `false` -> `json`, otherwise
+`stream`), so the two modes occupy separate namespaces and can never
+collide. Streaming responses are still never cached: a stream-mode key
+simply has nothing stored under it, and each streaming call runs fresh.
+Single-flight locks are scoped the same way. Endpoints whose body has no
+`stream` field are unaffected.
+
 ## v1.20260803.0
 
 ### Dependency security updates: pypdf 6.14.2, nltk held below 3.10
