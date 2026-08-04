@@ -3255,11 +3255,92 @@ class Overlord:
         except Exception:
             return ""
 
+    def _should_stream_response_deltas(self) -> bool:
+        """
+        Decide whether the final-response LLM call may stream incremental
+        ``content`` events to the client.
+
+        True only when ALL of the following hold:
+
+        - ``overlord.config.response.stream_tokens`` is enabled (default on);
+        - the response format is not post-processed AFTER persona generation.
+          ``json`` (wrapped in a JSON envelope) and ``html`` (BeautifulSoup
+          prettify) both rewrite the text after the LLM call, so streaming
+          the LLM output would show text the user never receives;
+        - the current request actually has a streaming subscriber (otherwise
+          a streaming LLM call buys nothing).
+        """
+        if not getattr(self, "stream_tokens", True):
+            return False
+        if getattr(self, "response_format", "markdown") in ("json", "html"):
+            return False
+        try:
+            from ...services.observability.context import get_current_request_context
+
+            request_context = get_current_request_context()
+            return bool(
+                request_context
+                and getattr(request_context, "id", None)
+                and streaming_manager.is_streaming_enabled(request_context.id)
+            )
+        except Exception:
+            return False
+
+    async def _persona_llm_call(
+        self,
+        llm,
+        messages: List[Dict[str, str]],
+        max_tokens: int,
+        stream_deltas: bool,
+    ) -> Any:
+        """
+        Run the persona LLM call, optionally streaming ``content`` deltas.
+
+        When ``stream_deltas`` is True, generation runs in streaming mode and
+        each provider chunk is emitted as a ``content`` streaming event
+        (passed through as-chunked; clients coalesce). The accumulated text
+        is returned so downstream handling (cleaning, the terminal
+        ``completed`` event) is identical to the non-streaming path.
+
+        On any streaming failure the call falls back to the regular
+        non-streaming request so the turn always produces a response; the
+        terminal ``completed`` event remains the authoritative content.
+        """
+        if stream_deltas:
+            try:
+                parts: List[str] = []
+                async for delta in llm.chat_stream(
+                    messages, max_tokens=max_tokens, temperature=0.7, caching=False
+                ):
+                    parts.append(delta)
+                    streaming.stream(
+                        "content",
+                        delta,
+                        stage="response_generation",
+                        skip_rephrase=True,
+                    )
+                if parts:
+                    return "".join(parts)
+            except Exception as e:
+                observability.observe(
+                    event_type=observability.ErrorEvents.INTERNAL_ERROR,
+                    level=observability.EventLevel.WARNING,
+                    data={"error": str(e), "stage": "persona_stream_deltas"},
+                    description=(
+                        f"Streaming persona generation failed, falling back "
+                        f"to non-streaming: {e}"
+                    ),
+                )
+        return await llm.chat(
+            messages, max_tokens=max_tokens, temperature=0.7, stream=False, caching=False
+        )
+
     async def _apply_persona(
         self,
         raw_response: Optional[str],
         user_message: str,
         session_id: Optional[str] = None,
+        stream_deltas: bool = False,
     ) -> str:
         """
         Apply the overlord persona to format a response.
@@ -3269,10 +3350,20 @@ class Overlord:
             user_message: The original user message for context
             session_id: The request's session id, when the call site has it
                 (used to recognize heartbeat-originated requests)
+            stream_deltas: Opt-in from call sites where the persona output IS
+                the final response text delivered to the user verbatim. When
+                enabled (and permitted by ``_should_stream_response_deltas``),
+                the persona LLM call streams and each chunk is emitted as a
+                ``content`` streaming event. Call sites that post-process the
+                persona output (e.g. credential-option formatting) must NOT
+                opt in, or clients would see text the user never receives.
 
         Returns:
             Formatted response with persona applied
         """
+        # Resolve delta streaming once: call-site opt-in AND runtime gates
+        # (config, response format, active streaming subscriber).
+        stream_deltas = stream_deltas and self._should_stream_response_deltas()
         # Heartbeat protocol guard (Proactiveness Phase 4): heartbeat
         # acknowledgments must survive persona formatting. Rephrasing
         # turns the suppression sentinel into friendly prose ("Everything
@@ -3418,9 +3509,10 @@ class Overlord:
                     {"role": "system", "content": system_prompt},
                     {"role": "user", "content": user_content},
                 ]
-                # Force non-streaming for persona application, disable caching for varied responses
-                response = await llm.chat(
-                    messages, max_tokens=300, temperature=0.7, stream=False, caching=False
+                # Caching disabled for varied responses; streams content
+                # deltas when the call site opted in and gates allow it.
+                response = await self._persona_llm_call(
+                    llm, messages, max_tokens=300, stream_deltas=stream_deltas
                 )
 
                 if hasattr(response, "content"):
@@ -3494,10 +3586,11 @@ Agent response: {raw_response}"""
                     {"role": "system", "content": system_prompt},
                     {"role": "user", "content": user_content},
                 ]
-                # Force non-streaming for persona application
-                # Disable caching to ensure varied responses (persona is final stage)
-                response = await llm.chat(
-                    messages, max_tokens=2000, temperature=0.7, stream=False, caching=False
+                # Caching disabled to ensure varied responses (persona is
+                # the final stage); streams content deltas when the call
+                # site opted in and gates allow it.
+                response = await self._persona_llm_call(
+                    llm, messages, max_tokens=2000, stream_deltas=stream_deltas
                 )
 
                 # Check cancellation after LLM call returns
@@ -3830,6 +3923,10 @@ Agent response: {raw_response}"""
             response_config = overlord_config.get("response", {})
             self.response_format = response_config.get("format", "markdown")
             self.streaming = response_config.get("streaming", False)
+            # Stream final-response tokens as incremental `content` SSE
+            # events during streaming chat (the terminal `completed`
+            # event still carries the full text, so this is additive).
+            self.stream_tokens = response_config.get("stream_tokens", True)
 
             # Resilience is handled by the resilient workflow executor
 
@@ -8905,7 +9002,9 @@ Agent response: {raw_response}"""
                 stage="response_preparation",
                 skip_rephrase=True,
             )
-            response = await self._apply_persona(None, message)
+            # stream_deltas: the persona output IS the final text on this
+            # path (returned and completed-emitted verbatim below)
+            response = await self._apply_persona(None, message, stream_deltas=True)
 
             # NOTE: Assistant response buffer storage is handled by
             # chat_orchestrator._process_sync_chat() after this returns.
@@ -9819,9 +9918,13 @@ Agent response: {raw_response}"""
         # Apply persona to format the response (except for clarifications)
         if result and hasattr(result, "content"):
             if isinstance(result.content, str):
-                # Simple string content - apply persona directly
+                # Simple string content - apply persona directly.
+                # stream_deltas: this persona output becomes result.content
+                # and is emitted verbatim in the terminal `completed` event
+                # below (json/html post-wrapping is excluded by the gate in
+                # _should_stream_response_deltas).
                 formatted_content = await self._apply_persona(
-                    result.content, message, session_id=session_id
+                    result.content, message, session_id=session_id, stream_deltas=True
                 )
                 result.content = formatted_content
             elif isinstance(result.content, dict):
@@ -9869,9 +9972,11 @@ Agent response: {raw_response}"""
                         # Last resort - format as JSON
                         extracted_text = json_lib.dumps(result.content, indent=2)
 
-                # Apply persona to the extracted text
+                # Apply persona to the extracted text.
+                # stream_deltas: same terminal path as the string branch
+                # above -- persona output is the final `completed` content.
                 formatted_content = await self._apply_persona(
-                    extracted_text, message, session_id=session_id
+                    extracted_text, message, session_id=session_id, stream_deltas=True
                 )
                 result.content = formatted_content
 

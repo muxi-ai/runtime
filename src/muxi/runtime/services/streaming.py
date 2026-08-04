@@ -321,6 +321,16 @@ def stream(event_type: str, content: str, **metadata):
             if event_type not in terminal_events:
                 return  # Skip all progress/thinking/planning events to save on LLM costs
 
+        # Content deltas (incremental final-response tokens) are emitted
+        # synchronously: they are high-frequency, strictly order-sensitive,
+        # and never LLM-rephrased. Routing them through the background
+        # thread pool could reorder chunks under thread scheduling, which
+        # would scramble the streamed text. emit_event is a cheap in-memory
+        # append, so the synchronous path adds no meaningful latency.
+        if event_type == "content":
+            streaming_manager.emit_event(request_context.id, event_type, content, **metadata)
+            return
+
         @multitasking.task
         def _emit_in_background(manager, req_id, evt_type, evt_content, evt_metadata, config):
             try:
