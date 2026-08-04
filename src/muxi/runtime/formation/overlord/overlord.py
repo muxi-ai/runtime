@@ -8651,8 +8651,19 @@ Agent response: {raw_response}"""
                                     },
                                 )
 
+                            # Self-describing metadata, matching the vocabulary
+                            # the other credential producers use. This response
+                            # asks the user for credentials, so the turn is not
+                            # finished -- ``_mark_turn_terminal`` reads these
+                            # keys to keep the request out of COMPLETED.
                             credential_request_response = MuxiResponse(
-                                role="assistant", content=result["message"]
+                                role="assistant",
+                                content=result["message"],
+                                metadata={
+                                    "clarification_type": "credential",
+                                    "credential_mode": result.get("action"),
+                                    "service": service,
+                                },
                             )
                             if result.get("action") == "redirect":
                                 # Declared credential portal (Response Envelope

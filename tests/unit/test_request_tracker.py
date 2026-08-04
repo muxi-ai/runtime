@@ -166,6 +166,54 @@ async def test_default_ttl():
 
 
 @pytest.mark.asyncio
+async def test_mark_completed_if_active_transitions_processing(tracker, make_state):
+    """An in-flight request is completed and stamped with an end_time."""
+    await tracker.track_request("req_active_done", make_state("req_active_done"))
+
+    assert await tracker.mark_completed_if_active("req_active_done", result="answer") is True
+
+    got = await tracker.get_request("req_active_done")
+    assert got.status == RequestStatus.COMPLETED
+    assert got.result == "answer"
+    assert got.end_time is not None
+
+
+@pytest.mark.asyncio
+async def test_mark_completed_if_active_keeps_terminal_status(tracker, make_state):
+    """A request that already reached a terminal state is left untouched."""
+    await tracker.track_request("req_cancelled", make_state("req_cancelled"))
+    await tracker.update_request("req_cancelled", RequestStatus.CANCELLED)
+
+    assert await tracker.mark_completed_if_active("req_cancelled", result="answer") is False
+
+    got = await tracker.get_request("req_cancelled")
+    assert got.status == RequestStatus.CANCELLED
+    assert got.result is None
+
+
+@pytest.mark.asyncio
+async def test_mark_completed_if_active_unknown_request(tracker):
+    """Completing an unknown request is a no-op."""
+    assert await tracker.mark_completed_if_active("req_missing", result="answer") is False
+
+
+@pytest.mark.asyncio
+async def test_mark_completed_if_active_stops_stale_reaper(make_state):
+    """A request completed this way is not reaped as stale."""
+    tracker = RequestTracker(completed_ttl=60.0, stale_timeout=0.01)
+    state = make_state("req_reap")
+    await tracker.track_request("req_reap", state)
+    await tracker.mark_completed_if_active("req_reap", result="answer")
+
+    state.start_time = time.time() - 3600
+    await tracker.cleanup_expired()
+
+    got = await tracker.get_request("req_reap")
+    assert got.status == RequestStatus.COMPLETED
+    assert got.error is None
+
+
+@pytest.mark.asyncio
 async def test_result_stored_on_completed(tracker, make_state):
     """Result payload is stored and retrievable for completed requests."""
     state = make_state("req_result")

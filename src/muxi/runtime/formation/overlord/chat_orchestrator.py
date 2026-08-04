@@ -48,6 +48,30 @@ class EnhancedMessage(NamedTuple):
 # ``_apply_scheduled_marker`` for the single-place rule.
 SCHEDULED_EXECUTION_MARKER = "[SCHEDULED] "
 
+# Stream event types that end a subscription (see StreamingManager.subscribe).
+# Seeing one means the stream closed because processing reached its own
+# terminal event -- not because the client hung up.
+TERMINAL_STREAM_EVENTS = frozenset({"completed", "failed", "cancelled"})
+
+# How long the streaming generator waits for the producer task to unwind
+# after it emitted its terminal event, before treating it as stuck.
+PRODUCER_DRAIN_TIMEOUT = 5.0
+
+# Response metadata set by turns that end awaiting a further user response:
+# clarification questions, workflow-approval prompts, and credential
+# requests. Those turns store pending interaction state and reuse the same
+# request_id on the follow-up turn, so they have not finished and their
+# question is not a final result. See ``_mark_turn_terminal``.
+PENDING_INTERACTION_KEYS = (
+    "clarification",
+    "clarification_requested",
+    "clarification_type",
+    "requires_clarification",
+    "needs_clarification",
+    "approval_required",
+    "requires_user_response",
+)
+
 
 def _apply_scheduled_marker(message: str, session_id: Optional[str]) -> str:
     """Return ``message`` with the scheduled-execution marker if and only
@@ -200,6 +224,10 @@ class ChatOrchestrator:
             # - It disables streaming when finished
             # We don't need to duplicate that here.
 
+            # The turn answered -- record it so pollers see a result and the
+            # stale request reaper doesn't later rewrite it to FAILED.
+            await self._mark_turn_terminal(request_id, result)
+
             return result
 
         # Create task with context propagation (Python 3.10 compatible)
@@ -213,10 +241,23 @@ class ChatOrchestrator:
         current_context.run(create_task_with_context)
 
         # Yield events from the stream; cancel processing on client disconnect
+        terminal_event_seen = False
         try:
             async for event in self._stream_request(request_id, user_id, session_id):
+                if isinstance(event, dict) and event.get("type") in TERMINAL_STREAM_EVENTS:
+                    terminal_event_seen = True
                 yield event
         finally:
+            # The subscription ends as soon as the terminal event is emitted,
+            # which is a beat before ``delayed_process`` returns. Wait for the
+            # producer to unwind rather than cancelling a turn that already
+            # answered -- otherwise a successful stream races into CANCELLED.
+            if terminal_event_seen and processing_task and not processing_task.done():
+                with suppress(asyncio.CancelledError, asyncio.TimeoutError):
+                    await asyncio.wait_for(
+                        asyncio.shield(processing_task), timeout=PRODUCER_DRAIN_TIMEOUT
+                    )
+
             # Client disconnected or stream ended -- cancel if still running
             if processing_task and not processing_task.done():
                 processing_task.cancel()
@@ -785,7 +826,51 @@ class ChatOrchestrator:
                         latency_ms = (time.time() - _framework_start_time) * 1000
                         telemetry.record_request(success, latency_ms, "framework")
 
+            # The turn answered -- record it so pollers see a result and the
+            # stale request reaper doesn't later rewrite it to FAILED.
+            await self._mark_turn_terminal(request_id, chat_result)
+
             return chat_result
+
+    async def _mark_turn_terminal(
+        self, request_id: str, result: Union[str, Dict[str, Any], MuxiResponse]
+    ) -> None:
+        """
+        Record the terminal state of a finished chat turn in the request tracker.
+
+        Ordinary sync/streaming turns used to be left in PROCESSING once the
+        response had been delivered, so ``GET /v1/requests/{id}`` reported
+        "processing" for a turn that had already answered, and the stale
+        request reaper eventually rewrote it to FAILED. Mirrors the
+        transition the early-heuristic fast path already performs.
+
+        Args:
+            request_id: The request being finished
+            result: Whatever the turn returned to the caller
+        """
+        # Async hand-off (background task or approved workflow): the
+        # background path owns the terminal transition for this request.
+        if isinstance(result, dict) and result.get("status") == "processing":
+            return
+
+        # Cooperative cancellation: the turn unwound because the client
+        # cancelled it, so it is cancelled -- not completed.
+        metadata = getattr(result, "metadata", None) or {}
+        if metadata.get("cancelled"):
+            await self.overlord.request_tracker.update_request(request_id, RequestStatus.CANCELLED)
+            return
+
+        # Interactive turns end awaiting a further user response and reuse
+        # this request_id on the follow-up turn (which re-registers it as
+        # PROCESSING), so the turn is not finished and its question is not
+        # a final result. Left untouched, as before this transition existed.
+        if any(metadata.get(key) for key in PENDING_INTERACTION_KEYS):
+            return
+
+        content = getattr(result, "content", None)
+        await self.overlord.request_tracker.mark_completed_if_active(
+            request_id, result=content if content is not None else result
+        )
 
     async def _determine_async_mode(
         self,

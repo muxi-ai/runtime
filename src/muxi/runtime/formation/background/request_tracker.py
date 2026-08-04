@@ -74,6 +74,13 @@ _TERMINAL_STATUSES = frozenset(
     {RequestStatus.COMPLETED, RequestStatus.FAILED, RequestStatus.CANCELLED}
 )
 
+# Statuses a request can still be moved out of by the producer that owns it.
+# Used by ``mark_completed_if_active`` so a request that already reached a
+# terminal state keeps the status it has.
+_ACTIVE_STATUSES = frozenset(
+    {RequestStatus.PENDING, RequestStatus.PROCESSING, RequestStatus.RUNNING}
+)
+
 # A request in one of these states has already run to its end: neither the
 # cooperative cancellation flag nor asyncio task cancellation can affect it.
 # CANCELLED is deliberately absent -- re-cancelling is a no-op, not a failure.
@@ -147,6 +154,41 @@ class RequestTracker:
                 request_state.error = error
 
             if status in _TERMINAL_STATUSES and request_state.end_time is None:
+                request_state.end_time = time.time()
+
+            return True
+
+    async def mark_completed_if_active(self, request_id: str, result: Any = None) -> bool:
+        """
+        Transition an in-flight request to COMPLETED.
+
+        Compare-and-set against the active statuses, so a request that already
+        reached a terminal state (cancelled on client disconnect, failed, or
+        completed by the async background path) keeps the status it has. This
+        is what lets a finished chat turn record itself without racing the
+        disconnect handler.
+
+        ``end_time`` is stamped like any other terminal transition, so the
+        entry is purged by ``cleanup_expired`` once ``completed_ttl`` elapses.
+
+        Args:
+            request_id: Unique identifier for the request
+            result: Result data to store alongside the COMPLETED status
+
+        Returns:
+            True if the request was found, still active, and transitioned
+        """
+        async with self._lock:
+            request_state = self._requests.get(request_id)
+            if request_state is None or request_state.status not in _ACTIVE_STATUSES:
+                return False
+
+            request_state.status = RequestStatus.COMPLETED
+
+            if result is not None:
+                request_state.result = result
+
+            if request_state.end_time is None:
                 request_state.end_time = time.time()
 
             return True

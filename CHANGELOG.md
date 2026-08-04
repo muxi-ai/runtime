@@ -2,6 +2,40 @@
 
 ## [unreleased]
 
+### Chat turns now reach a terminal request status
+
+Ordinary sync and streaming chat turns registered themselves in the
+request tracker as PROCESSING and never transitioned out of it. Only the
+overlord fast path and the async background path ever wrote COMPLETED
+back, so a turn that had already answered stayed "processing" until the
+stale request reaper rewrote it to FAILED 600s later -- recording
+successful turns as failures and leaving
+`GET /v1/requests/{request_id}` unable to return the result it holds.
+
+- New `RequestTracker.mark_completed_if_active()`: a compare-and-set that
+  moves a request from PENDING/PROCESSING/RUNNING to COMPLETED, stores
+  the result, and stamps `end_time` so the completed-entry TTL still
+  purges it. A request that already reached a terminal state keeps the
+  status it has, so a turn completing cannot clobber a cancellation.
+- Sync and streaming chat turns both mark themselves COMPLETED with their
+  response content once processing finishes, mirroring the fast path.
+  `GET /v1/requests/{request_id}` now reports "completed" and returns the
+  result for a finished turn.
+- The streaming generator waits for the producer task to unwind after the
+  stream's terminal event instead of cancelling it. The subscription ends
+  a beat before the producer returns, so a successful stream could
+  previously race into CANCELLED. Client disconnect (no terminal event)
+  still cancels and marks the request CANCELLED as before.
+- Async hand-offs (background execution, approved workflows) are left in
+  PROCESSING for the background task to finish, and cooperatively
+  cancelled turns are recorded CANCELLED rather than COMPLETED.
+- Interactive turns -- clarification questions, workflow-approval prompts,
+  credential requests -- are left alone as well. They end awaiting a
+  further user response and reuse the same request_id on the follow-up
+  turn, so their question is not a final result.
+- Covered by unit tests for both paths (including that the reaper leaves a
+  finished turn alone) and a new e2e test, `9_async/test_9b2_sync_turn_completion`.
+
 ### Request cancellation reports success for ordinary chat turns
 
 `DELETE /v1/requests/{request_id}` returned 400 `OPERATION_FAILED` for a
