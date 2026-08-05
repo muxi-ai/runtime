@@ -2,6 +2,30 @@
 
 ## [unreleased]
 
+### SOP file attachments now use the sandboxed document converter
+
+SOP `[file:...]` references were the last document intake path still
+parsing untrusted bytes inside the runtime process: it built its own
+`MarkItDown()` and called it directly -- no subprocess boundary, no
+rlimits, no wall-clock kill, no quarantine handling. Chat attachments
+and knowledge files had gone through the out-of-process conversion
+service since it was introduced, and the docs said conversion was
+sandboxed, which was untrue for this one path. SOP attachments now call
+the same `convert_document()` service, so a malformed or hostile
+document can no longer crash, hang, or balloon the runtime.
+
+- Conversion failures degrade exactly as before -- an attachment that
+  cannot be converted yields `[Unable to extract: <name>]` and the SOP
+  keeps running. What changed is that every failure mode is now a typed
+  `QuarantineReason` (timeout / memory / oversize / parser_error /
+  encrypted / unsupported) carried on the existing observability event,
+  instead of a parser exception caught after the fact.
+- The extension gate is now the converter's own supported-extension set
+  rather than a hand-maintained list. That list advertised `.doc` and
+  `.ppt`, which MarkItDown cannot read at all -- those files failed
+  confusingly. anydoc reads them, so they now convert, and OpenDocument,
+  RTF, EPUB, and HTML attachments work for the first time.
+
 ### Failed sync tasks now escalate to bounded async retries
 
 When a synchronous chat turn fails terminally (its in-request retry
