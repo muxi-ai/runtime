@@ -3285,7 +3285,7 @@ class Overlord:
 
         True only when ALL of the following hold:
 
-        - ``overlord.config.response.stream_tokens`` is enabled (default on);
+        - ``overlord.response.stream_tokens`` is enabled (default on);
         - the response format is not post-processed AFTER persona generation.
           ``json`` (wrapped in a JSON envelope) and ``html`` (BeautifulSoup
           prettify) both rewrite the text after the LLM call, so streaming

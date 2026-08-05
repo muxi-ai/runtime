@@ -112,7 +112,7 @@ pass) now runs in streaming mode and emits each provider chunk as a
   path stream; turns whose text is rewritten after generation
   (`response.format: json` wrapping, `html` prettify, credential-option
   formatting, error formatting) keep today's behavior.
-- Configurable via `overlord.config.response.stream_tokens` (default
+- Configurable via `overlord.response.stream_tokens` (default
   `true`). Chunking is passed through as the provider yields it; clients
   coalesce.
 - `content` events bypass the background emitter thread and are appended
