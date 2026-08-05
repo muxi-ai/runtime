@@ -112,7 +112,7 @@ pass) now runs in streaming mode and emits each provider chunk as a
   path stream; turns whose text is rewritten after generation
   (`response.format: json` wrapping, `html` prettify, credential-option
   formatting, error formatting) keep today's behavior.
-- Configurable via `overlord.config.response.stream_tokens` (default
+- Configurable via `overlord.response.stream_tokens` (default
   `true`). Chunking is passed through as the provider yields it; clients
   coalesce.
 - `content` events bypass the background emitter thread and are appended
@@ -204,7 +204,7 @@ simply has nothing stored under it, and each streaming call runs fresh.
 Single-flight locks are scoped the same way. Endpoints whose body has no
 `stream` field are unaffected.
 
-## v1.20260803.0
+## v0.20260803.0
 
 ### Dependency security updates: pypdf 6.14.2, nltk held below 3.10
 
