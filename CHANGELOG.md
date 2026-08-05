@@ -2,6 +2,32 @@
 
 ## [unreleased]
 
+### anydoc is now the primary document converter
+
+Office-document conversion (chat attachments and knowledge sources) now
+runs on Firecrawl's anydoc (Rust, `firecrawl-anydoc`) inside the same
+out-of-process sandbox that previously ran MarkItDown, extending the
+pdf-inspector-primary/MarkItDown-fallback pattern to every office format.
+
+- Coverage gained: legacy Office (.doc/.ppt/.pps/.pot/.xls), macro
+  variants (.docm/.pptm/.ppsm/.ppsx/.xlsm/.xlsb), OpenDocument
+  (.odt/.ods/.odp), RTF, and EPUB now convert -- formats MarkItDown never
+  handled. The chat-attachment gate and knowledge-source extension list
+  widened to match.
+- Per-file fallback: when anydoc fails on a file, conversion retries with
+  sandboxed MarkItDown for the formats MarkItDown supports
+  (docx/pptx/xlsx/xls/csv/epub) and emits
+  `document.conversion.fallback` with `primary`/`fallback` converter
+  names in the payload. Those events are the measurement story: when
+  fallbacks stop appearing in the field, MarkItDown can be dropped from
+  the office-document path entirely. anydoc-only formats quarantine
+  honestly as `parser_error` -- no fake fallback.
+- PDFs are unchanged: pdf-inspector stays primary (it classifies
+  native-text vs scanned pages, a signal anydoc's Python API does not
+  expose) with the existing MarkItDown fallback.
+- Mechanism swap only: no new configuration keys, same sandbox rlimits,
+  timeouts, and quarantine semantics.
+
 ### Inline credential collection no longer orphans its request
 
 Interactive turns are deliberately left PROCESSING, because the follow-up
