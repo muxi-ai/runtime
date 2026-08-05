@@ -1,6 +1,6 @@
 # Changelog
 
-## [unreleased]
+## v1.20260805.0
 
 ### SOP file attachments now use the sandboxed document converter
 
