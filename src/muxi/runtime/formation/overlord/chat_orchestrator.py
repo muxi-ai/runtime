@@ -207,6 +207,30 @@ class ChatOrchestrator:
                     },
                     description=f"Chat processing failed: {exc}",
                 )
+                # Async retry escalation seam (streaming exception path):
+                # when the gate allows it, the terminal completed event
+                # carries the fixed escalation message instead of the
+                # failure, and a background retry chain takes over under
+                # this request_id. A client disconnect cancels the
+                # processing task with asyncio.CancelledError, which never
+                # reaches this handler -- disconnects cannot escalate.
+                escalation_response = await self.overlord.retry_escalation.maybe_escalate(
+                    request_id,
+                    user_id=user_id,
+                    session_id=session_id,
+                    original_message=original_message,
+                    error_text=str(exc),
+                )
+                if escalation_response is not None:
+                    streaming.stream(
+                        "completed",
+                        escalation_response.content,
+                        status="escalated",
+                        escalated=True,
+                        request_id=request_id,
+                        processing_time_ms=0,
+                    )
+                    return escalation_response
                 streaming.stream(
                     "completed",
                     f"I'm sorry, I encountered an error processing your request: {exc}",
@@ -442,7 +466,11 @@ class ChatOrchestrator:
             internal_user_id=internal_user_id,
             muxi_user_id=muxi_user_id,
         ) as context:
-            # Track request in RequestTracker for cancellation support
+            # Track request in RequestTracker for cancellation support.
+            # webhook_url (already resolved to the formation default by
+            # overlord.chat when not provided per-request) rides the entry
+            # so terminal delivery -- including async retry escalation --
+            # knows where this request wants to hear back.
             initial_state = RequestState(
                 id=request_id,
                 status=RequestStatus.PROCESSING,
@@ -450,6 +478,7 @@ class ChatOrchestrator:
                 original_message=message,
                 user_id=user_id,
                 session_id=session_id,
+                webhook_url=webhook_url,
             )
             await self.overlord.request_tracker.track_request(request_id, initial_state)
 
@@ -815,9 +844,25 @@ class ChatOrchestrator:
                     ui_response=ui_response,
                 )
                 success = True
-            except Exception:
+            except Exception as exc:
                 success = False
-                raise
+                # Async retry escalation seam (non-streaming exception
+                # path): when the gate allows it, the caller receives the
+                # fixed escalation message as this turn's response instead
+                # of the raised failure, and a background retry chain takes
+                # over under this request_id. Cooperative cancellations are
+                # handled (and returned) inside _process_sync_chat, so they
+                # never reach this handler.
+                escalation_response = await self.overlord.retry_escalation.maybe_escalate(
+                    request_id,
+                    user_id=user_id,
+                    session_id=session_id,
+                    original_message=original_message,
+                    error_text=str(exc),
+                )
+                if escalation_response is None:
+                    raise
+                chat_result = escalation_response
             finally:
                 # Record framework mode telemetry for sync requests
                 if _is_framework_mode:
@@ -858,6 +903,13 @@ class ChatOrchestrator:
         metadata = getattr(result, "metadata", None) or {}
         if metadata.get("cancelled"):
             await self.overlord.request_tracker.update_request(request_id, RequestStatus.CANCELLED)
+            return
+
+        # Escalated retry: the turn answered with the escalation message,
+        # but the request itself is still in flight -- the background retry
+        # chain owns the terminal transition (async-retry-escalation PRD).
+        # The tracker entry stays PROCESSING with its escalated marker.
+        if metadata.get("escalated"):
             return
 
         # Interactive turns end awaiting a further user response and reuse

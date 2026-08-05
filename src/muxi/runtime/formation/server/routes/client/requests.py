@@ -217,6 +217,11 @@ async def get_request_status(
     if request_state.error:
         data["error"] = request_state.error
 
+    # Async retry escalation: surface the marker so pollers can tell an
+    # escalated retry chain from an ordinary in-flight request.
+    if getattr(request_state, "escalated", False):
+        data["escalated"] = True
+
     # Include result for completed requests so clients can poll for it
     if request_state.status == RequestStatus.COMPLETED and request_state.result is not None:
         result = request_state.result
@@ -226,6 +231,17 @@ async def get_request_status(
             data["result"] = result
         else:
             data["result"] = str(result)
+
+    # Escalated chains that gave up store their structured give-up report
+    # as the tracker entry's result -- polling is the delivery floor, so
+    # the report must be retrievable here for FAILED terminals too.
+    if (
+        request_state.status == RequestStatus.FAILED
+        and getattr(request_state, "escalated", False)
+        and request_state.result is not None
+    ):
+        report = request_state.result
+        data["report"] = report if isinstance(report, dict) else str(report)
 
     response = create_success_response(
         APIObjectType.REQUEST_STATUS,
