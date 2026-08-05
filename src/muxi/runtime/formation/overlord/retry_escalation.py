@@ -526,16 +526,54 @@ class RetryEscalationCoordinator:
                 # Replan: a fundamentally different approach, or a stuck
                 # short-circuit when no different approach exists and the
                 # failure is not changing.
+                #
+                # The planning step is bounded by the chain itself, not just
+                # by the replanner's internal decompose timeout: planning is
+                # one LLM interaction, so attempt_idle_timeout (generous
+                # enough for silent execution gaps) bounds it too, capped by
+                # whatever remains of the deadline once its clock is
+                # running. Without this, a stalled decomposer would hang the
+                # chain PROCESSING forever with a live task_ref -- which the
+                # stale reaper deliberately exempts.
+                planning_timeout = self.config.attempt_idle_timeout_seconds
+                deadline_remaining = self._deadline_remaining(chain)
+                if deadline_remaining is not None:
+                    planning_timeout = min(planning_timeout, max(deadline_remaining, 0.001))
                 try:
-                    new_workflow = await replanner.generate_replan(
-                        previous_workflow,
-                        context={
-                            "user_id": chain.user_id,
-                            "session_id": chain.session_id,
-                            "request_id": request_id,
-                            "escalated_retry": True,
-                        },
+                    new_workflow = await asyncio.wait_for(
+                        replanner.generate_replan(
+                            previous_workflow,
+                            context={
+                                "user_id": chain.user_id,
+                                "session_id": chain.session_id,
+                                "request_id": request_id,
+                                "escalated_retry": True,
+                            },
+                        ),
+                        timeout=planning_timeout,
                     )
+                except asyncio.TimeoutError:
+                    if self._deadline_exceeded(chain):
+                        await self._finish_failed(
+                            chain,
+                            TERMINAL_BUDGET_EXHAUSTED,
+                            detail="deadline exceeded during replanning",
+                        )
+                        return
+                    # A hung planner consumes an attempt like any other
+                    # failure; the signature carries over so a subsequent
+                    # similarity rejection still feeds the stuck logic.
+                    chain.attempts.append(
+                        AttemptRecord(
+                            number=overall_attempt,
+                            kind="async",
+                            plan_summary="(replanning timed out)",
+                            failure_reason=(f"replanning timed out after {planning_timeout:.0f}s"),
+                            failure_signature=chain.attempts[-1].failure_signature,
+                            ended_at=time.time(),
+                        )
+                    )
+                    continue
                 except ReplanningError as exc:
                     similarity_rejected = "too similar" in str(exc).lower()
                     if similarity_rejected and self._same_signature_as_previous(chain):
@@ -639,6 +677,51 @@ class RetryEscalationCoordinator:
                 TERMINAL_BUDGET_EXHAUSTED,
                 detail=f"escalation chain crashed: {exc}",
             )
+        finally:
+            # Belt-and-braces terminal guarantee: NO exit path -- including
+            # a failure inside the terminal handlers themselves -- may
+            # leave the tracker entry PROCESSING+escalated, because the
+            # stale reaper exempts escalated entries while the chain task
+            # is alive and this task is about to end.
+            await self._ensure_terminal_state(chain)
+
+    async def _ensure_terminal_state(self, chain: EscalationChain) -> None:
+        """Last-resort guard: force a terminal state if none was recorded.
+
+        Runs in the chain task's outermost ``finally``. Normal exits have
+        already recorded COMPLETED/FAILED/CANCELLED and this is a no-op;
+        if the chain (or one of its terminal handlers) died without doing
+        so, the entry is failed honestly with a report naming the internal
+        error. Never raises.
+        """
+        try:
+            tracker = self.overlord.request_tracker
+            state = await tracker.get_request(chain.request_id)
+            if state is not None and state.status in (
+                RequestStatus.PENDING,
+                RequestStatus.PROCESSING,
+                RequestStatus.RUNNING,
+            ):
+                report = self.build_report(
+                    chain,
+                    TERMINAL_BUDGET_EXHAUSTED,
+                    detail=(
+                        "escalation chain exited without recording a terminal "
+                        "state (internal error)"
+                    ),
+                )
+                await tracker.update_request(
+                    chain.request_id,
+                    RequestStatus.FAILED,
+                    result=report,
+                    error="async retry gave up (internal error in escalation chain)",
+                )
+                self._emit_terminal(chain, TERMINAL_BUDGET_EXHAUSTED)
+        except Exception:
+            # The guard itself must never mask the original exit path.
+            pass
+        finally:
+            self._chains.pop(chain.request_id, None)
 
     async def _execute_attempt(
         self, chain: EscalationChain, workflow: Workflow
@@ -735,6 +818,17 @@ class RetryEscalationCoordinator:
         if self.config.deadline_seconds is None or chain.deadline_started_at is None:
             return False
         return (time.time() - chain.deadline_started_at) > self.config.deadline_seconds
+
+    def _deadline_remaining(self, chain: EscalationChain) -> Optional[float]:
+        """Seconds left on the deadline, or None while its clock is off.
+
+        Used to cap the planning step between attempts: once the deadline
+        clock is running (second async attempt onward), replanning may not
+        outlive it.
+        """
+        if self.config.deadline_seconds is None or chain.deadline_started_at is None:
+            return None
+        return self.config.deadline_seconds - (time.time() - chain.deadline_started_at)
 
     async def _is_abandoned(self, request_id: str) -> bool:
         tracker = self.overlord.request_tracker

@@ -91,17 +91,23 @@ def make_plan(workflow_id: str = "wrk_replan_1", description: str = "different a
     )
 
 
+HANG = "hang"  # FakeReplanner sentinel: planning stalls forever
+
+
 class FakeReplanner:
     """Deterministic stand-in for the chain's ReplanningCoordinator."""
 
     def __init__(self, outcomes: List[Any]):
-        # Each outcome is a Workflow (returned) or an Exception (raised).
+        # Each outcome is a Workflow (returned), an Exception (raised), or
+        # the HANG sentinel (awaits forever -- a stalled decomposer).
         self.outcomes = list(outcomes)
         self.calls: List[Workflow] = []
 
     async def generate_replan(self, workflow, context=None):
         self.calls.append(workflow)
         outcome = self.outcomes.pop(0)
+        if outcome is HANG:
+            await asyncio.Event().wait()  # never resolves
         if isinstance(outcome, Exception):
             raise outcome
         return outcome
@@ -571,6 +577,181 @@ async def test_replanning_failure_consumes_attempt_but_chain_continues():
     state = await overlord.request_tracker.get_request(REQ)
     assert state.status == RequestStatus.COMPLETED
     assert state.result == "recovered"
+
+
+# ----------------------------------------------------------------------
+# Planning is bounded too: a stalled decomposer cannot hang the chain
+# ----------------------------------------------------------------------
+
+
+@pytest.mark.asyncio
+async def test_stalled_replanner_counts_attempt_then_chain_recovers():
+    """Planning runs under attempt_idle_timeout: a hung decomposer fails the
+    attempt at the bound and normal accounting proceeds."""
+    overlord = make_overlord()
+    await track_processing(overlord)
+    replanner = FakeReplanner([HANG, make_plan()])
+
+    async def _succeed(**kwargs):
+        return MuxiResponse(role="assistant", content="recovered after stall", metadata={})
+
+    overlord._execute_workflow = _succeed
+    coordinator = make_coordinator(
+        overlord, replanner=replanner, max_attempts=2, attempt_idle_timeout_seconds=0.15
+    )
+
+    await coordinator.maybe_escalate(
+        REQ,
+        user_id=USER,
+        session_id="sess_1",
+        original_message="do it",
+        error_text="connection refused",
+        failed_workflow=make_failed_workflow(),
+    )
+    chain = coordinator._chains[REQ]
+    await wait_for_chain(coordinator)
+
+    state = await overlord.request_tracker.get_request(REQ)
+    assert state.status == RequestStatus.COMPLETED
+    assert state.result == "recovered after stall"
+    # The stalled planning consumed one attempt with an honest reason and
+    # carried the failure signature forward.
+    stalled = chain.attempts[1]
+    assert "replanning timed out" in stalled.failure_reason
+    assert stalled.failure_signature == chain.attempts[0].failure_signature
+
+
+@pytest.mark.asyncio
+async def test_stalled_replanner_on_final_attempt_exhausts_budget():
+    overlord = make_overlord()
+    await track_processing(overlord)
+    replanner = FakeReplanner([HANG])
+    coordinator = make_coordinator(
+        overlord, replanner=replanner, max_attempts=1, attempt_idle_timeout_seconds=0.15
+    )
+
+    await coordinator.maybe_escalate(
+        REQ,
+        user_id=USER,
+        session_id="sess_1",
+        original_message="do it",
+        error_text="connection refused",
+        failed_workflow=make_failed_workflow(),
+    )
+    await wait_for_chain(coordinator)
+
+    state = await overlord.request_tracker.get_request(REQ)
+    assert state.status == RequestStatus.FAILED  # never left hanging PROCESSING
+    report = state.result
+    assert report["state"] == "budget_exhausted"
+    assert len(report["attempts"]) == 2
+    assert "replanning timed out" in report["attempts"][1]["failure_reason"]
+
+
+@pytest.mark.asyncio
+async def test_deadline_expiring_mid_planning_ends_chain():
+    """Once the deadline clock runs, replanning may not outlive it."""
+    overlord = make_overlord()
+    await track_processing(overlord)
+    # Attempt 1 plans + executes fast and fails; attempt 2's planning hangs.
+    replanner = FakeReplanner([make_plan("wrk_r1"), HANG])
+    coordinator = make_coordinator(
+        overlord,
+        replanner=replanner,
+        max_attempts=3,
+        deadline_seconds=0.2,
+        attempt_idle_timeout_seconds=3600,  # huge: the deadline must cut it
+    )
+
+    await coordinator.maybe_escalate(
+        REQ,
+        user_id=USER,
+        session_id="sess_1",
+        original_message="do it",
+        error_text="connection refused",
+        failed_workflow=make_failed_workflow(),
+    )
+    chain = coordinator._chains[REQ]
+    await asyncio.wait_for(asyncio.shield(chain.task), timeout=10.0)
+
+    assert chain.deadline_started_at is not None
+    state = await overlord.request_tracker.get_request(REQ)
+    assert state.status == RequestStatus.FAILED
+    report = state.result
+    assert report["state"] == "budget_exhausted"
+    assert "deadline exceeded during replanning" in report["detail"]
+    assert len(replanner.calls) == 2  # attempt 3 never planned
+
+
+# ----------------------------------------------------------------------
+# Terminal guarantee: no exit path leaves the entry PROCESSING+escalated
+# ----------------------------------------------------------------------
+
+
+@pytest.mark.asyncio
+async def test_chain_exception_ends_failed_never_processing():
+    overlord = make_overlord()
+    await track_processing(overlord)
+    replanner = FakeReplanner([make_plan()])
+
+    async def _explode(**kwargs):
+        raise RuntimeError("executor blew up unexpectedly")
+
+    overlord._execute_workflow = _explode
+    coordinator = make_coordinator(overlord, replanner=replanner, max_attempts=1)
+
+    await coordinator.maybe_escalate(
+        REQ,
+        user_id=USER,
+        session_id="sess_1",
+        original_message="do it",
+        error_text="connection refused",
+        failed_workflow=make_failed_workflow(),
+    )
+    chain = coordinator._chains[REQ]
+    await wait_for_chain(coordinator)
+
+    assert chain.task.done()
+    state = await overlord.request_tracker.get_request(REQ)
+    assert state.status == RequestStatus.FAILED  # never PROCESSING after the task ends
+    assert "executor blew up unexpectedly" in state.result["detail"]
+    assert REQ not in coordinator._chains
+
+
+@pytest.mark.asyncio
+async def test_terminal_guard_covers_failing_terminal_handler():
+    """Even a crash inside the terminal handler itself cannot leave the
+    entry PROCESSING: the outermost finally-guard force-fails it."""
+    overlord = make_overlord()
+    await track_processing(overlord)
+    replanner = FakeReplanner([make_plan()])
+    coordinator = make_coordinator(overlord, replanner=replanner, max_attempts=1)
+
+    async def _broken_finish(chain, state, detail):
+        raise RuntimeError("terminal handler itself is broken")
+
+    coordinator._finish_failed = _broken_finish
+
+    await coordinator.maybe_escalate(
+        REQ,
+        user_id=USER,
+        session_id="sess_1",
+        original_message="do it",
+        error_text="connection refused",
+        failed_workflow=make_failed_workflow(),
+    )
+    chain = coordinator._chains.get(REQ)
+    try:
+        await asyncio.wait_for(asyncio.shield(chain.task), timeout=10.0)
+    except RuntimeError:
+        pass  # the handler's crash propagates out of the chain task
+
+    assert chain.task.done()
+    state = await overlord.request_tracker.get_request(REQ)
+    assert state.status == RequestStatus.FAILED
+    report = state.result
+    assert "without recording a terminal state" in report["detail"]
+    assert REQ not in coordinator._chains
 
 
 # ----------------------------------------------------------------------
