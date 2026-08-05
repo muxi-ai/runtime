@@ -4,1800 +4,568 @@
 
 ### SOP file attachments now use the sandboxed document converter
 
-SOP `[file:...]` references were the last document intake path still
-parsing untrusted bytes inside the runtime process: it built its own
-`MarkItDown()` and called it directly -- no subprocess boundary, no
-rlimits, no wall-clock kill, no quarantine handling. Chat attachments
-and knowledge files had gone through the out-of-process conversion
-service since it was introduced, and the docs said conversion was
-sandboxed, which was untrue for this one path. SOP attachments now call
-the same `convert_document()` service, so a malformed or hostile
-document can no longer crash, hang, or balloon the runtime.
+SOP `[file:...]` references were the last document intake path still parsing untrusted bytes inside the runtime process: it built its own `MarkItDown()` and called it directly -- no subprocess boundary, no rlimits, no wall-clock kill, no quarantine handling. Chat attachments and knowledge files had gone through the out-of-process conversion service since it was introduced, and the docs said conversion was sandboxed, which was untrue for this one path. SOP attachments now call the same `convert_document()` service, so a malformed or hostile document can no longer crash, hang, or balloon the runtime.
 
-- Conversion failures degrade exactly as before -- an attachment that
-  cannot be converted yields `[Unable to extract: <name>]` and the SOP
-  keeps running. What changed is that every failure mode is now a typed
-  `QuarantineReason` (timeout / memory / oversize / parser_error /
-  encrypted / unsupported) carried on the existing observability event,
-  instead of a parser exception caught after the fact.
-- The extension gate is now the converter's own supported-extension set
-  rather than a hand-maintained list. That list advertised `.doc` and
-  `.ppt`, which MarkItDown cannot read at all -- those files failed
-  confusingly. anydoc reads them, so they now convert, and OpenDocument,
-  RTF, EPUB, and HTML attachments work for the first time.
+- Conversion failures degrade exactly as before -- an attachment that cannot be converted yields `[Unable to extract: <name>]` and the SOP keeps running. What changed is that every failure mode is now a typed `QuarantineReason` (timeout / memory / oversize / parser_error / encrypted / unsupported) carried on the existing observability event, instead of a parser exception caught after the fact.
+- The extension gate is now the converter's own supported-extension set rather than a hand-maintained list. That list advertised `.doc` and `.ppt`, which MarkItDown cannot read at all -- those files failed confusingly. anydoc reads them, so they now convert, and OpenDocument, RTF, EPUB, and HTML attachments work for the first time.
 
 ### Failed sync tasks now escalate to bounded async retries
 
-When a synchronous chat turn fails terminally (its in-request retry
-layers -- task retries, alternate agents, fallbacks -- exhausted), the
-runtime no longer just returns the failure. It tells the waiting caller
-"This has failed. I'm going to retry and let you know asynchronously.",
-keeps the request PROCESSING with an `escalated` marker, and runs a
-bounded chain of background attempts under the same request_id -- each
-with a FRESH plan generated through the workflow ReplanningCoordinator
-(similarity-rejected, GBAC-safe). The chain ends in a real result or an
-honest, structured give-up report (per-attempt plan summary and failure
-reason, plus what would unblock the task) that lands on the tracker
-entry, in the Captain's Log, and in the terminal notification.
+When a synchronous chat turn fails terminally (its in-request retry layers -- task retries, alternate agents, fallbacks -- exhausted), the runtime no longer just returns the failure. It tells the waiting caller "This has failed. I'm going to retry and let you know asynchronously.", keeps the request PROCESSING with an `escalated` marker, and runs a bounded chain of background attempts under the same request_id -- each with a FRESH plan generated through the workflow ReplanningCoordinator (similarity-rejected, GBAC-safe). The chain ends in a real result or an honest, structured give-up report (per-attempt plan summary and failure reason, plus what would unblock the task) that lands on the tracker entry, in the Captain's Log, and in the terminal notification.
 
-- Bounds are liveness- and attempt-based, not duration-based:
-  `max_attempts` (default 2 async attempts; the failed sync attempt
-  counts against the chain), `attempt_idle_timeout` (default 15m --
-  an attempt with no observability activity is hung; active attempts
-  can run as long as they like), an optional `deadline` whose clock
-  only starts when the second async attempt begins, and an always-on
-  stuck short-circuit (similarity-rejected replan + unchanged failure
-  signature ends the chain early with budget deliberately unspent).
-- Escalation never happens for: failures matching
-  `non_replannable_error_patterns` (auth/permission/credential/config
-  errors a different plan cannot avoid), pending interactions
-  (clarification, approval, credential prompts), user cancellations,
-  already-escalated requests, `retry_async.enabled: false`, or a
-  formation that is shutting down. Those return the failure exactly as
-  before.
-- Terminal delivery: channel notification via the NotificationRouter
-  when the formation has one, else the request's webhook_url with an
-  HMAC-SHA256-signed payload (`{request_id, state, result | report,
-  attempts, timestamp}`, signed with the formation's client key), and
-  `GET /v1/requests/{id}` always answers -- it now also returns the
-  give-up `report` (and an `escalated` flag) for escalated FAILED
-  entries.
-- Configuration (`overlord.response.retry_async`): `enabled` (default
-  true), `max_attempts` (default 2), `attempt_idle_timeout` (default
-  "15m"), `deadline` (default off). Malformed values fail at load.
-- New observability events: `response.retry.escalated`,
-  `response.retry.attempt`, `response.retry.terminal` -- all carry
-  request_id, so a chain's full history is traceable end to end.
+- Bounds are liveness- and attempt-based, not duration-based: `max_attempts` (default 2 async attempts; the failed sync attempt counts against the chain), `attempt_idle_timeout` (default 15m -- an attempt with no observability activity is hung; active attempts can run as long as they like), an optional `deadline` whose clock only starts when the second async attempt begins, and an always-on stuck short-circuit (similarity-rejected replan + unchanged failure signature ends the chain early with budget deliberately unspent).
+- Escalation never happens for: failures matching `non_replannable_error_patterns` (auth/permission/credential/config errors a different plan cannot avoid), pending interactions (clarification, approval, credential prompts), user cancellations, already-escalated requests, `retry_async.enabled: false`, or a formation that is shutting down. Those return the failure exactly as before.
+- Terminal delivery: channel notification via the NotificationRouter when the formation has one, else the request's webhook_url with an HMAC-SHA256-signed payload (`{request_id, state, result | report, attempts, timestamp}`, signed with the formation's client key), and `GET /v1/requests/{id}` always answers -- it now also returns the give-up `report` (and an `escalated` flag) for escalated FAILED entries.
+- Configuration (`overlord.response.retry_async`): `enabled` (default true), `max_attempts` (default 2), `attempt_idle_timeout` (default "15m"), `deadline` (default off). Malformed values fail at load.
+- New observability events: `response.retry.escalated`, `response.retry.attempt`, `response.retry.terminal` -- all carry request_id, so a chain's full history is traceable end to end.
 
 ### anydoc is now the primary document converter
 
-Office-document conversion (chat attachments and knowledge sources) now
-runs on Firecrawl's anydoc (Rust, `firecrawl-anydoc`) inside the same
-out-of-process sandbox that previously ran MarkItDown, extending the
-pdf-inspector-primary/MarkItDown-fallback pattern to every office format.
+Office-document conversion (chat attachments and knowledge sources) now runs on Firecrawl's anydoc (Rust, `firecrawl-anydoc`) inside the same out-of-process sandbox that previously ran MarkItDown, extending the pdf-inspector-primary/MarkItDown-fallback pattern to every office format.
 
-- Coverage gained: legacy Office (.doc/.ppt/.pps/.pot/.xls), macro
-  variants (.docm/.pptm/.ppsm/.ppsx/.xlsm/.xlsb), OpenDocument
-  (.odt/.ods/.odp), RTF, and EPUB now convert -- formats MarkItDown never
-  handled. The chat-attachment gate and knowledge-source extension list
-  widened to match.
-- Per-file fallback: when anydoc fails on a file, conversion retries with
-  sandboxed MarkItDown for the formats MarkItDown supports
-  (docx/pptx/xlsx/xls/csv/epub) and emits
-  `document.conversion.fallback` with `primary`/`fallback` converter
-  names in the payload. Those events are the measurement story: when
-  fallbacks stop appearing in the field, MarkItDown can be dropped from
-  the office-document path entirely. anydoc-only formats quarantine
-  honestly as `parser_error` -- no fake fallback.
-- PDFs are unchanged: pdf-inspector stays primary (it classifies
-  native-text vs scanned pages, a signal anydoc's Python API does not
-  expose) with the existing MarkItDown fallback.
-- Mechanism swap only: no new configuration keys, same sandbox rlimits,
-  timeouts, and quarantine semantics.
+- Coverage gained: legacy Office (.doc/.ppt/.pps/.pot/.xls), macro variants (.docm/.pptm/.ppsm/.ppsx/.xlsm/.xlsb), OpenDocument (.odt/.ods/.odp), RTF, and EPUB now convert -- formats MarkItDown never handled. The chat-attachment gate and knowledge-source extension list widened to match.
+- Per-file fallback: when anydoc fails on a file, conversion retries with sandboxed MarkItDown for the formats MarkItDown supports (docx/pptx/xlsx/xls/csv/epub) and emits `document.conversion.fallback` with `primary`/`fallback` converter names in the payload. Those events are the measurement story: when fallbacks stop appearing in the field, MarkItDown can be dropped from the office-document path entirely. anydoc-only formats quarantine honestly as `parser_error` -- no fake fallback.
+- PDFs are unchanged: pdf-inspector stays primary (it classifies native-text vs scanned pages, a signal anydoc's Python API does not expose) with the existing MarkItDown fallback.
+- Mechanism swap only: no new configuration keys, same sandbox rlimits, timeouts, and quarantine semantics.
 
 ### Inline credential collection no longer orphans its request
 
-Interactive turns are deliberately left PROCESSING, because the follow-up
-turn reuses the same request_id and closes the entry. That reuse depends
-on the turn storing pending-interaction state carrying its request_id --
-and the dynamic-credential "collect" branch was the one interactive path
-that stored none. So asking the user for a token parked the request, the
-token arrived under a brand new request_id, and nothing ever closed the
-original: the stale request reaper rewrote it to FAILED ("Request timed
-out") 600s later, even though the interaction had completed.
+Interactive turns are deliberately left PROCESSING, because the follow-up turn reuses the same request_id and closes the entry. That reuse depends on the turn storing pending-interaction state carrying its request_id -- and the dynamic-credential "collect" branch was the one interactive path that stored none. So asking the user for a token parked the request, the token arrived under a brand new request_id, and nothing ever closed the original: the stale request reaper rewrote it to FAILED ("Request timed out") 600s later, even though the interaction had completed.
 
-- The collect branch now stores continuation state carrying its
-  request_id, the way the sibling redirect branch already did. The
-  follow-up turn runs under the original id and transitions that entry to
-  COMPLETED. The state is written synchronously, since a user replying
-  with their token immediately could otherwise race a fire-and-forget
-  write and start a new request anyway.
-- Continuation state uses a credential-collect type of its own, so the
-  follow-up still falls through to the credential handler's own retry
-  loop rather than being claimed by a clarification branch.
-- Turns that keep the collect loop open (help request, invalid token ->
-  retry) carry the pending-interaction metadata, so they stay PROCESSING
-  like every other mid-interaction turn. Turns that close it (credential
-  stored, duplicate, cancelled) clear the state and complete the request.
+- The collect branch now stores continuation state carrying its request_id, the way the sibling redirect branch already did. The follow-up turn runs under the original id and transitions that entry to COMPLETED. The state is written synchronously, since a user replying with their token immediately could otherwise race a fire-and-forget write and start a new request anyway.
+- Continuation state uses a credential-collect type of its own, so the follow-up still falls through to the credential handler's own retry loop rather than being claimed by a clarification branch.
+- Turns that keep the collect loop open (help request, invalid token -> retry) carry the pending-interaction metadata, so they stay PROCESSING like every other mid-interaction turn. Turns that close it (credential stored, duplicate, cancelled) clear the state and complete the request.
 
 ### Streaming chat now streams the final response as content deltas
 
-During a streaming chat turn the final assistant text used to arrive
-only once, inside the terminal `completed` event -- clients could not
-render text as it generated. The final-response LLM call (the persona
-pass) now runs in streaming mode and emits each provider chunk as a
-`type: "content"` SSE event, so clients render tokens live.
+During a streaming chat turn the final assistant text used to arrive only once, inside the terminal `completed` event -- clients could not render text as it generated. The final-response LLM call (the persona pass) now runs in streaming mode and emits each provider chunk as a `type: "content"` SSE event, so clients render tokens live.
 
-- Purely additive: the terminal `completed` event still carries the full
-  final text, so clients that only read the terminal event keep working,
-  and clients that render deltas (e.g. the ACP bridge) dedup it.
-- Deltas are emitted only when the generated text IS the delivered text:
-  the fast conversational path and the standard agent/workflow response
-  path stream; turns whose text is rewritten after generation
-  (`response.format: json` wrapping, `html` prettify, credential-option
-  formatting, error formatting) keep today's behavior.
-- Configurable via `overlord.response.stream_tokens` (default
-  `true`). Chunking is passed through as the provider yields it; clients
-  coalesce.
-- `content` events bypass the background emitter thread and are appended
-  synchronously, guaranteeing delta ordering; they carry the standard
-  event envelope (request_id, user_id, session_id, timestamp).
-- New `LLM.chat_stream()` async generator on the LLM service (text-only,
-  no resilience-wrapper retries: replaying a partially consumed stream
-  would duplicate text; the overlord falls back to the non-streaming
-  call on any stream failure so the turn always answers).
-- If that fallback regenerates AFTER deltas were already published, the
-  terminal `completed` event additionally carries
-  `stream_discontinuity: true` -- clients that render deltas should then
-  discard them and treat `completed.content` as authoritative (the flag
-  is absent on every normal turn).
-- Covered by unit tests (ordering, envelope, config off, rewrite-step
-  gating, fallback) and a new e2e test,
-  `10_streaming/test_10_a_7` (deltas before `completed`, concatenation
-  equals the final text, clean stream termination).
+- Purely additive: the terminal `completed` event still carries the full final text, so clients that only read the terminal event keep working, and clients that render deltas (e.g. the ACP bridge) dedup it.
+- Deltas are emitted only when the generated text IS the delivered text: the fast conversational path and the standard agent/workflow response path stream; turns whose text is rewritten after generation (`response.format: json` wrapping, `html` prettify, credential-option formatting, error formatting) keep today's behavior.
+- Configurable via `overlord.response.stream_tokens` (default `true`). Chunking is passed through as the provider yields it; clients coalesce.
+- `content` events bypass the background emitter thread and are appended synchronously, guaranteeing delta ordering; they carry the standard event envelope (request_id, user_id, session_id, timestamp).
+- New `LLM.chat_stream()` async generator on the LLM service (text-only, no resilience-wrapper retries: replaying a partially consumed stream would duplicate text; the overlord falls back to the non-streaming call on any stream failure so the turn always answers).
+- If that fallback regenerates AFTER deltas were already published, the terminal `completed` event additionally carries `stream_discontinuity: true` -- clients that render deltas should then discard them and treat `completed.content` as authoritative (the flag is absent on every normal turn).
+- Covered by unit tests (ordering, envelope, config off, rewrite-step gating, fallback) and a new e2e test, `10_streaming/test_10_a_7` (deltas before `completed`, concatenation equals the final text, clean stream termination).
 
 ### Chat turns now reach a terminal request status
 
-Ordinary sync and streaming chat turns registered themselves in the
-request tracker as PROCESSING and never transitioned out of it. Only the
-overlord fast path and the async background path ever wrote COMPLETED
-back, so a turn that had already answered stayed "processing" until the
-stale request reaper rewrote it to FAILED 600s later -- recording
-successful turns as failures and leaving
-`GET /v1/requests/{request_id}` unable to return the result it holds.
+Ordinary sync and streaming chat turns registered themselves in the request tracker as PROCESSING and never transitioned out of it. Only the overlord fast path and the async background path ever wrote COMPLETED back, so a turn that had already answered stayed "processing" until the stale request reaper rewrote it to FAILED 600s later -- recording successful turns as failures and leaving `GET /v1/requests/{request_id}` unable to return the result it holds.
 
-- New `RequestTracker.mark_completed_if_active()`: a compare-and-set that
-  moves a request from PENDING/PROCESSING/RUNNING to COMPLETED, stores
-  the result, and stamps `end_time` so the completed-entry TTL still
-  purges it. A request that already reached a terminal state keeps the
-  status it has, so a turn completing cannot clobber a cancellation.
-- Sync and streaming chat turns both mark themselves COMPLETED with their
-  response content once processing finishes, mirroring the fast path.
-  `GET /v1/requests/{request_id}` now reports "completed" and returns the
-  result for a finished turn.
-- The streaming generator waits for the producer task to unwind after the
-  stream's terminal event instead of cancelling it. The subscription ends
-  a beat before the producer returns, so a successful stream could
-  previously race into CANCELLED. Client disconnect (no terminal event)
-  still cancels and marks the request CANCELLED as before.
-- Async hand-offs (background execution, approved workflows) are left in
-  PROCESSING for the background task to finish, and cooperatively
-  cancelled turns are recorded CANCELLED rather than COMPLETED.
-- Interactive turns -- clarification questions, workflow-approval prompts,
-  credential requests -- are left alone as well. They end awaiting a
-  further user response and reuse the same request_id on the follow-up
-  turn, so their question is not a final result.
-- Covered by unit tests for both paths (including that the reaper leaves a
-  finished turn alone) and a new e2e test, `9_async/test_9b2_sync_turn_completion`.
+- New `RequestTracker.mark_completed_if_active()`: a compare-and-set that moves a request from PENDING/PROCESSING/RUNNING to COMPLETED, stores the result, and stamps `end_time` so the completed-entry TTL still purges it. A request that already reached a terminal state keeps the status it has, so a turn completing cannot clobber a cancellation.
+- Sync and streaming chat turns both mark themselves COMPLETED with their response content once processing finishes, mirroring the fast path. `GET /v1/requests/{request_id}` now reports "completed" and returns the result for a finished turn.
+- The streaming generator waits for the producer task to unwind after the stream's terminal event instead of cancelling it. The subscription ends a beat before the producer returns, so a successful stream could previously race into CANCELLED. Client disconnect (no terminal event) still cancels and marks the request CANCELLED as before.
+- Async hand-offs (background execution, approved workflows) are left in PROCESSING for the background task to finish, and cooperatively cancelled turns are recorded CANCELLED rather than COMPLETED.
+- Interactive turns -- clarification questions, workflow-approval prompts, credential requests -- are left alone as well. They end awaiting a further user response and reuse the same request_id on the follow-up turn, so their question is not a final result.
+- Covered by unit tests for both paths (including that the reaper leaves a finished turn alone) and a new e2e test, `9_async/test_9b2_sync_turn_completion`.
 
 
 ### Request cancellation reports success for ordinary chat turns
 
-`DELETE /v1/requests/{request_id}` returned 400 `OPERATION_FAILED` for a
-normal chat turn even though the cancellation had taken effect. The route
-set the cooperative cancellation flag (which processing checkpoints honour,
-aborting the turn at the next safe point) but then keyed its status code off
-`Overlord.cancel_request`, which can only cancel an asyncio task when the
-request carries a `task_ref` -- and only background workflow executions do.
-Clients that check the status code concluded cancellation was unsupported.
+`DELETE /v1/requests/{request_id}` returned 400 `OPERATION_FAILED` for a normal chat turn even though the cancellation had taken effect. The route set the cooperative cancellation flag (which processing checkpoints honour, aborting the turn at the next safe point) but then keyed its status code off `Overlord.cancel_request`, which can only cancel an asyncio task when the request carries a `task_ref` -- and only background workflow executions do. Clients that check the status code concluded cancellation was unsupported.
 
 - 2xx whenever the request was found and the cancellation flag was set.
-- The response body now carries a `cancellation` field so callers can tell
-  how strong the guarantee is: `immediate` when the underlying task was
-  cancelled outright (background workflows), `cooperative` when the turn
-  will stop at its next checkpoint (ordinary chat turns).
-- 404 for unknown request ids is unchanged. A request that already
-  `completed` or `failed` still returns 400 `OPERATION_FAILED`, now with a
-  message naming the status -- that is the one case where neither
-  cancellation mechanism can apply. Re-cancelling an already-cancelled
-  request stays a successful no-op, as documented.
+- The response body now carries a `cancellation` field so callers can tell how strong the guarantee is: `immediate` when the underlying task was cancelled outright (background workflows), `cooperative` when the turn will stop at its next checkpoint (ordinary chat turns).
+- 404 for unknown request ids is unchanged. A request that already `completed` or `failed` still returns 400 `OPERATION_FAILED`, now with a message naming the status -- that is the one case where neither cancellation mechanism can apply. Re-cancelling an already-cancelled request stays a successful no-op, as documented.
 
 ### Idempotency keys are scoped by response mode
 
-Reusing an idempotency key across streaming and non-streaming calls could
-hand a stream consumer a JSON body. `POST /v1/chat` with `stream: false`
-caches its envelope; a later call with the same key and `stream: true`
-matched the same cache entry and replayed `application/json` to a client
-waiting on `text/event-stream` -- which typically fails to parse or hangs.
+Reusing an idempotency key across streaming and non-streaming calls could hand a stream consumer a JSON body. `POST /v1/chat` with `stream: false` caches its envelope; a later call with the same key and `stream: true` matched the same cache entry and replayed `application/json` to a client waiting on `text/event-stream` -- which typically fails to parse or hangs.
 
-The scope key now includes the effective response mode derived from the
-parsed request body (`stream` present and `false` -> `json`, otherwise
-`stream`), so the two modes occupy separate namespaces and can never
-collide. Streaming responses are still never cached: a stream-mode key
-simply has nothing stored under it, and each streaming call runs fresh.
-Single-flight locks are scoped the same way. Endpoints whose body has no
-`stream` field are unaffected.
+The scope key now includes the effective response mode derived from the parsed request body (`stream` present and `false` -> `json`, otherwise `stream`), so the two modes occupy separate namespaces and can never collide. Streaming responses are still never cached: a stream-mode key simply has nothing stored under it, and each streaming call runs fresh. Single-flight locks are scoped the same way. Endpoints whose body has no `stream` field are unaffected.
 
 ## v0.20260803.0
 
 ### Dependency security updates: pypdf 6.14.2, nltk held below 3.10
 
-- `pypdf` bumped to `>=6.14.2`, clearing four open advisories (two
-  infinite-loop DoS bugs on unterminated inline images, long runtimes on
-  repeated malformed xref entries, and unbounded memory on wrong image
-  dimensions). Defense in depth on top of the new conversion sandbox --
-  a malicious PDF now has to beat both the patched parser and the
-  subprocess resource limits.
-- `nltk` deliberately pinned `>=3.9.4,<3.10`: the 3.10 line's new
-  `inisec` import guard blocks any nltk-initiated import whose resolved
-  path is inside the current working directory, which breaks every
-  in-project `.venv` layout outright (`import nltk` fails from the repo
-  root, and the `-P` remedy it suggests does not help). MUXI's nltk
-  surface is punkt tokenization plus a fixed-URL `nltk.download("punkt")`;
-  the 3.10.0 advisories (corpus reader traversal/ReDoS, ENFORCE-mode
-  download filtering) are not reachable from that surface. Revisit when
-  upstream fixes the cwd check.
+- `pypdf` bumped to `>=6.14.2`, clearing four open advisories (two infinite-loop DoS bugs on unterminated inline images, long runtimes on repeated malformed xref entries, and unbounded memory on wrong image dimensions). Defense in depth on top of the new conversion sandbox -- a malicious PDF now has to beat both the patched parser and the subprocess resource limits.
+- `nltk` deliberately pinned `>=3.9.4,<3.10`: the 3.10 line's new `inisec` import guard blocks any nltk-initiated import whose resolved path is inside the current working directory, which breaks every in-project `.venv` layout outright (`import nltk` fails from the repo root, and the `-P` remedy it suggests does not help). MUXI's nltk surface is punkt tokenization plus a fixed-URL `nltk.download("punkt")`; the 3.10.0 advisories (corpus reader traversal/ReDoS, ENFORCE-mode download filtering) are not reachable from that surface. Revisit when upstream fixes the cwd check.
 
 ### Sandboxed document conversion + PDF routing to pdf-inspector
 
-Untrusted documents (chat attachments and knowledge source files) are no
-longer parsed in-process: a hostile PDF/DOCX/HTML file could previously
-hang, crash, or balloon the runtime via MarkItDown. Conversion now runs
-in a spawned subprocess with resource limits and typed quarantine
-outcomes (`services/multimodal/document_converter.py`):
+Untrusted documents (chat attachments and knowledge source files) are no longer parsed in-process: a hostile PDF/DOCX/HTML file could previously hang, crash, or balloon the runtime via MarkItDown. Conversion now runs in a spawned subprocess with resource limits and typed quarantine outcomes (`services/multimodal/document_converter.py`):
 
-- Out-of-process sandbox: bounded input size checked before spawning,
-  `resource.setrlimit` in the worker (CPU seconds everywhere, address
-  space on Linux, output file size on all platforms), and a hard
-  wall-clock timeout that kills the whole process group. Network
-  isolation is best-effort only (proxy env stripped); the containment
-  win is crash/hang/memory isolation, not egress control.
-- Typed `QuarantineReason` (`timeout`, `memory`, `oversize`,
-  `parser_error`, `encrypted`, `unsupported`) returned to callers --
-  never an unhandled exception into the chat path. Existing graceful
-  degradation is preserved: the attachment fails, the chat continues.
-- `application/pdf` / `.pdf` now routes to `pdf-inspector` (new
-  dependency): local native-text classification and structured markdown
-  extraction. If pdf-inspector cannot parse a given PDF, that file
-  falls back to sandboxed MarkItDown -- PDFs never fail harder than
-  before. All other convertible types stay on MarkItDown, now inside
-  the same sandbox.
-- Both call sites converted: the overlord chat-attachment path and the
-  `FileKnowledge` loader (reused by the knowledge handler and the
-  reasoning tree builder). Well-formed files produce identical text to
-  the previous in-process path.
-- New observability events: `document.conversion.completed`,
-  `document.conversion.quarantined` (with reason), and
-  `document.conversion.fallback`.
+- Out-of-process sandbox: bounded input size checked before spawning, `resource.setrlimit` in the worker (CPU seconds everywhere, address space on Linux, output file size on all platforms), and a hard wall-clock timeout that kills the whole process group. Network isolation is best-effort only (proxy env stripped); the containment win is crash/hang/memory isolation, not egress control.
+- Typed `QuarantineReason` (`timeout`, `memory`, `oversize`, `parser_error`, `encrypted`, `unsupported`) returned to callers -- never an unhandled exception into the chat path. Existing graceful degradation is preserved: the attachment fails, the chat continues.
+- `application/pdf` / `.pdf` now routes to `pdf-inspector` (new dependency): local native-text classification and structured markdown extraction. If pdf-inspector cannot parse a given PDF, that file falls back to sandboxed MarkItDown -- PDFs never fail harder than before. All other convertible types stay on MarkItDown, now inside the same sandbox.
+- Both call sites converted: the overlord chat-attachment path and the `FileKnowledge` loader (reused by the knowledge handler and the reasoning tree builder). Well-formed files produce identical text to the previous in-process path.
+- New observability events: `document.conversion.completed`, `document.conversion.quarantined` (with reason), and `document.conversion.fallback`.
 
 ### Durable distillery daily quotas
 
-The distilled-batch daily quota guard moves from an in-process dict
-(reset on restart, wrong across replicas) to durable DB-backed counters:
+The distilled-batch daily quota guard moves from an in-process dict (reset on restart, wrong across replicas) to durable DB-backed counters:
 
-- New `distillery_quota_counters` table -- one row per (formation,
-  distillery, UTC day), created with the rest of the runtime tables on
-  both SQLite and PostgreSQL.
-- Check-and-consume is one atomic guarded upsert (`INSERT ... ON
-  CONFLICT ... DO UPDATE ... WHERE count + n <= limit`), so concurrent
-  batches -- across async tasks or replicas sharing the database --
-  can never overshoot `max_events_per_day`; a batch of N events
-  consumes N slots or is rejected as a whole (429 contract unchanged).
-- Counts survive restarts; per-day rollover comes free from the date
-  key; buckets older than 7 days are pruned on the consume path (no
-  maintenance loop needed).
-- The counter is a cache over ground truth: a reservation leaked by a
-  crash between reserve and settle is reconciled downward to the
-  substrate's actual accepted-event count on each process's first
-  consume of a day bucket, so a crashy period cannot starve a
-  distillery with 429s until rollover.
+- New `distillery_quota_counters` table -- one row per (formation, distillery, UTC day), created with the rest of the runtime tables on both SQLite and PostgreSQL.
+- Check-and-consume is one atomic guarded upsert (`INSERT ... ON CONFLICT ... DO UPDATE ... WHERE count + n <= limit`), so concurrent batches -- across async tasks or replicas sharing the database -- can never overshoot `max_events_per_day`; a batch of N events consumes N slots or is rejected as a whole (429 contract unchanged).
+- Counts survive restarts; per-day rollover comes free from the date key; buckets older than 7 days are pruned on the consume path (no maintenance loop needed).
+- The counter is a cache over ground truth: a reservation leaked by a crash between reserve and settle is reconciled downward to the substrate's actual accepted-event count on each process's first consume of a day bucket, so a crashy period cannot starve a distillery with 429s until rollover.
 
 ### Memory events carry their originating request_id
 
-Every memory event now records the observability request that produced
-it, seeding answer-to-evidence provenance (a provenance chain shows
-which request produced each hop) and the future event forwarder:
+Every memory event now records the observability request that produced it, seeding answer-to-evidence provenance (a provenance chain shows which request produced each hop) and the future event forwarder:
 
-- Additive nullable `request_id` column on `memory_events`; existing
-  rows read NULL and events with no originating request (maintenance,
-  synthesis, legacy backfill) record NULL.
-- Populated at `record()` time from the observability request context
-  (single choke point -- no caller changes), surfaced in event dicts
-  and provenance chain output.
-- Idempotency is unchanged: a duplicate (source, source_id) retried
-  from a different request still dedups to the original event.
+- Additive nullable `request_id` column on `memory_events`; existing rows read NULL and events with no originating request (maintenance, synthesis, legacy backfill) record NULL.
+- Populated at `record()` time from the observability request context (single choke point -- no caller changes), surfaced in event dicts and provenance chain output.
+- Idempotency is unchanged: a duplicate (source, source_id) retried from a different request still dedups to the original event.
 
 ### Reliability and test-infrastructure fixes
 
-- Benchmark observation runs now survive `PYTHONSAFEPATH` / `python -P`
-  deployments: the tuning benchmark spawns its suite runners with an
-  explicit `PYTHONPATH` instead of relying on the implicit
-  current-directory `sys.path` entry, which safe-path mode strips.
-  Previously such deployments silently recorded no benchmark
-  observations.
-- Unit-test teardown disposes lazily created async database engines, so
-  the suite no longer leaks aiosqlite worker threads ("Event loop is
-  closed" noise after the run).
-- New e2e test `2W2` proves distillery quota durability end-to-end:
-  consumption survives a formation restart on the same database, a
-  post-restart batch that would exceed the daily limit is rejected, and
-  a full-duplicate replay consumes no quota.
+- Benchmark observation runs now survive `PYTHONSAFEPATH` / `python -P` deployments: the tuning benchmark spawns its suite runners with an explicit `PYTHONPATH` instead of relying on the implicit current-directory `sys.path` entry, which safe-path mode strips. Previously such deployments silently recorded no benchmark observations.
+- Unit-test teardown disposes lazily created async database engines, so the suite no longer leaks aiosqlite worker threads ("Event loop is closed" noise after the run).
+- New e2e test `2W2` proves distillery quota durability end-to-end: consumption survives a formation restart on the same database, a post-restart batch that would exceed the daily limit is rejected, and a full-duplicate replay consumes no quota.
 
 ## v0.20260713.0
 
 ### Idempotency-Key support (chat, scheduler jobs, triggers)
 
-The `idempotency_key` envelope field comes alive: clients can send an
-`X-Muxi-Idempotency-Key` header on POST `/chat`, POST `/scheduler/jobs`, and
-POST `/triggers/{name}`, and retries within 24h replay the original
-response instead of processing twice:
+The `idempotency_key` envelope field comes alive: clients can send an `X-Muxi-Idempotency-Key` header on POST `/chat`, POST `/scheduler/jobs`, and POST `/triggers/{name}`, and retries within 24h replay the original response instead of processing twice:
 
-- Keys are scoped per endpoint path and user, so different callers
-  (or different triggers) can reuse the same key safely.
-- Concurrent duplicates are single-flighted: the second request waits
-  for the first and receives its cached response -- a scheduled job
-  or trigger can never fire twice for one key.
-- Only successful (2xx) JSON responses are cached; errors stay
-  retryable, and SSE streaming responses pass through untouched.
-- The key echoes back in the response envelope (`request.idempotency_key`),
-  storage is in-process with TTL eviction, matching the runtime's
-  async request-state semantics.
+- Keys are scoped per endpoint path and user, so different callers (or different triggers) can reuse the same key safely.
+- Concurrent duplicates are single-flighted: the second request waits for the first and receives its cached response -- a scheduled job or trigger can never fire twice for one key.
+- Only successful (2xx) JSON responses are cached; errors stay retryable, and SSE streaming responses pass through untouched.
+- The key echoes back in the response envelope (`request.idempotency_key`), storage is in-process with TTL eviction, matching the runtime's async request-state semantics.
 
 ### A2A extended auth types (hmac, oauth2, openid)
 
-Agent-to-agent authentication grows beyond shared static keys
-(A2A Extended Auth Types PRD), leaning entirely on existing plumbing --
-the strict-mode inbound authenticator, the outbound credential manager,
-and the secrets interpolation the current modes already use:
+Agent-to-agent authentication grows beyond shared static keys (A2A Extended Auth Types PRD), leaning entirely on existing plumbing -- the strict-mode inbound authenticator, the outbound credential manager, and the secrets interpolation the current modes already use:
 
-- Inbound `hmac`: requests carry `X-Signature` (HMAC-SHA256 over the
-  `X-Timestamp` value) and are verified against the configured
-  `secret` with constant-time comparison, a timestamp tolerance
-  (default 300s, `timestamp_tolerance`), and a replay cache that
-  rejects reused signatures within the window.
-- Inbound `openid`: bearer JWTs are validated against the issuer's
-  JWKS (PyJWT + `jwks_url` or the issuer's well-known path) with
-  issuer/audience/algorithm/expiry checks and configurable clock skew;
-  callers authenticate as `openid:<sub>` with no shared key at rest.
-- Outbound `hmac`: each request to an external service is signed
-  fresh (timestamp + signature headers, names configurable), so
-  retries never reuse a stale signature.
-- Outbound `oauth2`: client_credentials tokens are fetched from the
-  service's `token_url`, cached per service, and refreshed 60s before
-  expiry; the token rides as a standard Bearer header.
-- Outbound service auth now uses the canonical `id` for credential
-  registration and matches requests through the service `url`, removing
-  the previous need to duplicate identifiers in `id` and `service_id`.
-  Legacy `service_id` configurations remain accepted with a deprecation
-  warning.
-- Strict mode matching extends to the new types: an hmac server
-  rejects bearer/api-key attempts and vice versa. Formation validation
-  gains per-type field checks and directional hints (`oauth2` is
-  outbound-only, `openid` inbound-only). mTLS remains out of scope.
+- Inbound `hmac`: requests carry `X-Signature` (HMAC-SHA256 over the `X-Timestamp` value) and are verified against the configured `secret` with constant-time comparison, a timestamp tolerance (default 300s, `timestamp_tolerance`), and a replay cache that rejects reused signatures within the window.
+- Inbound `openid`: bearer JWTs are validated against the issuer's JWKS (PyJWT + `jwks_url` or the issuer's well-known path) with issuer/audience/algorithm/expiry checks and configurable clock skew; callers authenticate as `openid:<sub>` with no shared key at rest.
+- Outbound `hmac`: each request to an external service is signed fresh (timestamp + signature headers, names configurable), so retries never reuse a stale signature.
+- Outbound `oauth2`: client_credentials tokens are fetched from the service's `token_url`, cached per service, and refreshed 60s before expiry; the token rides as a standard Bearer header.
+- Outbound service auth now uses the canonical `id` for credential registration and matches requests through the service `url`, removing the previous need to duplicate identifiers in `id` and `service_id`. Legacy `service_id` configurations remain accepted with a deprecation warning.
+- Strict mode matching extends to the new types: an hmac server rejects bearer/api-key attempts and vice versa. Formation validation gains per-type field checks and directional hints (`oauth2` is outbound-only, `openid` inbound-only). mTLS remains out of scope.
 
 ### Self-improving formation - meta-agent benchmark observation (Phase 3)
 
-The tuning loop gains a second evidence source (Self-Improving
-Formation PRD, Phase 3): the shipped memory benchmarks, run by the
-loop itself against a real formation steered by the live MUXI.md. A
-cold-start formation with zero users gets deterministic evidence on
-day one, and MUXI.md regressions surface against a consistent baseline
-instead of drifting traffic:
+The tuning loop gains a second evidence source (Self-Improving Formation PRD, Phase 3): the shipped memory benchmarks, run by the loop itself against a real formation steered by the live MUXI.md. A cold-start formation with zero users gets deterministic evidence on day one, and MUXI.md regressions surface against a consistent baseline instead of drifting traffic:
 
-- Benchmark observation: each pass may run the fixture-scale suites
-  (LongMemEval sample + structured recall, QA on) as subprocesses of a
-  harness checkout -- opt-in via `MUXI_BENCH_ROOT`, at most one attempt
-  per suite per 24h, bounded by a per-suite timeout. The complete
-  report is the verdict, not the exit code (runners can die in
-  native-library teardown after writing it); partial or
-  errored-question reports are never scored.
-- Metrics: scores invert to the watch windows' lower-is-better
-  contract (`benchmark:<suite>.recall_gap`, `benchmark:<suite>.qa_error`)
-  and persist in a sidecar (`observability/tuner/benchmarks.json`).
-  They carry forward through skipped or failed passes, so a broken
-  harness can never false-validate a learning through metric absence.
-- Tune step: runs on benchmark evidence alone (the cold-start case),
-  sees the scores with previous-run deltas as a prompt block, and is
-  bound by an overfitting guard -- benchmark-derived learnings must
-  generalize, and benchmark answers or dataset specifics never enter
-  MUXI.md. Memory-tuning knobs remain human recommendations.
-- Steering seam: the bench runners accept `--muxi-md`; the file rides
-  the QA answer prompt, the bench equivalent of the runtime injecting
-  it into every turn. The benchmark formation declares `tuning: false`
-  (the measuring stick never tunes itself).
-- Observability: new `tuning.benchmark` event per suite attempt;
-  `tuning.run` carries `benchmark_suites_run`/`benchmark_skipped`; the
-  morning report shows the scores when there is something to say.
+- Benchmark observation: each pass may run the fixture-scale suites (LongMemEval sample + structured recall, QA on) as subprocesses of a harness checkout -- opt-in via `MUXI_BENCH_ROOT`, at most one attempt per suite per 24h, bounded by a per-suite timeout. The complete report is the verdict, not the exit code (runners can die in native-library teardown after writing it); partial or errored-question reports are never scored.
+- Metrics: scores invert to the watch windows' lower-is-better contract (`benchmark:<suite>.recall_gap`, `benchmark:<suite>.qa_error`) and persist in a sidecar (`observability/tuner/benchmarks.json`). They carry forward through skipped or failed passes, so a broken harness can never false-validate a learning through metric absence.
+- Tune step: runs on benchmark evidence alone (the cold-start case), sees the scores with previous-run deltas as a prompt block, and is bound by an overfitting guard -- benchmark-derived learnings must generalize, and benchmark answers or dataset specifics never enter MUXI.md. Memory-tuning knobs remain human recommendations.
+- Steering seam: the bench runners accept `--muxi-md`; the file rides the QA answer prompt, the bench equivalent of the runtime injecting it into every turn. The benchmark formation declares `tuning: false` (the measuring stick never tunes itself).
+- Observability: new `tuning.benchmark` event per suite attempt; `tuning.run` carries `benchmark_suites_run`/`benchmark_skipped`; the morning report shows the scores when there is something to say.
 
 ### Self-improving formation - tuner step, pending flow, /learnings (Phase 2)
 
-The tuning loop now closes the observe-learn-steer cycle (Self-Improving
-Formation PRD, Phase 2): each pass distills the activity report into
-concrete learnings, curates MUXI.md, tracks every learning as an
-experiment with a watch window, and reports to the formation owner:
+The tuning loop now closes the observe-learn-steer cycle (Self-Improving Formation PRD, Phase 2): each pass distills the activity report into concrete learnings, curates MUXI.md, tracks every learning as an experiment with a watch window, and reports to the formation owner:
 
-- Tuner step: after the digest, the same pass asks the LLM to detect
-  patterns (cost hotspots, misrouted request classes, flaky tools) and
-  produce a revised MUXI.md plus structured learnings and prose
-  recommendations. Tuner-written content passes a line-level privacy
-  lint (markdown survives), the bounded-file contract is enforced on
-  the tuner's own writes, and deployment-shaped ideas (yaml edits, plan
-  upgrades) are never written to MUXI.md -- they ship as
-  recommendations for a human. The activity report now names failing
-  tools explicitly so learnings stay specific.
-- Experiments: learnings live in a sidecar store
-  (`observability/tuner/experiments.json`) with content-hash dedup
-  across their whole lifecycle -- pending, active, retired, dismissed.
-  Applying a learning opens a watch window (default 7 days) frozen at
-  the proposal-time baseline; when the watched metric has not improved
-  by 10% at window close, the learning is retired and never
-  re-proposed. Dismissals are equally terminal.
-- Pending flow: with `tuning.auto_apply: false` the tuner writes
-  PENDING-MUXI.md beside the live file and nothing changes until a
-  human acts -- `/learnings` (show/pending/apply/dismiss builtin,
-  mutating verbs refused in multi-user mode), the admin API
-  (`GET`/`PATCH`/`DELETE /tuning/pending`), or the morning report's
-  buttons.
-- Morning report: each pass with anything to say notifies the owner
-  through the formation's proactive channels -- applied or suggested
-  revision, new learnings, retirements, recommendations. Under manual
-  mode the report carries an apply/dismiss options widget rendered
-  natively on channels (P3 machinery); the button press resolves
-  session-independently.
-- NotificationRouter: `notify()` gains an optional `ui=` widget
-  pass-through into channel rendering and webhook payloads.
-- Spool fix: segment numbering now survives a delete-all commit
-  (checkpoint participates in the sequence scan), so post-digest events
-  can never land in an already-checkpointed name and vanish.
-- Observability: new `tuning.applied`, `tuning.suggested`,
-  `tuning.retired`, `tuning.dismissed` events plus pending-surface API
-  events; `validate_events.py` stays 100%.
-- E2E: 27A5 (auto-apply steering + deterministic watch-window
-  retirement), 27A6 (pending flow through /learnings and the admin
-  API, terminal dismissals), 27A7 (morning report delivery + widget
-  round-trip from an unrelated session).
+- Tuner step: after the digest, the same pass asks the LLM to detect patterns (cost hotspots, misrouted request classes, flaky tools) and produce a revised MUXI.md plus structured learnings and prose recommendations. Tuner-written content passes a line-level privacy lint (markdown survives), the bounded-file contract is enforced on the tuner's own writes, and deployment-shaped ideas (yaml edits, plan upgrades) are never written to MUXI.md -- they ship as recommendations for a human. The activity report now names failing tools explicitly so learnings stay specific.
+- Experiments: learnings live in a sidecar store (`observability/tuner/experiments.json`) with content-hash dedup across their whole lifecycle -- pending, active, retired, dismissed. Applying a learning opens a watch window (default 7 days) frozen at the proposal-time baseline; when the watched metric has not improved by 10% at window close, the learning is retired and never re-proposed. Dismissals are equally terminal.
+- Pending flow: with `tuning.auto_apply: false` the tuner writes PENDING-MUXI.md beside the live file and nothing changes until a human acts -- `/learnings` (show/pending/apply/dismiss builtin, mutating verbs refused in multi-user mode), the admin API (`GET`/`PATCH`/`DELETE /tuning/pending`), or the morning report's buttons.
+- Morning report: each pass with anything to say notifies the owner through the formation's proactive channels -- applied or suggested revision, new learnings, retirements, recommendations. Under manual mode the report carries an apply/dismiss options widget rendered natively on channels (P3 machinery); the button press resolves session-independently.
+- NotificationRouter: `notify()` gains an optional `ui=` widget pass-through into channel rendering and webhook payloads.
+- Spool fix: segment numbering now survives a delete-all commit (checkpoint participates in the sequence scan), so post-digest events can never land in an already-checkpointed name and vanish.
+- Observability: new `tuning.applied`, `tuning.suggested`, `tuning.retired`, `tuning.dismissed` events plus pending-surface API events; `validate_events.py` stays 100%.
+- E2E: 27A5 (auto-apply steering + deterministic watch-window retirement), 27A6 (pending flow through /learnings and the admin API, terminal dismissals), 27A7 (morning report delivery + widget round-trip from an unrelated session).
 
 ### Self-improving formation - spool, formation digest, MUXI.md (Phase 1)
 
-The formation now observes itself (Self-Improving Formation PRD,
-Phase 1): every observability event is retained in an internal spool,
-a scheduled loop digests it into a formation-scope captain's log entry
-visible to every user, and a curated MUXI.md file (the formation's
-CLAUDE.md) steers behavior -- hand-written on day one, tuner-curated in
-Phase 2:
+The formation now observes itself (Self-Improving Formation PRD, Phase 1): every observability event is retained in an internal spool, a scheduled loop digests it into a formation-scope captain's log entry visible to every user, and a curated MUXI.md file (the formation's CLAUDE.md) steers behavior -- hand-written on day one, tuner-curated in Phase 2:
 
-- Event spool: the EventLogger tees every emitted event into segmented
-  JSONL under the formation's observability directory -- always on,
-  regardless of the `logging:` yaml (which still controls what leaves
-  the runtime). Internal, not configuration: 32MB segments, 512MB cap
-  (oldest closed segments drop with a `spool.overrun` event),
-  checkpointed single-consumer reads. Digested segments are deleted
-  unless the yaml declares its own file transport -- then the files are
-  the dev's and digestion never deletes.
-- Tuning loop: a new in-runtime scheduled job (`tuning:` block --
-  `active`, `interval_hours`, `auto_apply`; on by default, closed-key
-  fail-fast validation) reads the spool since the last checkpoint,
-  aggregates it into a bounded activity report (event/level/problem
-  clusters, token usage, traffic shape -- raw identifiers never reach
-  the LLM), and digests it into today's formation log entry.
-- Formation captain's log: same storage and date-grain as the per-user
-  log, under a reserved formation scope. A sentence-level privacy lint
-  gates every write (user ids, emails, SSNs, card-length digit runs,
-  sensitive keywords, person/address/financial entities) -- dropping
-  the offending sentence, never the digest. The entry is injected into
-  EVERY user's context as a "Formation operations log" block; entries
-  are recorded as formation-scope `log.entry` memory events.
-- MUXI.md: a bounded markdown file of operational guidance living
-  beside SOUL.md -- formation-owned, git-trackable, human-editable.
-  Injected wherever SOUL.md is injected plus at the top of the
-  per-turn context; the mtime-cached handle means hand edits and API
-  replacements land on the next turn without a restart.
-- API: `GET /tuning` (live MUXI.md), `POST /tuning` (replace it),
-  `POST /tuning/run` (trigger one loop pass) -- admin key auth.
-- Observability: new `spool.overrun`, `formation_log.digested`, and
-  `tuning.run` events; `validate_events.py` stays 100%.
-- E2E: new 27_tuning area -- spool lifecycle incl. restart survival
-  (27A1), file-transport retention (27A2), multi-user digest with
-  privacy lint + cross-user context injection (27A3), /tuning API
-  surface + live MUXI.md steering (27A4).
+- Event spool: the EventLogger tees every emitted event into segmented JSONL under the formation's observability directory -- always on, regardless of the `logging:` yaml (which still controls what leaves the runtime). Internal, not configuration: 32MB segments, 512MB cap (oldest closed segments drop with a `spool.overrun` event), checkpointed single-consumer reads. Digested segments are deleted unless the yaml declares its own file transport -- then the files are the dev's and digestion never deletes.
+- Tuning loop: a new in-runtime scheduled job (`tuning:` block -- `active`, `interval_hours`, `auto_apply`; on by default, closed-key fail-fast validation) reads the spool since the last checkpoint, aggregates it into a bounded activity report (event/level/problem clusters, token usage, traffic shape -- raw identifiers never reach the LLM), and digests it into today's formation log entry.
+- Formation captain's log: same storage and date-grain as the per-user log, under a reserved formation scope. A sentence-level privacy lint gates every write (user ids, emails, SSNs, card-length digit runs, sensitive keywords, person/address/financial entities) -- dropping the offending sentence, never the digest. The entry is injected into EVERY user's context as a "Formation operations log" block; entries are recorded as formation-scope `log.entry` memory events.
+- MUXI.md: a bounded markdown file of operational guidance living beside SOUL.md -- formation-owned, git-trackable, human-editable. Injected wherever SOUL.md is injected plus at the top of the per-turn context; the mtime-cached handle means hand edits and API replacements land on the next turn without a restart.
+- API: `GET /tuning` (live MUXI.md), `POST /tuning` (replace it), `POST /tuning/run` (trigger one loop pass) -- admin key auth.
+- Observability: new `spool.overrun`, `formation_log.digested`, and `tuning.run` events; `validate_events.py` stays 100%.
+- E2E: new 27_tuning area -- spool lifecycle incl. restart survival (27A1), file-transport retention (27A2), multi-user digest with privacy lint + cross-user context injection (27A3), /tuning API surface + live MUXI.md steering (27A4).
 
 ### Response envelope UI - channel-native widget rendering (P3)
 
-The bundled slack/telegram/discord transformer templates now render
-envelope UI widgets natively (Response Envelope UI PRD, P3 -- owner
-ruling 2026-07-11), and channel button presses round-trip into the
-existing deterministic `ui_response` pinning. The text body always
-ships; widgets are strictly additive to the channel message:
+The bundled slack/telegram/discord transformer templates now render envelope UI widgets natively (Response Envelope UI PRD, P3 -- owner ruling 2026-07-11), and channel button presses round-trip into the existing deterministic `ui_response` pinning. The text body always ships; widgets are strictly additive to the channel message:
 
-- Template namespace: transformer substitution gains `response.ui`
-  (raw widget array) and channel-native renderings under `ui.*`
-  (`ui.telegram.reply_markup`, `ui.slack.blocks`,
-  `ui.discord.components`). Every entry is None without widgets, so
-  the existing None-dropping dict rendering keeps text-only deliveries
-  byte-identical (pinned by tests). Formations with their own
-  templates see zero change.
-- Bundled templates updated in place (not forked): telegram renders
-  `options` as an inline keyboard and `action_link` as url buttons;
-  slack renders Block Kit (a section carrying the full text -- Slack
-  shows blocks INSTEAD of top-level text -- plus actions buttons);
-  discord renders component action rows (5x5 clamp). Email stays text.
-- Button callback encoding: `<widget_id>#<option_index>` -- index, not
-  value, so the string always fits Telegram's 64-byte callback_data
-  limit; the index resolves against the pending clarification's
-  offered options (no server-side widget state, runtime stays
-  stateless).
-- Inbound: trigger `parse:` specs accept a `ui_response:` path
-  (Telegram `$.callback_query.data`, Slack `$.actions[0].value`,
-  Discord `$.data.custom_id`); the decoded `{id, index}` hint rides
-  the chat re-entry and hits the existing pinning, emitting
-  `ui.response.received` as before. Foreign callback payloads decode
-  to None -- the message stands alone.
-- E2E: telegram inline-keyboard delivery + simulated callback_query
-  pinning round trip (25A6); slack Block Kit variant + text-only
-  template zero-change pin (25A7).
+- Template namespace: transformer substitution gains `response.ui` (raw widget array) and channel-native renderings under `ui.*` (`ui.telegram.reply_markup`, `ui.slack.blocks`, `ui.discord.components`). Every entry is None without widgets, so the existing None-dropping dict rendering keeps text-only deliveries byte-identical (pinned by tests). Formations with their own templates see zero change.
+- Bundled templates updated in place (not forked): telegram renders `options` as an inline keyboard and `action_link` as url buttons; slack renders Block Kit (a section carrying the full text -- Slack shows blocks INSTEAD of top-level text -- plus actions buttons); discord renders component action rows (5x5 clamp). Email stays text.
+- Button callback encoding: `<widget_id>#<option_index>` -- index, not value, so the string always fits Telegram's 64-byte callback_data limit; the index resolves against the pending clarification's offered options (no server-side widget state, runtime stays stateless).
+- Inbound: trigger `parse:` specs accept a `ui_response:` path (Telegram `$.callback_query.data`, Slack `$.actions[0].value`, Discord `$.data.custom_id`); the decoded `{id, index}` hint rides the chat re-entry and hits the existing pinning, emitting `ui.response.received` as before. Foreign callback payloads decode to None -- the message stands alone.
+- E2E: telegram inline-keyboard delivery + simulated callback_query pinning round trip (25A6); slack Block Kit variant + text-only template zero-change pin (25A7).
 ### Response envelope UI - `mcp_resource` passthrough widget (P2)
 
-The third envelope widget type lands: when an external MCP server's
-tool result carries an embedded MCP Apps UI resource (a `ui://`-scheme
-embedded resource block), MUXI relays it verbatim to the client as an
-`mcp_resource` widget -- gateway, not app: no rendering, no
-interpretation, no execution (Response Envelope UI PRD, P2):
+The third envelope widget type lands: when an external MCP server's tool result carries an embedded MCP Apps UI resource (a `ui://`-scheme embedded resource block), MUXI relays it verbatim to the client as an `mcp_resource` widget -- gateway, not app: no rendering, no interpretation, no execution (Response Envelope UI PRD, P2):
 
-- Widget shape: `{type: "mcp_resource", id, resource (the ui:// URI),
-  mime_type?, data (embedded content, verbatim), encoding?
-  ("base64" for blob resources; omitted for text), server, tool}`.
-  Provenance is structural and on the widget itself: the producing
-  server + tool are mandatory builder arguments.
-- Detection (honest v1): embedded-resource content blocks
-  (`type: "resource"`) whose URI uses the `ui://` scheme, text or
-  blob contents. `resource_link` blocks are not relayed (no data;
-  MUXI does not proxy `ui://` fetches).
-- Untrusted-content posture: the resource is external data. It is
-  carried outside the LLM-bound result dict, kept out of the flattened
-  tool text, and stripped from tool messages -- the widget extractor is
-  its only consumer; the server's accompanying text blocks remain the
-  model-facing summary. Text keeps the fallback duty: the response is
-  complete without the widget.
-- Size clamps: own budgets (64KB/widget, 128KB/envelope for
-  mcp_resource) so whole UI documents fit without touching the P1
-  budgets for standard widgets; oversized resources are dropped whole,
-  never truncated.
-- Works on both agent execution paths (tool-chain and planning);
-  `ui.emitted` observability reused with the new type value.
+- Widget shape: `{type: "mcp_resource", id, resource (the ui:// URI), mime_type?, data (embedded content, verbatim), encoding? ("base64" for blob resources; omitted for text), server, tool}`. Provenance is structural and on the widget itself: the producing server + tool are mandatory builder arguments.
+- Detection (honest v1): embedded-resource content blocks (`type: "resource"`) whose URI uses the `ui://` scheme, text or blob contents. `resource_link` blocks are not relayed (no data; MUXI does not proxy `ui://` fetches).
+- Untrusted-content posture: the resource is external data. It is carried outside the LLM-bound result dict, kept out of the flattened tool text, and stripped from tool messages -- the widget extractor is its only consumer; the server's accompanying text blocks remain the model-facing summary. Text keeps the fallback duty: the response is complete without the widget.
+- Size clamps: own budgets (64KB/widget, 128KB/envelope for mcp_resource) so whole UI documents fit without touching the P1 budgets for standard widgets; oversized resources are dropped whole, never truncated.
+- Works on both agent execution paths (tool-chain and planning); `ui.emitted` observability reused with the new type value.
 
 ### Remote async tools - `watch_job` for MCP job-id + poll services
 
-MCP-reachable work that outlives a turn (image/video generation, long
-renders, batch jobs) can now be collected instead of forgotten: the new
-built-in `watch_job` tool registers a deterministic poll loop over any
-MCP tool the calling user can see (remote-async-tools PRD, P1). MUXI
-never classifies tools as async -- the agent recognizes a job-shaped
-response contextually, guided by a bundled SOP fragment:
+MCP-reachable work that outlives a turn (image/video generation, long renders, batch jobs) can now be collected instead of forgotten: the new built-in `watch_job` tool registers a deterministic poll loop over any MCP tool the calling user can see (remote-async-tools PRD, P1). MUXI never classifies tools as async -- the agent recognizes a job-shaped response contextually, guided by a bundled SOP fragment:
 
-- `watch_job` built-in: `tool` (any visible MCP tool; `server.tool`,
-  `server__tool`, or bare name), `args`, `done_when` (`path` +
-  `equals`/`in`, evaluated mechanically -- no LLM in the poll loop,
-  polls cost zero tokens), optional `result` selector and `label`.
-  Always asynchronous: returns a job handle immediately; no interval/
-  timeout arguments exist (cadence and deadline are formation config).
-- WatchService (DelegationService lifecycle idiom): tracked jobs on
-  `/jobs` (list/cancel/logs; cancel stops polling with no re-entry),
-  per-user concurrency clamp, write-through persistence to `watch_jobs`,
-  orphan marking on boot/shutdown. Completion/timeout/failure re-enter
-  the conversation via `route_class: watch` (same middleware + RBAC
-  pipeline as delegations) with the payload wrapped in the runtime #274
-  untrusted-content fencing, delivered via the proactiveness
-  NotificationRouter (user channel > formation default).
-- GBAC (D5): polls run under the ORIGINAL user's stored permission
-  context -- a user who cannot call the status tool cannot watch it
-  (rejected at creation, fail-closed per poll). Group templates may
-  override the quota (`mcp: {watch: {max_concurrent: N}}`; the highest
-  of the user's groups wins; governs watches only).
-- Config: `mcp.watch` sub-block (`interval` 30s, `timeout` 7200s,
-  `max_concurrent` 10/user, `max_consecutive_failures` 3), closed key
-  set, fail-fast at load. Default ON whenever the formation declares
-  MCP servers; `mcp: {watch: false}` removes the tool entirely.
-- Recognition SOP fragment: bundled markdown appended to agent
-  instructions whenever watch_job registers; a formation-local
-  `sops/watch_job.md` shadows it (empty file removes it).
-- Events: `watch.started/poll/completed/failed/timed_out/cancelled/
-  orphaned` (validated enums, `delegation.*` discipline).
-- Docs: `contributing/remote-async-tools.md` -- the four long-running
-  patterns (slow-sync timeout, watch_job, app-level webhook trigger,
-  per-call webhook trigger) with a worked image-generation example.
-- E2E: new `26_watch/` area (fixture stdio MCP job server) -- full
-  agent loop, timeout path, /jobs cancel mid-watch, GBAC + cross-user
-  isolation, and D6 channel-delivery resolution.
+- `watch_job` built-in: `tool` (any visible MCP tool; `server.tool`, `server__tool`, or bare name), `args`, `done_when` (`path` + `equals`/`in`, evaluated mechanically -- no LLM in the poll loop, polls cost zero tokens), optional `result` selector and `label`. Always asynchronous: returns a job handle immediately; no interval/ timeout arguments exist (cadence and deadline are formation config).
+- WatchService (DelegationService lifecycle idiom): tracked jobs on `/jobs` (list/cancel/logs; cancel stops polling with no re-entry), per-user concurrency clamp, write-through persistence to `watch_jobs`, orphan marking on boot/shutdown. Completion/timeout/failure re-enter the conversation via `route_class: watch` (same middleware + RBAC pipeline as delegations) with the payload wrapped in the runtime #274 untrusted-content fencing, delivered via the proactiveness NotificationRouter (user channel > formation default).
+- GBAC (D5): polls run under the ORIGINAL user's stored permission context -- a user who cannot call the status tool cannot watch it (rejected at creation, fail-closed per poll). Group templates may override the quota (`mcp: {watch: {max_concurrent: N}}`; the highest of the user's groups wins; governs watches only).
+- Config: `mcp.watch` sub-block (`interval` 30s, `timeout` 7200s, `max_concurrent` 10/user, `max_consecutive_failures` 3), closed key set, fail-fast at load. Default ON whenever the formation declares MCP servers; `mcp: {watch: false}` removes the tool entirely.
+- Recognition SOP fragment: bundled markdown appended to agent instructions whenever watch_job registers; a formation-local `sops/watch_job.md` shadows it (empty file removes it).
+- Events: `watch.started/poll/completed/failed/timed_out/cancelled/ orphaned` (validated enums, `delegation.*` discipline).
+- Docs: `contributing/remote-async-tools.md` -- the four long-running patterns (slow-sync timeout, watch_job, app-level webhook trigger, per-call webhook trigger) with a worked image-generation example.
+- E2E: new `26_watch/` area (fixture stdio MCP job server) -- full agent loop, timeout path, /jobs cancel mid-watch, GBAC + cross-user isolation, and D6 channel-delivery resolution.
 ### Response envelope UI - typed affordances (options, action_link)
 
-The chat response envelope gains an optional, typed `ui` array of
-affordances (P1 of the Response Envelope UI PRD; muxi#39 respec). The
-runtime never renders anything: clients that understand a widget type
-render it natively, everyone else gets the always-complete `text`:
+The chat response envelope gains an optional, typed `ui` array of affordances (P1 of the Response Envelope UI PRD; muxi#39 respec). The runtime never renders anything: clients that understand a widget type render it natively, everyone else gets the always-complete `text`:
 
-- Envelope: optional `ui` on the response message; strictly additive --
-  responses without widgets stay byte-identical to before (pinned by
-  unit + e2e regression tests). SSE gains a dedicated `ui` event
-  emitted at end-of-turn alongside the existing `done`/`error`
-  vocabulary.
-- `options` widget: clarifications with enumerable choices (credential
-  account selection) carry `{id, prompt, options[{value,label}],
-  multi:false}` plus prose listing the same choices (text carries the
-  fallback duty).
-- Reply path: chat requests accept an optional `ui_response: {id,
-  value}` hint. A hint matching the clarification-produced widget pins
-  the selection deterministically (no re-interpretation); unknown or
-  stale ids are ignored and the message stands alone. Stateless: ids
-  resolve against the conversation's pending-clarification record, no
-  server-side widget store.
-- `action_link` widget with structural provenance: URLs can only enter
-  a widget through a producer naming their source (formation config,
-  tool result, or trigger payload) -- the LLM cannot fabricate one.
-  P1 producers: a new top-level `links:` formation section (name ->
-  {label, url, hint}) surfaced on credential-redirect responses, and a
-  `_link` tool-result convention mirroring `_artifact`.
-- Size clamps (per-widget and per-envelope caps) and observability
-  events `ui.emitted` (type, producer) / `ui.response.received`
-  (type, matched); channels ignore `ui` in P1 (text IS the channel
-  experience).
-- E2E: new `25_envelope_ui` area (options + deterministic pinning,
-  action_link provenance + injection resistance, stale hint handling,
-  byte-identical no-widget regression pin, channel delivery).
+- Envelope: optional `ui` on the response message; strictly additive -- responses without widgets stay byte-identical to before (pinned by unit + e2e regression tests). SSE gains a dedicated `ui` event emitted at end-of-turn alongside the existing `done`/`error` vocabulary.
+- `options` widget: clarifications with enumerable choices (credential account selection) carry `{id, prompt, options[{value,label}], multi:false}` plus prose listing the same choices (text carries the fallback duty).
+- Reply path: chat requests accept an optional `ui_response: {id, value}` hint. A hint matching the clarification-produced widget pins the selection deterministically (no re-interpretation); unknown or stale ids are ignored and the message stands alone. Stateless: ids resolve against the conversation's pending-clarification record, no server-side widget store.
+- `action_link` widget with structural provenance: URLs can only enter a widget through a producer naming their source (formation config, tool result, or trigger payload) -- the LLM cannot fabricate one. P1 producers: a new top-level `links:` formation section (name -> {label, url, hint}) surfaced on credential-redirect responses, and a `_link` tool-result convention mirroring `_artifact`.
+- Size clamps (per-widget and per-envelope caps) and observability events `ui.emitted` (type, producer) / `ui.response.received` (type, matched); channels ignore `ui` in P1 (text IS the channel experience).
+- E2E: new `25_envelope_ui` area (options + deterministic pinning, action_link provenance + injection resistance, stale hint handling, byte-identical no-widget regression pin, channel delivery).
 
 ### Episodic memory - session-end digests + time-anchored recall tool
 
-Closes the two residual gaps from the muxi#32 episodic memory audit
-(per-user cross-session continuity itself already ships; formation-level
-narrative defers to the Formation Wiki):
+Closes the two residual gaps from the muxi#32 episodic memory audit (per-user cross-session continuity itself already ships; formation-level narrative defers to the Formation Wiki):
 
-- Session-end digest trigger: conversation turns now stamp a
-  (user, session) activity clock on the Captain's Log; an idle sweep
-  (riding the service's existing background-loop lifecycle) ends
-  sessions idle past `memory.captains_log.session_idle_minutes`
-  (default 30, `0`/`false` disables), emits the already-defined
-  `session.ended` observability event exactly once per session, and
-  digests the user's pending turns through the same pipeline the daily
-  tick uses. Short sessions persist at session end instead of waiting
-  for the next daily tick; drained queues mean the daily tick can never
-  double-digest, and a failed session-end digest re-queues its snapshot
-  so nothing is worse off than before.
-- `recall_history` built-in agent tool (registered/dispatched like
-  `get_artifact`, gated on an enabled Captain's Log): turns
-  time-anchored recall questions ("what did we discuss last Tuesday?")
-  into date-ranged queries over the user's log entries -- params
-  `date_from`/`date_to` (ISO dates, strict validation with friendly
-  errors), optional `query` keyword filter, `limit` (default 10,
-  max 30). Read-only, user-scoped (the calling user's entries only),
-  failure-isolated.
-- E2E: `2_memory/test_2y1_session_end_recall.py` seeds a short session,
-  idles it, and recalls it by date through the real agent tool path.
+- Session-end digest trigger: conversation turns now stamp a (user, session) activity clock on the Captain's Log; an idle sweep (riding the service's existing background-loop lifecycle) ends sessions idle past `memory.captains_log.session_idle_minutes` (default 30, `0`/`false` disables), emits the already-defined `session.ended` observability event exactly once per session, and digests the user's pending turns through the same pipeline the daily tick uses. Short sessions persist at session end instead of waiting for the next daily tick; drained queues mean the daily tick can never double-digest, and a failed session-end digest re-queues its snapshot so nothing is worse off than before.
+- `recall_history` built-in agent tool (registered/dispatched like `get_artifact`, gated on an enabled Captain's Log): turns time-anchored recall questions ("what did we discuss last Tuesday?") into date-ranged queries over the user's log entries -- params `date_from`/`date_to` (ISO dates, strict validation with friendly errors), optional `query` keyword filter, `limit` (default 10, max 30). Read-only, user-scoped (the calling user's entries only), failure-isolated.
+- E2E: `2_memory/test_2y1_session_end_recall.py` seeds a short session, idles it, and recalls it by date through the real agent tool path.
 
 ### Coding-agent delegation - mechanism + claude-code/droid adapters
 
-Formations can now delegate coding tasks to external headless coding
-CLIs as fire-and-collect background work (Phase 1 of the coding-agent
-delegation PRD, plus the droid adapter pulled forward):
+Formations can now delegate coding tasks to external headless coding CLIs as fire-and-collect background work (Phase 1 of the coding-agent delegation PRD, plus the droid adapter pulled forward):
 
-- Top-level `coding:` block: `client` (bundled adapter template name)
-  or inline adapter (exec-array command assembly, `{prompt}`/`{id}`/
-  `{model}` semantic slots, both session shapes plus the captured-id
-  path via `parse.session_id`), `output: stream-json | json | text`
-  with `parse:` selectors (the triggers `parse:` idiom reused), opaque
-  `model` with per-call override, `workdirs` roots (each delegation
-  runs in a fresh `<root>/<user_id>/<request_id>` dir), `cleanup:
-  delete` (default, with a TTL sweep for strays) or `keep`, a
-  resource-side `groups:` allowlist, `extra_args` vendor passthrough,
-  `env:` (the ONLY place `${{ secrets.* }}` resolves - references
-  anywhere else in the block fail the load pointing at `env:`),
-  `timeout` (default 30m), and per-user `max_concurrent` (default 3).
-- Fail-fast load validation: binary presence, adapter schema, workdir
-  roots, groups existence (when RBAC is active), output/cleanup/
-  timeout enums. No `coding:` block = nothing constructed, no tool
-  registered (pinned by unit test).
-- `delegate_coding` built-in tool (registered/dispatched like
-  `generate_file`): ALWAYS asynchronous - returns immediately with a
-  job id; params `prompt`, `workdir`, `model`, `continue_job_id`
-  (session continuation; vendor session ids persist on the job record
-  and never reach agents). Friendly error dicts for allowlist,
-  concurrency, and unknown-job rejections.
-- DelegationService: tracked background jobs visible in `/jobs`
-  (list/cancel/logs; cancel kills the process group and keeps the
-  session resumable; pause/resume documented as unsupported),
-  subprocess exec with env merge, per-mode output parsing, timeout,
-  orphan marking on boot/shutdown, optional `coding_delegations`
-  persistence table, and completion re-entry through the middleware +
-  RBAC pipeline (`route_class: delegation`) with delivery via the
-  proactiveness notification router.
-- Bundled dormant adapter templates `claude-code` and `droid`
-  (formation-local shadowing, inline escape hatch). Droid flags
-  verified against droid 0.169.0: `--session-id` with a fresh UUID
-  creates the session (idempotent create-or-resume), `--output-format
-  json` result shape confirmed.
-- New observability events: `delegation.started/progress/completed/
-  failed/timed_out/cancelled/orphaned`.
-- New e2e area `24_coding`: {claude-code, droid} x {ad-hoc,
-  new-project, existing-project}, all hermetic (local file:// bare
-  remotes, real agent runs). Developer guide:
-  `contributing/coding-delegation.md`.
+- Top-level `coding:` block: `client` (bundled adapter template name) or inline adapter (exec-array command assembly, `{prompt}`/`{id}`/ `{model}` semantic slots, both session shapes plus the captured-id path via `parse.session_id`), `output: stream-json | json | text` with `parse:` selectors (the triggers `parse:` idiom reused), opaque `model` with per-call override, `workdirs` roots (each delegation runs in a fresh `<root>/<user_id>/<request_id>` dir), `cleanup: delete` (default, with a TTL sweep for strays) or `keep`, a resource-side `groups:` allowlist, `extra_args` vendor passthrough, `env:` (the ONLY place `${{ secrets.* }}` resolves - references anywhere else in the block fail the load pointing at `env:`), `timeout` (default 30m), and per-user `max_concurrent` (default 3).
+- Fail-fast load validation: binary presence, adapter schema, workdir roots, groups existence (when RBAC is active), output/cleanup/ timeout enums. No `coding:` block = nothing constructed, no tool registered (pinned by unit test).
+- `delegate_coding` built-in tool (registered/dispatched like `generate_file`): ALWAYS asynchronous - returns immediately with a job id; params `prompt`, `workdir`, `model`, `continue_job_id` (session continuation; vendor session ids persist on the job record and never reach agents). Friendly error dicts for allowlist, concurrency, and unknown-job rejections.
+- DelegationService: tracked background jobs visible in `/jobs` (list/cancel/logs; cancel kills the process group and keeps the session resumable; pause/resume documented as unsupported), subprocess exec with env merge, per-mode output parsing, timeout, orphan marking on boot/shutdown, optional `coding_delegations` persistence table, and completion re-entry through the middleware + RBAC pipeline (`route_class: delegation`) with delivery via the proactiveness notification router.
+- Bundled dormant adapter templates `claude-code` and `droid` (formation-local shadowing, inline escape hatch). Droid flags verified against droid 0.169.0: `--session-id` with a fresh UUID creates the session (idempotent create-or-resume), `--output-format json` result shape confirmed.
+- New observability events: `delegation.started/progress/completed/ failed/timed_out/cancelled/orphaned`.
+- New e2e area `24_coding`: {claude-code, droid} x {ad-hoc, new-project, existing-project}, all hermetic (local file:// bare remotes, real agent runs). Developer guide: `contributing/coding-delegation.md`.
 
 ### Coding-agent delegation - opencode + pi adapter templates
 
-Phase 2a of the coding-agent delegation PRD: the two remaining bundled
-adapter templates, both on the captured-session path (the tool assigns
-the session id; MUXI parses it from output and replays it on
-`continue_job_id`):
+Phase 2a of the coding-agent delegation PRD: the two remaining bundled adapter templates, both on the captured-session path (the tool assigns the session id; MUXI parses it from output and replays it on `continue_job_id`):
 
-- `opencode` template, verified against opencode 1.14.46 with real
-  runs: `opencode run --format json` (JSONL events), result from the
-  final `text` event (`$.part.text`), session id from the events'
-  top-level `sessionID`, `--session` confirmed resume-only (a fresh id
-  fails), `--dir` on the forbidden list (MUXI sets the cwd).
-- `pi` template (@mariozechner/pi-coding-agent), verified against a
-  local pi 0.73.1 install: `pi --print --mode json` (JSONL), session
-  id from the real session-header event (`$.id`), `--session`
-  confirmed resume-only with global id lookup. The successful-run
-  result selector (`$.messages[-1].content[-1].text`) derives from
-  that version's bundled docs (no credentialed run was available) and
-  is marked `[verify]` in the template.
-- Delegation subprocesses now get `PWD` rewritten to the delegation
-  directory (POSIX-shell hygiene): opencode resolves its working
-  directory from `PWD` rather than the real cwd, and the inherited
-  runtime value made it operate on the wrong tree.
-- E2e: three real-run opencode tests (ad-hoc, new-project,
-  existing-project - hermetic local file:// bare remotes) and a pi
-  fixture-CLI test (real event shapes; exercises the bundled
-  template's selectors and captured-session continuation end to end).
-  Developer guide gained paste-ready `coding:` blocks for both tools.
+- `opencode` template, verified against opencode 1.14.46 with real runs: `opencode run --format json` (JSONL events), result from the final `text` event (`$.part.text`), session id from the events' top-level `sessionID`, `--session` confirmed resume-only (a fresh id fails), `--dir` on the forbidden list (MUXI sets the cwd).
+- `pi` template (@mariozechner/pi-coding-agent), verified against a local pi 0.73.1 install: `pi --print --mode json` (JSONL), session id from the real session-header event (`$.id`), `--session` confirmed resume-only with global id lookup. The successful-run result selector (`$.messages[-1].content[-1].text`) derives from that version's bundled docs (no credentialed run was available) and is marked `[verify]` in the template.
+- Delegation subprocesses now get `PWD` rewritten to the delegation directory (POSIX-shell hygiene): opencode resolves its working directory from `PWD` rather than the real cwd, and the inherited runtime value made it operate on the wrong tree.
+- E2e: three real-run opencode tests (ad-hoc, new-project, existing-project - hermetic local file:// bare remotes) and a pi fixture-CLI test (real event shapes; exercises the bundled template's selectors and captured-session continuation end to end). Developer guide gained paste-ready `coding:` blocks for both tools.
 
 ### Fixes
 
-- Knowledge graph entity ATTRIBUTES now render in the graph context
-  block: facts stored on the entity itself (emails, roles, tracking
-  codes) were invisible to the LLM because ``get_context_block``
-  rendered relationships only (found by the Tier 2 structured-recall
-  benchmark). Attribute facts render as compact entity cards
-  (``Name (type): key: value; ...``) after the relationship lines,
-  most relevant entities first (relationship-connected, then newest),
-  budgeted like the relationship lines and hard-clipped per card;
-  entities without attributes render nothing, so attribute-free
-  graphs keep the exact prior format. The clarification analyzer's
-  recall-question memory gate also consults the knowledge graph, so
-  recall questions whose answer lives only on a KG entity reach the
-  agent instead of bouncing to a clarification prompt. The knowledge
-  index deliberately stays name-only (it is a ~300-token orientation
-  catalog; the graph context block carries the attribute values).
-- Hardened the memory event substrate's operational paths (#259 review
-  follow-ups): `project_pending` now applies events in bounded chunks
-  (`memory.projections.batch_size`, default 500) per projection-lock
-  acquisition, releasing the lock between chunks so long catch-up
-  batches never stall concurrent event-first writers (checkpoint per
-  chunk; no event skipped or re-applied across chunk boundaries, crash
-  between chunks resumes at the last boundary); the GDPR
-  `POST /memory/forget` endpoint now runs its projection rebuild as a
-  tracked background job by default (202 + `job_id` pollable at
-  `GET /memory/forget/{job_id}`; the soft delete still runs inline,
-  `background: false` or `?sync=true` keeps the blocking behavior); and
-  the legacy backfill's silent 100,000-row ceiling became a documented
-  per-pass bound with persisted resume cursors - tables of any size
-  backfill across multiple passes, and the report now returns
-  `{"synthesized": n, "complete": bool}` per projection so operators
-  know when another pass is needed.
+- Knowledge graph entity ATTRIBUTES now render in the graph context block: facts stored on the entity itself (emails, roles, tracking codes) were invisible to the LLM because ``get_context_block`` rendered relationships only (found by the Tier 2 structured-recall benchmark). Attribute facts render as compact entity cards (``Name (type): key: value; ...``) after the relationship lines, most relevant entities first (relationship-connected, then newest), budgeted like the relationship lines and hard-clipped per card; entities without attributes render nothing, so attribute-free graphs keep the exact prior format. The clarification analyzer's recall-question memory gate also consults the knowledge graph, so recall questions whose answer lives only on a KG entity reach the agent instead of bouncing to a clarification prompt. The knowledge index deliberately stays name-only (it is a ~300-token orientation catalog; the graph context block carries the attribute values).
+- Hardened the memory event substrate's operational paths (#259 review follow-ups): `project_pending` now applies events in bounded chunks (`memory.projections.batch_size`, default 500) per projection-lock acquisition, releasing the lock between chunks so long catch-up batches never stall concurrent event-first writers (checkpoint per chunk; no event skipped or re-applied across chunk boundaries, crash between chunks resumes at the last boundary); the GDPR `POST /memory/forget` endpoint now runs its projection rebuild as a tracked background job by default (202 + `job_id` pollable at `GET /memory/forget/{job_id}`; the soft delete still runs inline, `background: false` or `?sync=true` keeps the blocking behavior); and the legacy backfill's silent 100,000-row ceiling became a documented per-pass bound with persisted resume cursors - tables of any size backfill across multiple passes, and the report now returns `{"synthesized": n, "complete": bool}` per projection so operators know when another pass is needed.
 
 ### Memory ingestion maturation - tier heuristics, entity resolution, synthesis cadences
 
-Completes the memory-ingestion PRD's remaining scope on top of the
-shipped `/v1/memories` pipeline (#218) and the substrate's
-projections/rebuild machinery (#259):
+Completes the memory-ingestion PRD's remaining scope on top of the shipped `/v1/memories` pipeline (#218) and the substrate's projections/rebuild machinery (#259):
 
-- Tier-escalation heuristics: a pure, deterministic decision per kept
-  item over Tier-0 regex signals (identities, dates, money,
-  commitments) plus the local classifier's category/margin. Personal/
-  work (and fail-open unknown) content escalates T1 -> T2 (LLM
-  extraction); flagged high-signal items and `metadata.priority: high`
-  escalate to T3 with an optionally configured frontier model
-  (`memory.ingestion.tiers.models`); per-source `tier` pins override.
-  Kept noise now rests at Tier 1 (verbatim event-sourced fact, no LLM
-  spent). Per-job budgets (`tiers.budget.t{2,3}_items_per_job`) demote
-  capped items instead of dropping them; every escalation is observable
-  (`memory.ingestion.tier_escalated` + tier/reason on the item report).
-- Entity resolution: probabilistic identity matching over the knowledge
-  graph (name/email/handle/role/relationship context). Auto-merge at or
-  above `entity_resolution.auto_merge_threshold` (0.85), flag below it
-  (event + `attributes.possible_duplicates` marker). Decisions ride the
-  event substrate as `entity.resolved` events with deterministic
-  per-pair idempotency keys, so re-ingestion can never duplicate or
-  re-merge differently; rebuilds replay recorded decisions verbatim,
-  and merged names redirect on upsert (duplicates never revive).
-- Pattern extraction + preference inference (v1): deterministic
-  aggregation only - activity schedule from event timestamps,
-  preference profile from `prefers`/`interested_in` edges, domain
-  expertise from reinforced topic entities - written as decaying
-  `fact.extracted` events keyed per (kind, ISO week).
-- Synthesis scheduling: hot (5min, resolution) / warm (hourly,
-  patterns) / cold (nightly, full pass) / cold-cold (weekly full
-  re-synthesis replaying the event log through the substrate rebuild)
-  cadences on the scheduler's existing periodic-task loop, each
-  individually disableable and interval-configurable, with durable
-  per-user cursors; failure-isolated everywhere and fully inert when
-  `memory.ingestion` is unconfigured (pinned by test).
-- Fail-fast config validation for the whole `memory.ingestion` block
-  through one shared parser (runtime service + formation validator).
+- Tier-escalation heuristics: a pure, deterministic decision per kept item over Tier-0 regex signals (identities, dates, money, commitments) plus the local classifier's category/margin. Personal/ work (and fail-open unknown) content escalates T1 -> T2 (LLM extraction); flagged high-signal items and `metadata.priority: high` escalate to T3 with an optionally configured frontier model (`memory.ingestion.tiers.models`); per-source `tier` pins override. Kept noise now rests at Tier 1 (verbatim event-sourced fact, no LLM spent). Per-job budgets (`tiers.budget.t{2,3}_items_per_job`) demote capped items instead of dropping them; every escalation is observable (`memory.ingestion.tier_escalated` + tier/reason on the item report).
+- Entity resolution: probabilistic identity matching over the knowledge graph (name/email/handle/role/relationship context). Auto-merge at or above `entity_resolution.auto_merge_threshold` (0.85), flag below it (event + `attributes.possible_duplicates` marker). Decisions ride the event substrate as `entity.resolved` events with deterministic per-pair idempotency keys, so re-ingestion can never duplicate or re-merge differently; rebuilds replay recorded decisions verbatim, and merged names redirect on upsert (duplicates never revive).
+- Pattern extraction + preference inference (v1): deterministic aggregation only - activity schedule from event timestamps, preference profile from `prefers`/`interested_in` edges, domain expertise from reinforced topic entities - written as decaying `fact.extracted` events keyed per (kind, ISO week).
+- Synthesis scheduling: hot (5min, resolution) / warm (hourly, patterns) / cold (nightly, full pass) / cold-cold (weekly full re-synthesis replaying the event log through the substrate rebuild) cadences on the scheduler's existing periodic-task loop, each individually disableable and interval-configurable, with durable per-user cursors; failure-isolated everywhere and fully inert when `memory.ingestion` is unconfigured (pinned by test).
+- Fail-fast config validation for the whole `memory.ingestion` block through one shared parser (runtime service + formation validator).
 
 ### Memory benchmarking - Tier 3 multi-session longitudinal scenarios
 
-Completes the memory-benchmarking PRD's Tier 3 in `bench/memory/`
-(Tiers 1/2/4 shipped in #220/#261) - the four longitudinal scenarios,
-run against a real formation with no mocks:
+Completes the memory-benchmarking PRD's Tier 3 in `bench/memory/` (Tiers 1/2/4 shipped in #220/#261) - the four longitudinal scenarios, run against a real formation with no mocks:
 
-- MemBench Generator (`longitudinal_corpus.py`): seeded, fully
-  deterministic multi-session corpora (no LLM), one per PRD scenario,
-  with a committed CI fixture and a `--preset full` PRD scale (30-day
-  corpora, 100 isolation users, 10,000 isolation retrieval ops).
-- Scenario A (buffer cycle compensation): raw turns replayed into the
-  real working memory under a small `--buffer-max-mb` budget with the
-  FIFO cleanup pass driven per session - the exact path the
-  pre-compaction flush (#260) guards; flush hand-offs are counted (an
-  opt-in `--flush-digest` runs the real silent-turn LLM digest).
-  Reports show evicted-fact R@5 through KG + Captain's Log vs the
-  working-memory baseline, a `recent_recall` control group, an
-  `evidence_evicted_fraction` validity check, and the PRD's
-  zero-lost-decisions audit. Fixture: structured R@5 100% on evicted
-  questions vs 0% working baseline (131/228 turns evicted).
-- Scenario B (cross-agent propagation): facts/artifacts produced in
-  one agent's sessions answered via another agent (question_meta
-  records the pair), plus the zero-artifact-orphans KG audit.
-- Scenario C (multi-user isolation): all users ingested side by side
-  with identical fact templates differing only in values; vector, KG,
-  and log retrieval ops audited for foreign `CANARY-*` tokens and
-  foreign session ids. Pass/fail per the PRD (fixture: 0 leaks / 600
-  ops; full preset: 10,000 ops across 100 users).
-- Scenario D (contradiction detection over time): manifests replayed
-  per-session through the live `store_extraction` path with per-fact
-  confidences, so the storage layer's supersede/conflict detection
-  and the substrate's `fact.contradicted` events (#259) fire as in
-  production; measures precision/recall plus detection-kind accuracy
-  against injected pairs (with duplicate/non-exclusive precision
-  distractors), tallies the substrate events, and re-audits after a
-  knowledge-graph projection rebuild from the event log
-  (`rebuild.consistent_with_live`).
-- `longitudinal_runner.py` keeps the harness conventions: cheap-model
-  config ($0 retrieval-only runs), per-scenario failure isolation with
-  reports always written (one per scenario under `results/`), nonzero
-  exit on incomplete runs; `--scenario all` spawns one subprocess per
-  scenario because the runtime's database manager is a process-level
-  singleton.
-- Fix in the Tier 2 structured adapter's KG retrieval rendering: when
-  several facts share a provenance turn (entity card + relationship
-  from the same utterance), their renderings are now merged into the
-  turn's text instead of dropping all but the first - rankings are
-  unchanged, but QA context no longer loses facts retrieval had
-  already found (`structured_recall_fixture_structured.json`
-  regenerated; retrieval metrics identical).
+- MemBench Generator (`longitudinal_corpus.py`): seeded, fully deterministic multi-session corpora (no LLM), one per PRD scenario, with a committed CI fixture and a `--preset full` PRD scale (30-day corpora, 100 isolation users, 10,000 isolation retrieval ops).
+- Scenario A (buffer cycle compensation): raw turns replayed into the real working memory under a small `--buffer-max-mb` budget with the FIFO cleanup pass driven per session - the exact path the pre-compaction flush (#260) guards; flush hand-offs are counted (an opt-in `--flush-digest` runs the real silent-turn LLM digest). Reports show evicted-fact R@5 through KG + Captain's Log vs the working-memory baseline, a `recent_recall` control group, an `evidence_evicted_fraction` validity check, and the PRD's zero-lost-decisions audit. Fixture: structured R@5 100% on evicted questions vs 0% working baseline (131/228 turns evicted).
+- Scenario B (cross-agent propagation): facts/artifacts produced in one agent's sessions answered via another agent (question_meta records the pair), plus the zero-artifact-orphans KG audit.
+- Scenario C (multi-user isolation): all users ingested side by side with identical fact templates differing only in values; vector, KG, and log retrieval ops audited for foreign `CANARY-*` tokens and foreign session ids. Pass/fail per the PRD (fixture: 0 leaks / 600 ops; full preset: 10,000 ops across 100 users).
+- Scenario D (contradiction detection over time): manifests replayed per-session through the live `store_extraction` path with per-fact confidences, so the storage layer's supersede/conflict detection and the substrate's `fact.contradicted` events (#259) fire as in production; measures precision/recall plus detection-kind accuracy against injected pairs (with duplicate/non-exclusive precision distractors), tallies the substrate events, and re-audits after a knowledge-graph projection rebuild from the event log (`rebuild.consistent_with_live`).
+- `longitudinal_runner.py` keeps the harness conventions: cheap-model config ($0 retrieval-only runs), per-scenario failure isolation with reports always written (one per scenario under `results/`), nonzero exit on incomplete runs; `--scenario all` spawns one subprocess per scenario because the runtime's database manager is a process-level singleton.
+- Fix in the Tier 2 structured adapter's KG retrieval rendering: when several facts share a provenance turn (entity card + relationship from the same utterance), their renderings are now merged into the turn's text instead of dropping all but the first - rankings are unchanged, but QA context no longer loses facts retrieval had already found (`structured_recall_fixture_structured.json` regenerated; retrieval metrics identical).
 
 ### Artifact memory phase 2 - manifest + retrieval tools
 
-Agents now use what artifact memory captures (artifact-memory PRD Phase 2,
-"Use the Data"; Phase 1 capture shipped earlier):
+Agents now use what artifact memory captures (artifact-memory PRD Phase 2, "Use the Data"; Phase 1 capture shipped earlier):
 
-- Artifact manifest in agent context: the Knowledge Index's artifacts
-  section now renders the PRD manifest shape - one line per artifact with
-  id, version, name, type, producing agent, date, and summary - capped at
-  the 20 most recently accessed (`memory.index.artifact_cap`), with a
-  "... and N more. Use get_artifact to search." pointer beyond the cap.
-- Built-in retrieval tools, registered only when artifact memory is live
-  (no persistent memory or `artifacts.enabled: false` means no tools, no
-  manifest): `get_artifact` (id lookup with a 500-char content preview,
-  or lexical search over name/summary/tags with a category filter),
-  `get_artifact_content` (full decrypted+decompressed content with
-  version selection; binary content is guarded out of model context),
-  and `get_artifact_history` (the full version chain from any version's
-  id). All user-scoped (cross-user ids read as not found) and
-  failure-isolated (friendly tool errors, never a crashed turn).
-  Retrieval refreshes `last_accessed_at` (and the last_accessed
-  retention expiry). Semantic search over artifact summaries stays
-  deferred to the embedding-platform phase.
-- Overlord routing awareness: the routing prompt includes the user's
-  artifact manifest (with each artifact's creating agent) so "update
-  that sales report" routes to the agent that created it, and treats
-  own-artifact retrieval - including by opaque artifact id - as normal
-  memory access rather than a security threat.
-- REST read surface under the client routes (dual-auth, user-scoped
-  through the request middleware + RBAC pipeline): `GET /v1/artifacts`,
-  `GET /v1/artifacts/{id}`, `GET /v1/artifacts/{id}/content` (standard
-  HTTP streaming with the artifact's own content type; `?version=N`),
-  and `GET /v1/artifacts/{id}/versions`.
-- Capture-side hardening from the PRD's open questions: configurable
-  `artifacts.max_size_mb` (default 50, fail-fast validated) skips
-  oversized captures, and checksum dedup skips re-captures that are
-  byte-identical to the current chain head instead of minting a
-  redundant version (compared on raw content inside the chain lock;
-  fails open on a corrupt head).
-- New observability events `MEMORY_ARTIFACT_RETRIEVED` /
-  `MEMORY_ARTIFACT_RETRIEVAL_FAILED` (event validation stays 100%). New
-  e2e: `5_artifacts/test_5_16_artifact_retrieval.py` (generate a file in
-  one turn, retrieve it by id in a later turn, list history after an
-  update).
+- Artifact manifest in agent context: the Knowledge Index's artifacts section now renders the PRD manifest shape - one line per artifact with id, version, name, type, producing agent, date, and summary - capped at the 20 most recently accessed (`memory.index.artifact_cap`), with a "... and N more. Use get_artifact to search." pointer beyond the cap.
+- Built-in retrieval tools, registered only when artifact memory is live (no persistent memory or `artifacts.enabled: false` means no tools, no manifest): `get_artifact` (id lookup with a 500-char content preview, or lexical search over name/summary/tags with a category filter), `get_artifact_content` (full decrypted+decompressed content with version selection; binary content is guarded out of model context), and `get_artifact_history` (the full version chain from any version's id). All user-scoped (cross-user ids read as not found) and failure-isolated (friendly tool errors, never a crashed turn). Retrieval refreshes `last_accessed_at` (and the last_accessed retention expiry). Semantic search over artifact summaries stays deferred to the embedding-platform phase.
+- Overlord routing awareness: the routing prompt includes the user's artifact manifest (with each artifact's creating agent) so "update that sales report" routes to the agent that created it, and treats own-artifact retrieval - including by opaque artifact id - as normal memory access rather than a security threat.
+- REST read surface under the client routes (dual-auth, user-scoped through the request middleware + RBAC pipeline): `GET /v1/artifacts`, `GET /v1/artifacts/{id}`, `GET /v1/artifacts/{id}/content` (standard HTTP streaming with the artifact's own content type; `?version=N`), and `GET /v1/artifacts/{id}/versions`.
+- Capture-side hardening from the PRD's open questions: configurable `artifacts.max_size_mb` (default 50, fail-fast validated) skips oversized captures, and checksum dedup skips re-captures that are byte-identical to the current chain head instead of minting a redundant version (compared on raw content inside the chain lock; fails open on a corrupt head).
+- New observability events `MEMORY_ARTIFACT_RETRIEVED` / `MEMORY_ARTIFACT_RETRIEVAL_FAILED` (event validation stays 100%). New e2e: `5_artifacts/test_5_16_artifact_retrieval.py` (generate a file in one turn, retrieve it by id in a later turn, list history after an update).
 
 ### Memory benchmarking - Tier 2 structured recall + Tier 4 cost efficiency
 
-Extends the `bench/memory/` harness (memory-benchmarking PRD; Tier 1
-shipped in #220) with MUXI's differentiated benchmarks:
+Extends the `bench/memory/` harness (memory-benchmarking PRD; Tier 1 shipped in #220) with MUXI's differentiated benchmarks:
 
-- Tier 2 structured recall: a seeded, fully deterministic synthetic
-  corpus + Q&A generator (`structured_corpus.py`, no LLM calls) covering
-  the five PRD categories - KG relationship recall, temporal validity,
-  Captain's Log narrative recall, cross-agent knowledge, and
-  contradiction detection. Committed CI fixture (3 sequences / 30
-  questions) plus a `--preset full` PRD-scale dataset (50 sequences /
-  500 questions). New `structured_recall_runner.py` runs the Tier 1
-  vector modes as baselines plus a `structured` mode that exercises the
-  real Knowledge Graph + Captain's Log services (ground-truth manifest
-  ingestion via `apply_extraction`/`upsert_entry`; LLM-extraction replay
-  is the documented Tier 3 seam). Reports add two metric blocks:
-  exact-string recall (verbatim emails/codes/ids in top-K context - the
-  decision input for memory-revamp Phase 6 hybrid/BM25 search, with
-  misses listed by question id) and contradiction-detection
-  precision/recall against the injected ground truth.
-- Tier 4 cost efficiency: new `cost_runner.py` measures retrieval
-  latency percentiles (p50/p95/p99) under a bounded-concurrency load
-  pattern, estimated context tokens per query, measured
-  tokens-per-accurate-recall (with `--qa`), cost per 1,000 queries with
-  monthly projections for the PRD usage scenarios (10/50/200
-  queries/day), and storage footprint per ingested turn. Model pricing
-  moved to an updatable `bench/memory/pricing.json` table (report.py now
-  loads it; behavior unchanged).
-- HuggingFace publication prep: `hf_publish.py` renders the dataset
-  card (MIT) + flat JSONL views ready for `hf upload` (upload itself is
-  a documented owner-only manual step).
-- All runners keep the Tier 1 conventions: real formation, cheap-model
-  config ($0 retrieval-only runs), per-case failure isolation, reports
-  always written on partial failure, nonzero exit on incomplete runs,
-  committed fixture reports under `bench/memory/results/`.
+- Tier 2 structured recall: a seeded, fully deterministic synthetic corpus + Q&A generator (`structured_corpus.py`, no LLM calls) covering the five PRD categories - KG relationship recall, temporal validity, Captain's Log narrative recall, cross-agent knowledge, and contradiction detection. Committed CI fixture (3 sequences / 30 questions) plus a `--preset full` PRD-scale dataset (50 sequences / 500 questions). New `structured_recall_runner.py` runs the Tier 1 vector modes as baselines plus a `structured` mode that exercises the real Knowledge Graph + Captain's Log services (ground-truth manifest ingestion via `apply_extraction`/`upsert_entry`; LLM-extraction replay is the documented Tier 3 seam). Reports add two metric blocks: exact-string recall (verbatim emails/codes/ids in top-K context - the decision input for memory-revamp Phase 6 hybrid/BM25 search, with misses listed by question id) and contradiction-detection precision/recall against the injected ground truth.
+- Tier 4 cost efficiency: new `cost_runner.py` measures retrieval latency percentiles (p50/p95/p99) under a bounded-concurrency load pattern, estimated context tokens per query, measured tokens-per-accurate-recall (with `--qa`), cost per 1,000 queries with monthly projections for the PRD usage scenarios (10/50/200 queries/day), and storage footprint per ingested turn. Model pricing moved to an updatable `bench/memory/pricing.json` table (report.py now loads it; behavior unchanged).
+- HuggingFace publication prep: `hf_publish.py` renders the dataset card (MIT) + flat JSONL views ready for `hf upload` (upload itself is a documented owner-only manual step).
+- All runners keep the Tier 1 conventions: real formation, cheap-model config ($0 retrieval-only runs), per-case failure isolation, reports always written on partial failure, nonzero exit on incomplete runs, committed fixture reports under `bench/memory/results/`.
 ### Knowledge reasoning RAG - Method B, hybrid mode, per-agent trees (Phases 2-5)
 
 Completes the knowledge-reasoning-rag PRD on top of Phase 1's Method A:
 
-- **Method B (`retrieval: tree-vector`)**: per-node chunk embeddings computed
-  at tree build through the unified embedding layer and scored at query time
-  with the PageIndex formula `NodeScore = (1/sqrt(N+1)) * sum(ChunkScore)` -
-  nodes are retrieved, chunks are scoring scaffolding; zero LLM calls per
-  query. Embeddings persist as a cache sidecar (`.tree.emb.jsonl`) keyed to
-  the embedding model, so a model swap recomputes vectors without an LLM
-  rebuild.
-- **`ScoringService`** (`reasoning/scoring_service.py`): standalone,
-  memory-agnostic `embed` / `score` / `aggregate_with_diminishing_returns`
-  primitive - the published cross-PRD contract that memory-revamp Layer 3
-  (hybrid search) consumes.
-- **Hybrid mode (`retrieval: hybrid`)**: Method A and B run in parallel,
-  results dedup-merge by node_id, and a sufficiency evaluator (dedicated
-  structured-output LLM call on `knowledge.tree.terminator_model`, resolved
-  through the model hierarchy, default: the tree model) decides whether to
-  fetch more via gap-topic scoring. Loop bounds: `tree.max_sufficiency_rounds`
-  (default 3) and `tree.max_fetched_nodes_pct` (default 50). Results carry a
-  `cost` metadata block (llm_calls / evaluator_rounds).
-- **Per-agent trees** (`agent_tree:` block on a source): one persistent tree
-  per source in `<formation>/.knowledge-trees/` (tree + KV + embeddings +
-  versioned `meta.json`), committable to the formation repo so deployments
-  load without rebuilding. Regeneration triggers: `manual` /
-  `on-source-change` (aggregate source MD5) / `on-formation-load`. Force
-  rebuild via the new admin endpoint `POST /v1/knowledge/rebuild` (the
-  runtime side of the CLI's `muxi knowledge rebuild`) or
-  `KnowledgeHandler.rebuild_agent_trees()`.
-- Multi-tree query results now merge round-robin by per-tree relevance rank
-  so one tree cannot crowd out another's top results; all reasoning LLM calls
-  pin explicit `max_tokens` so formation-level chat caps cannot truncate
-  structured outputs, and bypass the semantic response cache.
-- New observability events: `KNOWLEDGE_TREE_NODE_SELECTED`,
-  `KNOWLEDGE_TREE_HYBRID_QUEUED`, `KNOWLEDGE_TREE_SUFFICIENCY_EVALUATED`,
-  `KNOWLEDGE_TREE_HYBRID_TERMINATED_EARLY`,
-  `KNOWLEDGE_TREE_HYBRID_LOOP_CAPPED`, `KNOWLEDGE_AGENT_TREE_REGENERATED`.
-- New comparison bench (`bench/knowledge/`): vector vs A vs B vs hybrid on a
-  fixture corpus; contributor doc `contributing/knowledge-trees.md`. All
-  retrieval modes fall back to vector on failure; existing formations without
-  the new keys behave byte-identically.
+- **Method B (`retrieval: tree-vector`)**: per-node chunk embeddings computed at tree build through the unified embedding layer and scored at query time with the PageIndex formula `NodeScore = (1/sqrt(N+1)) * sum(ChunkScore)` - nodes are retrieved, chunks are scoring scaffolding; zero LLM calls per query. Embeddings persist as a cache sidecar (`.tree.emb.jsonl`) keyed to the embedding model, so a model swap recomputes vectors without an LLM rebuild.
+- **`ScoringService`** (`reasoning/scoring_service.py`): standalone, memory-agnostic `embed` / `score` / `aggregate_with_diminishing_returns` primitive - the published cross-PRD contract that memory-revamp Layer 3 (hybrid search) consumes.
+- **Hybrid mode (`retrieval: hybrid`)**: Method A and B run in parallel, results dedup-merge by node_id, and a sufficiency evaluator (dedicated structured-output LLM call on `knowledge.tree.terminator_model`, resolved through the model hierarchy, default: the tree model) decides whether to fetch more via gap-topic scoring. Loop bounds: `tree.max_sufficiency_rounds` (default 3) and `tree.max_fetched_nodes_pct` (default 50). Results carry a `cost` metadata block (llm_calls / evaluator_rounds).
+- **Per-agent trees** (`agent_tree:` block on a source): one persistent tree per source in `<formation>/.knowledge-trees/` (tree + KV + embeddings + versioned `meta.json`), committable to the formation repo so deployments load without rebuilding. Regeneration triggers: `manual` / `on-source-change` (aggregate source MD5) / `on-formation-load`. Force rebuild via the new admin endpoint `POST /v1/knowledge/rebuild` (the runtime side of the CLI's `muxi knowledge rebuild`) or `KnowledgeHandler.rebuild_agent_trees()`.
+- Multi-tree query results now merge round-robin by per-tree relevance rank so one tree cannot crowd out another's top results; all reasoning LLM calls pin explicit `max_tokens` so formation-level chat caps cannot truncate structured outputs, and bypass the semantic response cache.
+- New observability events: `KNOWLEDGE_TREE_NODE_SELECTED`, `KNOWLEDGE_TREE_HYBRID_QUEUED`, `KNOWLEDGE_TREE_SUFFICIENCY_EVALUATED`, `KNOWLEDGE_TREE_HYBRID_TERMINATED_EARLY`, `KNOWLEDGE_TREE_HYBRID_LOOP_CAPPED`, `KNOWLEDGE_AGENT_TREE_REGENERATED`.
+- New comparison bench (`bench/knowledge/`): vector vs A vs B vs hybrid on a fixture corpus; contributor doc `contributing/knowledge-trees.md`. All retrieval modes fall back to vector on failure; existing formations without the new keys behave byte-identically.
 ### Remote knowledge sources - archives, scheduling, extra protocols (Phases 2-4)
 
-Completes the remote-knowledge-sources PRD on top of the Phase 1 core
-sync: archive extraction, scheduled re-sync with incremental
-re-embedding, a manual sync trigger endpoint, and four more protocols.
+Completes the remote-knowledge-sources PRD on top of the Phase 1 core sync: archive extraction, scheduled re-sync with incremental re-embedding, a manual sync trigger endpoint, and four more protocols.
 
-- **Archive extraction (Phase 2)**: ``extract: true`` sources download a
-  single archive (``.zip``, ``.tar``, ``.tar.gz``/``.tgz``,
-  ``.tar.bz2``, ``.tar.xz``) and extract it into the local mirror;
-  ``extract_pattern`` keeps only matching members. Extraction is
-  security-hardened: member names are path-traversal-safe (same guards
-  as the manifest), symlink/hardlink/device members are rejected, and
-  decompression bombs are bounded by ``max_extracted_files`` (default
-  1000) and ``max_extracted_size`` (default 500MB) counted on the
-  DECOMPRESSED stream, never trusted from headers. Extraction happens in
-  a temp dir next to the mirror (always cleaned up); the mirror is only
-  updated after the whole archive extracted successfully, so a corrupt
-  or malicious archive degrades to the previously synced content.
-  Unchanged archives (hash + size) skip both download and extraction.
-- **Scheduled re-sync (Phase 3)**: sources with a cron ``schedule``
-  (or ``@hourly``/``@daily``/``@weekly``) now actually re-sync
-  periodically. The new ``KnowledgeSyncService`` registers with the
-  existing SchedulerService worker loop (the heartbeat's periodic-task
-  extension point -- no second scheduler). Per-source locks skip
-  overlapping syncs (``knowledge.sync.skipped``); total failures retry
-  with exponential backoff (per-source ``retry:`` block --
-  ``max_attempts``/``initial_delay``/``max_delay``/``exponential_base``,
-  defaults 3/5s/300s/2) and then fall back to the next cron fire, always
-  serving stale content in the meantime. After a sync that changed the
-  mirror, only the changed/deleted files are re-embedded
-  (``KnowledgeHandler.refresh_remote_source``), not the whole source.
-  Schedules without a running scheduler degrade to startup-only sync
-  with a loud init warning. ``@startup`` / no schedule keep the Phase 1
-  startup-only behavior.
-- **Manual sync trigger**: ``POST /v1/agents/{agent_id}/knowledge/sync``
-  (AdminKey; optional ``{"source_id": ...}`` body) re-syncs an agent's
-  remote sources on demand through the same locks and incremental
-  re-embed path, returning per-source results.
-- **Additional protocols (Phase 4)**: ``gs://`` (Google Cloud Storage,
-  Content-MD5 change detection, optional ``auth: {type: gcp,
-  credentials_json}`` else ADC), ``az://`` (Azure Blob Storage,
-  Content-MD5/ETag; requires ``auth: {type: azure}`` with
-  ``connection_string`` or ``account_name``+``account_key``),
-  ``ftp://`` (stdlib, size+mtime, ``basic`` auth or URL userinfo), and
-  ``sftp://`` (paramiko, size+mtime, ``ssh_key`` or ``basic`` auth;
-  strict host-key checking by default with the same
-  ``accept_new_host_keys`` opt-in as rsync+ssh). All use the shared
-  atomic-download path. Optional SDKs ship as extras --
-  ``muxi-runtime[gcs]``, ``[azure]``, ``[sftp]`` -- with clear
-  config-time errors naming the extra when missing; ftp needs nothing.
-- Fixed a latent WorkingMemory bug surfaced by incremental re-embedding:
-  FAISS partitions for pre-computed embeddings (knowledge chunks) were
-  created/rebuilt at the buffer's own embedding dimension, silently
-  dropping vectors on write and crashing every vector search after the
-  first index rebuild. Partition dimensionality now follows the vectors
-  it stores.
-- All new config keys are fail-fast validated at load time; formations
-  without remote sources remain untouched (the remote machinery is never
-  imported).
+- **Archive extraction (Phase 2)**: ``extract: true`` sources download a single archive (``.zip``, ``.tar``, ``.tar.gz``/``.tgz``, ``.tar.bz2``, ``.tar.xz``) and extract it into the local mirror; ``extract_pattern`` keeps only matching members. Extraction is security-hardened: member names are path-traversal-safe (same guards as the manifest), symlink/hardlink/device members are rejected, and decompression bombs are bounded by ``max_extracted_files`` (default
+  1000) and ``max_extracted_size`` (default 500MB) counted on the DECOMPRESSED stream, never trusted from headers. Extraction happens in a temp dir next to the mirror (always cleaned up); the mirror is only updated after the whole archive extracted successfully, so a corrupt or malicious archive degrades to the previously synced content. Unchanged archives (hash + size) skip both download and extraction.
+- **Scheduled re-sync (Phase 3)**: sources with a cron ``schedule`` (or ``@hourly``/``@daily``/``@weekly``) now actually re-sync periodically. The new ``KnowledgeSyncService`` registers with the existing SchedulerService worker loop (the heartbeat's periodic-task extension point -- no second scheduler). Per-source locks skip overlapping syncs (``knowledge.sync.skipped``); total failures retry with exponential backoff (per-source ``retry:`` block -- ``max_attempts``/``initial_delay``/``max_delay``/``exponential_base``, defaults 3/5s/300s/2) and then fall back to the next cron fire, always serving stale content in the meantime. After a sync that changed the mirror, only the changed/deleted files are re-embedded (``KnowledgeHandler.refresh_remote_source``), not the whole source. Schedules without a running scheduler degrade to startup-only sync with a loud init warning. ``@startup`` / no schedule keep the Phase 1 startup-only behavior.
+- **Manual sync trigger**: ``POST /v1/agents/{agent_id}/knowledge/sync`` (AdminKey; optional ``{"source_id": ...}`` body) re-syncs an agent's remote sources on demand through the same locks and incremental re-embed path, returning per-source results.
+- **Additional protocols (Phase 4)**: ``gs://`` (Google Cloud Storage, Content-MD5 change detection, optional ``auth: {type: gcp, credentials_json}`` else ADC), ``az://`` (Azure Blob Storage, Content-MD5/ETag; requires ``auth: {type: azure}`` with ``connection_string`` or ``account_name``+``account_key``), ``ftp://`` (stdlib, size+mtime, ``basic`` auth or URL userinfo), and ``sftp://`` (paramiko, size+mtime, ``ssh_key`` or ``basic`` auth; strict host-key checking by default with the same ``accept_new_host_keys`` opt-in as rsync+ssh). All use the shared atomic-download path. Optional SDKs ship as extras -- ``muxi-runtime[gcs]``, ``[azure]``, ``[sftp]`` -- with clear config-time errors naming the extra when missing; ftp needs nothing.
+- Fixed a latent WorkingMemory bug surfaced by incremental re-embedding: FAISS partitions for pre-computed embeddings (knowledge chunks) were created/rebuilt at the buffer's own embedding dimension, silently dropping vectors on write and crashing every vector search after the first index rebuild. Partition dimensionality now follows the vectors it stores.
+- All new config keys are fail-fast validated at load time; formations without remote sources remain untouched (the remote machinery is never imported).
 
 ### Memory revamp phases 3-5 - context optimization, knowledge index, lint
 
-The memory system's read-path and lifecycle layers on top of the Phase 1-2
-knowledge graph and captain's log (memory-revamp PRD; Phase 6 hybrid search
-stays deferred pending benchmark evidence):
+The memory system's read-path and lifecycle layers on top of the Phase 1-2 knowledge graph and captain's log (memory-revamp PRD; Phase 6 hybrid search stays deferred pending benchmark evidence):
 
-- Pre-compaction flush (Phase 3): working-memory FIFO eviction no longer
-  silently loses conversational context. A new eviction listener hook on
-  `WorkingMemory` hands at-risk buffer items to a silent LLM turn - at the
-  `memory.compaction.flush_threshold` (default 0.80) crossing and again as
-  an eviction-time safety net - which digests them through the captain's
-  log pipeline (entry + source lineage + lessons + graph facts) before the
-  buffer drops them. Best-effort and failure-isolated: a failed flush never
-  blocks eviction or a chat turn. `flush_enabled: false` is byte-identical
-  to the previous behavior (pinned by unit test).
-- Cache-TTL context pruning (Phase 3): when a session resumes after the
-  provider prompt-cache window (`memory.pruning.mode: cache-ttl`, default
-  TTL 300s), stale tool results and oversized turns are soft-trimmed
-  (first/last 1500 chars) or hard-cleared from the assembled history; the
-  newest `keep_last_n_tool_results` stay intact. Inert when unconfigured:
-  no `memory.pruning` block means no pruner is constructed.
-- Knowledge index (Phase 4): a <=300-token navigable catalog of what exists
-  in memory (entities, captain's log span, artifact manifest via the
-  artifact memory service - the seam artifact-memory Phase 2 rides - and
-  lint-flagged knowledge gaps), cached per user, persisted in
-  `system_config` (`memory_index:{user_id}`), and injected at retrieval
-  start in both context representations. Regenerates on log entries,
-  artifact saves, entity-count jumps past `entity_count_threshold`, lint
-  runs, and 24h staleness; truncates per section with `[+N more]` under the
-  `max_tokens` cap. Index failures never break a turn.
-- Memory lint (Phase 5): a background audit (weekly by default, on demand
-  via `run_lint` / admin `POST /memory/lint`) following the shared
-  background-loop lifecycle (started beside the scheduler, cancelled on
-  shutdown, failure-isolated per run and per user). Flags conflicted facts
-  unresolved past `conflict_resolution_days` and captain's log gaps > 7
-  days, hard-deletes superseded facts past the retention window, removes
-  orphaned relationships (`orphan_cleanup`), flags artifacts unaccessed for
-  `stale_artifact_days`, and force-regenerates a stale index. Findings feed
-  back into the knowledge index as knowledge gaps. Inert when unconfigured:
-  only constructed when the formation declares a `memory.lint` block.
-- All four new config sections (`memory.compaction`, `memory.pruning`,
-  `memory.index`, `memory.lint`) fail-fast validate at load time. New
-  observability events: `MEMORY_PRECOMPACTION_FLUSH_*`,
-  `MEMORY_CONTEXT_PRUNED`, `MEMORY_INDEX_*`, `MEMORY_LINT_*` (event
-  validation stays 100%). New e2e: `test_2x1_memory_revamp_phases_3_5.py`
-  (flush surviving real eviction, index injection observable in a real
-  turn, on-demand lint).
+- Pre-compaction flush (Phase 3): working-memory FIFO eviction no longer silently loses conversational context. A new eviction listener hook on `WorkingMemory` hands at-risk buffer items to a silent LLM turn - at the `memory.compaction.flush_threshold` (default 0.80) crossing and again as an eviction-time safety net - which digests them through the captain's log pipeline (entry + source lineage + lessons + graph facts) before the buffer drops them. Best-effort and failure-isolated: a failed flush never blocks eviction or a chat turn. `flush_enabled: false` is byte-identical to the previous behavior (pinned by unit test).
+- Cache-TTL context pruning (Phase 3): when a session resumes after the provider prompt-cache window (`memory.pruning.mode: cache-ttl`, default TTL 300s), stale tool results and oversized turns are soft-trimmed (first/last 1500 chars) or hard-cleared from the assembled history; the newest `keep_last_n_tool_results` stay intact. Inert when unconfigured: no `memory.pruning` block means no pruner is constructed.
+- Knowledge index (Phase 4): a <=300-token navigable catalog of what exists in memory (entities, captain's log span, artifact manifest via the artifact memory service - the seam artifact-memory Phase 2 rides - and lint-flagged knowledge gaps), cached per user, persisted in `system_config` (`memory_index:{user_id}`), and injected at retrieval start in both context representations. Regenerates on log entries, artifact saves, entity-count jumps past `entity_count_threshold`, lint runs, and 24h staleness; truncates per section with `[+N more]` under the `max_tokens` cap. Index failures never break a turn.
+- Memory lint (Phase 5): a background audit (weekly by default, on demand via `run_lint` / admin `POST /memory/lint`) following the shared background-loop lifecycle (started beside the scheduler, cancelled on shutdown, failure-isolated per run and per user). Flags conflicted facts unresolved past `conflict_resolution_days` and captain's log gaps > 7 days, hard-deletes superseded facts past the retention window, removes orphaned relationships (`orphan_cleanup`), flags artifacts unaccessed for `stale_artifact_days`, and force-regenerates a stale index. Findings feed back into the knowledge index as knowledge gaps. Inert when unconfigured: only constructed when the formation declares a `memory.lint` block.
+- All four new config sections (`memory.compaction`, `memory.pruning`, `memory.index`, `memory.lint`) fail-fast validate at load time. New observability events: `MEMORY_PRECOMPACTION_FLUSH_*`, `MEMORY_CONTEXT_PRUNED`, `MEMORY_INDEX_*`, `MEMORY_LINT_*` (event validation stays 100%). New e2e: `test_2x1_memory_revamp_phases_3_5.py` (flush surviving real eviction, index injection observable in a real turn, on-demand lint).
 ### Memory event substrate - projections, provenance, rebuild (Phases 2b-2d)
 
-The immutable memory event log (memory-event-substrate PRD) now covers the
-full write-path story on top of the shipped core log + dual-write:
+The immutable memory event log (memory-event-substrate PRD) now covers the full write-path story on top of the shipped core log + dual-write:
 
-- Incremental projection builders (2b): per-(projection, user) cursors in
-  ``projection_checkpoints`` drive ``project_pending`` (catch a cursor up
-  to the log tail; idempotent, poison events are skipped and reconciled by
-  rebuild) and ``apply_event`` (project one just-appended event). A new
-  artifact-metadata projector rebuilds ``artifacts`` rows from
-  ``artifact.saved`` events (v2 payloads carry the full metadata; v1
-  events are reconstructed deterministically - builders handle every
-  historical payload version); blobs are never touched and pre-substrate
-  rows survive resets.
-- Event-first cutover groundwork (Phase C, flag-gated, DEFAULT OFF):
-  ``memory.events.event_first: true`` makes the extractor, knowledge
-  graph, captain's log, ingestion, and shared-scope write paths append
-  the event and derive the projection through the substrate (synchronous
-  apply + background applier as crash recovery, with cursor snapshots
-  guarding dual-written history). Dual-write remains the default until
-  cutover.
-- Provenance (2c): ``GET /v1/memories/provenance?entity=X`` answers "why
-  do you think X?" - the knowledge graph entity, every fact touching it
-  (contradicted/superseded included), and per-fact causation chains from
-  the event log back to the originating interaction turn or ingestion
-  item. ``?event_id=`` traces a single event. The ``artifacts`` table
-  gains an additive ``derived_from_event_id`` provenance column.
-- Decay at query time (2c): ``memory.decay`` settings (default half-life
-  180d, volatile TTL 24h, per-relationship-type ``half_lives`` map).
-  Volatile events without an explicit expiry are stamped at write time;
-  an hourly maintenance sweep soft-deletes expired volatile events so
-  rebuilds drop their projections. Context-block ranking re-weights
-  facts by half-life age for configured types (no-op by default - the
-  hot read path pays nothing unless the formation opts in).
-- Contradiction audit (2c): knowledge-graph writes that conflict with or
-  supersede an existing exclusive fact now record ``fact.contradicted``
-  events (idempotent per fact pair, ``caused_by``-linked to the
-  extraction) plus a ``memory.fact.contradicted`` observability event.
-  Replay re-marks rows but never re-records audit events.
-- Rebuild & migration (2d): ``POST /memory/rebuild`` (admin) runs as a
-  background job by default (202 + job id, pollable at
-  ``GET /memory/rebuild/{job_id}``; ``background: false`` blocks) - this
-  backs ``muxi memory rebuild --user <id>``. ``POST /memory/backfill``
-  synthesizes idempotent ``source='legacy'`` events for pre-event-log
-  rows (KG entities/relationships, captain's log entries/lessons,
-  artifacts, orphan flat facts); ``rebuild`` accepts ``backfill: true``
-  to do both. ``POST /memory/forget`` is the GDPR flow: soft-delete a
-  source's events (reversible for the retention grace period; the
-  hard-purge worker then removes them), record the ``user.deletion``
-  audit event, and rebuild projections as if the source never existed.
-- Ops: per-user event-log size-cap alert
-  (``memory.events.retention.max_events_per_user``, alert-only per the
-  PRD's SQLite posture), projection lag alerts
-  (``memory.projections.lag_alert_threshold_seconds``), and new
-  observability events (``memory.projection.lagging``,
-  ``memory.event.expired``, ``memory.event.size_cap_exceeded``,
-  ``memory.fact.contradicted``, ``memory.backfill.started/completed``).
-  All new config keys fail-fast validated at load.
+- Incremental projection builders (2b): per-(projection, user) cursors in ``projection_checkpoints`` drive ``project_pending`` (catch a cursor up to the log tail; idempotent, poison events are skipped and reconciled by rebuild) and ``apply_event`` (project one just-appended event). A new artifact-metadata projector rebuilds ``artifacts`` rows from ``artifact.saved`` events (v2 payloads carry the full metadata; v1 events are reconstructed deterministically - builders handle every historical payload version); blobs are never touched and pre-substrate rows survive resets.
+- Event-first cutover groundwork (Phase C, flag-gated, DEFAULT OFF): ``memory.events.event_first: true`` makes the extractor, knowledge graph, captain's log, ingestion, and shared-scope write paths append the event and derive the projection through the substrate (synchronous apply + background applier as crash recovery, with cursor snapshots guarding dual-written history). Dual-write remains the default until cutover.
+- Provenance (2c): ``GET /v1/memories/provenance?entity=X`` answers "why do you think X?" - the knowledge graph entity, every fact touching it (contradicted/superseded included), and per-fact causation chains from the event log back to the originating interaction turn or ingestion item. ``?event_id=`` traces a single event. The ``artifacts`` table gains an additive ``derived_from_event_id`` provenance column.
+- Decay at query time (2c): ``memory.decay`` settings (default half-life 180d, volatile TTL 24h, per-relationship-type ``half_lives`` map). Volatile events without an explicit expiry are stamped at write time; an hourly maintenance sweep soft-deletes expired volatile events so rebuilds drop their projections. Context-block ranking re-weights facts by half-life age for configured types (no-op by default - the hot read path pays nothing unless the formation opts in).
+- Contradiction audit (2c): knowledge-graph writes that conflict with or supersede an existing exclusive fact now record ``fact.contradicted`` events (idempotent per fact pair, ``caused_by``-linked to the extraction) plus a ``memory.fact.contradicted`` observability event. Replay re-marks rows but never re-records audit events.
+- Rebuild & migration (2d): ``POST /memory/rebuild`` (admin) runs as a background job by default (202 + job id, pollable at ``GET /memory/rebuild/{job_id}``; ``background: false`` blocks) - this backs ``muxi memory rebuild --user <id>``. ``POST /memory/backfill`` synthesizes idempotent ``source='legacy'`` events for pre-event-log rows (KG entities/relationships, captain's log entries/lessons, artifacts, orphan flat facts); ``rebuild`` accepts ``backfill: true`` to do both. ``POST /memory/forget`` is the GDPR flow: soft-delete a source's events (reversible for the retention grace period; the hard-purge worker then removes them), record the ``user.deletion`` audit event, and rebuild projections as if the source never existed.
+- Ops: per-user event-log size-cap alert (``memory.events.retention.max_events_per_user``, alert-only per the PRD's SQLite posture), projection lag alerts (``memory.projections.lag_alert_threshold_seconds``), and new observability events (``memory.projection.lagging``, ``memory.event.expired``, ``memory.event.size_cap_exceeded``, ``memory.fact.contradicted``, ``memory.backfill.started/completed``). All new config keys fail-fast validated at load.
 
 ### Knowledge reasoning RAG - Method A tree retrieval (Phase 1)
 
-Large knowledge files are now indexed as hierarchical trees navigated by an
-LLM at query time instead of vector chunking (knowledge-reasoning-rag PRD,
-Phase 1):
+Large knowledge files are now indexed as hierarchical trees navigated by an LLM at query time instead of vector chunking (knowledge-reasoning-rag PRD, Phase 1):
 
-- New `formation/agents/knowledge/reasoning/` package: `TreeBuilder`
-  (deterministic heading/window segmentation + batched LLM summaries),
-  `TreeCache` (MD5-keyed disk persistence: compact tree JSON + separate
-  node->raw KV file), and `TreeSearchA` (Method A: one LLM call selects
-  node_ids from the compressed tree; raw content resolved from the KV).
-- Per-file gate at ingestion: files above `knowledge.reasoning_threshold`
-  tokens (default 40000, `0` disables) are tree-indexed; everything else
-  flows through the unchanged vector pipeline. Applies inside directory
-  sources too. Per-source `retrieval: vector|tree` overrides the gate
-  (`tree-vector`/`hybrid` are reserved for later phases and rejected at
-  load). New `knowledge.tree` settings block: `model` (defaults to the
-  agent's text model; accepts an `llm.aliases` name or `provider/model`),
-  `max_depth`, `max_pages_per_node`, `max_tokens_per_node`,
-  `max_document_tokens`. All new keys fail-fast validated at load time.
-- Tree and vector sources coexist in one agent's knowledge base; tree
-  results carry `source_type: "tree"` plus a `node_path` breadcrumb via the
-  unified `RetrievalResult` schema (contract shared with the memory-revamp
-  PRD).
-- Failure isolation: tree build failure (or the `max_document_tokens` size
-  cap) falls back to vector indexing; navigation failure at query time falls
-  back to vector search results - never a failed turn. New observability
-  events: `KNOWLEDGE_TREE_BUILD_STARTED` / `_COMPLETED` / `_FAILED` and
-  `KNOWLEDGE_TREE_FALLBACK_TO_VECTOR` (with cause).
-- Inert when unconfigured: files under the threshold (and handlers without a
-  tree model) behave byte-identically to the previous vector path, pinned by
-  unit tests.
+- New `formation/agents/knowledge/reasoning/` package: `TreeBuilder` (deterministic heading/window segmentation + batched LLM summaries), `TreeCache` (MD5-keyed disk persistence: compact tree JSON + separate node->raw KV file), and `TreeSearchA` (Method A: one LLM call selects node_ids from the compressed tree; raw content resolved from the KV).
+- Per-file gate at ingestion: files above `knowledge.reasoning_threshold` tokens (default 40000, `0` disables) are tree-indexed; everything else flows through the unchanged vector pipeline. Applies inside directory sources too. Per-source `retrieval: vector|tree` overrides the gate (`tree-vector`/`hybrid` are reserved for later phases and rejected at load). New `knowledge.tree` settings block: `model` (defaults to the agent's text model; accepts an `llm.aliases` name or `provider/model`), `max_depth`, `max_pages_per_node`, `max_tokens_per_node`, `max_document_tokens`. All new keys fail-fast validated at load time.
+- Tree and vector sources coexist in one agent's knowledge base; tree results carry `source_type: "tree"` plus a `node_path` breadcrumb via the unified `RetrievalResult` schema (contract shared with the memory-revamp PRD).
+- Failure isolation: tree build failure (or the `max_document_tokens` size cap) falls back to vector indexing; navigation failure at query time falls back to vector search results - never a failed turn. New observability events: `KNOWLEDGE_TREE_BUILD_STARTED` / `_COMPLETED` / `_FAILED` and `KNOWLEDGE_TREE_FALLBACK_TO_VECTOR` (with cause).
+- Inert when unconfigured: files under the threshold (and handlers without a tree model) behave byte-identically to the previous vector path, pinned by unit tests.
 
 ### Remote knowledge sources - Phase 1 core sync
 
-Agents can now declare url-based knowledge sources next to local paths
-(remote-knowledge-sources PRD, Phase 1):
+Agents can now declare url-based knowledge sources next to local paths (remote-knowledge-sources PRD, Phase 1):
 
-- ``knowledge.sources[*].url`` supports ``http(s)://`` (single file),
-  ``s3://`` (prefix + glob), ``rsync://`` / ``rsync+ssh://`` (incremental
-  tree sync), and ``file://`` (bind mounts). Credentials go through the
-  existing ``${{ secrets.* }}`` interpolation (``auth`` blocks:
-  ``basic``/``bearer`` for http, ``aws`` for s3, ``ssh_key`` for
-  rsync+ssh; plus http ``headers``).
-- Remote content syncs at formation startup into a per-source local
-  mirror under the runtime knowledge cache dir with manifest-based
-  change detection (ETag / Last-Modified / size+mtime), then feeds the
-  unchanged local ingestion pipeline. Downloads are atomic (temp file +
-  rename), so a mid-stream failure can never truncate a previously
-  synced good copy. ``include``/``exclude`` filters and ``max_files`` /
-  ``max_file_size`` / ``max_total_size`` / ``timeout`` limits are
-  enforced. For rsync+ssh, SSH host key checking is strict by default;
-  ``accept_new_host_keys: true`` is the explicit opt-in for
-  trust-on-first-use. S3 ``auth: {type: aws}`` without explicit keys
-  uses boto3's default credential chain.
-- Failure isolation: a failing sync never blocks formation startup or
-  chat -- sources degrade to previously synced content (stale-wins); on
-  a cold start with an unreachable source the formation still starts
-  with a loud warning. New observability events:
-  ``knowledge.sync.started``, ``knowledge.sync.completed``,
-  ``error.knowledge.sync.failed``.
-- Fail-fast load-time validation of source declarations (schemes, auth
-  shape, limits, cron ``schedule`` syntax). Not yet in Phase 1 (config
-  is rejected or documented accordingly): archive extraction
-  (``extract``), scheduled re-sync (``schedule`` accepted, sync runs at
-  startup only), and ``gs``/``az``/``ftp``/``sftp`` protocols.
-- Formations with only local knowledge sources are untouched (the remote
-  sync machinery is never even imported).
+- ``knowledge.sources[*].url`` supports ``http(s)://`` (single file), ``s3://`` (prefix + glob), ``rsync://`` / ``rsync+ssh://`` (incremental tree sync), and ``file://`` (bind mounts). Credentials go through the existing ``${{ secrets.* }}`` interpolation (``auth`` blocks: ``basic``/``bearer`` for http, ``aws`` for s3, ``ssh_key`` for rsync+ssh; plus http ``headers``).
+- Remote content syncs at formation startup into a per-source local mirror under the runtime knowledge cache dir with manifest-based change detection (ETag / Last-Modified / size+mtime), then feeds the unchanged local ingestion pipeline. Downloads are atomic (temp file + rename), so a mid-stream failure can never truncate a previously synced good copy. ``include``/``exclude`` filters and ``max_files`` / ``max_file_size`` / ``max_total_size`` / ``timeout`` limits are enforced. For rsync+ssh, SSH host key checking is strict by default; ``accept_new_host_keys: true`` is the explicit opt-in for trust-on-first-use. S3 ``auth: {type: aws}`` without explicit keys uses boto3's default credential chain.
+- Failure isolation: a failing sync never blocks formation startup or chat -- sources degrade to previously synced content (stale-wins); on a cold start with an unreachable source the formation still starts with a loud warning. New observability events: ``knowledge.sync.started``, ``knowledge.sync.completed``, ``error.knowledge.sync.failed``.
+- Fail-fast load-time validation of source declarations (schemes, auth shape, limits, cron ``schedule`` syntax). Not yet in Phase 1 (config is rejected or documented accordingly): archive extraction (``extract``), scheduled re-sync (``schedule`` accepted, sync runs at startup only), and ``gs``/``az``/``ftp``/``sftp`` protocols.
+- Formations with only local knowledge sources are untouched (the remote sync machinery is never even imported).
 
 ### RBAC membership via request middleware; server.auth and user_groups removed
 
-MUXI stops storing group memberships (request-middleware PRD). Breaking
-for pre-1.0 formations that used ``server.auth`` or seeded
-``user_groups``:
+MUXI stops storing group memberships (request-middleware PRD). Breaking for pre-1.0 formations that used ``server.auth`` or seeded ``user_groups``:
 
-- New top-level ``middleware:`` block: an actual MCP server (stdio
-  ``command``+``args`` or http ``url``+``headers``, plus ``timeout``)
-  exposing exactly one tool named ``middleware``. It receives the full
-  request payload (``user_id``, ``message``, ``attachments``,
-  ``metadata``, ``route_class`` -- never ``groups`` inbound) and returns
-  the same-shaped payload, possibly modified: attaching ``groups`` (the
-  ONLY membership source), rewriting identity, applying payload policy.
-  Connected at formation load with the existing MCP client; a missing or
-  non-conforming ``middleware`` tool fails the load. Fail-closed at
-  request time: error, timeout, or malformed response rejects the
-  request (403; ``error.middleware.failed``). No runtime-side caching --
-  ``timeout`` is the only knob.
-- New top-level ``rbac:`` block: ``active: auto|true|false`` (auto =
-  on iff ``groups/`` has files; true without groups fails the load;
-  false is a loud kill switch) and ``fallback: false|<group_name>``
-  (reject no-group requests, or proceed with the named group's
-  permissions -- validated against ``groups/``). Dead config (active +
-  ``fallback: false`` + no middleware) fails the load.
-- The pipeline runs after client-key auth and before any processing on
-  ALL authenticated inbound traffic (chat, audiochat, triggers, memory
-  routes) AND internally-originated requests -- heartbeat and scheduler
-  jobs synthesize the same payload (``route_class: "heartbeat"`` /
-  ``"scheduler"``) and traverse middleware + RBAC identically.
-- REMOVED: ``server.auth`` (the ``required|open`` key, the user auth
-  gate, and the open+groups load rule). The client key authenticates
-  the caller; user-level gating is ``rbac.fallback: false`` plus a
-  middleware that returns no groups for unknown users. Formations still
-  carrying the key fail the load with a migration error.
-- REMOVED: the ``user_groups`` table (creation and the resolver's DB
-  membership read). Existing deployed tables are left orphaned --
-  nothing destructive. The ``groups/`` YAML files, inheritance, the
-  four-level tools cascade, ``memory.write`` grants, and resource
-  filtering are all unchanged.
-- Shipped template: ``contributing/templates/middleware.py`` -- a
-  one-file stdio middleware (stdlib only) resolving groups from a
-  static map; doubles as the e2e fixture. Config reference:
-  ``contributing/request-middleware.md``.
+- New top-level ``middleware:`` block: an actual MCP server (stdio ``command``+``args`` or http ``url``+``headers``, plus ``timeout``) exposing exactly one tool named ``middleware``. It receives the full request payload (``user_id``, ``message``, ``attachments``, ``metadata``, ``route_class`` -- never ``groups`` inbound) and returns the same-shaped payload, possibly modified: attaching ``groups`` (the ONLY membership source), rewriting identity, applying payload policy. Connected at formation load with the existing MCP client; a missing or non-conforming ``middleware`` tool fails the load. Fail-closed at request time: error, timeout, or malformed response rejects the request (403; ``error.middleware.failed``). No runtime-side caching -- ``timeout`` is the only knob.
+- New top-level ``rbac:`` block: ``active: auto|true|false`` (auto = on iff ``groups/`` has files; true without groups fails the load; false is a loud kill switch) and ``fallback: false|<group_name>`` (reject no-group requests, or proceed with the named group's permissions -- validated against ``groups/``). Dead config (active + ``fallback: false`` + no middleware) fails the load.
+- The pipeline runs after client-key auth and before any processing on ALL authenticated inbound traffic (chat, audiochat, triggers, memory routes) AND internally-originated requests -- heartbeat and scheduler jobs synthesize the same payload (``route_class: "heartbeat"`` / ``"scheduler"``) and traverse middleware + RBAC identically.
+- REMOVED: ``server.auth`` (the ``required|open`` key, the user auth gate, and the open+groups load rule). The client key authenticates the caller; user-level gating is ``rbac.fallback: false`` plus a middleware that returns no groups for unknown users. Formations still carrying the key fail the load with a migration error.
+- REMOVED: the ``user_groups`` table (creation and the resolver's DB membership read). Existing deployed tables are left orphaned -- nothing destructive. The ``groups/`` YAML files, inheritance, the four-level tools cascade, ``memory.write`` grants, and resource filtering are all unchanged.
+- Shipped template: ``contributing/templates/middleware.py`` -- a one-file stdio middleware (stdlib only) resolving groups from a static map; doubles as the e2e fixture. Config reference: ``contributing/request-middleware.md``.
 
 ### Unified tools vocabulary + attachment overrides (#251)
 
 Completes the GBAC tool-override cascade design.
 
-- ``allow`` / ``deny`` is now the canonical vocabulary for ``tools:``
-  blocks at every level -- registry (``mcp.servers[].tools``) and agent
-  attachments included; ``whitelist`` / ``blacklist`` remain accepted
-  aliases. The strict either-or rule is relaxed to both-permitted with
-  deny-applied-after-allow (a superset of previous behavior).
-- Agent attachments to formation-declared MCP servers can now carry a
-  ``tools:`` override (string reference or ``{id, tools}`` mapping),
-  filling in level two of the four-level cascade: formation catalog,
-  agent attachment, group per-server, group per-agent -- most specific
-  wins.
-- An intentionally emptied shared catalog is respected as empty instead
-  of silently falling back to the unfiltered registry.
+- ``allow`` / ``deny`` is now the canonical vocabulary for ``tools:`` blocks at every level -- registry (``mcp.servers[].tools``) and agent attachments included; ``whitelist`` / ``blacklist`` remain accepted aliases. The strict either-or rule is relaxed to both-permitted with deny-applied-after-allow (a superset of previous behavior).
+- Agent attachments to formation-declared MCP servers can now carry a ``tools:`` override (string reference or ``{id, tools}`` mapping), filling in level two of the four-level cascade: formation catalog, agent attachment, group per-server, group per-agent -- most specific wins.
+- An intentionally emptied shared catalog is respected as empty instead of silently falling back to the unfiltered registry.
 
 ### Proactiveness, Phase 4: default heartbeat SOP + docs (#247)
 
-The closing slice of the proactiveness epic -- content, docs, and two
-suppression-robustness fixes found by the first live heartbeat e2e.
+The closing slice of the proactiveness epic -- content, docs, and two suppression-robustness fixes found by the first live heartbeat e2e.
 
-- Bundled default heartbeat SOP: heartbeats enabled without a
-  ``sop:``/``instruction:`` fall back to a shipped SOP (check due jobs
-  and recent context, reach out only when warranted, otherwise
-  ``HEARTBEAT_OK``); formation config overrides it.
-- Suppression hardened: the sentinel is detected anywhere in a heartbeat
-  response (synthesis layers wrap it), and persona formatting passes
-  sentinel-bearing responses through verbatim -- scoped to
-  heartbeat-originated sessions so normal chats mentioning
-  ``HEARTBEAT_OK`` are untouched.
-- Soul document template + guide (``contributing/soul-documents.md``,
-  ``contributing/templates/soul.md``) for the overlord soul, a full
-  config reference for ``proactive:`` / ``commands:``
-  (``contributing/proactiveness-config.md``), and enriched OpenAPI docs
-  for the notifications and user-channels endpoints.
+- Bundled default heartbeat SOP: heartbeats enabled without a ``sop:``/``instruction:`` fall back to a shipped SOP (check due jobs and recent context, reach out only when warranted, otherwise ``HEARTBEAT_OK``); formation config overrides it.
+- Suppression hardened: the sentinel is detected anywhere in a heartbeat response (synthesis layers wrap it), and persona formatting passes sentinel-bearing responses through verbatim -- scoped to heartbeat-originated sessions so normal chats mentioning ``HEARTBEAT_OK`` are untouched.
+- Soul document template + guide (``contributing/soul-documents.md``, ``contributing/templates/soul.md``) for the overlord soul, a full config reference for ``proactive:`` / ``commands:`` (``contributing/proactiveness-config.md``), and enriched OpenAPI docs for the notifications and user-channels endpoints.
 
 ### Proactiveness, Phase 3: built-in commands (#245)
 
-Eight built-in slash commands land in the registry Phase 1 left open --
-all fully deterministic, zero LLM round-trips, active whenever the
-``commands:`` block is enabled (no block still means no interception).
+Eight built-in slash commands land in the registry Phase 1 left open -- all fully deterministic, zero LLM round-trips, active whenever the ``commands:`` block is enabled (no block still means no interception).
 
-- ``/setup``: a stateful guided flow derived from the formation's own
-  config (channel question only when channels are declared, then
-  timezone), per-user with a 10-minute expiry that replies with a clear
-  expiration message instead of leaking answers to the LLM.
-- ``/jobs``: list/pause/resume/cancel/logs against the scheduler with
-  caller-ownership enforcement; ``/identity``: link/unlink identifiers
-  with cross-user protection; ``/channels`` and ``/preferences``:
-  read/write per-user channel state (``/channels test`` routes a real
-  notification); ``/reset``: clears the current session buffer;
-  ``/help`` and ``/status``: pure reads.
-- Formation-defined commands shadow built-ins (author control wins), and
-  a ``commands.builtin:`` map disables individual built-ins.
-- Handler failures return a friendly reply and emit new
-  ``command.{executed,failed}`` events -- never a crashed turn.
+- ``/setup``: a stateful guided flow derived from the formation's own config (channel question only when channels are declared, then timezone), per-user with a 10-minute expiry that replies with a clear expiration message instead of leaking answers to the LLM.
+- ``/jobs``: list/pause/resume/cancel/logs against the scheduler with caller-ownership enforcement; ``/identity``: link/unlink identifiers with cross-user protection; ``/channels`` and ``/preferences``: read/write per-user channel state (``/channels test`` routes a real notification); ``/reset``: clears the current session buffer; ``/help`` and ``/status``: pure reads.
+- Formation-defined commands shadow built-ins (author control wins), and a ``commands.builtin:`` map disables individual built-ins.
+- Handler failures return a friendly reply and emit new ``command.{executed,failed}`` events -- never a crashed turn.
 
 ### Proactiveness, Phase 2: channel templates (#243)
 
-Platform channels ship as declarative content, not MCPs. A channel is a
-trigger + transformer pair: the developer points their bot at
-``POST /server/triggers/{id}``, and the trigger names the payload format
-and the post-back URL.
+Platform channels ship as declarative content, not MCPs. A channel is a trigger + transformer pair: the developer points their bot at ``POST /server/triggers/{id}``, and the trigger names the payload format and the post-back URL.
 
-- ``transformer:`` and ``webhook:`` in trigger frontmatter now compose --
-  the transformer supplies payload format, auth, and retry; the trigger's
-  webhook URL is the delivery destination. ``endpoint.url`` is optional
-  in transformer YAML; resolution is trigger/channel URL first, then the
-  transformer's own, with a load-time error when neither exists.
-  ``proactive.channels.<name>.url`` gets the same override, including
-  ``${{ secrets.* }}``-backed bridge URLs.
-- Bundled dormant templates for ``slack``, ``telegram``, ``discord``,
-  and ``email`` -- real platform payload shapes, no URLs, inert until
-  referenced, shadowed by formation-local ``transformers/`` files (same
-  rule as built-in skills). Email emits a constructed message object
-  (from/to/subject/body/headers) to the developer's bridge webhook;
-  SMTP/SES wiring stays developer territory.
-- Per-platform setup guides and example triggers in
-  ``contributing/channel-templates.md``.
+- ``transformer:`` and ``webhook:`` in trigger frontmatter now compose -- the transformer supplies payload format, auth, and retry; the trigger's webhook URL is the delivery destination. ``endpoint.url`` is optional in transformer YAML; resolution is trigger/channel URL first, then the transformer's own, with a load-time error when neither exists. ``proactive.channels.<name>.url`` gets the same override, including ``${{ secrets.* }}``-backed bridge URLs.
+- Bundled dormant templates for ``slack``, ``telegram``, ``discord``, and ``email`` -- real platform payload shapes, no URLs, inert until referenced, shadowed by formation-local ``transformers/`` files (same rule as built-in skills). Email emits a constructed message object (from/to/subject/body/headers) to the developer's bridge webhook; SMTP/SES wiring stays developer territory.
+- Per-platform setup guides and example triggers in ``contributing/channel-templates.md``.
 
 ### Proactiveness, Phase 1: foundation (#238)
 
-Formations can now initiate contact instead of only responding. The
-``proactive:`` block wires notification routing, heartbeats, and slash
-commands -- all inert when unconfigured.
+Formations can now initiate contact instead of only responding. The ``proactive:`` block wires notification routing, heartbeats, and slash commands -- all inert when unconfigured.
 
-- **Channels are transformers**: a channel is a named reference to a
-  trigger transformer, so outbound delivery reuses the existing template
-  substitution, auth, and retry machinery with a single webhook fallback
-  when every channel fails.
-- **Routing precedence**: explicit channel(s) over user preference over
-  formation default over webhook, with reserved ``last`` / ``preferred``
-  / ``webhook`` targets and multi-channel arrays. Per-user channel state
-  (preferred channel, addressing context, last channel, timezone) is
-  kept in memory with write-through persistence and exposed via
-  ``POST /v1/notifications`` and ``GET/PUT /v1/users/{id}/channels``.
-- **Source tracking**: inbound chat and triggers record which channel a
-  user last spoke on, so "reply where they are" works.
-- **Heartbeat**: rides the existing scheduler through a new periodic-task
-  extension point -- interval gating, active hours (fixed or user
-  timezone, overnight ranges, weekend flags), ``HEARTBEAT_OK``
-  suppression, fresh session per run, and full failure isolation with
-  new heartbeat events.
-- **Soul documents**: soul stays an overlord-level concept -- a
-  ``SOUL.md``/``soul.md`` next to ``formation.yaml`` is auto-discovered
-  as the overlord's default persona (precedence: ``SOUL.md`` >
-  ``soul.md`` > inline ``overlord.soul`` > built-in default). Agents are
-  single-file contained: an agent's character lives in its
-  ``system_message``.
-- **Slash commands**: opt-in ``commands:`` block mapping ``/command`` to
-  SOPs via explicit invocation (no LLM round-trip for unknown commands);
-  the built-in command registry lands in a later phase.
-- Phases 2-5 (channel MCPs, built-in ``/setup``-style commands, extra
-  channels) are deliberately out of scope for this PR.
+- **Channels are transformers**: a channel is a named reference to a trigger transformer, so outbound delivery reuses the existing template substitution, auth, and retry machinery with a single webhook fallback when every channel fails.
+- **Routing precedence**: explicit channel(s) over user preference over formation default over webhook, with reserved ``last`` / ``preferred`` / ``webhook`` targets and multi-channel arrays. Per-user channel state (preferred channel, addressing context, last channel, timezone) is kept in memory with write-through persistence and exposed via ``POST /v1/notifications`` and ``GET/PUT /v1/users/{id}/channels``.
+- **Source tracking**: inbound chat and triggers record which channel a user last spoke on, so "reply where they are" works.
+- **Heartbeat**: rides the existing scheduler through a new periodic-task extension point -- interval gating, active hours (fixed or user timezone, overnight ranges, weekend flags), ``HEARTBEAT_OK`` suppression, fresh session per run, and full failure isolation with new heartbeat events.
+- **Soul documents**: soul stays an overlord-level concept -- a ``SOUL.md``/``soul.md`` next to ``formation.yaml`` is auto-discovered as the overlord's default persona (precedence: ``SOUL.md`` > ``soul.md`` > inline ``overlord.soul`` > built-in default). Agents are single-file contained: an agent's character lives in its ``system_message``.
+- **Slash commands**: opt-in ``commands:`` block mapping ``/command`` to SOPs via explicit invocation (no LLM round-trip for unknown commands); the built-in command registry lands in a later phase.
+- Phases 2-5 (channel MCPs, built-in ``/setup``-style commands, extra channels) are deliberately out of scope for this PR.
 
 ### Bundled compute skill (#237)
 
-A built-in code-as-reasoning skill: the agent writes a self-contained
-Python file and a bundled executor runs it inside the existing Skill RCE
-sandbox. No inner LLM loop, no orchestration, no new execution paths.
+A built-in code-as-reasoning skill: the agent writes a self-contained Python file and a bundled executor runs it inside the existing Skill RCE sandbox. No inner LLM loop, no orchestration, no new execution paths.
 
-- ``SKILL.md`` teaches activation, the write-file/print-answer contract,
-  and the allowed-imports policy (json, math, datetime, re, statistics,
-  csv, pandas, numpy inlined); four worked reference examples ship with
-  the skill.
-- Executor hardening: path-traversal and symlink rejection, AST
-  import/builtin policy that follows attribute chains (``eval.__call__``
-  is caught), and distinct machine-readable error prefixes so agents fix
-  syntax errors as syntax and import violations as imports.
-- ``run_skill`` gained ``input_files`` pass-through (the RCE server has
-  no shell, so code cannot ride in ``command``), plus a compute-only
-  recovery shim for planner models that put raw Python in ``command``.
-- New ``computation.{requested,completed,failed}`` events with a
-  ``failure_kind`` breakdown. Disable via ``skills.disable_builtin``;
-  degrades like any scripted skill when no RCE is configured.
+- ``SKILL.md`` teaches activation, the write-file/print-answer contract, and the allowed-imports policy (json, math, datetime, re, statistics, csv, pandas, numpy inlined); four worked reference examples ship with the skill.
+- Executor hardening: path-traversal and symlink rejection, AST import/builtin policy that follows attribute chains (``eval.__call__`` is caught), and distinct machine-readable error prefixes so agents fix syntax errors as syntax and import violations as imports.
+- ``run_skill`` gained ``input_files`` pass-through (the RCE server has no shell, so code cannot ride in ``command``), plus a compute-only recovery shim for planner models that put raw Python in ``command``.
+- New ``computation.{requested,completed,failed}`` events with a ``failure_kind`` breakdown. Disable via ``skills.disable_builtin``; degrades like any scripted skill when no RCE is configured.
 
 ### Performance: local embeddings on macOS (#258)
 
-The CoreML execution provider is now off by default on macOS for the
-local ONNX embedding models -- partition negotiation cost far more than
-it saved (observed: e2e p50 retrieval latency dropped ~27%) -- and the
-classifier warmup halves its embed calls. Set
-``ONELLM_COREML_DISABLED=false`` to opt back in.
+The CoreML execution provider is now off by default on macOS for the local ONNX embedding models -- partition negotiation cost far more than it saved (observed: e2e p50 retrieval latency dropped ~27%) -- and the classifier warmup halves its embed calls. Set ``ONELLM_COREML_DISABLED=false`` to opt back in.
 
 ### Fixes (#229, #231, #234, #235, #240, #241, #249, #257, #269, #272)
 
-- Pytest-based e2e tests no longer inherit the unit-test 60-second
-  pytest-timeout through rootdir discovery: ``e2e/pytest.ini`` now owns
-  e2e ceilings (360s, thread method) -- this was the real cause of the
-  "ONNX load timeout" failures in area 15 (#257).
+- Pytest-based e2e tests no longer inherit the unit-test 60-second pytest-timeout through rootdir discovery: ``e2e/pytest.ini`` now owns e2e ceilings (360s, thread method) -- this was the real cause of the "ONNX load timeout" failures in area 15 (#257).
 
-- The e2e harness self-provisions the gitignored formation ``.key``
-  symlinks (``e2e/provision_keys.py``, run automatically by
-  ``run_all_tests.py``/``run_random_tests.py``): fresh checkouts and git
-  worktrees no longer hit ``InvalidSignature`` failures from
-  SecretsManager auto-generating a wrong key next to the committed
-  ``secrets.enc``. Stale auto-generated keys over the shared symlinked
-  ``secrets.enc`` are replaced; formation-owned key/secrets pairs are
-  never touched (#269).
-- The background-forget job lifecycle test polls with a wall-clock
-  deadline and a short sleep instead of 50 back-to-back requests, which
-  raced the background rebuild on loaded CI runners and flaked (#272).
-- Scheduler due-job queries are scoped to the owning formation:
-  formations sharing one database no longer execute each other's
-  scheduled jobs (``get_active_jobs_batch`` and its pagination count
-  filtered only on ACTIVE status; every other query in the manager was
-  already formation-scoped) (#249).
+- The e2e harness self-provisions the gitignored formation ``.key`` symlinks (``e2e/provision_keys.py``, run automatically by ``run_all_tests.py``/``run_random_tests.py``): fresh checkouts and git worktrees no longer hit ``InvalidSignature`` failures from SecretsManager auto-generating a wrong key next to the committed ``secrets.enc``. Stale auto-generated keys over the shared symlinked ``secrets.enc`` are replaced; formation-owned key/secrets pairs are never touched (#269).
+- The background-forget job lifecycle test polls with a wall-clock deadline and a short sleep instead of 50 back-to-back requests, which raced the background rebuild on loaded CI runners and flaked (#272).
+- Scheduler due-job queries are scoped to the owning formation: formations sharing one database no longer execute each other's scheduled jobs (``get_active_jobs_batch`` and its pagination count filtered only on ACTIVE status; every other query in the manager was already formation-scoped) (#249).
 
-- The formation MCP server exposes its tools again on FastAPI 0.137+:
-  lazy router inclusion left ``app.routes`` holding placeholders instead
-  of flattened routes, so the MCP mount found zero routes with an
-  ``operation_id`` and generated an empty tool set. Client tool paths are
-  now collected from the source routers at registration time -- same
-  exposure semantics, no dependence on FastAPI route internals (#241).
-- The artifact-memory e2e fixture uses a repo-relative ``secrets.enc``
-  symlink so it works in fresh worktrees (#240).
+- The formation MCP server exposes its tools again on FastAPI 0.137+: lazy router inclusion left ``app.routes`` holding placeholders instead of flattened routes, so the MCP mount found zero routes with an ``operation_id`` and generated an empty tool set. Client tool paths are now collected from the source routers at registration time -- same exposure semantics, no dependence on FastAPI route internals (#241).
+- The artifact-memory e2e fixture uses a repo-relative ``secrets.enc`` symlink so it works in fresh worktrees (#240).
 
-- Scope-column migration now covers ALL ``memories_{dim}`` tables, not
-  just the dimension guessed at startup -- the active dimension is probed
-  lazily on first embed, so the previously-migrated table could differ
-  from the one actually queried, breaking scope-filtered retrieval (#231).
-- The resilient executor's tool-timeout fallback no longer passes a
-  keyword argument ``process_message`` does not accept; the resulting
-  ``TypeError`` was swallowed, so recovery silently failed the task
-  instead of retrying without tools (#234).
-- The ``13_triggers`` e2e runner discovers its tests dynamically instead
-  of a hardcoded list that had drifted from the files on disk (#229).
-- e2e ``CapturingLogger`` fakes implement ``should_emit()``, restoring
-  event capture in the PII-redaction observability tests after the
-  filtered-event pre-check landed (#235).
+- Scope-column migration now covers ALL ``memories_{dim}`` tables, not just the dimension guessed at startup -- the active dimension is probed lazily on first embed, so the previously-migrated table could differ from the one actually queried, breaking scope-filtered retrieval (#231).
+- The resilient executor's tool-timeout fallback no longer passes a keyword argument ``process_message`` does not accept; the resulting ``TypeError`` was swallowed, so recovery silently failed the task instead of retrying without tools (#234).
+- The ``13_triggers`` e2e runner discovers its tests dynamically instead of a hardcoded list that had drifted from the files on disk (#229).
+- e2e ``CapturingLogger`` fakes implement ``should_emit()``, restoring event capture in the PII-redaction observability tests after the filtered-event pre-check landed (#235).
 
 ### Hierarchical Model Selection (#232)
 
-Model choice now follows the formation hierarchy with lowest-level-wins
-overrides: formation ``llm.models`` -> agent ``llm_models`` (previously
-validated but never applied -- now wired) -> SOP/trigger/skill frontmatter
-``model:`` -> per-step ``[model:x]`` directives. Authors specify models
-where the knowledge lives; no capability inference.
+Model choice now follows the formation hierarchy with lowest-level-wins overrides: formation ``llm.models`` -> agent ``llm_models`` (previously validated but never applied -- now wired) -> SOP/trigger/skill frontmatter ``model:`` -> per-step ``[model:x]`` directives. Authors specify models where the knowledge lives; no capability inference.
 
-- ``llm.aliases``: semantic names (``fast``, ``premium``) mapped to
-  ``provider/model``, resolved before cache keying so an alias and its
-  target share one cached model instance.
-- Fail-fast load-time validation of every model reference in ``sops/``,
-  ``triggers/``, and ``skills/`` and of alias targets; a broken alias
-  errors both at its definition and at every usage site.
-- Request-time failure isolation: an unresolvable override falls back to
-  the agent default, and a failing override call retries on the agent's
-  own model -- a model-selection problem never crashes a turn. New
-  ``MODEL_OVERRIDE_APPLIED`` / ``MODEL_OVERRIDE_FAILED`` events carry the
-  override source (``agent``, ``trigger``, ``skill``, ``sop_frontmatter``,
-  ``sop_step``).
-- When the same underlying model appears under several capabilities with
-  different keys/settings, overrides deterministically prefer the ``text``
-  capability's entry, else the first declared.
-- Inert when unconfigured: formations without the new fields behave
-  identically to before (pinned by tests).
+- ``llm.aliases``: semantic names (``fast``, ``premium``) mapped to ``provider/model``, resolved before cache keying so an alias and its target share one cached model instance.
+- Fail-fast load-time validation of every model reference in ``sops/``, ``triggers/``, and ``skills/`` and of alias targets; a broken alias errors both at its definition and at every usage site.
+- Request-time failure isolation: an unresolvable override falls back to the agent default, and a failing override call retries on the agent's own model -- a model-selection problem never crashes a turn. New ``MODEL_OVERRIDE_APPLIED`` / ``MODEL_OVERRIDE_FAILED`` events carry the override source (``agent``, ``trigger``, ``skill``, ``sop_frontmatter``, ``sop_step``).
+- When the same underlying model appears under several capabilities with different keys/settings, overrides deterministically prefer the ``text`` capability's entry, else the first declared.
+- Inert when unconfigured: formations without the new fields behave identically to before (pinned by tests).
 
 ### Trigger Transformers: response formatting + outbound routing (#228)
 
-Trigger results can now reach external platforms (Slack, Telegram, Twilio,
-any webhook consumer) with zero custom glue code -- the outbound half of the
-triggers-and-transformers design.
+Trigger results can now reach external platforms (Slack, Telegram, Twilio, any webhook consumer) with zero custom glue code -- the outbound half of the triggers-and-transformers design.
 
-- Transformer YAML files (``transformers/<name>.yaml``) with fail-fast
-  validation: template variable substitution over trigger context and
-  response data, HTTP delivery with bearer/basic/header auth, and retry
-  with exponential backoff.
-- Trigger frontmatter integration: ``transformer:`` / ``webhook:``
-  (mutually exclusive) route the response; ``parse:`` extracts inbound
-  fields via JSONPath and passes them through as template context.
-- Failure isolation per the PRD: delivery errors retry, then fall back to
-  the formation's default async webhook with ``transformer_error``
-  metadata -- a broken transformer never loses the trigger result.
-- Hardened rendering from review: markdown-to-HTML link substitution only
-  emits anchors for ``http(s)`` URLs (``javascript:``/``data:`` render as
-  plain text), truncation never exceeds ``max_length`` even with long
-  suffixes, and whitespace-bearing templates keep their whitespace.
+- Transformer YAML files (``transformers/<name>.yaml``) with fail-fast validation: template variable substitution over trigger context and response data, HTTP delivery with bearer/basic/header auth, and retry with exponential backoff.
+- Trigger frontmatter integration: ``transformer:`` / ``webhook:`` (mutually exclusive) route the response; ``parse:`` extracts inbound fields via JSONPath and passes them through as template context.
+- Failure isolation per the PRD: delivery errors retry, then fall back to the formation's default async webhook with ``transformer_error`` metadata -- a broken transformer never loses the trigger result.
+- Hardened rendering from review: markdown-to-HTML link substitution only emits anchors for ``http(s)`` URLs (``javascript:``/``data:`` render as plain text), truncation never exceeds ``max_length`` even with long suffixes, and whitespace-bearing templates keep their whitespace.
 
 ### Workflow-level replanning (#227)
 
-When a workflow fails after task-level recovery is exhausted, the runtime
-can now analyze why and ask the decomposer for a fundamentally different
-plan instead of returning the failure. Disabled by default
-(``overlord.workflow.replanning.enabled``).
+When a workflow fails after task-level recovery is exhausted, the runtime can now analyze why and ask the decomposer for a fundamentally different plan instead of returning the failure. Disabled by default (``overlord.workflow.replanning.enabled``).
 
-- ``ReplanningCoordinator``: failure analysis, replan generation through
-  the existing ``TaskDecomposer``, duplicate-plan detection, and
-  per-original-workflow attempt budgets (replans of replans share one
-  budget, default 3).
-- Non-replannable errors (auth, permissions, credentials, configuration,
-  data corruption) never trigger a replan -- a different plan hits the
-  same wall.
-- Replanned executions run within the *remaining* time budget of the
-  original workflow, never a fresh ceiling.
-- Completed work travels into the replan context so the new plan does not
-  redo it; the decomposition prompt stays byte-identical when replanning
-  is disabled.
-- New ``workflow.replanning.{started,completed,failed,skipped}`` events
-  and streaming stages.
+- ``ReplanningCoordinator``: failure analysis, replan generation through the existing ``TaskDecomposer``, duplicate-plan detection, and per-original-workflow attempt budgets (replans of replans share one budget, default 3).
+- Non-replannable errors (auth, permissions, credentials, configuration, data corruption) never trigger a replan -- a different plan hits the same wall.
+- Replanned executions run within the *remaining* time budget of the original workflow, never a fresh ceiling.
+- Completed work travels into the replan context so the new plan does not redo it; the decomposition prompt stays byte-identical when replanning is disabled.
+- New ``workflow.replanning.{started,completed,failed,skipped}`` events and streaming stages.
 
 ### Artifact Memory, Phase 1: capture (#226)
 
-Everything agents produce through ``generate_file`` (local sandbox or RCE)
-is now persisted -- versioned, user-scoped, encrypted, and
-retention-managed. No behavior change for agents; the data accumulates
-silently for the retrieval phase to build on.
+Everything agents produce through ``generate_file`` (local sandbox or RCE) is now persisted -- versioned, user-scoped, encrypted, and retention-managed. No behavior change for agents; the data accumulates silently for the retrieval phase to build on.
 
-- Storage pipeline: gzip, then AES-256-GCM with per-user keys derived
-  (HKDF-SHA256) from an immutable ``formation_instance_id``, local blob
-  store, SHA-256 checksums, metadata row in the new ``artifacts`` table
-  (both backends).
-- Versioning on name match: previous head demoted, ``parent_id`` chain,
-  history blobs retained; version races resolved with keyed locks plus a
-  partial unique index.
-- Retention worker: ``expires_at`` computed at capture from
-  ``artifacts.retention``; hourly sweep soft-deletes expired rows and
-  prunes blobs, following the shared background-loop lifecycle.
-- Capture is a tracked background task off the response path -- every
-  failure is logged and swallowed; the user response is never affected.
-  Secret-interpolated content is never captured.
-- Phase 2 (manifest injection + ``get_artifact*`` retrieval tools) waits
-  on the Knowledge Index layer; S3 storage is rejected loudly at config
-  time rather than silently falling back.
+- Storage pipeline: gzip, then AES-256-GCM with per-user keys derived (HKDF-SHA256) from an immutable ``formation_instance_id``, local blob store, SHA-256 checksums, metadata row in the new ``artifacts`` table (both backends).
+- Versioning on name match: previous head demoted, ``parent_id`` chain, history blobs retained; version races resolved with keyed locks plus a partial unique index.
+- Retention worker: ``expires_at`` computed at capture from ``artifacts.retention``; hourly sweep soft-deletes expired rows and prunes blobs, following the shared background-loop lifecycle.
+- Capture is a tracked background task off the response path -- every failure is logged and swallowed; the user response is never affected. Secret-interpolated content is never captured.
+- Phase 2 (manifest injection + ``get_artifact*`` retrieval tools) waits on the Knowledge Index layer; S3 storage is rejected loudly at config time rather than silently falling back.
 
 ### Memory Distillery: runtime endpoint (#221)
 
-On-premises distilleries can now push pre-processed memory into a formation
-through a signed, verified channel.
+On-premises distilleries can now push pre-processed memory into a formation through a signed, verified channel.
 
-- ``POST /v1/memories/distilled`` with fail-closed Ed25519 verification:
-  domain-separated signatures over the raw request body, header-bound
-  against replay, one indistinct 401 for every failure mode.
-- Distillery registration/trust registry (admin API + table on both
-  backends) with per-registration authority scoping (user patterns, event
-  types, daily quotas) -- distilleries are system principals; their events
-  land user-scoped and visibility stays group-governed at retrieval.
-- Idempotent by construction on the event substrate; quota gates only
-  net-new events, so full-duplicate replays always succeed. Pre-computed
-  embeddings accepted on exact model match, re-embedded otherwise.
-- Inert without ``memory.distillery`` config. The on-prem distillery server
-  itself is a separate open-source project; this is the runtime side of
-  the contract.
+- ``POST /v1/memories/distilled`` with fail-closed Ed25519 verification: domain-separated signatures over the raw request body, header-bound against replay, one indistinct 401 for every failure mode.
+- Distillery registration/trust registry (admin API + table on both backends) with per-registration authority scoping (user patterns, event types, daily quotas) -- distilleries are system principals; their events land user-scoped and visibility stays group-governed at retrieval.
+- Idempotent by construction on the event substrate; quota gates only net-new events, so full-duplicate replays always succeed. Pre-computed embeddings accepted on exact model match, re-embedded otherwise.
+- Inert without ``memory.distillery`` config. The on-prem distillery server itself is a separate open-source project; this is the runtime side of the contract.
 
 ### Memory benchmarking harness, Tier 1 (#220)
 
-``bench/memory/``: reproducible retrieval + QA benchmarks over the real
-memory stack (LongMemEval, LoCoMo, ConvoMem runners) with committed
-synthetic fixtures for CI, documented full-dataset downloads, cheap-model
-configs (retrieval-only runs cost $0), per-run token/cost reporting,
-deterministic seeds, structured JSON reports, and failure-isolated runs
-that always produce a (possibly partial) report with a nonzero exit code
-on any incomplete run.
+``bench/memory/``: reproducible retrieval + QA benchmarks over the real memory stack (LongMemEval, LoCoMo, ConvoMem runners) with committed synthetic fixtures for CI, documented full-dataset downloads, cheap-model configs (retrieval-only runs cost $0), per-run token/cost reporting, deterministic seeds, structured JSON reports, and failure-isolated runs that always produce a (possibly partial) report with a nonzero exit code on any incomplete run.
 
 
 ### Memory Ingestion: the /v1/memories platform endpoint (#218)
 
-MUXI now builds memory from more than interaction: developers and pipelines
-can push content into a formation's memory through a first-class ingestion
-API.
+MUXI now builds memory from more than interaction: developers and pipelines can push content into a formation's memory through a first-class ingestion API.
 
-- **Contract**: ``POST /v1/memories`` with ``source`` / ``source_id`` /
-  ``timestamp`` / ``metadata`` (plus the existing scope fields);
-  ``POST /v1/memories/batch`` with per-item accepted/duplicate/invalid
-  statuses; ``GET /v1/memories/ingestion/{processing_id}`` for async status
-  with per-stage outcomes and token-usage cost attribution.
-- **Idempotent by construction**: ``(source, source_id)`` rides the event
-  substrate's unique index -- a replayed POST returns the original event id
-  and its derived events (``duplicate: true``), never creates copies, and
-  batches are safely retryable (limits fire before any append).
-- **Tiered pipeline**: cheap local-classifier triage (no frontier LLM),
-  aggressive-by-default per-source noise filtering (tunable via
-  ``memory.ingestion.sources.<source>.filter``), then extraction through
-  the existing flat-fact/knowledge-graph machinery with source provenance
-  carried onto every derived fact. Filtered items are recorded as
-  replayable events -- improve the filters later and re-project history
-  instead of re-ingesting it.
-- Per-user in-flight caps with leak-proof slot accounting; shared-scope
-  ingestion honors the ``memory.write`` grants from memory namespaces.
+- **Contract**: ``POST /v1/memories`` with ``source`` / ``source_id`` / ``timestamp`` / ``metadata`` (plus the existing scope fields); ``POST /v1/memories/batch`` with per-item accepted/duplicate/invalid statuses; ``GET /v1/memories/ingestion/{processing_id}`` for async status with per-stage outcomes and token-usage cost attribution.
+- **Idempotent by construction**: ``(source, source_id)`` rides the event substrate's unique index -- a replayed POST returns the original event id and its derived events (``duplicate: true``), never creates copies, and batches are safely retryable (limits fire before any append).
+- **Tiered pipeline**: cheap local-classifier triage (no frontier LLM), aggressive-by-default per-source noise filtering (tunable via ``memory.ingestion.sources.<source>.filter``), then extraction through the existing flat-fact/knowledge-graph machinery with source provenance carried onto every derived fact. Filtered items are recorded as replayable events -- improve the filters later and re-project history instead of re-ingesting it.
+- Per-user in-flight caps with leak-proof slot accounting; shared-scope ingestion honors the ``memory.write`` grants from memory namespaces.
 
 
 ### Memory Namespaces: user, group, and formation scopes (#214, #215)
 
-Memory is no longer single-scope. A memory is written to exactly one scope
-and read up the chain -- a user's queries see their own memories, their
-groups' shared memories, and formation-wide memories, merged by relevance
-with more-specific scopes outranking broader ones.
+Memory is no longer single-scope. A memory is written to exactly one scope and read up the chain -- a user's queries see their own memories, their groups' shared memories, and formation-wide memories, merged by relevance with more-specific scopes outranking broader ones.
 
-- **Scope substrate**: ``scope_type`` / ``scope_id`` on the memory tables
-  (additive migration; existing rows read as user scope) with canonical
-  constants shared by the memories store and the event substrate; working-
-  memory partitions generalized to ``session | user | group | formation``,
-  adding the previously missing user-level partition.
-- **Shared writes are grant-gated and event-first**: writing formation or
-  group scope requires a ``memory.write`` grant in the caller's group YAML
-  (403 without one, glob grants supported); the scoped event must append
-  before the row is written, so every shared fact is replayable by
-  construction. Conversation-derived extraction remains user-scope only,
-  always.
-- **Read fan-out**: long-term search/list and working-memory retrieval fan
-  out across ``user -> member groups -> formation`` (GBAC membership, with
-  resolver fallback for non-API callers), support per-query narrowing
-  (``scopes=["user"]``), and never surface another group's memories.
-- Also fixes a silent pre-existing bug where flat-fact memories never
-  reached the clean chat context (wrong keyword argument, exception
-  swallowed) -- long-term recall now actually flows into agent responses.
+- **Scope substrate**: ``scope_type`` / ``scope_id`` on the memory tables (additive migration; existing rows read as user scope) with canonical constants shared by the memories store and the event substrate; working- memory partitions generalized to ``session | user | group | formation``, adding the previously missing user-level partition.
+- **Shared writes are grant-gated and event-first**: writing formation or group scope requires a ``memory.write`` grant in the caller's group YAML (403 without one, glob grants supported); the scoped event must append before the row is written, so every shared fact is replayable by construction. Conversation-derived extraction remains user-scope only, always.
+- **Read fan-out**: long-term search/list and working-memory retrieval fan out across ``user -> member groups -> formation`` (GBAC membership, with resolver fallback for non-API callers), support per-query narrowing (``scopes=["user"]``), and never surface another group's memories.
+- Also fixes a silent pre-existing bug where flat-fact memories never reached the clean chat context (wrong keyword argument, exception swallowed) -- long-term recall now actually flows into agent responses.
 
 
 ### Memory Event Substrate (#212)
 
-Every memory write is now recorded as an immutable event; the memory stores
-become rebuildable projections.
+Every memory write is now recorded as an immutable event; the memory stores become rebuildable projections.
 
-- **Event log**: ``memory_events`` on Postgres and SQLite with idempotency
-  keys (``source`` + ``source_id``), versioned payload schemas validated at
-  write time, causation chains, and forward-compatible scope columns.
-- **Dual-write**: knowledge-graph extraction, Captain's Log digests, lessons,
-  and flat-fact extraction all append events alongside their existing writes
-  (Phase A of the migration plan); event append failures never affect the
-  projection write or the chat turn.
-- **Replay**: a projector registry with wipe-and-rebuild
-  (``POST /v1/memory/rebuild``), proven replay-equivalent for all three
-  projections -- improve extraction logic, re-project history.
-- **Selective forgetting**: ``forget_source`` soft deletion with audit events
-  and a daily hard-purge loop -- the GDPR substrate the memory platform
-  builds on.
+- **Event log**: ``memory_events`` on Postgres and SQLite with idempotency keys (``source`` + ``source_id``), versioned payload schemas validated at write time, causation chains, and forward-compatible scope columns.
+- **Dual-write**: knowledge-graph extraction, Captain's Log digests, lessons, and flat-fact extraction all append events alongside their existing writes (Phase A of the migration plan); event append failures never affect the projection write or the chat turn.
+- **Replay**: a projector registry with wipe-and-rebuild (``POST /v1/memory/rebuild``), proven replay-equivalent for all three projections -- improve extraction logic, re-project history.
+- **Selective forgetting**: ``forget_source`` soft deletion with audit events and a daily hard-purge loop -- the GDPR substrate the memory platform builds on.
 
 ### Access control hardening (#211)
 
-A ``groups/`` directory now requires ``server.auth: "required"`` -- the
-"open formation with groups" combination is a load-time validation error.
-Its documented semantics gave unknown users full access while registered
-users got filtered access (inverted trust); the combination is no longer
-expressible.
+A ``groups/`` directory now requires ``server.auth: "required"`` -- the "open formation with groups" combination is a load-time validation error. Its documented semantics gave unknown users full access while registered users got filtered access (inverted trust); the combination is no longer expressible.
 
 
 ### Group-Based Access Control (#202, #203, #204, #207)
 
-Formation operators can now control who may interact with a formation and
-which agents, triggers, SOPs, and MCP tools each group of users can reach.
+Formation operators can now control who may interact with a formation and which agents, triggers, SOPs, and MCP tools each group of users can reach.
 
-- **Auth gate**: ``server.auth: required | open`` (default ``open`` -- existing
-  formations unaffected). Under ``required``, requests from users not present
-  in the formation's database are rejected with 401 on chat and trigger
-  routes. New ``groups`` / ``user_groups`` tables build on the existing
-  ``users`` / ``user_identifiers`` identity substrate; memberships reference
-  external identifiers so operators can populate groups before a user's
-  first interaction.
-- **Auto-discovered group files**: a ``groups/`` directory activates
-  permission filtering. Simplified format -- id from filename stem, plain
-  lists are allow-lists, ``inherits`` with cycle detection, fnmatch globs,
-  union-of-allows / any-deny-wins across a user's groups.
-- **Cascading tool overrides**: one ``tools: {allow, deny}`` structure at four
-  levels (MCP registry catalog, agent attachment, group per-server, group
-  per-agent-per-server); most specific wins, a group override supersedes the
-  inherited config, and ``tools: {deny: "*"}`` hides a server from a group.
-- **Request-time enforcement**: permissions resolve once per request (TTL
-  membership cache + LRU resolution cache) and filter agent routing, direct
-  agent addressing, workflow planning/execution, trigger firing (403), SOP
-  matching, and each agent's per-server MCP tool surface. A denied agent
-  behaves exactly like an unknown one -- no information leak. Formations
-  without a ``groups/`` directory are completely unaffected.
+- **Auth gate**: ``server.auth: required | open`` (default ``open`` -- existing formations unaffected). Under ``required``, requests from users not present in the formation's database are rejected with 401 on chat and trigger routes. New ``groups`` / ``user_groups`` tables build on the existing ``users`` / ``user_identifiers`` identity substrate; memberships reference external identifiers so operators can populate groups before a user's first interaction.
+- **Auto-discovered group files**: a ``groups/`` directory activates permission filtering. Simplified format -- id from filename stem, plain lists are allow-lists, ``inherits`` with cycle detection, fnmatch globs, union-of-allows / any-deny-wins across a user's groups.
+- **Cascading tool overrides**: one ``tools: {allow, deny}`` structure at four levels (MCP registry catalog, agent attachment, group per-server, group per-agent-per-server); most specific wins, a group override supersedes the inherited config, and ``tools: {deny: "*"}`` hides a server from a group.
+- **Request-time enforcement**: permissions resolve once per request (TTL membership cache + LRU resolution cache) and filter agent routing, direct agent addressing, workflow planning/execution, trigger firing (403), SOP matching, and each agent's per-server MCP tool surface. A denied agent behaves exactly like an unknown one -- no information leak. Formations without a ``groups/`` directory are completely unaffected.
 
 ### Memory: Knowledge Graph + Captain's Log (#208, #209)
 
-The first two phases of the memory revamp: structured relationships and a
-temporal narrative layer, built alongside (not replacing) flat-fact
-extraction.
+The first two phases of the memory revamp: structured relationships and a temporal narrative layer, built alongside (not replacing) flat-fact extraction.
 
-- **Knowledge graph foundation**: ``kg_entities`` / ``kg_relationships`` on
-  Postgres and SQLite, real-time extraction riding the existing extraction
-  pipeline plus an hourly deep-extraction pass, contradiction detection with
-  supersession (retain-never-delete), graph context injected into chat
-  context, and graph algorithms via pgRouting (Postgres) or NetworkX
-  (SQLite) behind a parity-tested interface.
-- **Captain's Log**: periodic per-user digests with full source lineage (a
-  cycle-checked derivation DAG), same-date digest merging, and a new
-  ``/history`` client endpoint.
-- **Lessons loop**: digest-extracted lessons with dedup + confirmation
-  bumps, confidence decay and archiving, embedding-cluster consolidation,
-  a ``record_lesson`` built-in tool, and top-N lesson injection into agent
-  system prompts.
+- **Knowledge graph foundation**: ``kg_entities`` / ``kg_relationships`` on Postgres and SQLite, real-time extraction riding the existing extraction pipeline plus an hourly deep-extraction pass, contradiction detection with supersession (retain-never-delete), graph context injected into chat context, and graph algorithms via pgRouting (Postgres) or NetworkX (SQLite) behind a parity-tested interface.
+- **Captain's Log**: periodic per-user digests with full source lineage (a cycle-checked derivation DAG), same-date digest merging, and a new ``/history`` client endpoint.
+- **Lessons loop**: digest-extracted lessons with dedup + confirmation bumps, confidence decay and archiving, embedding-cluster consolidation, a ``record_lesson`` built-in tool, and top-N lesson injection into agent system prompts.
 
 ### Performance: request hot path (#190, #192, #194-#200)
 
-- **Working memory vector search**: per-session FAISS partitions replace the
-  formation-wide index -- session-scoped searches no longer scan (or get
-  crowded out of top-k by) other sessions' vectors, fixing a recall bug where
-  busy multi-user formations could return zero results despite good matches
-  (#200); O(1) reverse index mapping removes an O(k*n) scan per search (#190).
-- **Observability off the hot path**: file/stream/trail event transports moved
-  to a batched background writer with connection reuse (#197); events are
-  filtered before redaction and thread spawn (#196); redaction patterns are
-  precompiled and redaction itself runs on the emission thread with a cheap
-  container snapshot guarding against caller mutation -- output unchanged
-  (#198).
-- **Concurrency**: profile-memory collections fetched concurrently (#195);
-  memory-extractor duplicate checks and stores batched with within-batch
-  dedup (#194).
-- **Hygiene**: LRU-bounded agent routing cache (#192); buffer FIFO cleanup
-  moved off the shared multitasking pool onto a dedicated thread so event
-  emitters stop queueing behind it (#199).
+- **Working memory vector search**: per-session FAISS partitions replace the formation-wide index -- session-scoped searches no longer scan (or get crowded out of top-k by) other sessions' vectors, fixing a recall bug where busy multi-user formations could return zero results despite good matches (#200); O(1) reverse index mapping removes an O(k*n) scan per search (#190).
+- **Observability off the hot path**: file/stream/trail event transports moved to a batched background writer with connection reuse (#197); events are filtered before redaction and thread spawn (#196); redaction patterns are precompiled and redaction itself runs on the emission thread with a cheap container snapshot guarding against caller mutation -- output unchanged (#198).
+- **Concurrency**: profile-memory collections fetched concurrently (#195); memory-extractor duplicate checks and stores batched with within-batch dedup (#194).
+- **Hygiene**: LRU-bounded agent routing cache (#192); buffer FIFO cleanup moved off the shared multitasking pool onto a dedicated thread so event emitters stop queueing behind it (#199).
 
 ### Fixes
 
-- **Knowledge search session filter** (#201): knowledge chunks are stored
-  without a session id but were searched with one, so session-scoped
-  knowledge searches silently returned zero results; the knowledge leg of
-  unified search is no longer session-filtered (conversational memory keeps
-  its session scoping).
-- **Cache keys** (#191, #193): the overlord model cache now includes the
-  model name and a settings digest, so capability model or settings changes
-  no longer serve stale instances; LLM cache keys are order-preserving for
-  list inputs.
+- **Knowledge search session filter** (#201): knowledge chunks are stored without a session id but were searched with one, so session-scoped knowledge searches silently returned zero results; the knowledge leg of unified search is no longer session-filtered (conversational memory keeps its session scoping).
+- **Cache keys** (#191, #193): the overlord model cache now includes the model name and a settings digest, so capability model or settings changes no longer serve stale instances; LLM cache keys are order-preserving for list inputs.
 
 ## v0.20260619.0
 
 ### PII/secret redaction hardening + entity-based redaction
 
-Observability and memory now redact secrets and personal data far more
-thoroughly, and entity-based PII redaction (names, addresses, organizations,
-dates of birth, financial identifiers) is a built-in capability that is on by
-default.
+Observability and memory now redact secrets and personal data far more thoroughly, and entity-based PII redaction (names, addresses, organizations, dates of birth, financial identifiers) is a built-in capability that is on by default.
 
-- **Redact by default in observability**: ``observe()`` now redacts every event
-  before emission instead of only a user-facing allow-list. Non-user events
-  (``SystemEvents``, ``MCP_*``, ``WORKFLOW_*``, ...) previously emitted raw
-  payloads that could carry secrets. A ``skip_redaction=True`` opt-out exists for
-  audited, non-sensitive events.
-- **Luhn-validated credit-card redaction**: 16-digit sequences are now masked
-  only when they pass the Luhn checksum, eliminating false positives on order
-  IDs, timestamps, and other long digit runs while still catching real cards.
-- **Unified sensitive vocabulary**: a shared ``utils/sensitive_terms.py`` holds
-  two term sets -- ``SENSITIVE_KEY_TERMS`` (substring-matched for dict keys) and
-  ``SENSITIVE_PREVIEW_TERMS`` (word-boundary-matched for free text) -- so the
-  observability redactor and the memory extractor stop drifting apart and avoid
-  ``"monkey"``-contains-``"key"`` style false positives.
-- **Entity-based PII redaction**: a pluggable detector layer
-  (``utils/redaction/``) sits after the regex layer. The default implementation
-  wraps Microsoft Presidio (spaCy ``en_core_web_sm``) and masks PERSON, ADDRESS,
-  ORG, date-of-birth (date entities only in birth context), and financial
-  identifiers using consistent indexed tokens (``[PERSON_1]``, ``[ORG_1]``, ...).
-  Generic dates and non-Luhn numbers are deliberately preserved.
-- **Core dependency, default on**: ``presidio-analyzer`` / ``presidio-anonymizer``
-  are now core dependencies (spaCy + ``en_core_web_sm`` were already core, used by
-  document chunking), so this is not an optional extra. A single
-  ``logging.redaction.entities`` flag (default ``true``) toggles the entity layer;
-  it is registered during formation load before observability is enabled. If the
-  model is unavailable the layer degrades gracefully to regex-only.
-- **Memory extractor gate**: the extractor reuses the shared vocabulary and the
-  entity detector so PII-bearing content is kept out of long-term memory.
-- **Lean image**: the lean ``Dockerfile`` now bakes ``en_core_web_sm`` into the
-  install prefix so default-on entity redaction works in the default image,
-  matching ``Dockerfile.production`` and the e2e image.
+- **Redact by default in observability**: ``observe()`` now redacts every event before emission instead of only a user-facing allow-list. Non-user events (``SystemEvents``, ``MCP_*``, ``WORKFLOW_*``, ...) previously emitted raw payloads that could carry secrets. A ``skip_redaction=True`` opt-out exists for audited, non-sensitive events.
+- **Luhn-validated credit-card redaction**: 16-digit sequences are now masked only when they pass the Luhn checksum, eliminating false positives on order IDs, timestamps, and other long digit runs while still catching real cards.
+- **Unified sensitive vocabulary**: a shared ``utils/sensitive_terms.py`` holds two term sets -- ``SENSITIVE_KEY_TERMS`` (substring-matched for dict keys) and ``SENSITIVE_PREVIEW_TERMS`` (word-boundary-matched for free text) -- so the observability redactor and the memory extractor stop drifting apart and avoid ``"monkey"``-contains-``"key"`` style false positives.
+- **Entity-based PII redaction**: a pluggable detector layer (``utils/redaction/``) sits after the regex layer. The default implementation wraps Microsoft Presidio (spaCy ``en_core_web_sm``) and masks PERSON, ADDRESS, ORG, date-of-birth (date entities only in birth context), and financial identifiers using consistent indexed tokens (``[PERSON_1]``, ``[ORG_1]``, ...). Generic dates and non-Luhn numbers are deliberately preserved.
+- **Core dependency, default on**: ``presidio-analyzer`` / ``presidio-anonymizer`` are now core dependencies (spaCy + ``en_core_web_sm`` were already core, used by document chunking), so this is not an optional extra. A single ``logging.redaction.entities`` flag (default ``true``) toggles the entity layer; it is registered during formation load before observability is enabled. If the model is unavailable the layer degrades gracefully to regex-only.
+- **Memory extractor gate**: the extractor reuses the shared vocabulary and the entity detector so PII-bearing content is kept out of long-term memory.
+- **Lean image**: the lean ``Dockerfile`` now bakes ``en_core_web_sm`` into the install prefix so default-on entity redaction works in the default image, matching ``Dockerfile.production`` and the e2e image.
 
 Files touched:
 - ``utils/sensitive_terms.py`` -- NEW shared term sets
@@ -1812,18 +580,14 @@ Files touched:
 - ``tests/unit/test_observability_redaction.py`` -- NEW redact-by-default tests
 - ``tests/unit/utils/test_redaction.py`` -- NEW detector/Presidio tests (incl. live)
 - ``tests/unit/utils/test_security.py`` -- Luhn coverage
-- ``e2e/tests/18_observability/test_18c_pii_redaction_observability.py`` -- NEW e2e:
-  pipeline redaction with the flag on and off
-- ``e2e/tests/18_observability/test_18d_pii_redaction_chat.py`` -- NEW e2e: real chat
-  turn never leaks secrets/PII into emitted events
+- ``e2e/tests/18_observability/test_18c_pii_redaction_observability.py`` -- NEW e2e: pipeline redaction with the flag on and off
+- ``e2e/tests/18_observability/test_18d_pii_redaction_chat.py`` -- NEW e2e: real chat turn never leaks secrets/PII into emitted events
 
 ## v0.20260616.0
 
 ### SOP Skill Directives -- deterministic activation from SOP steps
 
-SOP steps can now declare skills that should be activated deterministically
-before the assigned agent processes the task, using a new bracket directive
-syntax similar to ``[agent:...]`` and ``[mcp:...]``.
+SOP steps can now declare skills that should be activated deterministically before the assigned agent processes the task, using a new bracket directive syntax similar to ``[agent:...]`` and ``[mcp:...]``.
 
 - **Bracket syntax**: ``[skill:skill-name]`` for activation-only, ``[skill:skill-name/script-name]`` to also run a script from the skill's ``scripts/`` directory. Placed on the same line as the step heading after ``[agent:...]``.
 - **Deterministic activation**: the workflow executor calls ``skill_manager.activate_async`` directly before ``agent.process_message``, without waiting for the LLM to choose the ``activate_skill`` tool. Skill content is injected into the task prompt as a skill prelude.
@@ -1848,14 +612,11 @@ Files touched:
 
 ### E2E: update deprecated Gemini model
 
-All E2E formation YAMLs referencing ``google/gemini-2.0-flash`` (shut down by Google)
-now use the stable successor ``google/gemini-2.5-flash``. This fixes formation-loading
-404 errors in tests that depend on vision/video model declarations.
+All E2E formation YAMLs referencing ``google/gemini-2.0-flash`` (shut down by Google) now use the stable successor ``google/gemini-2.5-flash``. This fixes formation-loading 404 errors in tests that depend on vision/video model declarations.
 
 ### Dependency minimums updated to latest compatible releases
 
-65 direct dependency minimums in ``pyproject.toml`` raised to the newest
-resolvable versions after ``uv lock --upgrade``. Notable bumps:
+65 direct dependency minimums in ``pyproject.toml`` raised to the newest resolvable versions after ``uv lock --upgrade``. Notable bumps:
 - ``mcp>=1.27.2`` (was 1.26.x)
 - ``fastmcp>=3.4.2`` (was 3.2.x)
 - ``numpy>=2.2.6`` (was 1.24.x)
@@ -1931,8 +692,7 @@ Verification:
 - **Build, amd64**: cross-build via ``docker build --platform linux/amd64`` (BuildKit + QEMU) succeeds. The aarch64-specific ``sqlite-vec`` recompile in the builder stage uses ``python -c "import sys; print(f'python{sys.version_info.major}. {sys.version_info.minor}')"`` to derive the install path; this branch was exercised on the arm64 build and is version-agnostic.
 - **SIF, arm64**: ``./scripts/build/sif.sh --arch arm64`` produces a 551 MB SIF (down from 643 MB on 3.10 - 14% smaller).
 - **SIF, amd64**: ``./scripts/build/sif.sh --arch amd64`` produces a 607 MB SIF (down from 643 MB on 3.10 - 5.6% smaller). The smaller delta on amd64 is expected - amd64 wheels for ``scipy`` / ``numpy`` / ``pandas`` are slightly larger than their aarch64 counterparts and ``onnxruntime`` ships a fatter amd64 binary. SIF deployed to ``~/.muxi/server/runtimes/`` and smoke-tested via ``runtime-runner:latest`` under QEMU emulation on the Mac host: passes (Python 3.14.4 / x86_64; faiss 1.13.2; pyzmq 27.1.0; markitdown + the kept extras' backends import OK
-  - mammoth, pdfminer.six, pdfplumber, python-pptx, openpyxl,
-  xlrd; the four dropped extras confirmed absent; ``muxi.runtime.formation.initialization.probe_declared_models`` callable; ``SystemEvents`` enum reports 127 entries).
+  - mammoth, pdfminer.six, pdfplumber, python-pptx, openpyxl, xlrd; the four dropped extras confirmed absent; ``muxi.runtime.formation.initialization.probe_declared_models`` callable; ``SystemEvents`` enum reports 127 entries).
 - **Wheels confirmed in the built image**: ``faiss-cpu 1.13.2`` (cp310 abi3 on manylinux_2_28), ``pyzmq 27.1.0`` (cp312 abi3 on manylinux_2_28; the 3.14 standard-ABI wheel is published as ``cp314-cp314t`` for the free-threaded interpreter only, but the abi3 wheel covers the standard interpreter), ``psycopg2-binary 2.9.12``, ``spacy 3.8.13``, ``lxml 6.1.0``, ``mammoth 1.11.0``, ``pdfminer.six 20251230``, ``pdfplumber 0.11.9``, ``python-pptx 1.0.2``, ``openpyxl 3.1.5``, ``xlrd 2.0.2``, ``scipy 1.17.1``, ``numpy 2.4.4``, ``pandas 3.0.2``, ``cryptography 47.0.0``, ``Pillow 12.2.0``, ``pydantic 2.13.3``, ``protobuf 7.34.1``.
 
 ### Formation: probe declared models at init; refuse to load on 404
@@ -2321,7 +1081,7 @@ That left the synthesis prompt with **zero ground-truth signal** that any file w
   through, or that generation failed when this list is non-empty. You MAY mention
   the filename(s) naturally in your reply.
   ```
-  …right before the existing closing instructions. Pure-text plans (no artifacts at all) get no block — the conditional keeps prompt size unchanged for the common case.
+…right before the existing closing instructions. Pure-text plans (no artifacts at all) get no block — the conditional keeps prompt size unchanged for the common case.
 
 The serializer is left as-is — it correctly avoids dumping the full `MuxiArtifact` (binary `data_url`, base64 thumbnails) into the LLM context. The new block carries only the user-facing identifying data (filename, type/format, size).
 
@@ -2425,12 +1185,12 @@ Two real bugs surfaced while triaging unrelated e2e test fragility:
 
 1. **``information_extraction`` false-positives on user-self-recall.** Both LLM-based security analyzers (``RequestAnalyzer._llm_analyze_request`` and ``AgentRouter._parse_routing_response``) intermittently classified benign user-self-recall messages ("list back the role I mentioned earlier", "summarize my profession", "what's my name?") as ``information_extraction`` attacks and short-circuited with "I can't process that request." — the LLM never saw buffer context. Both prompts already carved this out in plain English; the classifier just would not comply on borderline phrasings.
 
-   Added a deterministic post-LLM heuristic ``RequestAnalyzer._heuristic_is_user_self_recall`` that downgrades the classification only when **all three** hold: (a) the message contains a first-person possessor anchored to the user themselves, (b) it contains a recall verb / "mentioned earlier" anchor pointing back at the conversation, and (c) it does NOT name a system-state target (system prompt, config, internal tools, credentials, …). Wired into both call sites:
+Added a deterministic post-LLM heuristic ``RequestAnalyzer._heuristic_is_user_self_recall`` that downgrades the classification only when **all three** hold: (a) the message contains a first-person possessor anchored to the user themselves, (b) it contains a recall verb / "mentioned earlier" anchor pointing back at the conversation, and (c) it does NOT name a system-state target (system prompt, config, internal tools, credentials, …). Wired into both call sites:
 
    * ``RequestAnalyzer._llm_analyze_request`` only downgrades the ``information_extraction`` threat type — ``prompt_injection``, ``credential_fishing``, ``jailbreak`` are untouched.
    * ``AgentRouter.select_agent_for_message`` treats SECURITY_BLOCK on user-self-recall as a null routing decision so the intelligent fallback picks an agent. Real attack messages still propagate ``SecurityViolation``.
 
-   Strengthened both LLM prompts with a more explicit not-a-threat carve-out covering the recall phrasings the LLM was previously missing.
+Strengthened both LLM prompts with a more explicit not-a-threat carve-out covering the recall phrasings the LLM was previously missing.
 
 2. **Workflow-approval pending state lost to a fire-and-forget race.** ``_handle_workflow_approval`` used the fire-and-forget ``_set_pending_clarification`` on the hand-off back to the user. Because the user's reply ("Yes, please proceed") arrives almost immediately, the kv_set could race past the response: the next request reads ``_get_pending_clarification`` → ``None``, the workflow_approval branch is skipped, and the approval message is treated as a fresh, contextless prompt ("Could you share more about the plan?"). The ``ambiguous_credential`` path already used the synchronous variant for exactly this reason; applied the same fix here with a comment referencing both call sites so future drive-by edits don't regress.
 
@@ -2627,7 +1387,7 @@ Requires `onellm[cache]>=0.20260422.3` — the pin bump in this release picks up
   pip install 'muxi-runtime[pytorch]'        # CPU torch + sentence-transformers
   pip install 'muxi-runtime[cuda]'           # GPU ONNX + GPU FAISS + CUDA torch
   ```
-  The `[cuda]` extra conflicts with the core `faiss-cpu` and `faissx` deps (each owns the same top-level module name as its GPU sibling); `Dockerfile.cuda` handles the uninstall-then-reinstall sequence automatically, and users installing through pip directly should run `pip uninstall -y faiss-cpu faissx onnxruntime` before the extras install.
+The `[cuda]` extra conflicts with the core `faiss-cpu` and `faissx` deps (each owns the same top-level module name as its GPU sibling); `Dockerfile.cuda` handles the uninstall-then-reinstall sequence automatically, and users installing through pip directly should run `pip uninstall -y faiss-cpu faissx onnxruntime` before the extras install.
 - `docker-entrypoint.sh` (cache assertion): when the SIF detects SIF mode (`APPTAINER_CONTAINER` / `SINGULARITY_CONTAINER` / `MUXI_SIF_MODE`), it now asserts at least one `models--*` directory exists under `/opt/hf-cache` before launching the formation server. An empty cache fails fast with an actionable error instead of surfacing a confusing "model not found" from inside HuggingFace's offline resolver.
 
 These changes coordinate with parallel work in `muxi-server` (cache lifecycle commands, `onellm download` orchestration, bind-mount injection at launch) and `runtime-runner` (the Docker image that wraps Apptainer for SIF execution on non-Linux hosts, which forwards the bind-mount chain through a two-hop mount).
