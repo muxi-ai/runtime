@@ -13,10 +13,13 @@ import yaml
 
 from ...services import observability
 from ...services.memory.embedding import embed
-from ...utils.user_dirs import get_cache_dir
 
-# Lazy import DocumentChunkManager to avoid initialization issues
-# from ..documents.storage.chunk_manager import DocumentChunkManager
+# Sandboxed document conversion (out-of-process anydoc / pdf-inspector / MarkItDown)
+from ...services.multimodal.document_converter import (
+    ATTACHMENT_CONVERTIBLE_EXTENSIONS,
+    convert_document_async,
+)
+from ...utils.user_dirs import get_cache_dir
 
 
 class OneLLMEmbeddingAdapter:
@@ -115,7 +118,6 @@ class SOPSystem:
         # LAZY-LOADED SERVICES
         # ===================================================================
         # These will be initialized on first use
-        self._document_processor = None
         self._faiss_service = None
         self._embedding_model = None
 
@@ -567,68 +569,6 @@ class SOPSystem:
                 pass
         return self._embedding_model
 
-    def _get_document_processor(self):
-        """Lazily get document processor and chunk manager."""
-        if self._document_processor is None:
-            try:
-                # Use both MarkItDown for extraction and DocumentChunkManager for chunking
-                from markitdown import MarkItDown
-
-                self._document_processor = {
-                    "markitdown": MarkItDown(),
-                    "chunk_manager": self._get_chunk_manager(),
-                }
-            except Exception:
-                pass
-        return self._document_processor
-
-    def _get_chunk_manager(self):
-        """Get DocumentChunkManager from formation or create one using formation's config."""
-        try:
-            # Lazy import DocumentChunkManager to avoid initialization issues
-            # Try to get from formation's configured services
-            from ...formation import Formation  # noqa: E402
-            from ..documents.storage.chunk_manager import DocumentChunkManager
-
-            formation = Formation.get_instance()
-
-            # First try to get existing chunk manager
-            if formation and hasattr(formation, "_configured_services"):
-                chunk_manager = formation._configured_services.get("document_chunk_manager")
-                if chunk_manager:
-                    return chunk_manager
-
-            # If not available, try to get the document processing config from formation
-            if formation:
-                # Try to get document processing config from formation
-                if hasattr(formation, "_document_processing_config"):
-                    # Use the formation's document processing configuration
-                    return DocumentChunkManager(
-                        document_config=formation._document_processing_config
-                    )
-
-                # Try to get from _configured_services as well
-                if hasattr(formation, "_configured_services"):
-                    doc_config = formation._configured_services.get("document_processing_config")
-                    if doc_config:
-                        return DocumentChunkManager(document_config=doc_config)
-
-            # Last resort: Create using the formation's LLM config if available
-            if formation and hasattr(formation, "_llm_config"):
-                from ...formation.config.document_processing import DocumentProcessingConfig
-
-                # This will extract document settings from llm.models.documents
-                config = DocumentProcessingConfig(formation._llm_config)
-                return DocumentChunkManager(document_config=config)
-
-            # Final fallback: Create with defaults (will use formation defaults internally)
-            from ...formation.config.document_processing import DocumentProcessingConfig
-
-            config = DocumentProcessingConfig({})
-            return DocumentChunkManager(document_config=config)
-        except Exception:
-            return None
-
     # ========================================================================
     # INDEXING AND SEARCH
     # ========================================================================
@@ -925,28 +865,17 @@ class SOPSystem:
             # In the future, we could use vision models to describe the image
             return f"[Image file: {file_path.name}]"
 
-        # Use MarkItDown for document files (PDFs, Word docs, spreadsheets, presentations)
-        document_processor = self._get_document_processor()
-        if document_processor and file_path.suffix.lower() in [
-            ".pdf",
-            ".docx",
-            ".doc",
-            ".pptx",
-            ".ppt",
-            ".xlsx",
-            ".xls",
-        ]:
+        # Convertible documents (PDFs, Word docs, spreadsheets, presentations,
+        # OpenDocument, RTF, EPUB, HTML) go through the sandboxed out-of-process
+        # conversion service - the same boundary chat attachments and knowledge
+        # files use. The gate is the converter's own supported-extension set, so
+        # it cannot drift from what the converters actually read (legacy binary
+        # .doc/.ppt included, via anydoc). Untrusted document bytes are never
+        # parsed in the runtime process.
+        if file_path.suffix.lower() in ATTACHMENT_CONVERTIBLE_EXTENSIONS:
             try:
-                markitdown = document_processor.get("markitdown")
-                if markitdown:
-                    # Extract complete content with MarkItDown
-                    result = markitdown.convert(str(file_path))
-                    content = (
-                        result.text_content if hasattr(result, "text_content") else str(result)
-                    )
-                    return content
+                raw = file_path.read_bytes()
             except Exception as e:
-                # Log extraction failure but continue
                 observability.observe(
                     event_type=observability.ErrorEvents.WARNING,
                     level=observability.EventLevel.WARNING,
@@ -955,10 +884,39 @@ class SOPSystem:
                         "error": str(e),
                         "file_type": file_path.suffix,
                     },
-                    description=f"Failed to extract content from {file_path.name}",
+                    description=f"Failed to read {file_path.name}",
                 )
-                # Return reference placeholder
-                return f"[Unable to extract: {file_path.name}]"
+                return f"[Unable to read: {file_path.name}]"
+
+            conversion = await convert_document_async(
+                raw,
+                file_path.name,
+                max_input_bytes=max_file_size_mb * 1024 * 1024,
+            )
+            if conversion.ok:
+                return conversion.text
+
+            # Quarantined (timeout/memory/oversize/parser_error/encrypted/
+            # unsupported). The conversion service already emitted
+            # DOCUMENT_CONVERSION_QUARANTINED; keep this call site's existing
+            # graceful degradation - an unconvertible attachment must never
+            # abort the SOP.
+            reason = (
+                conversion.quarantine_reason.value if conversion.quarantine_reason else "unknown"
+            )
+            observability.observe(
+                event_type=observability.ErrorEvents.WARNING,
+                level=observability.EventLevel.WARNING,
+                data={
+                    "file": str(file_path),
+                    "error": conversion.detail,
+                    "file_type": file_path.suffix,
+                    "quarantine_reason": reason,
+                },
+                description=f"Failed to extract content from {file_path.name}",
+            )
+            # Return reference placeholder
+            return f"[Unable to extract: {file_path.name}]"
 
         # For unsupported file types, return a reference
         return f"[Unsupported file type: {file_path.name}]"
