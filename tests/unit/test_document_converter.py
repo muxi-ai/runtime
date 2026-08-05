@@ -12,10 +12,11 @@ These tests use real converters and real hostile fixtures - no mocks:
   - a decompression-bomb .docx (tiny zip, enormous extracted text)
   - a huge HTML document that cannot finish inside the timeout
   - oversize input rejected before any subprocess is spawned
-  - well-formed .docx/.html producing byte-identical text to in-process
-    MarkItDown (the pre-sandbox behavior)
   - PDFs routed to pdf-inspector, with fallback to MarkItDown when
     pdf-inspector cannot parse the file
+  - office/OpenDocument/RTF/EPUB/CSV routed to anydoc, with fallback to
+    MarkItDown only for the formats MarkItDown supports; anydoc-only formats
+    quarantine honestly as parser_error
 """
 
 import asyncio
@@ -30,10 +31,15 @@ from pypdf import PdfReader, PdfWriter
 
 from muxi.runtime.services import observability
 from muxi.runtime.services.multimodal.document_converter import (
+    ANYDOC_EXTENSIONS,
+    ATTACHMENT_CONVERTIBLE_EXTENSIONS,
+    ENGINE_ANYDOC,
     ENGINE_MARKITDOWN,
     ENGINE_PDF_INSPECTOR,
     ConversionResult,
     QuarantineReason,
+    _select_engine,
+    _select_fallback_engine,
     convert_document,
     convert_document_async,
 )
@@ -128,12 +134,13 @@ def _in_process_markitdown(content: bytes, suffix: str, tmp_path) -> str:
     return MarkItDown().convert(str(path)).text_content
 
 
-def test_wellformed_docx_converts_identically_to_in_process(tmp_path):
+def test_wellformed_docx_converts_via_anydoc():
     content = make_docx_bytes("Quarterly revenue grew 14% in Q3.")
     result = convert_document(content, "report.docx")
     assert result.ok, result.detail
-    assert result.engine == ENGINE_MARKITDOWN
-    assert result.text == _in_process_markitdown(content, ".docx", tmp_path)
+    assert result.engine == ENGINE_ANYDOC
+    assert not result.fallback_used
+    assert "Quarterly revenue grew 14% in Q3." in result.text
 
 
 def test_wellformed_html_converts_identically_to_in_process(tmp_path):
@@ -188,6 +195,247 @@ def test_encrypted_pdf_quarantined_as_encrypted():
     result = convert_document(make_encrypted_pdf_bytes(), "locked.pdf")
     assert not result.ok
     assert result.quarantine_reason == QuarantineReason.ENCRYPTED
+
+
+# ---------------------------------------------------------------------------
+# Routing table: anydoc is primary for its full claimed surface
+# ---------------------------------------------------------------------------
+
+# Every extension anydoc claims (minus .pdf, which keeps its dedicated route).
+_ANYDOC_CLAIMED_EXTENSIONS = [
+    ".doc",
+    ".docx",
+    ".docm",
+    ".ppt",
+    ".pps",
+    ".pot",
+    ".pptx",
+    ".pptm",
+    ".ppsx",
+    ".ppsm",
+    ".xls",
+    ".xlsx",
+    ".xlsm",
+    ".xlsb",
+    ".odt",
+    ".ods",
+    ".odp",
+    ".rtf",
+    ".epub",
+    ".csv",
+]
+
+
+def test_anydoc_extension_set_matches_claimed_surface():
+    assert ANYDOC_EXTENSIONS == frozenset(_ANYDOC_CLAIMED_EXTENSIONS)
+
+
+@pytest.mark.parametrize("ext", _ANYDOC_CLAIMED_EXTENSIONS)
+def test_every_claimed_extension_routes_to_anydoc(ext):
+    assert _select_engine(f"file{ext}", None) == ENGINE_ANYDOC
+
+
+@pytest.mark.parametrize(
+    "media_type,expected",
+    [
+        ("application/pdf", ENGINE_PDF_INSPECTOR),
+        ("application/msword", ENGINE_ANYDOC),
+        (
+            "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+            ENGINE_ANYDOC,
+        ),
+        ("application/vnd.ms-word.document.macroEnabled.12", ENGINE_ANYDOC),
+        ("application/vnd.ms-powerpoint", ENGINE_ANYDOC),
+        (
+            "application/vnd.openxmlformats-officedocument.presentationml.presentation",
+            ENGINE_ANYDOC,
+        ),
+        ("application/vnd.openxmlformats-officedocument.presentationml.slideshow", ENGINE_ANYDOC),
+        ("application/vnd.ms-excel", ENGINE_ANYDOC),
+        ("application/vnd.ms-excel.sheet.binary.macroEnabled.12", ENGINE_ANYDOC),
+        ("application/vnd.oasis.opendocument.text", ENGINE_ANYDOC),
+        ("application/vnd.oasis.opendocument.spreadsheet", ENGINE_ANYDOC),
+        ("application/vnd.oasis.opendocument.presentation", ENGINE_ANYDOC),
+        ("application/rtf", ENGINE_ANYDOC),
+        ("text/rtf", ENGINE_ANYDOC),
+        ("application/epub+zip", ENGINE_ANYDOC),
+        ("text/csv; charset=utf-8", ENGINE_ANYDOC),
+        ("text/html", ENGINE_MARKITDOWN),
+        ("application/octet-stream", ENGINE_MARKITDOWN),
+        (None, ENGINE_MARKITDOWN),
+    ],
+)
+def test_media_type_routing_without_extension(media_type, expected):
+    # Extension-less filename: the media type alone must drive routing.
+    assert _select_engine("attachment", media_type) == expected
+
+
+def test_unclaimed_types_still_route_to_markitdown():
+    assert _select_engine("page.html", None) == ENGINE_MARKITDOWN
+    assert _select_engine("data.json", None) == ENGINE_MARKITDOWN
+    assert _select_engine("mystery.bin", None) == ENGINE_MARKITDOWN
+    assert _select_engine("doc.pdf", None) == ENGINE_PDF_INSPECTOR
+
+
+@pytest.mark.parametrize(
+    "filename,media_type,expected",
+    [
+        # pdf-inspector always falls back to MarkItDown.
+        ("doc.pdf", "application/pdf", ENGINE_MARKITDOWN),
+        # anydoc formats MarkItDown also supports keep a per-file fallback.
+        ("a.docx", None, ENGINE_MARKITDOWN),
+        ("a.pptx", None, ENGINE_MARKITDOWN),
+        ("a.xlsx", None, ENGINE_MARKITDOWN),
+        ("a.xls", None, ENGINE_MARKITDOWN),
+        ("a.csv", None, ENGINE_MARKITDOWN),
+        ("a.epub", None, ENGINE_MARKITDOWN),
+        # Media type alone selects the fallback for extension-less files.
+        ("attachment", "text/csv", ENGINE_MARKITDOWN),
+        (
+            "attachment",
+            "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+            ENGINE_MARKITDOWN,
+        ),
+        # anydoc-only formats have no fallback: failures quarantine honestly.
+        ("a.doc", None, None),
+        ("a.docm", None, None),
+        ("a.ppt", None, None),
+        ("a.pptm", None, None),
+        ("a.xlsm", None, None),
+        ("a.xlsb", None, None),
+        ("a.odt", None, None),
+        ("a.ods", None, None),
+        ("a.odp", None, None),
+        ("a.rtf", None, None),
+        ("attachment", "application/msword", None),
+        ("attachment", "application/vnd.oasis.opendocument.text", None),
+    ],
+)
+def test_fallback_selection(filename, media_type, expected):
+    engine = _select_engine(filename, media_type)
+    assert _select_fallback_engine(engine, filename, media_type) == expected
+
+
+def test_markitdown_route_has_no_fallback():
+    assert _select_fallback_engine(ENGINE_MARKITDOWN, "page.html", "text/html") is None
+
+
+def test_attachment_gate_covers_anydoc_surface():
+    # Chat attachments must admit every format anydoc converts, plus the
+    # pre-existing .pdf/.html routes.
+    assert set(ATTACHMENT_CONVERTIBLE_EXTENSIONS) == {".pdf", ".html"} | ANYDOC_EXTENSIONS
+
+
+# ---------------------------------------------------------------------------
+# anydoc conversions: real fixtures for RTF / ODT / CSV / DOCX
+# ---------------------------------------------------------------------------
+
+RTF_FIXTURE = (
+    rb"{\rtf1\ansi\deff0 {\fonttbl {\f0 Times New Roman;}}"
+    rb"\f0\fs24 Hello {\b RTF} sandbox test.\par}"
+)
+
+
+def make_odt_bytes(text: str = "Hello ODT sandbox test.") -> bytes:
+    """A minimal but valid ODT: a zip with the ODF mimetype and content.xml."""
+    content_xml = (
+        '<?xml version="1.0" encoding="UTF-8"?>'
+        "<office:document-content"
+        ' xmlns:office="urn:oasis:names:tc:opendocument:xmlns:office:1.0"'
+        ' xmlns:text="urn:oasis:names:tc:opendocument:xmlns:text:1.0"'
+        ' office:version="1.2">'
+        f"<office:body><office:text><text:p>{text}</text:p></office:text></office:body>"
+        "</office:document-content>"
+    )
+    buffer = io.BytesIO()
+    with zipfile.ZipFile(buffer, "w") as archive:
+        archive.writestr(
+            "mimetype",
+            "application/vnd.oasis.opendocument.text",
+            compress_type=zipfile.ZIP_STORED,
+        )
+        archive.writestr("content.xml", content_xml)
+    return buffer.getvalue()
+
+
+def test_rtf_converts_via_anydoc():
+    result = convert_document(RTF_FIXTURE, "note.rtf")
+    assert result.ok, result.detail
+    assert result.engine == ENGINE_ANYDOC
+    assert not result.fallback_used
+    # anydoc renders the bold run as markdown emphasis.
+    assert "Hello **RTF** sandbox test." in result.text
+
+
+def test_odt_converts_via_anydoc():
+    result = convert_document(make_odt_bytes(), "letter.odt")
+    assert result.ok, result.detail
+    assert result.engine == ENGINE_ANYDOC
+    assert "Hello ODT sandbox test." in result.text
+
+
+def test_csv_converts_via_anydoc_as_table():
+    result = convert_document(b"name,qty\nwidget,3\ngadget,7\n", "data.csv", media_type="text/csv")
+    assert result.ok, result.detail
+    assert result.engine == ENGINE_ANYDOC
+    # anydoc renders CSV as a markdown table.
+    assert "| widget | 3 |" in result.text
+
+
+def test_anydoc_failure_falls_back_to_markitdown_for_supported_format():
+    # CSV bytes wearing an .xls extension: anydoc detects no OLE/ZIP signature,
+    # trusts the extension, and its workbook parser rejects the file, while
+    # MarkItDown's content sniffing recovers the table. This mirrors the
+    # real-world servers-send-CSV-as-.xls case.
+    result = convert_document(b"name,qty\nwidget,3\n", "export.xls")
+    assert result.ok, result.detail
+    assert result.fallback_used
+    assert result.fallback_from == ENGINE_ANYDOC
+    assert result.engine == ENGINE_MARKITDOWN
+    assert "widget" in result.text
+    # The anydoc error is preserved for observability.
+    assert "ConvertError" in result.detail
+
+
+def test_corrupt_anydoc_only_format_quarantines_without_fallback():
+    # A structurally-broken ODT (zip local-file magic, no archive): odt is
+    # anydoc-only, so the failure must quarantine honestly - no fallback.
+    result = convert_document(b"PK\x03\x04 not really a zip archive", "broken.odt")
+    assert not result.ok
+    assert result.engine == ENGINE_ANYDOC
+    assert result.quarantine_reason == QuarantineReason.PARSER_ERROR
+    assert not result.fallback_used
+    assert result.fallback_from is None
+
+
+def test_fallback_event_payload_carries_primary_and_fallback_converters():
+    capturing = _CapturingLogger()
+    previous = observability.get_runtime_event_logger()
+    observability.set_runtime_event_logger(capturing)
+    observability.enable()
+    try:
+        convert_document(b"name,qty\nwidget,3\n", "export.xls")
+        import time
+
+        deadline = time.time() + 5
+        fallback_events = []
+        while time.time() < deadline:
+            fallback_events = [
+                e for e in capturing.snapshot() if e["event"] == "document.conversion.fallback"
+            ]
+            if fallback_events:
+                break
+            time.sleep(0.1)
+    finally:
+        observability.disable()
+        observability.set_runtime_event_logger(previous)
+
+    assert fallback_events, "no document.conversion.fallback event was emitted"
+    data = fallback_events[0]["data"]
+    assert data["primary"] == ENGINE_ANYDOC
+    assert data["fallback"] == ENGINE_MARKITDOWN
+    # Pre-anydoc field kept for existing consumers.
+    assert data["fallback_from"] == ENGINE_ANYDOC
 
 
 # ---------------------------------------------------------------------------

@@ -8,9 +8,9 @@
 # Author:       Muxi Framework Team
 #
 # This script is the *only* code that touches untrusted document bytes with a
-# parser (pdf-inspector or MarkItDown). It is executed by file path (never
-# imported) so the muxi package import chain is skipped and the process stays
-# small and fast to spawn.
+# parser (anydoc, pdf-inspector, or MarkItDown). It is executed by file path
+# (never imported) so the muxi package import chain is skipped and the process
+# stays small and fast to spawn.
 #
 # Isolation model (v1, honest limits):
 #   - Process boundary: parser crashes/hangs kill this process, not the runtime.
@@ -45,6 +45,7 @@ except ImportError:  # pragma: no cover - Windows
 
 ENGINE_PDF_INSPECTOR = "pdf_inspector"
 ENGINE_MARKITDOWN = "markitdown"
+ENGINE_ANYDOC = "anydoc"
 
 # QuarantineReason values (mirrored from document_converter.QuarantineReason;
 # this file cannot import muxi modules).
@@ -106,27 +107,43 @@ def _convert_with_pdf_inspector(input_path: str) -> str:
     return pdf_inspector.process_pdf(input_path).markdown
 
 
-def _convert(engine: str, input_path: str, max_output_bytes: int) -> dict:
+def _convert_with_anydoc(input_path: str) -> str:
+    import anydoc
+
+    # Format is detected from the file content; the temp file's sanitized
+    # extension is the fallback for signature-less formats (CSV).
+    return anydoc.to_markdown(input_path)
+
+
+_CONVERTERS = {
+    ENGINE_PDF_INSPECTOR: _convert_with_pdf_inspector,
+    ENGINE_MARKITDOWN: _convert_with_markitdown,
+    ENGINE_ANYDOC: _convert_with_anydoc,
+}
+
+
+def _convert(engine: str, fallback_engine, input_path: str, max_output_bytes: int) -> dict:
     """Run the conversion, returning a result dict (never raising for parser errors)."""
     fallback_from = None
     fallback_error = None
     engine_used = engine
 
     try:
-        if engine == ENGINE_PDF_INSPECTOR:
-            try:
-                text = _convert_with_pdf_inspector(input_path)
-            except MemoryError:
+        try:
+            text = _CONVERTERS[engine](input_path)
+        except MemoryError:
+            raise
+        except Exception as primary_exc:  # noqa: BLE001 - untrusted input boundary
+            if not fallback_engine:
+                # No converter can retry this format; classify the primary
+                # failure honestly instead of pretending a fallback ran.
                 raise
-            except Exception as pdf_exc:  # noqa: BLE001 - untrusted input boundary
-                # pdf-inspector could not handle this PDF; fall back to
-                # sandboxed MarkItDown so we never fail harder than before.
-                fallback_from = ENGINE_PDF_INSPECTOR
-                fallback_error = f"{type(pdf_exc).__name__}: {pdf_exc}"
-                engine_used = ENGINE_MARKITDOWN
-                text = _convert_with_markitdown(input_path)
-        else:
-            text = _convert_with_markitdown(input_path)
+            # The primary converter could not handle this file; fall back to
+            # the sandboxed secondary so we never fail harder than before.
+            fallback_from = engine
+            fallback_error = f"{type(primary_exc).__name__}: {primary_exc}"
+            engine_used = fallback_engine
+            text = _CONVERTERS[fallback_engine](input_path)
     except MemoryError:
         return {
             "ok": False,
@@ -181,8 +198,12 @@ def main() -> int:
     parser = argparse.ArgumentParser(description="Sandboxed document conversion worker")
     parser.add_argument("input_path")
     parser.add_argument("output_path")
+    parser.add_argument("--engine", choices=sorted(_CONVERTERS), required=True)
     parser.add_argument(
-        "--engine", choices=[ENGINE_PDF_INSPECTOR, ENGINE_MARKITDOWN], required=True
+        "--fallback-engine",
+        choices=sorted(_CONVERTERS),
+        default=None,
+        help="Converter to retry with in-process when the primary engine raises",
     )
     parser.add_argument("--cpu-seconds", type=int, required=True)
     parser.add_argument("--memory-bytes", type=int, required=True)
@@ -190,7 +211,7 @@ def main() -> int:
     args = parser.parse_args()
 
     _apply_rlimits(args.cpu_seconds, args.memory_bytes, args.max_output_bytes)
-    result = _convert(args.engine, args.input_path, args.max_output_bytes)
+    result = _convert(args.engine, args.fallback_engine, args.input_path, args.max_output_bytes)
 
     with open(args.output_path, "w", encoding="utf-8") as handle:
         json.dump(result, handle)

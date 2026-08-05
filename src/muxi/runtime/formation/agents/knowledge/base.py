@@ -57,7 +57,7 @@ from typing import Any, Dict, List, Optional
 # Import observability
 from ....services import observability
 
-# Sandboxed document conversion (out-of-process MarkItDown / pdf-inspector)
+# Sandboxed document conversion (out-of-process anydoc / pdf-inspector / MarkItDown)
 from ....services.multimodal.document_converter import convert_document
 
 # Import DocumentChunkManager for hybrid architecture integration
@@ -100,8 +100,13 @@ class FileKnowledge(KnowledgeSource):
     with support for recursive scanning and file extension filtering.
     It supports the new configuration schema with path, description, and options.
 
-    Enhanced with markitdown support for comprehensive file format handling:
-    - Office documents: .docx, .pptx, .xlsx, .xls
+    Converted via the sandboxed conversion service (anydoc for office/
+    OpenDocument/RTF/EPUB/CSV, pdf-inspector for PDFs, MarkItDown for the
+    rest and as per-file fallback):
+    - Office documents: .doc, .docx, .docm, .ppt, .pps, .pot, .pptx, .pptm,
+      .ppsx, .ppsm, .xls, .xlsx, .xlsm, .xlsb
+    - OpenDocument: .odt, .ods, .odp
+    - Rich text: .rtf
     - PDFs: .pdf
     - Images: .jpg, .jpeg, .png, .gif, .bmp, .tiff
     - Audio: .wav, .mp3
@@ -112,13 +117,30 @@ class FileKnowledge(KnowledgeSource):
     - Plain text: .txt, .md
     """
 
-    # Extended list of supported file extensions via markitdown
+    # Extensions handled by the sandboxed conversion service (the name predates
+    # anydoc: routing inside document_converter picks the actual engine).
     _MARKITDOWN_EXTENSIONS = [
-        # Office documents
+        # Office documents (anydoc: legacy, OOXML, and macro variants)
+        ".doc",
         ".docx",
+        ".docm",
+        ".ppt",
+        ".pps",
+        ".pot",
         ".pptx",
-        ".xlsx",
+        ".pptm",
+        ".ppsx",
+        ".ppsm",
         ".xls",
+        ".xlsx",
+        ".xlsm",
+        ".xlsb",
+        # OpenDocument (anydoc)
+        ".odt",
+        ".ods",
+        ".odp",
+        # Rich Text Format (anydoc)
+        ".rtf",
         # PDFs
         ".pdf",
         # Images (with OCR support)
@@ -221,7 +243,8 @@ class FileKnowledge(KnowledgeSource):
         """
         Load and process file content using appropriate method.
 
-        Uses markitdown for supported formats, direct reading for text files.
+        Uses the sandboxed conversion service for supported formats, direct
+        reading for text files.
 
         Args:
             file_path: Path to the file to load
@@ -251,7 +274,8 @@ class FileKnowledge(KnowledgeSource):
                     return f"[Error loading file: {os.path.basename(file_path)}]"
 
                 # Convert supported file types in the sandboxed subprocess
-                # (pdf-inspector for PDFs, MarkItDown for everything else).
+                # (anydoc for office/OpenDocument/RTF/EPUB/CSV, pdf-inspector
+                # for PDFs, MarkItDown for everything else and as fallback).
                 with open(file_path, "rb") as f:
                     raw = f.read()
                 conversion = convert_document(

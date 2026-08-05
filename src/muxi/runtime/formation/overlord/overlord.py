@@ -134,7 +134,7 @@ from ...services.multimodal import (
     WorkflowMultiModalProcessor,
 )
 
-# Sandboxed document conversion (out-of-process MarkItDown / pdf-inspector)
+# Sandboxed document conversion (out-of-process anydoc / pdf-inspector / MarkItDown)
 from ...services.multimodal.document_converter import (
     ATTACHMENT_CONVERTIBLE_EXTENSIONS,
     convert_document_async,
@@ -5724,8 +5724,10 @@ Agent response: {raw_response}"""
 
                 else:
                     # Convertible documents go through the sandboxed out-of-process
-                    # conversion service (pdf-inspector for PDFs, MarkItDown for
-                    # the rest); hostile files are quarantined, never parsed here.
+                    # conversion service (pdf-inspector for PDFs, anydoc for office/
+                    # OpenDocument/RTF/EPUB/CSV, MarkItDown for the rest and as
+                    # per-file fallback); hostile files are quarantined, never
+                    # parsed here.
                     file_ext = os.path.splitext(filename)[1].lower()
                     should_convert = file_ext in ATTACHMENT_CONVERTIBLE_EXTENSIONS
 
