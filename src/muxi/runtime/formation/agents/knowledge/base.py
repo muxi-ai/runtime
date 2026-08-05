@@ -58,7 +58,11 @@ from typing import Any, Dict, List, Optional
 from ....services import observability
 
 # Sandboxed document conversion (out-of-process anydoc / pdf-inspector / MarkItDown)
-from ....services.multimodal.document_converter import convert_document
+from ....services.multimodal.document_converter import (
+    ANYDOC_EXTENSIONS,
+    ENGINE_ANYDOC,
+    convert_document,
+)
 
 # Import DocumentChunkManager for hybrid architecture integration
 from ...documents.storage.chunk_manager import DocumentChunk, DocumentChunkManager
@@ -544,7 +548,17 @@ class FileKnowledge(KnowledgeSource):
         return all_chunks
 
     def _get_processing_method(self, file_path: str) -> str:
-        """Get the processing method used for a file."""
+        """Get the processing method (converter engine) used for a file.
+
+        Mirrors the converter's actual routing: anydoc-claimed extensions
+        convert via anydoc (PDF stays on the pdf-inspector route), so chunk
+        metadata and diagnostics name the engine that really ran.
+        """
+        ext = os.path.splitext(file_path)[1].lower()
+        if ext == ".pdf":
+            return "pdf-inspector"
+        if ext in ANYDOC_EXTENSIONS:
+            return ENGINE_ANYDOC
         if self._is_markitdown_supported(file_path):
             return "markitdown"
         elif self._is_text_file(file_path):

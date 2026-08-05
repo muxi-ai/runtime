@@ -551,3 +551,24 @@ def test_quarantine_and_fallback_events_emitted():
     assert "document.conversion.completed" in names
     quarantined = next(e for e in events if e["event"] == "document.conversion.quarantined")
     assert quarantined["data"]["quarantine_reason"] == "oversize"
+
+
+class TestKnowledgeProcessingMethodLabel:
+    """The knowledge chunk metadata names the engine that actually converts."""
+
+    def _method(self, filename: str) -> str:
+        from muxi.runtime.formation.agents.knowledge.base import FileKnowledge
+
+        source = FileKnowledge.__new__(FileKnowledge)
+        source.enable_markitdown = True
+        return FileKnowledge._get_processing_method(source, filename)
+
+    def test_anydoc_formats_labeled_anydoc(self):
+        for name in ("a.odt", "b.rtf", "c.doc", "d.pptm", "e.xlsb", "f.epub"):
+            assert self._method(name) == "anydoc", name
+
+    def test_pdf_labeled_pdf_inspector(self):
+        assert self._method("report.pdf") == "pdf-inspector"
+
+    def test_text_still_text(self):
+        assert self._method("notes.md") == "text"
