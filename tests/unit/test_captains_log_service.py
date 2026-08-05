@@ -318,7 +318,18 @@ class TestLoopLifecycle:
 
         service.start(lambda: model)
         assert service._task is not None
-        await asyncio.sleep(0.2)
+        # Wait for the first digest tick instead of a fixed sleep. The old
+        # fixed 0.2s window raced the loop's wakeup + sqlite round-trip +
+        # model call: on a loaded machine (CI runners) stop() cancelled the
+        # digest mid-flight, observed as model.calls == 0 or a missing
+        # entry. Reproducible on an unmodified checkout by running this
+        # test under CPU contention. Polling keeps the common case fast
+        # (~0.1s) and only the pathological case waits longer.
+        deadline = asyncio.get_event_loop().time() + 10.0
+        while asyncio.get_event_loop().time() < deadline:
+            if model.calls >= 1 and len(await service.storage.list_entries("u1")) == 1:
+                break
+            await asyncio.sleep(0.02)
         await service.stop()
         assert service._task is None
         assert model.calls >= 1
