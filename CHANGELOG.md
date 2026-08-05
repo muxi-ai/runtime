@@ -2,6 +2,8 @@
 
 ## [unreleased]
 
+## v1.20260805.0
+
 ### SOP file attachments now use the sandboxed document converter
 
 SOP `[file:...]` references were the last document intake path still parsing untrusted bytes inside the runtime process: it built its own `MarkItDown()` and called it directly -- no subprocess boundary, no rlimits, no wall-clock kill, no quarantine handling. Chat attachments and knowledge files had gone through the out-of-process conversion service since it was introduced, and the docs said conversion was sandboxed, which was untrue for this one path. SOP attachments now call the same `convert_document()` service, so a malformed or hostile document can no longer crash, hang, or balloon the runtime.
