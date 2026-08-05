@@ -226,6 +226,7 @@ from .clarification import (
 )
 from .input_validation import InputLimits, InputValidationError, InputValidator
 from .mcp_coordinator import MCPCoordinator
+from .retry_escalation import RetryAsyncConfig, RetryEscalationCoordinator
 
 # Configuration Management
 from .secrets_manager import SecretsInterpolator
@@ -844,6 +845,17 @@ class Overlord:
         self.async_threshold_seconds = async_config.get("threshold_seconds", 30)
         self.async_enable_estimation = async_config.get("enable_estimation", True)
         self.async_webhook_url = async_config.get("webhook_url")
+
+        # Async retry escalation ("the honest loop"): a terminal sync
+        # failure converts into a bounded background retry chain instead
+        # of a bare error (PRD: async-retry-escalation). Config lives
+        # under overlord.response.retry_async; malformed values raise
+        # loudly at load time.
+        _response_config = (self.formation_config.get("overlord") or {}).get("response") or {}
+        self.retry_async_config = RetryAsyncConfig.from_formation_data(
+            _response_config.get("retry_async")
+        )
+        self.retry_escalation = RetryEscalationCoordinator(self, self.retry_async_config)
 
         # Track background tasks to ensure they complete before shutdown
         self._background_tasks: Set[asyncio.Task] = set()
@@ -10891,8 +10903,17 @@ Agent response: {raw_response}"""
                 return completed_status
             return {"error": "Request not found"}
 
-        # Update status based on task state if task reference exists
-        if request_state.task_ref:
+        # Update status based on task state if task reference exists.
+        # Only infer for entries still in a non-terminal state: a recorded
+        # terminal (e.g. an escalated retry chain that ended FAILED with a
+        # give-up report, whose chain task then exited normally) must not
+        # be rewritten by this liveness heuristic.
+        _non_terminal = (
+            RequestStatus.PENDING,
+            RequestStatus.PROCESSING,
+            RequestStatus.RUNNING,
+        )
+        if request_state.task_ref and request_state.status in _non_terminal:
             if request_state.task_ref.done():
                 if request_state.task_ref.cancelled():
                     request_state.status = RequestStatus.CANCELLED
@@ -11209,6 +11230,52 @@ Agent response: {raw_response}"""
                 }
             )
 
+            # Async retry escalation seam: the workflow's own success signal
+            # says this sync attempt failed terminally (task-level retries,
+            # alternate agents, and fallbacks are already exhausted by the
+            # resilient executor). Gate and, when allowed, convert the
+            # failure into a background retry chain -- the caller receives
+            # the fixed escalation message as this turn's terminal content
+            # instead of the failure.
+            _workflow_status_value = (
+                completed_workflow.status.value
+                if hasattr(completed_workflow.status, "value")
+                else str(completed_workflow.status)
+            )
+            if _workflow_status_value == "failed":
+                _failure_texts = [
+                    t.get("error", "unknown error")
+                    for t in task_results
+                    if t.get("status") == "failed"
+                ]
+                escalation_response = await self.retry_escalation.maybe_escalate(
+                    request_id,
+                    user_id=user_id,
+                    session_id=session_id,
+                    original_message=None,  # tracker holds the raw user text
+                    error_text="; ".join(_failure_texts) or "workflow failed",
+                    failed_workflow=completed_workflow,
+                    metadata=final_response.metadata,
+                )
+                if escalation_response is not None:
+                    if is_streaming:
+                        # Deterministic protocol text as the terminal
+                        # completed event -- never persona/LLM-styled.
+                        streaming.stream(
+                            "completed",
+                            escalation_response.content,
+                            stage="final",
+                            workflow_id=workflow_id,
+                            escalated=True,
+                            request_id=request_id,
+                        )
+                    if original_parallel_setting is not None:
+                        self.workflow_executor.config.behavior.enable_parallel_execution = (
+                            original_parallel_setting
+                        )
+                        original_parallel_setting = None
+                    return escalation_response
+
             # Emit streaming completion event if streaming is enabled
             if is_streaming:
                 # Event 10: COMMENTED OUT - not informative finalizing event
@@ -11257,6 +11324,33 @@ Agent response: {raw_response}"""
                 },
                 description=f"Error executing workflow {workflow_id}: {str(e)}",
             )
+
+            # Async retry escalation seam (exception path): same gate as the
+            # failed-workflow branch above. Cooperative cancellations are a
+            # user decision, never a failure -- they bypass the gate
+            # entirely (asyncio.CancelledError is BaseException and never
+            # reaches this handler).
+            escalation_response = None
+            if not isinstance(e, RequestCancelledException):
+                escalation_response = await self.retry_escalation.maybe_escalate(
+                    request_id,
+                    user_id=user_id,
+                    session_id=session_id,
+                    original_message=None,  # tracker holds the raw user text
+                    error_text=str(e),
+                    failed_workflow=workflow,
+                )
+            if escalation_response is not None:
+                if is_streaming:
+                    streaming.stream(
+                        "completed",
+                        escalation_response.content,
+                        stage="final",
+                        workflow_id=workflow_id,
+                        escalated=True,
+                        request_id=request_id,
+                    )
+                return escalation_response
 
             return MuxiResponse(
                 role="assistant",

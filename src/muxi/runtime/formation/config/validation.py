@@ -3321,6 +3321,17 @@ class FormationValidator:
             if not isinstance(response_config["streaming"], bool):
                 self.result.add_error("response.streaming must be a boolean")
 
+        # Validate retry_async (async retry escalation, PRD section 8)
+        if "retry_async" in response_config:
+            from ..overlord.retry_escalation import RetryAsyncConfig, RetryAsyncConfigError
+
+            try:
+                RetryAsyncConfig.from_formation_data(response_config["retry_async"])
+            except RetryAsyncConfigError as exc:
+                self.result.add_error(str(exc))
+            except Exception as exc:
+                self.result.add_error(f"overlord.response.retry_async is invalid: {exc}")
+
     def _validate_overlord_caching_config(self, caching_config: Dict[str, Any]) -> None:
         """Validate overlord caching configuration."""
         if not isinstance(caching_config, dict):

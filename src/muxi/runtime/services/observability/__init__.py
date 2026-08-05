@@ -69,6 +69,10 @@ __all__ = [
     # Runtime logger management
     "get_runtime_event_logger",
     "set_runtime_event_logger",
+    # Request activity watch (liveness for async retry escalation)
+    "watch_request_activity",
+    "unwatch_request_activity",
+    "get_last_request_activity",
 ]
 
 
@@ -78,6 +82,7 @@ __all__ = [
 
 import signal
 import threading
+import time as _time
 from typing import Any, Dict, Optional, Union
 
 import multitasking
@@ -167,6 +172,54 @@ _runtime_event_logger_lock = threading.Lock()
 # Start disabled during init, enable after formation is ready
 _enabled = False
 
+# ===================================================================
+# REQUEST ACTIVITY WATCH (liveness signal for async retry escalation)
+# ===================================================================
+# Watched request_ids -> timestamp of their last observe() call. Only
+# explicitly-watched requests are tracked (bounded: one entry per live
+# escalation attempt), so the hot path stays a single dict-membership
+# check for everything else. The touch happens before the enabled/filter
+# gates: an attempt that calls observe() is alive whether or not the
+# event ultimately reaches a transport.
+_activity_watch: Dict[str, float] = {}
+_activity_watch_lock = threading.Lock()
+
+
+def watch_request_activity(request_id: str) -> None:
+    """Start tracking last-observability-activity for a request."""
+    with _activity_watch_lock:
+        _activity_watch[request_id] = _time.time()
+
+
+def unwatch_request_activity(request_id: str) -> None:
+    """Stop tracking a request's observability activity."""
+    with _activity_watch_lock:
+        _activity_watch.pop(request_id, None)
+
+
+def get_last_request_activity(request_id: str) -> Optional[float]:
+    """Timestamp of the last observe() under this request, if watched."""
+    with _activity_watch_lock:
+        return _activity_watch.get(request_id)
+
+
+def _touch_request_activity() -> None:
+    """Stamp the current request context's activity, if watched."""
+    if not _activity_watch:
+        return
+    try:
+        from .context import get_current_request_context
+
+        request_context = get_current_request_context()
+        request_id = getattr(request_context, "id", None) if request_context else None
+        if request_id is None:
+            return
+        with _activity_watch_lock:
+            if request_id in _activity_watch:
+                _activity_watch[request_id] = _time.time()
+    except Exception:
+        pass
+
 
 def set_runtime_event_logger(logger: "EventLogger") -> None:
     """Set the runtime event logger for global access."""
@@ -206,6 +259,11 @@ def observe(
             is applied to every event by default.
     """
     global _enabled
+
+    # Liveness stamp for watched requests (async retry escalation idle
+    # detection): fires before every other gate -- an attempt calling
+    # observe() is alive even when the event itself is filtered/disabled.
+    _touch_request_activity()
 
     # Skip if observability is disabled (during init)
     if not _enabled:

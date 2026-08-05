@@ -2,6 +2,49 @@
 
 ## [unreleased]
 
+### Failed sync tasks now escalate to bounded async retries
+
+When a synchronous chat turn fails terminally (its in-request retry
+layers -- task retries, alternate agents, fallbacks -- exhausted), the
+runtime no longer just returns the failure. It tells the waiting caller
+"This has failed. I'm going to retry and let you know asynchronously.",
+keeps the request PROCESSING with an `escalated` marker, and runs a
+bounded chain of background attempts under the same request_id -- each
+with a FRESH plan generated through the workflow ReplanningCoordinator
+(similarity-rejected, GBAC-safe). The chain ends in a real result or an
+honest, structured give-up report (per-attempt plan summary and failure
+reason, plus what would unblock the task) that lands on the tracker
+entry, in the Captain's Log, and in the terminal notification.
+
+- Bounds are liveness- and attempt-based, not duration-based:
+  `max_attempts` (default 2 async attempts; the failed sync attempt
+  counts against the chain), `attempt_idle_timeout` (default 15m --
+  an attempt with no observability activity is hung; active attempts
+  can run as long as they like), an optional `deadline` whose clock
+  only starts when the second async attempt begins, and an always-on
+  stuck short-circuit (similarity-rejected replan + unchanged failure
+  signature ends the chain early with budget deliberately unspent).
+- Escalation never happens for: failures matching
+  `non_replannable_error_patterns` (auth/permission/credential/config
+  errors a different plan cannot avoid), pending interactions
+  (clarification, approval, credential prompts), user cancellations,
+  already-escalated requests, `retry_async.enabled: false`, or a
+  formation that is shutting down. Those return the failure exactly as
+  before.
+- Terminal delivery: channel notification via the NotificationRouter
+  when the formation has one, else the request's webhook_url with an
+  HMAC-SHA256-signed payload (`{request_id, state, result | report,
+  attempts, timestamp}`, signed with the formation's client key), and
+  `GET /v1/requests/{id}` always answers -- it now also returns the
+  give-up `report` (and an `escalated` flag) for escalated FAILED
+  entries.
+- Configuration (`overlord.response.retry_async`): `enabled` (default
+  true), `max_attempts` (default 2), `attempt_idle_timeout` (default
+  "15m"), `deadline` (default off). Malformed values fail at load.
+- New observability events: `response.retry.escalated`,
+  `response.retry.attempt`, `response.retry.terminal` -- all carry
+  request_id, so a chain's full history is traceable end to end.
+
 ### anydoc is now the primary document converter
 
 Office-document conversion (chat attachments and knowledge sources) now

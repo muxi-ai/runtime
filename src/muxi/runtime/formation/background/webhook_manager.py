@@ -265,6 +265,63 @@ class WebhookManager:
 
         return False
 
+    async def deliver_signed_payload(
+        self,
+        *,
+        webhook_url: str,
+        payload: Dict[str, Any],
+        request_id: str,
+        signing_secret: Optional[str] = None,
+        delivery_type: str = "signed",
+        retries: Optional[int] = None,
+        timeout: Optional[int] = None,
+    ) -> bool:
+        """
+        Deliver an arbitrary JSON payload with HMAC-SHA256 signature headers.
+
+        Uses the same signature scheme as async completion webhooks
+        (``X-Muxi-Signature: t=<ts>,v1=<hex>`` over ``{ts}.{canonical
+        json}``) but allows a per-call signing secret -- retry-escalation
+        terminals sign with the formation's CLIENT key so receivers can
+        verify origin with the key they already hold.
+
+        Args:
+            webhook_url: URL to deliver the payload to
+            payload: JSON-serializable payload dict (sent verbatim)
+            request_id: Request ID for observability correlation
+            signing_secret: Secret for HMAC signing; falls back to the
+                manager's default signing secret when None/empty
+            delivery_type: Delivery kind for observability metadata
+            retries: Number of retry attempts (uses default if None)
+            timeout: Request timeout (uses default if None)
+
+        Returns:
+            True if delivery was successful, False otherwise. Delivery
+            failure never raises -- callers' state must not depend on it.
+        """
+        secret = signing_secret or self._signing_secret
+        headers: Dict[str, str] = {"Content-Type": "application/json"}
+        if secret:
+            sig_header, sig_ts = sign_webhook(payload, secret)
+            headers["X-Muxi-Signature"] = sig_header
+            headers["X-Muxi-Timestamp"] = str(sig_ts)
+
+        # The signature covers the canonical (compact, sorted-keys) JSON
+        # encoding, so the body on the wire must be exactly that encoding.
+        body = json.dumps(payload, separators=(",", ":"), sort_keys=True)
+
+        success, _error, _attempts = await self.deliver_raw(
+            url=webhook_url,
+            method="POST",
+            headers=headers,
+            body=body,
+            request_id=request_id,
+            delivery_type=delivery_type,
+            retries=retries,
+            timeout=timeout,
+        )
+        return success
+
     async def deliver_raw(
         self,
         *,

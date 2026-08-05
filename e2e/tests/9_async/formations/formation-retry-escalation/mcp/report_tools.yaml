@@ -1,0 +1,14 @@
+schema: "1.0.0"
+id: "report-tools"
+description: "Deterministic failure-injection tool server for retry escalation tests"
+
+type: "command"
+
+# Relative to the test's working directory (the tests chdir to
+# e2e/tests/9_async before booting the formation, matching how
+# run_all_tests.py invokes them).
+command: "python"
+args:
+  - "formations/formation-retry-escalation/report_tools_server.py"
+  - "/tmp/muxi_e2e_retry_escalation.flag"
+timeout_seconds: 120

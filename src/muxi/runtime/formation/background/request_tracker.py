@@ -49,6 +49,12 @@ class RequestState:
     # Lifecycle management fields
     progress: Optional[str] = None  # Optional progress string (e.g., "3/5 tasks")
     task_ref: Optional[asyncio.Task] = None  # Reference to asyncio task for cancellation
+    # Async retry escalation: True while (and after) a failed sync turn is
+    # retried by a background escalation chain under this same request_id.
+    # PROCESSING+escalated entries with a live task_ref are exempt from the
+    # stale reaper; FAILED+escalated entries carry the give-up report in
+    # ``result`` so GET /v1/requests/{id} can return it.
+    escalated: bool = False
 
     @property
     def processing_time(self) -> Optional[float]:
@@ -324,12 +330,22 @@ class RequestTracker:
                 self._cancelled.discard(req_id)
                 purged += 1
 
-            # Reap stale processing requests (e.g. broken-pipe orphans)
+            # Reap stale processing requests (e.g. broken-pipe orphans).
+            # Escalated entries whose chain task is still alive are exempt:
+            # a legitimately-running retry chain may outlive stale_timeout
+            # by design (its own bounds are attempts + per-attempt idle
+            # liveness). Once the chain task is gone (e.g. process restart
+            # lost the in-process chain), the reaper fails the entry
+            # honestly like any other orphan.
             _active = frozenset({RequestStatus.PROCESSING, RequestStatus.RUNNING})
             stale_ids = [
                 req_id
                 for req_id, state in self._requests.items()
-                if state.status in _active and (now - state.start_time) > self.stale_timeout
+                if state.status in _active
+                and (now - state.start_time) > self.stale_timeout
+                and not (
+                    state.escalated and state.task_ref is not None and not state.task_ref.done()
+                )
             ]
             for req_id in stale_ids:
                 state = self._requests[req_id]

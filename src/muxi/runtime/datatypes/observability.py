@@ -1290,6 +1290,17 @@ class ConversationEvents(Enum):
     RESPONSE_SYNTHESIZED = "response.synthesized"
     # When multiple responses are synthesized into final response
 
+    RESPONSE_RETRY_ESCALATED = "response.retry.escalated"
+    # When a terminal sync failure escalates to bounded async retry
+    # (carries the sync failure reason and delivery mode)
+
+    RESPONSE_RETRY_ATTEMPT = "response.retry.attempt"
+    # When an escalated async retry attempt starts (n, plan id)
+
+    RESPONSE_RETRY_TERMINAL = "response.retry.terminal"
+    # When an escalation chain reaches a terminal state
+    # (achieved | impossible | stuck | budget_exhausted | abandoned)
+
     # ===================================================================
     # ASYNC PROCESSING
     # ===================================================================

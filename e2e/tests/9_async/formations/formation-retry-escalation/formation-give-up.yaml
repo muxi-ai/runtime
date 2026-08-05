@@ -1,0 +1,83 @@
+schema: "1.0.0"
+id: "retry-escalation-giveup-test"
+description: "Async retry escalation: budget exhausts and an honest give-up report lands"
+
+runtime:
+  built_in_mcps: false
+
+llm:
+  settings:
+    temperature: 0.1
+    max_tokens: 1000
+  api_keys:
+    openai: "${{ secrets.OPENAI_API_KEY }}"
+  models:
+    - text: "openai/gpt-4o-mini"
+    - embedding: "openai/text-embedding-3-small"
+
+agents:
+  - id: status_reporter
+    name: "Status Reporter"
+    description: "Fetches system status reports using the report-tools MCP server"
+    system_message: |
+      You are a system status assistant. Your ONLY way to know the system
+      status is the system_status_report tool -- you have no other source.
+      When asked about system status you MUST call the system_status_report
+      tool and relay exactly what it returns, including any verification
+      token. Never invent a status.
+    mcp_enabled: true
+
+mcp:
+  servers:
+    - report-tools
+
+overlord:
+  clarification:
+    enabled: false
+
+  response:
+    format: "markdown"
+    retry_async:
+      enabled: true
+      max_attempts: 1  # one async attempt, then the honest give-up report
+      attempt_idle_timeout: "5m"
+      deadline: null
+
+  workflow:
+    auto_decomposition: true
+    complexity_threshold: 2.5  # low bar so the request decomposes (must be > 2.0: at <= 2.0 the workflow path is disabled entirely)
+    plan_approval_threshold: 10
+    retry:
+      max_attempts: 1
+    timeouts:
+      task_timeout: 15
+      phase_timeout: 90
+      workflow_timeout: 120
+      enable_adaptive_timeout: false
+
+memory:
+  buffer:
+    size: 20
+    vector_search: false
+
+  # Persistent memory (sqlite) so the captain's log exists: the give-up
+  # report must land there (PRD section 6).
+  persistent:
+    provider: "sqlite"
+    connection_string: "retry_escalation_giveup_test.db"
+    embedding_model: "openai/text-embedding-3-small"
+
+async:
+  threshold_seconds: 3600
+
+server:
+  enabled: true
+  port: 8281
+  api_keys:
+    admin_key: test-admin-key-9d2
+    client_key: test-client-key-9d2
+
+logging:
+  system:
+    level: "error"
+    destination: "stdout"
