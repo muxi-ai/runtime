@@ -204,7 +204,7 @@ simply has nothing stored under it, and each streaming call runs fresh.
 Single-flight locks are scoped the same way. Endpoints whose body has no
 `stream` field are unaffected.
 
-## v1.20260803.0
+## v0.20260803.0
 
 ### Dependency security updates: pypdf 6.14.2, nltk held below 3.10
 
