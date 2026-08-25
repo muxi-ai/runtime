@@ -2,6 +2,12 @@
 
 ## [unreleased]
 
+### pdf-inspector held below 1.0
+
+`pdf-inspector` 1.x changes the failure contract MUXI's PDF routing depends on. On a PDF it cannot read -- a broken xref table, for instance -- 0.2.x raises, and that exception is precisely what hands the file to the MarkItDown fallback. 1.17.0 instead returns success with empty text, so the fallback never fires and the document is quarantined as `parser_error`: a PDF that used to convert now fails outright, regressing the documented guarantee that PDFs never fail harder than they did before pdf-inspector was introduced. The dependency is pinned `<1.0` until the router is adapted to treat empty output as a fallback trigger and the classification API is re-verified against 1.x.
+
+This surfaced through CI rather than through the lockfile: the test job installs with `pip install -e ".[dev]"`, which resolves fresh from `pyproject.toml` and ignores `uv.lock`, so an unbounded `>=` constraint silently picks up new majors.
+
 ## v1.20260805.0
 
 ### SOP file attachments now use the sandboxed document converter
