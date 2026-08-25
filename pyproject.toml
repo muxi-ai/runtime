@@ -81,17 +81,7 @@ dependencies = [
     # (above) remains the per-file fallback for the formats it supports and the
     # converter for everything anydoc does not claim (HTML, images, ...).
     "firecrawl-anydoc>=0.1.3",
-    # pdf-inspector held below 1.0: 1.x changes the failure contract our PDF
-    # routing depends on. On a PDF it cannot read (e.g. a broken xref table),
-    # 0.2.x raises -- which is what triggers the MarkItDown fallback. 1.17.0
-    # instead returns success with empty text, so the fallback never fires and
-    # the document is quarantined as parser_error. That regresses the
-    # documented "PDFs never fail harder than before" guarantee, and CI caught
-    # it only because `pip install -e .[dev]` resolves fresh (the uv.lock is
-    # not used there). Revisit as a deliberate 1.x migration: adapt the router
-    # to treat empty output as a fallback trigger, then re-verify the
-    # classification API this routing relies on.
-    "pdf-inspector>=0.2.6,<1.0",  # PDF classification + native-text markdown extraction (sandboxed)
+    "pdf-inspector>=0.2.6",  # PDF classification + native-text markdown extraction (sandboxed)
     "pypdf>=6.14.2",  # PDF document processing (successor to PyPDF2); inline-image loop + xref DoS advisories fixed in 6.14.x
     "python-docx>=1.2.0",  # Word document processing
     "markdownify>=1.2.2",  # HTML to Markdown conversion

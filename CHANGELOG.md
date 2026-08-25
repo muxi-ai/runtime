@@ -2,11 +2,13 @@
 
 ## [unreleased]
 
-### pdf-inspector held below 1.0
+### Document conversion falls back when a converter returns nothing
 
-`pdf-inspector` 1.x changes the failure contract MUXI's PDF routing depends on. On a PDF it cannot read -- a broken xref table, for instance -- 0.2.x raises, and that exception is precisely what hands the file to the MarkItDown fallback. 1.17.0 instead returns success with empty text, so the fallback never fires and the document is quarantined as `parser_error`: a PDF that used to convert now fails outright, regressing the documented guarantee that PDFs never fail harder than they did before pdf-inspector was introduced. The dependency is pinned `<1.0` until the router is adapted to treat empty output as a fallback trigger and the classification API is re-verified against 1.x.
+The sandboxed converter only fell back to MarkItDown when the primary engine *raised*. Newer parsers report an unreadable file differently: pdf-inspector >= 0.2.7 and anydoc >= 0.2.3 return empty output instead of raising. The fallback therefore never fired and the file was quarantined as `parser_error` -- so a PDF or spreadsheet that used to convert (via the fallback) started failing outright, breaking the guarantee that a document never fails harder than it did before the primary engines were introduced.
 
-This surfaced through CI rather than through the lockfile: the test job installs with `pip install -e ".[dev]"`, which resolves fresh from `pyproject.toml` and ignores `uv.lock`, so an unbounded `>=` constraint silently picks up new majors.
+"Succeeded but produced nothing" is now treated as a primary failure, so it reaches the fallback exactly as an exception does; only when the fallback also produces nothing is the file quarantined. Verified against both the old and new parser versions, and against the pdf-inspector 1.x line.
+
+This surfaced through CI rather than the lockfile: the test job installs with `pip install -e ".[dev]"`, which resolves fresh from `pyproject.toml` and ignores `uv.lock`, so unbounded `>=` constraints pick up new releases silently. Two unrelated dependency PRs failed on this same test as a result.
 
 ## v1.20260805.0
 
