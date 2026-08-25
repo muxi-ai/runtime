@@ -122,6 +122,15 @@ _CONVERTERS = {
 }
 
 
+def _has_text(value) -> bool:
+    """True when a converter actually extracted something usable.
+
+    Converters signal an unreadable file either by raising or by returning
+    nothing at all; this collapses the second form to a single predicate.
+    """
+    return value is not None and str(value).strip() != ""
+
+
 def _convert(engine: str, fallback_engine, input_path: str, max_output_bytes: int) -> dict:
     """Run the conversion, returning a result dict (never raising for parser errors)."""
     fallback_from = None
@@ -144,6 +153,20 @@ def _convert(engine: str, fallback_engine, input_path: str, max_output_bytes: in
             fallback_error = f"{type(primary_exc).__name__}: {primary_exc}"
             engine_used = fallback_engine
             text = _CONVERTERS[fallback_engine](input_path)
+        else:
+            # A raised exception is not the only way a converter reports that
+            # it cannot read a file: pdf-inspector >= 0.2.7 and anydoc >= 0.2.3
+            # return empty output instead. Treat "succeeded but produced
+            # nothing" as a primary failure too, so it still reaches the
+            # fallback -- otherwise a file that used to convert (via the
+            # fallback) starts quarantining as parser_error, which is exactly
+            # the "never fail harder than before" guarantee this path exists
+            # to keep.
+            if not _has_text(text) and fallback_engine:
+                fallback_from = engine
+                fallback_error = "primary converter produced no text"
+                engine_used = fallback_engine
+                text = _CONVERTERS[fallback_engine](input_path)
     except MemoryError:
         return {
             "ok": False,
@@ -163,9 +186,11 @@ def _convert(engine: str, fallback_engine, input_path: str, max_output_bytes: in
             "fallback_error": fallback_error,
         }
 
-    if text is None:
-        # MarkItDown returns None text_content when it cannot extract anything
-        # from a malformed file; that is a parse failure, not an empty document.
+    if not _has_text(text):
+        # Converters report "I could not read this" by returning nothing --
+        # MarkItDown as None text_content, pdf-inspector/anydoc as empty
+        # output. Either way nothing was extracted, and by this point the
+        # fallback (if any) has already had its turn.
         return {
             "ok": False,
             "reason": REASON_PARSER_ERROR,

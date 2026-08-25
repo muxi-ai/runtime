@@ -2,6 +2,14 @@
 
 ## [unreleased]
 
+### Document conversion falls back when a converter returns nothing
+
+The sandboxed converter only fell back to MarkItDown when the primary engine *raised*. Newer parsers report an unreadable file differently: pdf-inspector >= 0.2.7 and anydoc >= 0.2.3 return empty output instead of raising. The fallback therefore never fired and the file was quarantined as `parser_error` -- so a PDF or spreadsheet that used to convert (via the fallback) started failing outright, breaking the guarantee that a document never fails harder than it did before the primary engines were introduced.
+
+"Succeeded but produced nothing" is now treated as a primary failure, so it reaches the fallback exactly as an exception does; only when the fallback also produces nothing is the file quarantined. Verified against both the old and new parser versions, and against the pdf-inspector 1.x line.
+
+This surfaced through CI rather than the lockfile: the test job installs with `pip install -e ".[dev]"`, which resolves fresh from `pyproject.toml` and ignores `uv.lock`, so unbounded `>=` constraints pick up new releases silently. Two unrelated dependency PRs failed on this same test as a result.
+
 ## v1.20260805.0
 
 ### SOP file attachments now use the sandboxed document converter

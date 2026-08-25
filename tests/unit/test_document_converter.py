@@ -179,8 +179,10 @@ def test_pdf_inspector_failure_falls_back_to_markitdown():
     assert result.fallback_used
     assert result.engine == ENGINE_MARKITDOWN
     assert "Hello Broken Xref" in result.text
-    # The pdf-inspector error is preserved for observability.
-    assert "PDF parsing error" in result.detail
+    # Why the primary was abandoned is preserved for observability. Which form
+    # that takes depends on the installed pdf-inspector: <= 0.2.6 raises, while
+    # >= 0.2.7 reports an unreadable PDF by returning no text at all.
+    assert "PDF parsing error" in result.detail or "produced no text" in result.detail
 
 
 def test_garbage_pdf_quarantined_as_parser_error():
@@ -393,8 +395,13 @@ def test_anydoc_failure_falls_back_to_markitdown_for_supported_format():
     assert result.fallback_from == ENGINE_ANYDOC
     assert result.engine == ENGINE_MARKITDOWN
     assert "widget" in result.text
-    # The anydoc error is preserved for observability.
-    assert "ConvertError" in result.detail
+    # Why the primary was abandoned is preserved for observability. The exact
+    # wording tracks the installed anydoc -- 0.1.x raises ConvertError, 0.2.x
+    # raises MalformedError, and a version that reports an unreadable file by
+    # returning nothing lands as "produced no text" -- so assert that some
+    # reason survived rather than pinning one library's error name.
+    assert result.detail.strip(), "no reason recorded for the fallback"
+    assert result.fallback_from == ENGINE_ANYDOC
 
 
 def test_corrupt_anydoc_only_format_quarantines_without_fallback():
