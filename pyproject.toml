@@ -57,7 +57,7 @@ dependencies = [
     "psutil>=7.2.2",  # System and process utilities
 
     # MCP Package
-    "mcp>=1.27.2",  # Required for Streamable HTTP transport support (security fix)
+    "mcp>=1.27.2,<2.0.0",  # Required for Streamable HTTP transport support (security fix); <2: SDK 2.x removed streamablehttp_client and moved auth/timeout into an httpx2 client (breaking API change)
     "fastmcp>=3.4.2",  # MCP server generation from FastAPI app
 
     # File processing and utilities
