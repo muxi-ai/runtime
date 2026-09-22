@@ -2,6 +2,18 @@
 
 ## [unreleased]
 
+## v1.20260922.0
+
+### The pre-request LLM decisions now reply under typed JSON contracts
+
+The three LLM decisions the runtime makes ahead of every request used to be parsed out of free text: agent routing read a single `[agent-id] or SECURITY_BLOCK` tag, credential detection scraped JSON out of prose, and request analysis (security threat, complexity, topics) extracted a JSON block from the model's reply. Each path carried its own ad-hoc parser, and when the model's reply did not match the expected shape the decision silently degraded -- in the earlier Part B sample, 8 of 35 live routing requests (~23%) came back with no parseable agent id and fell through to heuristics.
+
+All three decisions now go through one typed path: `LLM.chat_json()` enforces the reply shape with a strict structured-output schema (`response_format: json_schema`) on OpenAI, and on every other provider appends a format contract to the prompt with one stern retry before failing exactly as before. The contracts cover agent routing (`security_block` / `agent`, the agent id picked from the live GBAC-filtered candidate set or null), credential detection (`type` / `service` / `confidence`), and request analysis (all 13 fields the prompt already asked for, including `reasoning`).
+
+Measured on the Part B fixture set through the real API: routing replies went from 9/53 unparseable to 0/53, routing agent accuracy rose from 71.4% to 95.3%, and safe-forwarding false positives dropped from 2.3% to 0.0%; credential kind accuracy holds at 96.7%; request-analysis complexity stays at parity (within-1 80%, MAE 0.90 vs 0.93, median latency unchanged); security-threat recall-on-true improved from 93.3% to 100%, and routing's 10/10 security-attack block recall is unchanged.
+
+All fallback behavior is preserved: an unparseable reply still lands on the same paths as before -- the routing heuristics and user-self-recall override, the credential handler's configured-service re-check, and the analyzer's defensive defaults. LLM-detected security threats still raise the same `SecurityViolation`. No formation configuration changes.
+
 ### Document conversion falls back when a converter returns nothing
 
 The sandboxed converter only fell back to MarkItDown when the primary engine *raised*. Newer parsers report an unreadable file differently: pdf-inspector >= 0.2.7 and anydoc >= 0.2.3 return empty output instead of raising. The fallback therefore never fired and the file was quarantined as `parser_error` -- so a PDF or spreadsheet that used to convert (via the fallback) started failing outright, breaking the guarantee that a document never fails harder than it did before the primary engines were introduced.
