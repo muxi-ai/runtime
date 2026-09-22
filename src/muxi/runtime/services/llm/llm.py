@@ -232,6 +232,7 @@ class LLMErrorType(Enum):
     TIMEOUT = "timeout"
     NETWORK = "network"
     INVALID_REQUEST = "invalid_request"
+    RESPONSE_PARSING = "response_parsing"
     MODEL_OVERLOAD = "model_overload"
     CONTEXT_LENGTH = "context_length"
     FILE_TOO_LARGE = "file_too_large"
@@ -1497,6 +1498,99 @@ class LLM:
                 stop=stop,
                 **kwargs,
             )
+
+    async def chat_json(
+        self,
+        messages: List[Dict[str, str]],
+        json_schema: Dict[str, Any],
+        **kwargs: Any,
+    ) -> Dict[str, Any]:
+        """Chat expecting a JSON object reply, enforced where the provider allows.
+
+        OpenAI enforces the schema through a strict ``json_schema`` response
+        format, so the reply is a conforming JSON object by construction.
+        Every other provider gets a compact format contract appended to the
+        system prompt and one stern retry before the failure is raised;
+        callers keep their existing fallback paths for the raised case.
+
+        Args:
+            messages: Conversation, normally with a leading system message.
+            json_schema: The ``json_schema`` member of an OpenAI
+                structured-output definition: ``{"name", "strict", "schema"}``.
+            **kwargs: Forwarded to :meth:`chat` (e.g. ``max_tokens``).
+
+        Returns:
+            The reply parsed as a JSON object (dict).
+
+        Raises:
+            LLMError: ``RESPONSE_PARSING`` when the reply is not a JSON
+                object after the provider-appropriate attempts.
+        """
+        required = json_schema.get("schema", {}).get("required", [])
+        if self._provider == "openai":
+            content = await self.chat(
+                messages,
+                response_format={"type": "json_schema", "json_schema": json_schema},
+                **kwargs,
+            )
+            return self._loads_json_object(content)
+
+        contract = (
+            "\n\nRespond with ONLY a valid JSON object (no prose, no markdown "
+            f"fences) with exactly these keys: {', '.join(map(str, required))}."
+        )
+        attempt = self._append_system_note(messages, contract)
+        try:
+            return self._loads_json_object(await self.chat(attempt, **kwargs))
+        except LLMError as exc:
+            if exc.error_type is not LLMErrorType.RESPONSE_PARSING:
+                raise
+            retry = self._append_system_note(
+                attempt,
+                "\nYour previous reply was not a valid JSON object. "
+                "Respond again with ONLY the JSON object.",
+            )
+            return self._loads_json_object(await self.chat(retry, **kwargs))
+
+    @staticmethod
+    def _append_system_note(messages: List[Dict[str, str]], note: str) -> List[Dict[str, str]]:
+        """Copy ``messages``, appending ``note`` to the first system message.
+
+        Never mutates the caller's list or dicts; inserts a system message
+        when the conversation has none.
+        """
+        copied = [dict(message) for message in messages]
+        for message in copied:
+            if message.get("role") == "system":
+                message["content"] = f"{message['content']}{note}"
+                return copied
+        return [{"role": "system", "content": note.strip()}, *copied]
+
+    def _loads_json_object(self, content: str) -> Dict[str, Any]:
+        """Parse a JSON object from model output, tolerating fences or prose.
+
+        This consolidates the JSON-in-prose scrape (find ``{`` / rfind ``}``)
+        that the credential and workflow-analysis call sites each carried.
+        """
+        text = content.strip() if content else ""
+        candidates = [text]
+        start, end = text.find("{"), text.rfind("}")
+        if start >= 0 and end > start:
+            candidates.append(text[start : end + 1])
+        for candidate in candidates:
+            try:
+                parsed = json.loads(candidate)
+            except ValueError:
+                continue
+            if isinstance(parsed, dict):
+                return parsed
+        raise LLMError(
+            f"Model reply was not a JSON object: {text[:120]!r}",
+            error_type=LLMErrorType.RESPONSE_PARSING,
+            provider=self._provider,
+            model=self.model_name,
+            retryable=False,
+        )
 
     async def chat_stream(
         self,

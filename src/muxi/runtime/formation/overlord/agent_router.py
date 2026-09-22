@@ -33,6 +33,31 @@ class AgentRouter:
     STRONG_NON_MUXI_MATCH_MARGIN = 3
     MAX_ROUTING_CACHE_SIZE = 5000
 
+    @staticmethod
+    def _routing_json_schema(available_agents: list[str]) -> Dict[str, Any]:
+        """Strict structured-output contract for the routing decision.
+
+        The agent enum is the live (GBAC-filtered) candidate list plus null
+        for the security-block case, mirroring the retired
+        ``[agent-id] or SECURITY_BLOCK`` free-text contract exactly.
+        """
+        return {
+            "name": "agent_routing",
+            "strict": True,
+            "schema": {
+                "type": "object",
+                "properties": {
+                    "security_block": {"type": "boolean"},
+                    "agent": {
+                        "type": ["string", "null"],
+                        "enum": [*available_agents, None],
+                    },
+                },
+                "required": ["security_block", "agent"],
+                "additionalProperties": False,
+            },
+        }
+
     def __init__(self, overlord):
         """
         Initialize the agent router.
@@ -394,22 +419,33 @@ class AgentRouter:
                 artifact_hint=artifact_hint,
             )
 
-            # Query the routing model
-            response = await routing_model.chat(messages)
-
-            # Parse the response. The routing LLM signals security threats by
-            # emitting SECURITY_BLOCK; _parse_routing_response converts that
-            # into a SecurityViolation. Apply the same defensive override as
-            # RequestAnalyzer for the information-extraction false-positive
-            # category: legitimate user-self-recall requests ("list back the
-            # role I mentioned earlier", "what's my name?") sometimes trip
-            # this guard despite the routing prompt's explicit carve-out for
-            # questions about the user's own information. When the heuristic
-            # confidently identifies user-self-recall, treat the routing
-            # decision as inconclusive (None) so the intelligent fallback
-            # path can pick an agent normally.
+            # Query the routing model under a typed JSON contract (strict
+            # json_schema on OpenAI, prompt-enforced on other providers via
+            # LLM.chat_json). Measured against free-text + tag parsing on the
+            # Part B fixtures: 9/53 replies unparseable -> 0/53, agent
+            # accuracy 71.4% -> 95.3%, safe false positives 2.3% -> 0.0%
+            # (engineering notes, system-one-structured-partb). The model
+            # signals security threats with `security_block: true`, which
+            # becomes a SecurityViolation below. Apply the same defensive
+            # override as RequestAnalyzer for the information-extraction
+            # false-positive category: legitimate user-self-recall requests
+            # ("list back the role I mentioned earlier", "what's my name?")
+            # sometimes trip this guard despite the routing prompt's explicit
+            # carve-out for questions about the user's own information. When
+            # the heuristic confidently identifies user-self-recall, treat
+            # the routing decision as inconclusive (None) so the intelligent
+            # fallback path can pick an agent normally.
             try:
-                selected_agent_id = self._parse_routing_response(response)
+                decision = await routing_model.chat_json(
+                    messages, self._routing_json_schema(available_agents), max_tokens=50
+                )
+                selected_agent_id = decision.get("agent")
+                if decision.get("security_block"):
+                    raise SecurityViolation(
+                        reason="LLM detected security threat in message",
+                        threat_type="llm_detected",
+                        message_preview="",  # Don't log potentially malicious content
+                    )
             except SecurityViolation:
                 from ..workflow.analyzer import RequestAnalyzer
 
@@ -448,7 +484,7 @@ class AgentRouter:
                         level=observability.EventLevel.INFO,
                         data={
                             "reason": override_reason,
-                            "raw_response": response[:120],
+                            "raw_response": str(decision)[:120],
                             "message_preview": message[:120],
                         },
                         description=(
@@ -647,7 +683,7 @@ For safe messages, analyze and select the best agent considering:
 - When a specialist agent clearly matches the request, prefer it over the default/generalist agent
 - If there is a previous agent for this session, prefer it for follow-up messages that lack explicit topic keywords (e.g., short replies, pronouns, continuation of a task)
 
-Your response: [agent-id] or SECURITY_BLOCK"""
+Your response: a JSON object with `security_block` (boolean) and `agent` (the best agent id from the options above, or null when the message is a security attack)."""
 
         # Add session context hint if available
         last_agent = self._session_last_agent.get(session_id) if session_id else None
@@ -731,73 +767,6 @@ Your response: [agent-id] or SECURITY_BLOCK"""
             return str(default_agent)
 
         return available_agents[0]
-
-    def _parse_routing_response(self, response: str) -> Optional[str]:
-        """
-        Parse the routing model response to extract the agent ID or security block.
-
-        This method attempts to extract a valid agent ID from the routing model's
-        response, handling various response formats and potential issues. It also
-        detects security violations signaled by the LLM.
-
-        Args:
-            response: The raw response from the routing model
-
-        Returns:
-            The extracted agent ID if valid, None otherwise
-
-        Raises:
-            SecurityViolation: If the LLM detects a security threat (SECURITY_BLOCK)
-        """
-        if not response:
-            return None
-
-        # Clean up the response
-        response = response.strip()
-
-        # SECURITY: Check if LLM detected a security threat
-        if "SECURITY_BLOCK" in response.upper():
-            raise SecurityViolation(
-                reason="LLM detected security threat in message",
-                threat_type="llm_detected",
-                message_preview="",  # Don't log potentially malicious content
-            )
-
-        # Try to extract agent ID - handle various formats
-        lines = response.split("\n")
-        for line in lines:
-            line = line.strip()
-            if not line:
-                continue
-
-            # Direct agent ID
-            if line in self.overlord.agents:
-                return line
-
-            # Format: "agent_id" or 'agent_id'
-            if (line.startswith('"') and line.endswith('"')) or (
-                line.startswith("'") and line.endswith("'")
-            ):
-                agent_id = line[1:-1]
-                if agent_id in self.overlord.agents:
-                    return agent_id
-
-            # Format: Agent: agent_id
-            if ":" in line:
-                parts = line.split(":", 1)
-                if len(parts) == 2:
-                    agent_id = parts[1].strip().strip("\"'")
-                    if agent_id in self.overlord.agents:
-                        return agent_id
-
-            # Check if any part of the line matches an agent ID
-            words = line.split()
-            for word in words:
-                word = word.strip(".,!?;\"'()[]{}")
-                if word in self.overlord.agents:
-                    return word
-
-        return None
 
     def clear_routing_cache(self) -> None:
         """Clear the routing cache."""
