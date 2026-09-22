@@ -109,8 +109,8 @@ async def test_override_downgrades_artifact_retrieval(
     analyzer_with_mock_llm: RequestAnalyzer, threat_type: str
 ) -> None:
     analyzer = analyzer_with_mock_llm
-    analyzer.llm.chat = AsyncMock(return_value="{}")
-    analyzer._parse_llm_analysis = lambda _resp: _analysis(threat_type)  # type: ignore[assignment]
+    analyzer.llm.chat_json = AsyncMock(return_value={})
+    analyzer._analysis_from_dict = lambda _data: _analysis(threat_type)  # type: ignore[assignment]
 
     result = await analyzer._llm_analyze_request(RETRIEVAL_MESSAGE, context=None)
 
@@ -125,8 +125,8 @@ async def test_override_leaves_real_extraction_untouched(
     analyzer_with_mock_llm: RequestAnalyzer,
 ) -> None:
     analyzer = analyzer_with_mock_llm
-    analyzer.llm.chat = AsyncMock(return_value="{}")
-    analyzer._parse_llm_analysis = lambda _resp: _analysis(  # type: ignore[assignment]
+    analyzer.llm.chat_json = AsyncMock(return_value={})
+    analyzer._analysis_from_dict = lambda _data: _analysis(  # type: ignore[assignment]
         "information_extraction"
     )
 
@@ -144,8 +144,8 @@ async def test_override_never_touches_prompt_injection(
 ) -> None:
     """Prompt injection is never downgraded, even with artifact phrasing."""
     analyzer = analyzer_with_mock_llm
-    analyzer.llm.chat = AsyncMock(return_value="{}")
-    analyzer._parse_llm_analysis = lambda _resp: _analysis("prompt_injection")  # type: ignore[assignment]
+    analyzer.llm.chat_json = AsyncMock(return_value={})
+    analyzer._analysis_from_dict = lambda _data: _analysis("prompt_injection")  # type: ignore[assignment]
 
     result = await analyzer._llm_analyze_request(RETRIEVAL_MESSAGE, context=None)
 

@@ -8,9 +8,11 @@ Tests that the system handles fallback scenarios gracefully:
 
 All fallbacks should return empty topics list without breaking the system.
 """
+
+
 import pytest
-from pathlib import Path
-from muxi.runtime.formation.workflow.analyzer import RequestAnalyzer, ComplexityMethod
+
+from muxi.runtime.formation.workflow.analyzer import ComplexityMethod, RequestAnalyzer
 
 
 @pytest.mark.asyncio
@@ -22,7 +24,7 @@ async def test_heuristic_analyzer_returns_empty_topics():
         "Write a blog post about AI trends",
         "Debug the login API endpoint",
         "Analyze Q4 sales data",
-        "Create a meal plan for next week"
+        "Create a meal plan for next week",
     ]
 
     for message in test_messages:
@@ -48,7 +50,7 @@ async def test_llm_error_returns_empty_topics():
 
     # Mock LLM that throws error
     mock_llm = AsyncMock()
-    mock_llm.chat = AsyncMock(side_effect=Exception("LLM service unavailable"))
+    mock_llm.chat_json = AsyncMock(side_effect=Exception("LLM service unavailable"))
 
     analyzer = RequestAnalyzer(llm=mock_llm, complexity_method=ComplexityMethod.LLM)
 
@@ -58,9 +60,9 @@ async def test_llm_error_returns_empty_topics():
     assert result.topics == []
     assert result.complexity_score > 0  # Heuristic still provides score
 
-    print(f"\n✓ LLM error handled gracefully")
+    print("\n✓ LLM error handled gracefully")
     print(f"  Topics: {result.topics} (empty from fallback)")
-    print(f"  System remained stable")
+    print("  System remained stable")
 
 
 @pytest.mark.asyncio
@@ -68,9 +70,16 @@ async def test_malformed_json_returns_empty_topics():
     """Test malformed LLM response returns empty topics."""
     from unittest.mock import AsyncMock
 
-    # Mock LLM that returns invalid JSON
+    from muxi.runtime.services.llm.llm import LLMError, LLMErrorType
+
+    # chat_json raises RESPONSE_PARSING when the reply is not a JSON object
     mock_llm = AsyncMock()
-    mock_llm.chat = AsyncMock(return_value="This is not JSON at all!")
+    mock_llm.chat_json = AsyncMock(
+        side_effect=LLMError(
+            "Model reply was not a JSON object: 'This is not JSON at all!'",
+            error_type=LLMErrorType.RESPONSE_PARSING,
+        )
+    )
 
     analyzer = RequestAnalyzer(llm=mock_llm, complexity_method=ComplexityMethod.LLM)
 
@@ -80,7 +89,7 @@ async def test_malformed_json_returns_empty_topics():
     assert result.topics == []
     assert result.complexity_score > 0
 
-    print(f"\n✓ Malformed JSON handled gracefully")
+    print("\n✓ Malformed JSON handled gracefully")
     print(f"  Topics: {result.topics} (empty from error handler)")
 
 
@@ -89,18 +98,18 @@ async def test_missing_topics_field_returns_empty():
     """Test LLM response without topics field returns empty list."""
     from unittest.mock import AsyncMock
 
-    # Mock LLM that returns valid JSON but no topics field
+    # Mock LLM that returns a valid decision object but no topics field
     mock_llm = AsyncMock()
-    mock_llm.chat = AsyncMock(return_value="""
-    {
-        "complexity_score": 5.0,
-        "implicit_subtasks": ["Step 1"],
-        "required_capabilities": ["general"],
-        "acceptance_criteria": ["Done"],
-        "confidence_score": 0.8,
-        "reasoning": "Test response without topics"
-    }
-    """)
+    mock_llm.chat_json = AsyncMock(
+        return_value={
+            "complexity_score": 5.0,
+            "implicit_subtasks": ["Step 1"],
+            "required_capabilities": ["general"],
+            "acceptance_criteria": ["Done"],
+            "confidence_score": 0.8,
+            "reasoning": "Test response without topics",
+        }
+    )
 
     analyzer = RequestAnalyzer(llm=mock_llm, complexity_method=ComplexityMethod.LLM)
 
@@ -110,7 +119,7 @@ async def test_missing_topics_field_returns_empty():
     assert result.topics == []
     assert result.complexity_score == 5.0
 
-    print(f"\n✓ Missing topics field handled")
+    print("\n✓ Missing topics field handled")
     print(f"  Topics: {result.topics} (defaults to empty)")
 
 
@@ -121,17 +130,17 @@ async def test_topics_not_array_returns_empty():
 
     # Mock LLM that returns topics as string instead of array
     mock_llm = AsyncMock()
-    mock_llm.chat = AsyncMock(return_value="""
-    {
-        "complexity_score": 5.0,
-        "implicit_subtasks": [],
-        "required_capabilities": ["general"],
-        "acceptance_criteria": ["Done"],
-        "confidence_score": 0.8,
-        "topics": "writing, blog, coding",
-        "reasoning": "Test"
-    }
-    """)
+    mock_llm.chat_json = AsyncMock(
+        return_value={
+            "complexity_score": 5.0,
+            "implicit_subtasks": [],
+            "required_capabilities": ["general"],
+            "acceptance_criteria": ["Done"],
+            "confidence_score": 0.8,
+            "topics": "writing, blog, coding",
+            "reasoning": "Test",
+        }
+    )
 
     analyzer = RequestAnalyzer(llm=mock_llm, complexity_method=ComplexityMethod.LLM)
 
@@ -140,7 +149,7 @@ async def test_topics_not_array_returns_empty():
     # Non-list topics should be converted to empty list
     assert result.topics == []
 
-    print(f"\n✓ Non-array topics handled")
+    print("\n✓ Non-array topics handled")
     print(f"  Topics: {result.topics} (converted to empty)")
 
 
@@ -151,17 +160,17 @@ async def test_empty_topics_array_returns_empty():
 
     # Mock LLM that returns empty topics array
     mock_llm = AsyncMock()
-    mock_llm.chat = AsyncMock(return_value="""
-    {
-        "complexity_score": 3.0,
-        "implicit_subtasks": [],
-        "required_capabilities": ["general"],
-        "acceptance_criteria": ["Done"],
-        "confidence_score": 0.7,
-        "topics": [],
-        "reasoning": "Simple request with no clear topics"
-    }
-    """)
+    mock_llm.chat_json = AsyncMock(
+        return_value={
+            "complexity_score": 3.0,
+            "implicit_subtasks": [],
+            "required_capabilities": ["general"],
+            "acceptance_criteria": ["Done"],
+            "confidence_score": 0.7,
+            "topics": [],
+            "reasoning": "Simple request with no clear topics",
+        }
+    )
 
     analyzer = RequestAnalyzer(llm=mock_llm, complexity_method=ComplexityMethod.LLM)
 
@@ -169,78 +178,78 @@ async def test_empty_topics_array_returns_empty():
 
     assert result.topics == []
 
-    print(f"\n✓ Empty topics array preserved")
+    print("\n✓ Empty topics array preserved")
     print(f"  Topics: {result.topics}")
 
 
 def test_topics_with_empty_strings_filtered():
-    """Test empty strings in topics are filtered out via _parse_llm_analysis."""
+    """Test empty strings in topics are filtered out via _analysis_from_dict."""
     analyzer = RequestAnalyzer(llm=None, complexity_method=ComplexityMethod.HEURISTIC)
 
-    result = analyzer._parse_llm_analysis("""
-    {
-        "complexity_score": 5.0,
-        "implicit_subtasks": [],
-        "required_capabilities": ["general"],
-        "acceptance_criteria": ["Done"],
-        "confidence_score": 0.8,
-        "topics": ["writing", "", "  ", "blog", null, "coding"],
-        "reasoning": "Test"
-    }
-    """)
+    result = analyzer._analysis_from_dict(
+        {
+            "complexity_score": 5.0,
+            "implicit_subtasks": [],
+            "required_capabilities": ["general"],
+            "acceptance_criteria": ["Done"],
+            "confidence_score": 0.8,
+            "topics": ["writing", "", "  ", "blog", None, "coding"],
+            "reasoning": "Test",
+        }
+    )
 
     assert result.topics == ["writing", "blog", "coding"]
     assert "" not in result.topics
     assert "  " not in result.topics
 
-    print(f"\n✓ Empty strings filtered from topics")
+    print("\n✓ Empty strings filtered from topics")
     print(f"  Topics: {result.topics}")
 
 
 def test_topics_normalized_to_lowercase():
-    """Test topics are normalized to lowercase via _parse_llm_analysis."""
+    """Test topics are normalized to lowercase via _analysis_from_dict."""
     analyzer = RequestAnalyzer(llm=None, complexity_method=ComplexityMethod.HEURISTIC)
 
-    result = analyzer._parse_llm_analysis("""
-    {
-        "complexity_score": 5.0,
-        "implicit_subtasks": ["step"],
-        "required_capabilities": ["general"],
-        "acceptance_criteria": ["Done"],
-        "confidence_score": 0.8,
-        "topics": ["Writing", "BLOG", "Sales-Analysis", "  Quarterly-Reports  "],
-        "reasoning": "Test"
-    }
-    """)
+    result = analyzer._analysis_from_dict(
+        {
+            "complexity_score": 5.0,
+            "implicit_subtasks": ["step"],
+            "required_capabilities": ["general"],
+            "acceptance_criteria": ["Done"],
+            "confidence_score": 0.8,
+            "topics": ["Writing", "BLOG", "Sales-Analysis", "  Quarterly-Reports  "],
+            "reasoning": "Test",
+        }
+    )
 
     assert result.topics == ["writing", "blog", "sales-analysis", "quarterly-reports"]
     assert all(t == t.lower() for t in result.topics)
     assert all(t == t.strip() for t in result.topics)
 
-    print(f"\n✓ Topics normalized to lowercase")
+    print("\n✓ Topics normalized to lowercase")
     print(f"  Topics: {result.topics}")
 
 
 def test_topics_limited_to_five():
-    """Test topics list is limited to maximum of 5 items via _parse_llm_analysis."""
+    """Test topics list is limited to maximum of 5 items via _analysis_from_dict."""
     analyzer = RequestAnalyzer(llm=None, complexity_method=ComplexityMethod.HEURISTIC)
 
-    result = analyzer._parse_llm_analysis("""
-    {
-        "complexity_score": 5.0,
-        "implicit_subtasks": ["step"],
-        "required_capabilities": ["general"],
-        "acceptance_criteria": ["Done"],
-        "confidence_score": 0.8,
-        "topics": ["topic1", "topic2", "topic3", "topic4", "topic5", "topic6", "topic7"],
-        "reasoning": "Test"
-    }
-    """)
+    result = analyzer._analysis_from_dict(
+        {
+            "complexity_score": 5.0,
+            "implicit_subtasks": ["step"],
+            "required_capabilities": ["general"],
+            "acceptance_criteria": ["Done"],
+            "confidence_score": 0.8,
+            "topics": ["topic1", "topic2", "topic3", "topic4", "topic5", "topic6", "topic7"],
+            "reasoning": "Test",
+        }
+    )
 
     assert len(result.topics) == 5
     assert result.topics == ["topic1", "topic2", "topic3", "topic4", "topic5"]
 
-    print(f"\n✓ Topics limited to 5 items")
+    print("\n✓ Topics limited to 5 items")
     print(f"  Topics: {result.topics}")
     print(f"  Count: {len(result.topics)}")
 

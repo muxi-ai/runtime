@@ -11,13 +11,24 @@ class FakeActiveAgentTracker:
 
 
 class FakeRoutingModel:
+    """Test double for the routing LLM's typed-JSON contract.
+
+    Responses are decision dicts exactly as ``LLM.chat_json`` returns them
+    (see ``AgentRouter._routing_json_schema``).
+    """
+
     def __init__(self, responses):
         self.responses = list(responses)
         self.calls = []
 
-    async def chat(self, messages):
+    async def chat_json(self, messages, json_schema, **kwargs):
         self.calls.append(messages)
         return self.responses.pop(0)
+
+
+def _decision(agent, security_block=False):
+    """One routing decision dict, as the structured contract returns it."""
+    return {"agent": agent, "security_block": security_block}
 
 
 class FakeArtifactMemory:
@@ -92,7 +103,7 @@ class FakeOverlord:
 class TestAgentRouter:
     @pytest.mark.asyncio
     async def test_prompt_includes_specialist_metadata(self):
-        overlord = FakeOverlord(FakeRoutingModel(["ms365-assistant"]))
+        overlord = FakeOverlord(FakeRoutingModel([_decision("ms365-assistant")]))
         router = AgentRouter(overlord)
 
         messages = router._create_routing_messages(
@@ -108,7 +119,7 @@ class TestAgentRouter:
 
     @pytest.mark.asyncio
     async def test_cache_is_scoped_by_session(self):
-        routing_model = FakeRoutingModel(["assistant", "ms365-assistant"])
+        routing_model = FakeRoutingModel([_decision("assistant"), _decision("ms365-assistant")])
         overlord = FakeOverlord(routing_model)
         router = AgentRouter(overlord)
 
@@ -132,7 +143,9 @@ class TestAgentRouter:
 
     @pytest.mark.asyncio
     async def test_llm_muxi_generalist_selection_is_overridden_by_strong_non_muxi_match(self):
-        overlord = FakeOverlord(FakeRoutingModel(["muxi-generalist"]), include_muxi_generalist=True)
+        overlord = FakeOverlord(
+            FakeRoutingModel([_decision("muxi-generalist")]), include_muxi_generalist=True
+        )
         router = AgentRouter(overlord)
 
         selected = await router.select_agent_for_message(
@@ -143,7 +156,9 @@ class TestAgentRouter:
 
     @pytest.mark.asyncio
     async def test_llm_muxi_generalist_selection_is_kept_without_strong_non_muxi_match(self):
-        overlord = FakeOverlord(FakeRoutingModel(["muxi-generalist"]), include_muxi_generalist=True)
+        overlord = FakeOverlord(
+            FakeRoutingModel([_decision("muxi-generalist")]), include_muxi_generalist=True
+        )
         router = AgentRouter(overlord)
 
         selected = await router.select_agent_for_message("Tell me a joke", session_id="session-1")
@@ -152,7 +167,7 @@ class TestAgentRouter:
 
     @pytest.mark.asyncio
     async def test_llm_general_agent_selection_is_overridden_by_strong_specialist_tool_match(self):
-        overlord = FakeOverlord(FakeRoutingModel(["assistant"]))
+        overlord = FakeOverlord(FakeRoutingModel([_decision("assistant")]))
         router = AgentRouter(overlord)
 
         selected = await router.select_agent_for_message(
@@ -163,7 +178,7 @@ class TestAgentRouter:
 
     @pytest.mark.asyncio
     async def test_routing_cache_evicts_oldest_entries_beyond_max_size(self):
-        routing_model = FakeRoutingModel(["assistant"] * 4)
+        routing_model = FakeRoutingModel([_decision("assistant")] * 4)
         overlord = FakeOverlord(routing_model)
         router = AgentRouter(overlord)
         router.MAX_ROUTING_CACHE_SIZE = 3
@@ -180,7 +195,7 @@ class TestAgentRouter:
         # Artifact routing awareness (Artifact Memory Phase 2, PRD 2.6):
         # the routing prompt carries the user's artifact manifest with
         # each artifact's creating agent.
-        routing_model = FakeRoutingModel(["ms365-assistant"])
+        routing_model = FakeRoutingModel([_decision("ms365-assistant")])
         overlord = FakeOverlord(routing_model)
         overlord.artifact_memory = FakeArtifactMemory(
             [
@@ -205,7 +220,7 @@ class TestAgentRouter:
 
     @pytest.mark.asyncio
     async def test_no_artifact_hint_without_service_or_user(self):
-        routing_model = FakeRoutingModel(["assistant", "assistant"])
+        routing_model = FakeRoutingModel([_decision("assistant"), _decision("assistant")])
         overlord = FakeOverlord(routing_model)
         router = AgentRouter(overlord)
 
@@ -220,7 +235,7 @@ class TestAgentRouter:
 
     @pytest.mark.asyncio
     async def test_artifact_hint_failure_never_breaks_routing(self):
-        routing_model = FakeRoutingModel(["assistant"])
+        routing_model = FakeRoutingModel([_decision("assistant")])
         overlord = FakeOverlord(routing_model)
 
         class ExplodingArtifactMemory:
@@ -245,7 +260,7 @@ class TestAgentRouter:
         # threat (opaque ids look like credentials). With artifact memory
         # live, the deterministic override downgrades the block so the
         # intelligent fallback picks an agent.
-        routing_model = FakeRoutingModel(["SECURITY_BLOCK"])
+        routing_model = FakeRoutingModel([_decision(None, security_block=True)])
         overlord = FakeOverlord(routing_model)
         overlord.artifact_memory = FakeArtifactMemory(
             [{"name": "sales.csv", "public_id": "abc123", "version": 1, "agent_id": "assistant"}]
@@ -264,7 +279,7 @@ class TestAgentRouter:
     async def test_security_block_on_real_attack_still_raises(self):
         from muxi.runtime.datatypes.exceptions import SecurityViolation
 
-        routing_model = FakeRoutingModel(["SECURITY_BLOCK"])
+        routing_model = FakeRoutingModel([_decision(None, security_block=True)])
         overlord = FakeOverlord(routing_model)
         router = AgentRouter(overlord)
 
@@ -276,7 +291,7 @@ class TestAgentRouter:
 
     @pytest.mark.asyncio
     async def test_routing_cache_hit_refreshes_recency(self):
-        routing_model = FakeRoutingModel(["assistant"] * 3)
+        routing_model = FakeRoutingModel([_decision("assistant")] * 3)
         overlord = FakeOverlord(routing_model)
         router = AgentRouter(overlord)
         router.MAX_ROUTING_CACHE_SIZE = 2
