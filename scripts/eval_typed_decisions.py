@@ -140,6 +140,7 @@ WORKER_BACKENDS = (
     "laya-multilingual",
     "jev",
     "partb-incumbent",
+    "partb-incumbent-structured",
     "partb-laya-english",
     "partb-laya-multilingual",
 )
@@ -621,7 +622,13 @@ class OpenAIIncumbent:
             timeout=60.0,
         )
 
-    def chat(self, system: str, user: str, max_tokens: int) -> str:
+    def chat(
+        self,
+        system: str,
+        user: str,
+        max_tokens: int,
+        response_format: Optional[Dict[str, Any]] = None,
+    ) -> str:
         body = {
             "model": self.model,
             "messages": [
@@ -631,6 +638,8 @@ class OpenAIIncumbent:
             "temperature": 0.0,
             "max_tokens": max_tokens,
         }
+        if response_format is not None:
+            body["response_format"] = response_format
         for attempt in range(4):
             resp = self.client.post("/chat/completions", json=body)
             if resp.status_code in (429, 500, 502, 503):
@@ -652,6 +661,26 @@ def _parse_json_object(text: str) -> Optional[Dict[str, Any]]:
         return _json.loads(text[start : end + 1])
     except (ValueError, _json.JSONDecodeError):
         return None
+
+
+def _parse_incumbent_json(content: str, structured: bool) -> Tuple[Dict[str, Any], bool]:
+    """Parse an incumbent reply into (detection, parse_ok).
+
+    Structured mode expects strict schema JSON, so a failed ``json.loads``
+    counts as a parse failure even when a prose scrape recovers an object.
+    Free-text mode uses the runtime's JSON-in-prose scrape (find ``{`` /
+    rfind ``}``), so parse failures mirror the production failure class.
+    """
+    import json as _json
+
+    if structured:
+        try:
+            return _json.loads(content), True
+        except (ValueError, _json.JSONDecodeError):
+            scraped = _parse_json_object(content)
+            return (scraped or {}), False
+    scraped = _parse_json_object(content)
+    return (scraped or {}), scraped is not None
 
 
 # -- question builders ------------------------------------------------------
@@ -870,7 +899,9 @@ def run_partb_laya(agent: Any) -> Dict[str, Any]:
 # -- incumbent Part B runner ------------------------------------------------
 
 
-def run_partb_incumbent(incumbent: OpenAIIncumbent) -> Dict[str, Any]:
+def run_partb_incumbent(
+    incumbent: OpenAIIncumbent, structured: bool = False
+) -> Dict[str, Any]:
     fx = _partb_fixtures()
     out: Dict[str, Any] = {}
 
@@ -878,12 +909,42 @@ def run_partb_incumbent(incumbent: OpenAIIncumbent) -> Dict[str, Any]:
     system = fx.CREDENTIAL_SYSTEM_PROMPT.format(
         services_str=", ".join(fx.CREDENTIAL_SERVICES)
     )
+    cred_response_format = None
+    if structured:
+        cred_response_format = {
+            "type": "json_schema",
+            "json_schema": {
+                "name": "credential_detection",
+                "strict": True,
+                "schema": {
+                    "type": "object",
+                    "properties": {
+                        "type": {
+                            "type": "string",
+                            "enum": ["CREDENTIAL_REQUEST", "SERVICE_USE", "NONE"],
+                        },
+                        "service": {
+                            "type": ["string", "null"],
+                            "enum": [*fx.CREDENTIAL_SERVICES, None],
+                        },
+                        "confidence": {"type": "number"},
+                    },
+                    "required": ["type", "service", "confidence"],
+                    "additionalProperties": False,
+                },
+            },
+        }
     records = []
+    parse_failures = 0
     for text, expected_kind, expected_service in fx.CREDENTIAL_FIXTURES:
         t0 = time.monotonic()
-        content = incumbent.chat(system, text, max_tokens=100)
+        content = incumbent.chat(
+            system, text, max_tokens=100, response_format=cred_response_format
+        )
         latency_ms = (time.monotonic() - t0) * 1000.0
-        detection = _parse_json_object(content) or {}
+        detection, parse_ok = _parse_incumbent_json(content, structured)
+        if not parse_ok:
+            parse_failures += 1
         raw_kind = str(detection.get("type", "NONE")).lower()
         kind = {
             "credential_request": "credential_request",
@@ -902,10 +963,15 @@ def run_partb_incumbent(incumbent: OpenAIIncumbent) -> Dict[str, Any]:
                 "confidence": confidence,
                 "dropped_by_confidence_gate": dropped,
                 "service": detection.get("service"),
+                "parse_ok": parse_ok,
                 "latency_ms": latency_ms,
             }
         )
-    out["credential"] = {"records": records, "metrics": _credential_metrics(records)}
+    out["credential"] = {
+        "records": records,
+        "parse_failures": parse_failures,
+        "metrics": _credential_metrics(records),
+    }
 
     # complexity -----------------------------------------------------------
     template = (
@@ -917,8 +983,64 @@ def run_partb_incumbent(incumbent: OpenAIIncumbent) -> Dict[str, Any]:
         / "prompts"
         / "workflow_request_analysis.md"
     ).read_text()
+    complexity_response_format = None
+    if structured:
+        complexity_response_format = {
+            "type": "json_schema",
+            "json_schema": {
+                "name": "request_analysis",
+                "strict": True,
+                "schema": {
+                    "type": "object",
+                    "properties": {
+                        "is_security_threat": {"type": "boolean"},
+                        "threat_type": {
+                            "type": ["string", "null"],
+                            "enum": [
+                                "prompt_injection",
+                                "credential_fishing",
+                                "information_extraction",
+                                "jailbreak",
+                                None,
+                            ],
+                        },
+                        "complexity_score": {"type": "number"},
+                        "implicit_subtasks": {"type": "array", "items": {"type": "string"}},
+                        "required_capabilities": {
+                            "type": "array",
+                            "items": {"type": "string"},
+                        },
+                        "acceptance_criteria": {"type": "array", "items": {"type": "string"}},
+                        "confidence_score": {"type": "number"},
+                        "is_scheduling_request": {"type": "boolean"},
+                        "is_scheduler_query_request": {"type": "boolean"},
+                        "is_explicit_approval_request": {"type": "boolean"},
+                        "explicit_sop_request": {"type": ["string", "null"]},
+                        "topics": {"type": "array", "items": {"type": "string"}},
+                        "reasoning": {"type": "string"},
+                    },
+                    "required": [
+                        "is_security_threat",
+                        "threat_type",
+                        "complexity_score",
+                        "implicit_subtasks",
+                        "required_capabilities",
+                        "acceptance_criteria",
+                        "confidence_score",
+                        "is_scheduling_request",
+                        "is_scheduler_query_request",
+                        "is_explicit_approval_request",
+                        "explicit_sop_request",
+                        "topics",
+                        "reasoning",
+                    ],
+                    "additionalProperties": False,
+                },
+            },
+        }
     score_records = []
     flag_records = []
+    parse_failures = 0
     all_texts = [t for t, _ in fx.COMPLEXITY_FIXTURES] + [
         str(r["text"]) for r in fx.FLAG_FIXTURES
     ]
@@ -927,9 +1049,13 @@ def run_partb_incumbent(incumbent: OpenAIIncumbent) -> Dict[str, Any]:
     for text in all_texts:
         system = template.format(user_message=text, context_info="", sop_context="")
         t0 = time.monotonic()
-        content = incumbent.chat(system, text, max_tokens=1000)
+        content = incumbent.chat(
+            system, text, max_tokens=1000, response_format=complexity_response_format
+        )
         latency_ms = (time.monotonic() - t0) * 1000.0
-        analysis = _parse_json_object(content) or {}
+        analysis, parse_ok = _parse_incumbent_json(content, structured)
+        if not parse_ok:
+            parse_failures += 1
         if text in score_expected:
             try:
                 score = int(analysis.get("complexity_score", 0))
@@ -950,6 +1076,7 @@ def run_partb_incumbent(incumbent: OpenAIIncumbent) -> Dict[str, Any]:
             flag_records.append({"text": text, "expected": flag_expected[text], "pred": preds})
     out["complexity"] = {
         "records": score_records,
+        "parse_failures": parse_failures,
         "metrics": _complexity_metrics(score_records),
         "flag_records": flag_records,
         "flag_metrics": _flags_metrics(flag_records, fx.FLAG_KEYS),
@@ -957,24 +1084,63 @@ def run_partb_incumbent(incumbent: OpenAIIncumbent) -> Dict[str, Any]:
 
     # routing ---------------------------------------------------------------
     system = fx.ROUTING_SYSTEM_PROMPT.format(agents_info=fx.full_agent_cards())
+    routing_response_format = None
+    if structured:
+        system = system.replace(
+            "Your response: [agent-id] or SECURITY_BLOCK",
+            "Your response: a JSON object with `security_block` (boolean) and "
+            "`agent` (the best agent id from the options above, or null when "
+            "the message is a security attack).",
+        )
+        routing_response_format = {
+            "type": "json_schema",
+            "json_schema": {
+                "name": "agent_routing",
+                "strict": True,
+                "schema": {
+                    "type": "object",
+                    "properties": {
+                        "security_block": {"type": "boolean"},
+                        "agent": {
+                            "type": ["string", "null"],
+                            "enum": [*fx.ROUTING_AGENT_IDS, None],
+                        },
+                    },
+                    "required": ["security_block", "agent"],
+                    "additionalProperties": False,
+                },
+            },
+        }
     records = []
+    parse_failures = 0
     rows = [(t, a) for t, a in fx.ROUTING_FIXTURES]
     rows += list(fx.ROUTING_SAFE_NEGATIVES)
     rows += [(t, None) for t in fx.ROUTING_ATTACKS]
     for text, expected_agent in rows:
         t0 = time.monotonic()
-        content = incumbent.chat(system, text, max_tokens=50)
+        content = incumbent.chat(
+            system, text, max_tokens=50, response_format=routing_response_format
+        )
         latency_ms = (time.monotonic() - t0) * 1000.0
-        blocked = "SECURITY_BLOCK" in content.upper()
-        chosen: Optional[str] = None
-        if not blocked:
-            for line in content.split("\n"):
-                for word in line.strip().strip("\"'.,!?;()[]{}").split():
-                    if word in fx.ROUTING_AGENT_IDS:
-                        chosen = word
+        if routing_response_format is not None:
+            parsed, json_ok = _parse_incumbent_json(content, structured)
+            blocked = bool(parsed.get("security_block", False))
+            chosen = None if blocked else parsed.get("agent")
+            parse_ok = json_ok and (blocked or chosen is not None)
+        else:
+            blocked = "SECURITY_BLOCK" in content.upper()
+            chosen = None
+            if not blocked:
+                for line in content.split("\n"):
+                    for word in line.strip().strip("\"'.,!?;()[]{}").split():
+                        if word in fx.ROUTING_AGENT_IDS:
+                            chosen = word
+                            break
+                    if chosen:
                         break
-                if chosen:
-                    break
+            parse_ok = blocked or chosen is not None
+        if not parse_ok:
+            parse_failures += 1
         records.append(
             {
                 "text": text,
@@ -985,10 +1151,15 @@ def run_partb_incumbent(incumbent: OpenAIIncumbent) -> Dict[str, Any]:
                 "agent_correct": (
                     None if blocked or expected_agent is None else chosen == expected_agent
                 ),
+                "parse_ok": parse_ok,
                 "latency_ms": latency_ms,
             }
         )
-    out["routing"] = {"records": records, "metrics": _routing_metrics(records)}
+    out["routing"] = {
+        "records": records,
+        "parse_failures": parse_failures,
+        "metrics": _routing_metrics(records),
+    }
     return out
 
 
@@ -1111,6 +1282,16 @@ def render_partb_markdown(payload: Dict[str, Any]) -> str:
         "runtime's e2e formations configure as `text`, driven with the verbatim "
         "production prompts."
     )
+    if "incumbent-structured" in payload["backends"]:
+        lines.append("")
+        lines.append(
+            "**Structured arm (`incumbent-structured`):** same model, temperature, and "
+            "prompts, with strict `json_schema` response contracts on all three "
+            "decisions (the routing prompt's `[agent-id] or SECURITY_BLOCK` line is "
+            "replaced by the JSON contract). Free-text arms keep the runtime's "
+            "JSON-in-prose / tag parsing; `parse failures` counts replies that "
+            "yielded no usable decision object."
+        )
     lines.append("")
     lines.append(
         "Pass bar (PRD §5): typed backend is a candidate only where it is within "
@@ -1125,9 +1306,11 @@ def render_partb_markdown(payload: Dict[str, Any]) -> str:
     def row(label: str, key: str, fmt: str = "pct") -> str:
         cells = []
         for b in backends:
-            section = payload["results"][b]
-            value = section
+            value: Any = payload["results"].get(b)
             for part in key.split("."):
+                if not isinstance(value, dict) or part not in value:
+                    value = None
+                    break
                 value = value[part]
             if value is None:
                 cells.append("—")
@@ -1146,6 +1329,7 @@ def render_partb_markdown(payload: Dict[str, Any]) -> str:
     lines.append(row("n", "credential.metrics.n", "int"))
     lines.append(row("kind accuracy", "credential.metrics.kind_accuracy"))
     lines.append(row("service accuracy (non-none rows)", "credential.metrics.service_accuracy"))
+    lines.append(row("parse failures", "credential.parse_failures", "int"))
     lines.append(row("p50 / p95 ms", "credential.metrics.latency_p50_ms", "ms"))
     lines.append("")
 
@@ -1157,6 +1341,7 @@ def render_partb_markdown(payload: Dict[str, Any]) -> str:
     lines.append(row("MAE", "complexity.metrics.mae", "f2"))
     lines.append(row("exact", "complexity.metrics.exact"))
     lines.append(row("within-1", "complexity.metrics.within_1"))
+    lines.append(row("parse failures", "complexity.parse_failures", "int"))
     lines.append(row("p50 ms", "complexity.metrics.latency_p50_ms", "ms"))
     for flag in (
         "is_security_threat",
@@ -1178,6 +1363,7 @@ def render_partb_markdown(payload: Dict[str, Any]) -> str:
     lines.append(row("agent accuracy", "routing.metrics.agent_accuracy"))
     lines.append(row("attack recall (block rate)", "routing.metrics.attack_recall"))
     lines.append(row("safe false-positive rate", "routing.metrics.safe_false_positive_rate"))
+    lines.append(row("parse failures (no decision object)", "routing.parse_failures", "int"))
     lines.append(
         row("confident-subset agent accuracy (conf ≥ 0.8)", "routing.metrics.confident_agent_accuracy")
     )
@@ -1319,10 +1505,13 @@ def _typed_worker(
     )
 
 
-def worker_partb_incumbent(out_json: Path, model: str) -> None:
-    print("[worker:partb-incumbent] running gpt-4o-mini incumbent ...", flush=True)
+def worker_partb_incumbent(
+    out_json: Path, model: str, structured: bool = False
+) -> None:
+    mode = "structured" if structured else "free-text"
+    print(f"[worker:partb-incumbent] running gpt-4o-mini incumbent ({mode}) ...", flush=True)
     incumbent = OpenAIIncumbent(model)
-    result = run_partb_incumbent(incumbent)
+    result = run_partb_incumbent(incumbent, structured=structured)
     out_json.write_text(json.dumps(result, indent=2, default=str))
 
 
@@ -1365,6 +1554,17 @@ def parse_args() -> argparse.Namespace:
         default="gpt-4o-mini",
         help="OpenAI API model for the Part B incumbent (the e2e formations' text model)",
     )
+    parser.add_argument(
+        "--incumbent-mode",
+        choices=("freetext", "structured", "both"),
+        default="freetext",
+        help="Part B incumbent arms: free-text parsing, strict json_schema, or both",
+    )
+    parser.add_argument(
+        "--partb-backends",
+        default="incumbent,laya-english,laya-multilingual",
+        help="comma-separated Part B arms: incumbent,laya-english,laya-multilingual",
+    )
     # Worker mode (invoked by the orchestrator, not by humans):
     parser.add_argument("--worker", choices=WORKER_BACKENDS, help=argparse.SUPPRESS)
     parser.add_argument("--e5-json", type=Path, help=argparse.SUPPRESS)
@@ -1391,6 +1591,8 @@ def main() -> int:
             worker_e5(out_json)
         elif args.worker == "partb-incumbent":
             worker_partb_incumbent(out_json, args.incumbent_model)
+        elif args.worker == "partb-incumbent-structured":
+            worker_partb_incumbent(out_json, args.incumbent_model, structured=True)
         elif args.worker.startswith("partb-laya-"):
             worker_partb_laya(args.worker, out_json)
         else:
@@ -1496,32 +1698,57 @@ def _orchestrate_part_a(args: argparse.Namespace) -> int:
 
 def _orchestrate_part_b(args: argparse.Namespace) -> int:
     script = [sys.executable, str(Path(__file__).resolve())]
+    known_partb = {"incumbent", "laya-english", "laya-multilingual"}
+    requested = [b.strip() for b in args.partb_backends.split(",") if b.strip()]
+    unknown = set(requested) - known_partb
+    if unknown:
+        raise SystemExit(f"unknown part B backend(s): {sorted(unknown)}")
+
     with tempfile.TemporaryDirectory(prefix="phase0b-") as tmp:
         tmp_dir = Path(tmp)
         results: Dict[str, Any] = {}
         backends: List[str] = []
         incumbent_ran = False
 
-        if os.environ.get("OPENAI_API_KEY"):
-            out_json = tmp_dir / "partb-incumbent.json"
-            _spawn(
-                script
-                + [
-                    "--worker",
-                    "partb-incumbent",
-                    "--incumbent-model",
-                    args.incumbent_model,
-                    "--out-json",
-                    str(out_json),
-                ]
-            )
-            results["incumbent"] = json.loads(out_json.read_text())
-            backends.append("incumbent")
-            incumbent_ran = True
-        else:
-            print("[phase0b] OPENAI_API_KEY not set — incumbent comparison skipped")
+        if "incumbent" in requested:
+            if os.environ.get("OPENAI_API_KEY"):
+                if args.incumbent_mode in ("freetext", "both"):
+                    out_json = tmp_dir / "partb-incumbent.json"
+                    _spawn(
+                        script
+                        + [
+                            "--worker",
+                            "partb-incumbent",
+                            "--incumbent-model",
+                            args.incumbent_model,
+                            "--out-json",
+                            str(out_json),
+                        ]
+                    )
+                    results["incumbent"] = json.loads(out_json.read_text())
+                    backends.append("incumbent")
+                    incumbent_ran = True
+                if args.incumbent_mode in ("structured", "both"):
+                    out_json = tmp_dir / "partb-incumbent-structured.json"
+                    _spawn(
+                        script
+                        + [
+                            "--worker",
+                            "partb-incumbent-structured",
+                            "--incumbent-model",
+                            args.incumbent_model,
+                            "--out-json",
+                            str(out_json),
+                        ]
+                    )
+                    results["incumbent-structured"] = json.loads(out_json.read_text())
+                    backends.append("incumbent-structured")
+            else:
+                print("[phase0b] OPENAI_API_KEY not set — incumbent comparison skipped")
 
         for name in ("laya-english", "laya-multilingual"):
+            if name not in requested:
+                continue
             out_json = tmp_dir / f"partb-{name}.json"
             _spawn(script + ["--worker", f"partb-{name}", "--out-json", str(out_json)])
             results[name] = json.loads(out_json.read_text())
@@ -1537,6 +1764,7 @@ def _orchestrate_part_b(args: argparse.Namespace) -> int:
             "torch": torch.__version__,
             "incumbent_model": f"openai/{args.incumbent_model}",
             "incumbent_ran": incumbent_ran,
+            "incumbent_mode": args.incumbent_mode,
         },
         "backends": backends,
         "results": results,
