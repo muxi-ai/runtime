@@ -1,6 +1,6 @@
 # Changelog
 
-## [unreleased]
+## v1.20260922.0
 
 ### The pre-request LLM decisions now reply under typed JSON contracts
 
