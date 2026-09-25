@@ -148,7 +148,7 @@ dependencies = [
     # Database
     "psycopg2-binary>=2.9.12",
     "asyncpg>=0.31.0",  # Async PostgreSQL driver for SQLAlchemy (required for persistent memory)
-    "SQLAlchemy[asyncio]>=2.0.51,<2.1",
+    "SQLAlchemy[asyncio]>=2.0.51",
     "aiosqlite>=0.22.1",  # Async SQLite driver for SQLAlchemy (required for default persistent memory)
 
     # Legacy dependencies (keeping for compatibility)

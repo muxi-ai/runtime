@@ -523,7 +523,7 @@ class LessonStorage:
         async with self.db_manager.get_async_session() as session:
             stmt = (
                 select(Lesson.user_id, Lesson.agent_id, func.count(Lesson.id))
-                .filter_by(formation_id=self.formation_id, archived=False)
+                .where(Lesson.formation_id == self.formation_id, Lesson.archived.is_(False))
                 .group_by(Lesson.user_id, Lesson.agent_id)
                 .having(func.count(Lesson.id) > cap)
             )

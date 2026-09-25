@@ -2,9 +2,9 @@
 
 ## [unreleased]
 
-### SQLAlchemy is held below 2.1
+### SQLAlchemy 2.1 is supported
 
-SQLAlchemy 2.1 rejects an ambiguous `filter_by()` in the Captain's Log lesson consolidation, and CI (which installs fresh from `pyproject.toml`) started resolving 2.1.1 and failing. The dependency is now `SQLAlchemy[asyncio]>=2.0.51,<2.1` until the code is made 2.1-compatible.
+SQLAlchemy 2.1 resolves `filter_by()` keywords against every entity in the FROM clause and raises `AmbiguousColumnError` when a name matches more than one. The over-cap lesson query in the Captain's Log (`LessonStorage.scopes_over_cap`, used by lesson consolidation) selected lesson columns next to `count(Lesson.id)`, which 2.1 treats as two entities, so consolidation failed. It now filters with explicit column references. That was the only incompatibility the unit and integration suites found. The temporary `<2.1` pin is removed; SQLAlchemy 2.0.51 and later 2.0.x releases remain supported.
 
 ## v1.20260922.0
 
