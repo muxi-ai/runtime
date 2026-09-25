@@ -88,7 +88,7 @@ def _channel_user(ctx: BuiltinCommandContext) -> str:
     """The user id under which channel/preference state is tracked."""
     if not getattr(ctx.overlord, "is_multi_user", False) or ctx.user_id is None:
         return "0"
-    return str(ctx.user_id).lower().strip()
+    return str(ctx.user_id)
 
 
 def _channel_store(ctx: BuiltinCommandContext) -> Any:
@@ -438,7 +438,7 @@ async def _cmd_identity(ctx: BuiltinCommandContext) -> str:
             "which is not configured in this formation."
         )
 
-    user = str(ctx.user_id).lower().strip()
+    user = str(ctx.user_id)
     tokens = ctx.args.split()
     action = tokens[0].lower() if tokens else "list"
 
@@ -514,12 +514,12 @@ async def _identity_link(
     from ..services.memory.long_term import UserIdentifier
     from ..utils.user_resolution import resolve_user_identifier
 
-    identifier = identifier.strip().lower()
+    identifier = identifier.strip()
     if not identifier or len(identifier) > _MAX_IDENTIFIER_LENGTH:
         return f"Invalid identifier: must be 1-{_MAX_IDENTIFIER_LENGTH} characters with no spaces."
     if identifier_type is not None:
-        # Normalize like the identifier itself so "Telegram" and "telegram"
-        # render as one label in /identity listings.
+        # Normalize the type label so "Telegram" and "telegram" render as
+        # one label in /identity listings (the identifier itself is verbatim).
         identifier_type = identifier_type.strip().lower()
         if not identifier_type or len(identifier_type) > _MAX_IDENTIFIER_TYPE_LENGTH:
             return f"Invalid identifier type: must be 1-{_MAX_IDENTIFIER_TYPE_LENGTH} characters."
@@ -575,7 +575,7 @@ async def _identity_unlink(
 
     from ..services.memory.long_term import UserIdentifier
 
-    identifier = identifier.strip().lower()
+    identifier = identifier.strip()
     if identifier == user:
         return "You cannot unlink the identity you are currently using."
 
@@ -837,7 +837,7 @@ def _flows(overlord: Any) -> Dict[str, SetupFlowState]:
 
 def cancel_setup_flow(overlord: Any, user_id: Any) -> None:
     """Drop any active /setup flow for a user (any resolved command cancels)."""
-    user = "0" if user_id is None else str(user_id).lower().strip()
+    user = "0" if user_id is None else str(user_id)
     _flows(overlord).pop(user, None)
 
 

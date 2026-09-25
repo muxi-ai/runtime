@@ -65,11 +65,10 @@ MAX_ERROR_CHARS = 4_000
 
 
 def _normalize_user(user_id: Any) -> str:
-    """Match the chat path's user id normalization (lowercase, '0' default)."""
+    """Match the chat path's user id (verbatim string, '0' default)."""
     if user_id is None:
         return "0"
-    normalized = str(user_id).lower().strip()
-    return normalized or "0"
+    return str(user_id) or "0"
 
 
 def _iso(value) -> Optional[str]:

@@ -24,8 +24,8 @@ from ....utils.sensitive_terms import SENSITIVE_KEY_TERMS
 
 # Reserved user id scoping formation-wide log entries. Not a real user:
 # "0" is the single-user-mode user, so the sentinel must be distinct and
-# impossible as an external id (external ids are lowercased; this one is
-# also excluded from per-user enumeration paths such as the memory lint).
+# impossible as an external id (it is also excluded from per-user
+# enumeration paths such as the memory lint).
 FORMATION_LOG_USER_ID = "__formation__"
 
 _SENTENCE_SPLIT = re.compile(r"(?<=[.!?])\s+")

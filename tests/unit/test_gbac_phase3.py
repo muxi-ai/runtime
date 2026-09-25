@@ -304,6 +304,24 @@ class TestPermissionGate:
 
         assert str(denied.value) == str(unknown.value)
 
+    async def test_denial_event_keeps_user_id_case(self, tmp_path, monkeypatch):
+        perms = make_perms(tmp_path, {"g.yaml": "agents: [a]\n"}, "g")
+        overlord = make_overlord_stub(FakeResolver(perms), {"a": object(), "b": object()})
+        denied = []
+        real_observe = enforcement.observability.observe
+
+        def record(event_type, **kwargs):
+            if event_type == enforcement.observability.ErrorEvents.AUTHORIZATION_FAILED:
+                denied.append(kwargs["data"])
+            return real_observe(event_type, **kwargs)
+
+        monkeypatch.setattr(enforcement.observability, "observe", record)
+
+        with pytest.raises(ValueError):
+            await overlord._apply_permission_gate("Ada@Example.com", "b")
+
+        assert [event["user_id"] for event in denied] == ["Ada@Example.com"]
+
     async def test_no_permitted_agents_returns_graceful_response(self, tmp_path):
         perms = ResolvedPermissions(group_ids=(), groups=())  # no memberships
         overlord = make_overlord_stub(FakeResolver(perms), {"a": object(), "b": object()})

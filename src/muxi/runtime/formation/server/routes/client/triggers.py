@@ -269,8 +269,8 @@ async def execute_trigger(
     # and may rewrite the authenticated identity; the trigger then fires
     # only when the resolved permissions allow it. Per the PRD's channel
     # table, API/webhook callers get a 403 with a generic message. The
-    # middleware receives user_id exactly as the caller sent it; the id is
-    # lowercased and trimmed only after the middleware step.
+    # middleware receives user_id exactly as the caller sent it, and the
+    # id it returns is kept byte-for-byte.
     from .....services import middleware as middleware_service
     from .....services.gbac import enforcement as gbac_enforcement
 
@@ -296,7 +296,6 @@ async def execute_trigger(
                 detail="Request rejected by the formation middleware",
             )
         user_id = transformed["user_id"]
-    user_id = str(user_id).lower().strip()
     # Record the pipeline outcome for the overlord call below
     # (middleware_applied=True): the chat pipeline must not run the
     # middleware a second time for the same request.

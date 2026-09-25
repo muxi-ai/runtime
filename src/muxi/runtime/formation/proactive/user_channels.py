@@ -36,7 +36,7 @@ class UserChannelState(Base):
 
     __tablename__ = "user_channel_state"
 
-    user_id = Column(String(255), primary_key=True)  # External user id (normalized)
+    user_id = Column(String(255), primary_key=True)  # External user id (verbatim)
     formation_id = Column(String(255), primary_key=True)
     state = Column(Text, nullable=False)  # JSON blob (portable across PG/SQLite)
     updated_at = Column(
@@ -102,8 +102,8 @@ class UserChannelStore:
 
     @staticmethod
     def normalize_user_id(user_id: Any) -> str:
-        """Normalize an external user id the way the overlord chat path does."""
-        return str(user_id).lower().strip()
+        """Coerce an external user id to the string the overlord chat path keeps."""
+        return str(user_id)
 
     async def get_state(self, user_id: str) -> Dict[str, Any]:
         """Return a copy of the user's channel state (empty defaults if unset)."""
