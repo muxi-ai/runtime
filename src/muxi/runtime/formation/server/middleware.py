@@ -17,6 +17,7 @@ from starlette.middleware.base import BaseHTTPMiddleware
 
 from ...services import observability
 from ...utils.id_generator import generate_request_id
+from ...utils.user_resolution import lowercase_email_user_id
 from .responses import create_error_response
 from .utils import get_header_case_insensitive, has_header_case_insensitive
 
@@ -336,3 +337,33 @@ class ConnectionTrackingMiddleware(BaseHTTPMiddleware):
                     self.server_instance._active_connections.discard(connection_task)
             else:
                 self.server_instance._active_connections.discard(connection_task)
+
+
+class EmailUserIdMiddleware:
+    """
+    Lowercase an email-shaped ``X-Muxi-User-ID`` header as a request enters.
+
+    Email addresses are the one kind of user id the runtime treats as
+    case-insensitive. Normalising the header here, before any other
+    middleware or route reads it, gives every route (chat, memory,
+    triggers, sessions, credentials, the scheduler, ...) and the request
+    middleware the same id. Any other id passes byte-for-byte.
+    """
+
+    def __init__(self, app):
+        self.app = app
+
+    async def __call__(self, scope, receive, send):
+        if scope["type"] == "http":
+            scope = {
+                **scope,
+                "headers": [
+                    (
+                        (name, lowercase_email_user_id(value.decode("latin-1")).encode("latin-1"))
+                        if name == b"x-muxi-user-id"
+                        else (name, value)
+                    )
+                    for name, value in scope["headers"]
+                ],
+            }
+        await self.app(scope, receive, send)

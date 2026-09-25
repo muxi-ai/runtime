@@ -6824,15 +6824,19 @@ Agent response: {raw_response}"""
         # (heartbeat, scheduler) traverse it identically via their
         # route_class. Fail-closed: middleware errors reject the
         # request, and rbac.fallback never applies to them. The
-        # middleware receives user_id exactly as the caller sent it, and
-        # the runtime keeps the id the middleware returns (or, without a
-        # middleware, the caller's id) byte-for-byte: identity
-        # normalisation is the middleware's job, never the runtime's.
+        # middleware receives user_id as the caller sent it, except that
+        # an email-shaped id is lowercased first; the runtime keeps the id
+        # the middleware returns (or, without a middleware, that id)
+        # byte-for-byte: any other identity normalisation is the
+        # middleware's job, never the runtime's.
         from ...services import middleware as middleware_service
         from ...services.gbac import enforcement as gbac
+        from ...utils.user_resolution import lowercase_email_user_id
 
         request_middleware = self._configured_services.get("request_middleware")
         if not middleware_applied:
+            if user_id is not None:
+                user_id = lowercase_email_user_id(str(user_id))
             if request_middleware is not None:
                 payload = middleware_service.build_request_payload(
                     user_id=str(user_id) if user_id is not None else "0",

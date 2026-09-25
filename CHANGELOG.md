@@ -2,19 +2,37 @@
 
 ## [unreleased]
 
-### BREAKING: the runtime never changes the case of a user id
+### Email-address user ids are lowercased
 
-The runtime no longer lowercases or trims `user_id` anywhere. The id the caller sends (or, when a request middleware is configured, the id the middleware returns) is kept byte-for-byte through chat, the memory and trigger routes, memory keys, the credentials resolver, the scheduler, notification-channel state, `/identity`, `/setup`, and coding and watch jobs. `/identity link` and `/identity unlink` store and match identifiers verbatim too.
+A `user_id` that is an email address is now lowercased, whole (local part and domain), where it enters the runtime, before the request middleware is called:
+
+- the HTTP server lowercases an email-shaped `X-Muxi-User-ID` header as the request arrives, so every route sees the same id (chat, memory, triggers, sessions, events, requests, credentials, artifacts, the scheduler routes, idempotency scoping);
+- `Overlord.chat` does the same for callers that do not come through HTTP (channels, the scheduler firing a job, delegation) and for the deprecated `user_id` body field;
+- identifiers linked to a user (`POST /v1/users/identifiers`, `/identity link` and `/identity unlink`) and the ids named by the user routes (`GET /v1/users/{identifier}`, `POST /v1/users/resolve`, `DELETE /v1/users/identifiers/{identifier}`, `/v1/users/{user_id}/channels`) are stored and looked up the same way.
+
+`Ada@Example.com` and `ada@example.com` therefore reach the same user on every route, whether or not the formation declares a middleware, and a middleware receives the lowercase form. An id counts as an email address when it has exactly one `@`, a non-empty local part, a domain of two or more non-empty dot-separated labels, and no whitespace; `a@b`, `@x.com`, `a@@b.com` and `a b@c.com` are not, and are kept as sent.
+
+No other id changes case: a Slack id (`U024BE7LH`), an API key or an `eun_...` id still passes byte-for-byte, and the id a middleware returns is kept verbatim, email or not.
+
+**Upgrading from v1.20260922.0:** that release lowercased the id in chat, triggers, the memory search/create/provenance routes, notification-channel state and `/identity` links, so data stored there is already lowercase and stays reachable. Routes that did not lowercase (memory batch ingest, history and buffer, sessions, credentials, the `/v1/users/...` identifier routes, admin-created scheduler jobs) stored a mixed-case email as sent. Those rows were already split from the chat user; they now stay under the mixed-case key, which the runtime no longer produces. A client that wrote data there under a mixed-case email must re-send or relink it.
+
+### The scheduler accepts email-address user ids
+
+The scheduler's input validator rejected any `user_id` outside `[A-Za-z0-9_.-]`, so a job could not be created for a user identified by an email address. It now also admits `@` and `+`; the 255-character cap is unchanged. The user id is only a lookup key there (bound as a query parameter, never interpolated into SQL or a shell). The check now matches the whole id, so a trailing newline, which the old anchored pattern let through, is rejected along with whitespace, `/` and other control characters. Formation ids keep the narrower rule.
+
+### BREAKING: the runtime never changes the case of a user id, except to lowercase an email address
+
+The runtime no longer trims `user_id` anywhere, and lowercases it only when it is an email address (see "Email-address user ids are lowercased" above). The id the caller sends (or, when a request middleware is configured, the id the middleware returns) is kept byte-for-byte through chat, the memory and trigger routes, memory keys, the credentials resolver, the scheduler, notification-channel state, `/identity`, `/setup`, and coding and watch jobs. `/identity link` and `/identity unlink` store and match identifiers verbatim too.
 
 Identity normalisation is the middleware's job: an identity service such as Eunomia returns a canonical, self-identifying id (`eun_...`), and the runtime must pass identifiers through untouched so that a Slack id (`U024BE7LH`) or an API key survives intact and a formation cannot silently merge or split users by case.
 
-**Impact:** formations without a middleware now treat `Ada@x` and `ada@x` as different users. Data stored under the old lowercase ids stays under those ids, so a client that sends a mixed-case id now reaches a new, empty user. Operators who relied on case folding must normalise at the client (or in a middleware) and send the same form every time, which for existing users means the lowercase form.
+**Impact:** formations without a middleware now treat `Ada` and `ada` (or any other pair of ids that differ only by case and are not email addresses) as different users. Data stored under the old lowercase ids stays under those ids, so a client that sends a mixed-case id now reaches a new, empty user. Operators who relied on case folding must normalise at the client (or in a middleware) and send the same form every time, which for existing users means the lowercase form.
 
 ### The request middleware now receives the user id as sent
 
 The chat, memory and trigger pipelines used to lowercase and trim `user_id` *before* calling the formation's request middleware, so the middleware never saw the identifier the caller actually sent. Case-sensitive identifiers could not survive that: a Slack user id such as `U024BE7LH` arrived as `u024be7lh`, and an API key used as an identifier arrived lowercased too -- neither of which an identity service that validates the Slack id format or compares keys exactly can resolve.
 
-The middleware now receives `user_id` verbatim, so it can normalise identifiers itself. The runtime no longer lowercases or trims the id it keeps either; see the breaking entry above.
+The middleware now receives `user_id` verbatim (an email address lowercased, see above), so it can normalise identifiers itself. The runtime no longer lowercases or trims the id it keeps either; see the breaking entry above.
 
 This also fixes an inconsistency in chat: the pre-middleware lowercasing was skipped when files were attached, so a formation without middleware kept a mixed-case `user_id` for requests with attachments and a lowercase one for requests without. Both now reach the same id.
 

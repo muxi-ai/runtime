@@ -269,8 +269,9 @@ async def execute_trigger(
     # and may rewrite the authenticated identity; the trigger then fires
     # only when the resolved permissions allow it. Per the PRD's channel
     # table, API/webhook callers get a 403 with a generic message. The
-    # middleware receives user_id exactly as the caller sent it, and the
-    # id it returns is kept byte-for-byte.
+    # middleware receives user_id as it reached the server (an
+    # email-shaped X-Muxi-User-ID is lowercased by EmailUserIdMiddleware;
+    # any other id is as sent), and the id it returns is kept byte-for-byte.
     from .....services import middleware as middleware_service
     from .....services.gbac import enforcement as gbac_enforcement
 

@@ -350,6 +350,7 @@ class FormationServer:
         from .middleware import (
             APILoggingMiddleware,
             ConnectionTrackingMiddleware,
+            EmailUserIdMiddleware,
             ErrorHandlingMiddleware,
             RequestTrackingMiddleware,
         )
@@ -365,6 +366,10 @@ class FormationServer:
 
         # 5. API logging (log requests)
         app.add_middleware(APILoggingMiddleware)
+
+        # 6. Email user ids (outermost): lowercase an email-shaped
+        # X-Muxi-User-ID before any other layer or route reads it
+        app.add_middleware(EmailUserIdMiddleware)
 
         # Add exception handlers to ensure proper envelope format
         from fastapi.exceptions import RequestValidationError

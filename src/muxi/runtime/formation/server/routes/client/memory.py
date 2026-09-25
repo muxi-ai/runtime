@@ -186,8 +186,10 @@ async def _run_request_pipeline(
     so the shared-scope read fan-out (``resolve_read_group_ids``) sees
     the caller's groups.
 
-    The middleware receives ``user_id`` exactly as the caller sent it,
-    and the identity it returns is kept byte-for-byte.
+    The middleware receives ``user_id`` as it reached the server (an
+    email-shaped ``X-Muxi-User-ID`` is lowercased by
+    ``EmailUserIdMiddleware``; any other id is as sent), and the identity
+    it returns is kept byte-for-byte.
 
     Returns:
         ``(user_id, permissions, error_response)`` -- the (possibly

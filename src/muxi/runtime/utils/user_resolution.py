@@ -7,12 +7,14 @@ external identifiers (email, Slack ID, Telegram handle, etc.) to map to a single
 MUXI user.
 
 Key Functions:
+- lowercase_email_user_id: Lowercase an email-shaped user id; leave any other id as is
 - resolve_user_identifier: Resolve any identifier to (internal_user_id, muxi_user_id)
 - associate_user_identifiers: Associate multiple identifiers to a single user
 
 This is a simple utility module with stateless functions - no service class needed.
 """
 
+import re
 from typing import Any, Dict, List, Optional, Tuple, Union
 
 from sqlalchemy import select
@@ -21,6 +23,32 @@ from sqlalchemy.exc import IntegrityError
 from ..services import observability
 from ..services.memory.long_term import User, UserIdentifier
 from ..utils.id_generator import get_default_nanoid
+
+# Exactly one "@", a non-empty local part, and a domain of two or more
+# non-empty dot-separated labels; no whitespace anywhere.
+EMAIL_USER_ID_PATTERN = re.compile(r"[^@\s]+@[^@\s.]+(?:\.[^@\s.]+)+")
+
+
+def lowercase_email_user_id(user_id: str) -> str:
+    """
+    Lowercase a user id that is an email address; return any other id unchanged.
+
+    Email addresses are the one kind of user id the runtime treats as
+    case-insensitive, so ``Ada@Example.com`` and ``ada@example.com`` reach the
+    same user. The whole address is lowercased, local part included. Every
+    other id (a Slack id such as ``U024BE7LH``, an API key, an ``eun_`` id) is
+    kept byte-for-byte: identity normalisation beyond this is the request
+    middleware's job.
+
+    Args:
+        user_id: The user id as the caller sent it
+
+    Returns:
+        The lowercased id if it is email-shaped, otherwise ``user_id`` itself
+    """
+    if EMAIL_USER_ID_PATTERN.fullmatch(user_id):
+        return user_id.lower()
+    return user_id
 
 
 async def resolve_user_identifier(
