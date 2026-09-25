@@ -2,6 +2,10 @@
 
 ## [unreleased]
 
+### SQLAlchemy is held below 2.1
+
+SQLAlchemy 2.1 rejects an ambiguous `filter_by()` in the Captain's Log lesson consolidation, and CI (which installs fresh from `pyproject.toml`) started resolving 2.1.1 and failing. The dependency is now `SQLAlchemy[asyncio]>=2.0.51,<2.1` until the code is made 2.1-compatible.
+
 ## v1.20260922.0
 
 ### The pre-request LLM decisions now reply under typed JSON contracts
