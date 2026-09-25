@@ -10,16 +10,17 @@ silently merged.
 
 from __future__ import annotations
 
-from types import SimpleNamespace
-
 import pytest
 from sqlalchemy import select
 
+from muxi.runtime.formation.background.request_tracker import RequestTracker
 from muxi.runtime.formation.credentials.encrypted import EncryptedCredentialResolver
 from muxi.runtime.formation.credentials.resolver import Credential
 from muxi.runtime.formation.overlord.chat_orchestrator import ChatOrchestrator
+from muxi.runtime.formation.overlord.overlord import Overlord
 from muxi.runtime.services.db import Base, DatabaseManager
 from muxi.runtime.services.memory.long_term import User, UserIdentifier
+from muxi.runtime.services.observability.manager import ObservabilityManager
 from muxi.runtime.services.scheduler.manager import JobManager
 from muxi.runtime.services.scheduler.models import ScheduledJob, ScheduledJobAudit
 
@@ -56,29 +57,37 @@ async def stored_identifiers(db_manager):
         return sorted(rows.scalars().all())
 
 
-class _PipelineStopped(Exception):
-    """Raised by the request tracker seam once the memory key is resolved."""
+def make_overlord(db_manager) -> Overlord:
+    """A real Overlord carrying only the state the greeting fast path reads.
+
+    A bare greeting with no buffer memory takes the orchestrator's early
+    heuristic path: the identity is resolved, the request is tracked, and
+    the persona fallback answers without any model call.
+    """
+    overlord = Overlord.__new__(Overlord)
+    overlord.is_multi_user = True
+    overlord.formation_id = FORMATION_ID
+    overlord.db_manager = db_manager
+    overlord.long_term_memory = None
+    overlord.buffer_memory_manager = None
+    overlord.agents = {}
+    overlord.streaming = False
+    overlord.routing_model = None
+    overlord._capability_models = {}
+    overlord._background_tasks = set()
+    overlord.observability_manager = ObservabilityManager()
+    overlord.request_tracker = RequestTracker()
+    return overlord
 
 
-async def test_chat_pipeline_memory_key_keeps_user_id_case(db_manager):
-    tracked = []
+async def test_chat_pipeline_keeps_user_id_case(db_manager):
+    overlord = make_overlord(db_manager)
 
-    def track_request(**kwargs):
-        tracked.append(kwargs)
-        raise _PipelineStopped
+    response = await ChatOrchestrator(overlord).chat("hello", user_id=USER_ID)
 
-    overlord = SimpleNamespace(
-        is_multi_user=True,
-        formation_id=FORMATION_ID,
-        db_manager=db_manager,
-        long_term_memory=None,
-        observability_manager=SimpleNamespace(track_request=track_request),
-    )
-
-    with pytest.raises(_PipelineStopped):
-        await ChatOrchestrator(overlord).chat("hello", user_id=USER_ID)
-
-    assert tracked[0]["user_id"] == USER_ID
+    assert response.metadata["early_heuristic"] is True
+    [state] = (await overlord.request_tracker.get_all_requests()).values()
+    assert state.user_id == USER_ID
     assert await stored_identifiers(db_manager) == [USER_ID]
 
 

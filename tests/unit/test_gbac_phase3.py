@@ -308,9 +308,14 @@ class TestPermissionGate:
         perms = make_perms(tmp_path, {"g.yaml": "agents: [a]\n"}, "g")
         overlord = make_overlord_stub(FakeResolver(perms), {"a": object(), "b": object()})
         denied = []
-        monkeypatch.setattr(
-            enforcement, "observe_denied", lambda *args, **kwargs: denied.append(kwargs)
-        )
+        real_observe = enforcement.observability.observe
+
+        def record(event_type, **kwargs):
+            if event_type == enforcement.observability.ErrorEvents.AUTHORIZATION_FAILED:
+                denied.append(kwargs["data"])
+            return real_observe(event_type, **kwargs)
+
+        monkeypatch.setattr(enforcement.observability, "observe", record)
 
         with pytest.raises(ValueError):
             await overlord._apply_permission_gate("Ada@Example.com", "b")
