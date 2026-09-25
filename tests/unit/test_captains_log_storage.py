@@ -319,6 +319,18 @@ class TestScopesOverCap:
         assert await lessons.scopes_over_cap(2) == [("u1", "assistant", 3)]
         assert await lessons.scopes_over_cap(3) == []
 
+    async def test_ignores_archived_and_other_formation_lessons(self, db_manager, lessons):
+        archived = [
+            (await lessons.upsert_lesson("u1", "assistant", f"Rule {i}"))[0] for i in range(3)
+        ]
+        await lessons.archive_lessons([lesson["id"] for lesson in archived])
+        other_formation = LessonStorage(db_manager, "other-formation")
+        for index in range(3):
+            await other_formation.upsert_lesson("u1", "assistant", f"Other {index}")
+
+        assert await lessons.scopes_over_cap(2) == []
+        assert await other_formation.scopes_over_cap(2) == [("u1", "assistant", 3)]
+
 
 class TestRuleNormalization:
     def test_normalize_rule(self):
