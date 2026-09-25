@@ -20,6 +20,8 @@ from __future__ import annotations
 
 import asyncio
 import json
+import sys
+from pathlib import Path
 from types import SimpleNamespace
 
 import pytest
@@ -494,17 +496,37 @@ class TestTransform:
 # 5. Identity hand-off: raw id in, lowercased id kept
 # ===================================================================
 
+RECORDING_MIDDLEWARE = Path(__file__).parent / "fixtures" / "recording_middleware.py"
 
-class EchoClient(FakeClient):
-    """Middleware that returns the payload it was sent, optionally rewritten."""
 
-    def __init__(self, rewrite=None):
-        super().__init__()
-        self.rewrite = rewrite or {}
+@pytest.fixture
+async def recording_middleware(tmp_path):
+    """Start the shipped middleware template as a real stdio MCP server.
 
-    async def execute_tool(self, tool_name, params, request_id=None, timeout=None):
-        self.calls.append((tool_name, params))
-        return tool_success({**params, **self.rewrite})
+    Returns ``start(rewrite_user_id=None) -> (middleware, received)``:
+    ``received()`` lists the user_ids the server was sent, verbatim.
+    """
+    started = []
+
+    async def start(rewrite_user_id=None):
+        record = tmp_path / f"received-{len(started)}.jsonl"
+        args = [str(RECORDING_MIDDLEWARE), str(record)]
+        if rewrite_user_id is not None:
+            args.append(rewrite_user_id)
+        mw = RequestMiddleware(command=sys.executable, args=tuple(args), formation_id=FORMATION_ID)
+        await mw.start()
+        started.append(mw)
+
+        def received():
+            if not record.exists():
+                return []
+            return [json.loads(line) for line in record.read_text().splitlines()]
+
+        return mw, received
+
+    yield start
+    for mw in started:
+        await mw.stop()
 
 
 @pytest.fixture
@@ -547,19 +569,20 @@ def make_chat_overlord(request_middleware):
 class TestChatIdentityHandOff:
     @pytest.mark.parametrize("files", [None, [ATTACHMENT]], ids=["no-files", "files"])
     @pytest.mark.parametrize("raw_id", ["U024BE7LH", "Ada@Example.com"])
-    async def test_middleware_receives_user_id_verbatim(self, raw_id, files):
-        client = EchoClient()
-        overlord = make_chat_overlord(middleware_with(client))
+    async def test_middleware_receives_user_id_verbatim(self, recording_middleware, raw_id, files):
+        mw, received = await recording_middleware()
+        overlord = make_chat_overlord(mw)
 
         await overlord.chat("hello", user_id=raw_id, files=files)
 
-        _, params = client.calls[0]
-        assert params["user_id"] == raw_id
+        assert received() == [raw_id]
         assert overlord.seen_user_ids == [raw_id.lower()]
 
-    async def test_middleware_returned_user_id_is_lowercased_and_trimmed(self):
-        client = EchoClient(rewrite={"user_id": "  Employee-42 "})
-        overlord = make_chat_overlord(middleware_with(client))
+    async def test_middleware_returned_user_id_is_lowercased_and_trimmed(
+        self, recording_middleware
+    ):
+        mw, _ = await recording_middleware(rewrite_user_id="  Employee-42 ")
+        overlord = make_chat_overlord(mw)
 
         await overlord.chat("hello", user_id="Ada@Example.com")
 
@@ -574,61 +597,54 @@ class TestChatIdentityHandOff:
         assert overlord.seen_user_ids == ["ada@example.com"]
 
 
+def memory_formation(request_middleware):
+    return SimpleNamespace(
+        formation_id=FORMATION_ID,
+        request_middleware=request_middleware,
+        permission_resolver=None,
+    )
+
+
 @pytest.mark.usefixtures("clean_request_groups")
 class TestMemoryRouteIdentityHandOff:
-    async def test_middleware_receives_user_id_verbatim(self):
-        client = EchoClient()
-        formation = SimpleNamespace(
-            formation_id=FORMATION_ID,
-            request_middleware=middleware_with(client),
-            permission_resolver=None,
-        )
+    async def test_middleware_receives_user_id_verbatim(self, recording_middleware):
+        mw, received = await recording_middleware()
 
-        user_id, _, error = await _run_request_pipeline(formation, "U024BE7LH", "req-1", "/v1/x")
+        user_id, _, error = await _run_request_pipeline(
+            memory_formation(mw), "U024BE7LH", "req-1", "/v1/memories"
+        )
 
         assert error is None
-        assert client.calls[0][1]["user_id"] == "U024BE7LH"
+        assert received() == ["U024BE7LH"]
         assert user_id == "u024be7lh"
 
-    async def test_middleware_returned_user_id_is_lowercased_and_trimmed(self):
-        client = EchoClient(rewrite={"user_id": "  Employee-42 "})
-        formation = SimpleNamespace(
-            formation_id=FORMATION_ID,
-            request_middleware=middleware_with(client),
-            permission_resolver=None,
-        )
+    async def test_middleware_returned_user_id_is_lowercased_and_trimmed(
+        self, recording_middleware
+    ):
+        mw, _ = await recording_middleware(rewrite_user_id="  Employee-42 ")
 
-        user_id, _, _ = await _run_request_pipeline(formation, "Ada@Example.com", "req-1", "/v1/x")
+        user_id, _, _ = await _run_request_pipeline(
+            memory_formation(mw), "Ada@Example.com", "req-1", "/v1/memories"
+        )
 
         assert user_id == "employee-42"
 
     async def test_without_middleware_user_id_is_lowercased_and_trimmed(self):
-        formation = SimpleNamespace(
-            formation_id=FORMATION_ID, request_middleware=None, permission_resolver=None
-        )
-
         user_id, _, _ = await _run_request_pipeline(
-            formation, " Ada@Example.com ", "req-1", "/v1/x"
+            memory_formation(None), " Ada@Example.com ", "req-1", "/v1/memories"
         )
 
         assert user_id == "ada@example.com"
 
 
-class RecordingOverlord:
-    """Receives the trigger route's chat() call and records the user_id."""
-
-    def __init__(self):
-        self.seen_user_ids = []
-
-    async def chat(self, message, user_id=None, **kwargs):
-        self.seen_user_ids.append(user_id)
-        return "ok"
-
-
 async def fire_trigger(tmp_path, raw_id, request_middleware):
+    """POST a trigger through the real route into a real Overlord.chat().
+
+    Returns the user_id the chat pipeline settled on (see make_chat_overlord).
+    """
     (tmp_path / "triggers").mkdir(exist_ok=True)
     (tmp_path / "triggers" / "report.md").write_text("Report\n")
-    overlord = RecordingOverlord()
+    overlord = make_chat_overlord(None)
     formation = SimpleNamespace(
         formation_id=FORMATION_ID,
         request_middleware=request_middleware,
@@ -658,18 +674,20 @@ async def fire_trigger(tmp_path, raw_id, request_middleware):
 
 @pytest.mark.usefixtures("clean_request_groups")
 class TestTriggerRouteIdentityHandOff:
-    async def test_middleware_receives_user_id_verbatim(self, tmp_path):
-        client = EchoClient()
+    async def test_middleware_receives_user_id_verbatim(self, tmp_path, recording_middleware):
+        mw, received = await recording_middleware()
 
-        seen = await fire_trigger(tmp_path, "U024BE7LH", middleware_with(client))
+        seen = await fire_trigger(tmp_path, "U024BE7LH", mw)
 
-        assert client.calls[0][1]["user_id"] == "U024BE7LH"
+        assert received() == ["U024BE7LH"]
         assert seen == ["u024be7lh"]
 
-    async def test_middleware_returned_user_id_is_lowercased_and_trimmed(self, tmp_path):
-        client = EchoClient(rewrite={"user_id": "  Employee-42 "})
+    async def test_middleware_returned_user_id_is_lowercased_and_trimmed(
+        self, tmp_path, recording_middleware
+    ):
+        mw, _ = await recording_middleware(rewrite_user_id="  Employee-42 ")
 
-        seen = await fire_trigger(tmp_path, "Ada@Example.com", middleware_with(client))
+        seen = await fire_trigger(tmp_path, "Ada@Example.com", mw)
 
         assert seen == ["employee-42"]
 
