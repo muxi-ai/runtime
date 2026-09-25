@@ -6814,9 +6814,6 @@ Agent response: {raw_response}"""
                 )
                 # Re-raise to propagate programming errors (AttributeError, TypeError, etc.)
                 raise
-        elif user_id is not None:
-            # Normalize user_id - lowercase and strip whitespace
-            user_id = str(user_id).lower().strip()
 
         # ===================================================================
         # REQUEST MIDDLEWARE + RBAC PRE-CHECK (request-middleware PRD)
@@ -6828,7 +6825,10 @@ Agent response: {raw_response}"""
         # memberships can enter the pipeline; internal origins
         # (heartbeat, scheduler) traverse it identically via their
         # route_class. Fail-closed: middleware errors reject the
-        # request, and rbac.fallback never applies to them.
+        # request, and rbac.fallback never applies to them. The
+        # middleware receives user_id exactly as the caller sent it, so
+        # it can normalise case-sensitive identifiers itself; the id the
+        # runtime keeps is lowercased and trimmed only after this step.
         from ...services import middleware as middleware_service
         from ...services.gbac import enforcement as gbac
 
@@ -6857,13 +6857,15 @@ Agent response: {raw_response}"""
                 # Continue processing with the returned payload: identity
                 # mapping, message policy, and attachment rewrites all
                 # take effect here.
-                user_id = str(transformed["user_id"]).lower().strip()
+                user_id = transformed["user_id"]
                 message = transformed["message"]
                 files = middleware_service.decode_attachments(transformed["attachments"]) or None
             else:
                 # No middleware declared: make sure no stale groups from a
                 # previous request in this context can leak in.
                 gbac.set_request_groups(None)
+        if user_id is not None:
+            user_id = str(user_id).lower().strip()
 
         # RBAC pre-check: a request that ends up with no groups is
         # rejected (or remapped to the fallback group) BEFORE any
