@@ -514,8 +514,10 @@ async def recording_middleware(tmp_path):
         if rewrite_user_id is not None:
             args.append(rewrite_user_id)
         mw = RequestMiddleware(command=sys.executable, args=tuple(args), formation_id=FORMATION_ID)
-        await mw.start()
+        # Tracked before start(): a start that fails after connecting still
+        # leaves a subprocess for the teardown to stop.
         started.append(mw)
+        await mw.start()
 
         def received():
             if not record.exists():
