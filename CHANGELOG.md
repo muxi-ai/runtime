@@ -2,6 +2,14 @@
 
 ## [unreleased]
 
+### The request middleware now receives the user id as sent
+
+The chat, memory and trigger pipelines used to lowercase and trim `user_id` *before* calling the formation's request middleware, so the middleware never saw the identifier the caller actually sent. Case-sensitive identifiers could not survive that: a Slack user id such as `U024BE7LH` arrived as `u024be7lh`, and an API key used as an identifier arrived lowercased too -- neither of which an identity service that validates the Slack id format or compares keys exactly can resolve.
+
+The middleware now receives `user_id` verbatim, so it can normalise identifiers itself. The runtime still lowercases and trims the id it keeps, once, after the middleware step -- whether or not a middleware is configured. A formation without middleware ends up with exactly the same lowercase `user_id` as before; a formation with middleware keeps the lowercased form of whatever the middleware returns, as before.
+
+This also fixes an inconsistency in chat: the pre-middleware lowercasing was skipped when files were attached, so a formation without middleware kept a mixed-case `user_id` for requests with attachments and a lowercase one for requests without. Both now reach the same lowercase id.
+
 ### SQLAlchemy 2.1 is supported
 
 SQLAlchemy 2.1 resolves `filter_by()` keywords against every entity in the FROM clause and raises `AmbiguousColumnError` when a name matches more than one. The over-cap lesson query in the Captain's Log (`LessonStorage.scopes_over_cap`, used by lesson consolidation) selected lesson columns next to `count(Lesson.id)`, which 2.1 treats as two entities, so consolidation failed. It now filters with explicit column references. That was the only incompatibility the unit and integration suites found. The temporary `<2.1` pin is removed; SQLAlchemy 2.0.51 and later 2.0.x releases remain supported.
