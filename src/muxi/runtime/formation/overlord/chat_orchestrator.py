@@ -373,7 +373,7 @@ class ChatOrchestrator:
                 "Please provide a user_id parameter to identify the user making this request."
             )
 
-        user_id = str(user_id).lower().strip() if user_id is not None else None
+        user_id = str(user_id) if user_id is not None else None
 
         # Track framework mode requests (direct Python API calls, not via HTTP)
         # HTTP requests are tracked by middleware with route="direct" or "server"

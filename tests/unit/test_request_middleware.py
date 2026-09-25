@@ -12,8 +12,9 @@ Covers:
 4. Transform -- the MCP plumbing: structured/text results, tool errors,
    timeouts, and transport failures all reject fail-closed.
 5. Identity hand-off -- chat, memory and trigger pipelines pass the
-   caller's user_id to the middleware verbatim and lowercase/trim only the
-   id they keep, with or without middleware and with or without files.
+   caller's user_id to the middleware verbatim and keep the id verbatim
+   (the middleware's, or the caller's without a middleware), with or
+   without files. The runtime never changes the case of a user id.
 """
 
 from __future__ import annotations
@@ -493,7 +494,7 @@ class TestTransform:
 
 
 # ===================================================================
-# 5. Identity hand-off: raw id in, lowercased id kept
+# 5. Identity hand-off: raw id in, same id kept
 # ===================================================================
 
 RECORDING_MIDDLEWARE = Path(__file__).parent / "fixtures" / "recording_middleware.py"
@@ -578,25 +579,23 @@ class TestChatIdentityHandOff:
         await overlord.chat("hello", user_id=raw_id, files=files)
 
         assert received() == [raw_id]
-        assert overlord.seen_user_ids == [raw_id.lower()]
+        assert overlord.seen_user_ids == [raw_id]
 
-    async def test_middleware_returned_user_id_is_lowercased_and_trimmed(
-        self, recording_middleware
-    ):
-        mw, _ = await recording_middleware(rewrite_user_id="  Employee-42 ")
+    async def test_middleware_returned_user_id_is_kept_verbatim(self, recording_middleware):
+        mw, _ = await recording_middleware(rewrite_user_id="Employee-42")
         overlord = make_chat_overlord(mw)
 
         await overlord.chat("hello", user_id="Ada@Example.com")
 
-        assert overlord.seen_user_ids == ["employee-42"]
+        assert overlord.seen_user_ids == ["Employee-42"]
 
     @pytest.mark.parametrize("files", [None, [ATTACHMENT]], ids=["no-files", "files"])
-    async def test_without_middleware_user_id_is_lowercased_and_trimmed(self, files):
+    async def test_without_middleware_user_id_is_kept_verbatim(self, files):
         overlord = make_chat_overlord(None)
 
-        await overlord.chat("hello", user_id=" Ada@Example.com ", files=files)
+        await overlord.chat("hello", user_id="Ada@Example.com", files=files)
 
-        assert overlord.seen_user_ids == ["ada@example.com"]
+        assert overlord.seen_user_ids == ["Ada@Example.com"]
 
 
 def memory_formation(request_middleware):
@@ -618,25 +617,23 @@ class TestMemoryRouteIdentityHandOff:
 
         assert error is None
         assert received() == ["U024BE7LH"]
-        assert user_id == "u024be7lh"
+        assert user_id == "U024BE7LH"
 
-    async def test_middleware_returned_user_id_is_lowercased_and_trimmed(
-        self, recording_middleware
-    ):
-        mw, _ = await recording_middleware(rewrite_user_id="  Employee-42 ")
+    async def test_middleware_returned_user_id_is_kept_verbatim(self, recording_middleware):
+        mw, _ = await recording_middleware(rewrite_user_id="Employee-42")
 
         user_id, _, _ = await _run_request_pipeline(
             memory_formation(mw), "Ada@Example.com", "req-1", "/v1/memories"
         )
 
-        assert user_id == "employee-42"
+        assert user_id == "Employee-42"
 
-    async def test_without_middleware_user_id_is_lowercased_and_trimmed(self):
+    async def test_without_middleware_user_id_is_kept_verbatim(self):
         user_id, _, _ = await _run_request_pipeline(
-            memory_formation(None), " Ada@Example.com ", "req-1", "/v1/memories"
+            memory_formation(None), "Ada@Example.com", "req-1", "/v1/memories"
         )
 
-        assert user_id == "ada@example.com"
+        assert user_id == "Ada@Example.com"
 
 
 async def fire_trigger(tmp_path, raw_id, request_middleware):
@@ -682,18 +679,18 @@ class TestTriggerRouteIdentityHandOff:
         seen = await fire_trigger(tmp_path, "U024BE7LH", mw)
 
         assert received() == ["U024BE7LH"]
-        assert seen == ["u024be7lh"]
+        assert seen == ["U024BE7LH"]
 
-    async def test_middleware_returned_user_id_is_lowercased_and_trimmed(
+    async def test_middleware_returned_user_id_is_kept_verbatim(
         self, tmp_path, recording_middleware
     ):
-        mw, _ = await recording_middleware(rewrite_user_id="  Employee-42 ")
+        mw, _ = await recording_middleware(rewrite_user_id="Employee-42")
 
         seen = await fire_trigger(tmp_path, "Ada@Example.com", mw)
 
-        assert seen == ["employee-42"]
+        assert seen == ["Employee-42"]
 
-    async def test_without_middleware_user_id_is_lowercased(self, tmp_path):
+    async def test_without_middleware_user_id_is_kept_verbatim(self, tmp_path):
         seen = await fire_trigger(tmp_path, "Ada@Example.com", None)
 
-        assert seen == ["ada@example.com"]
+        assert seen == ["Ada@Example.com"]

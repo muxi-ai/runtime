@@ -450,8 +450,8 @@ class TestWorkdirs:
         result = await service.delegate(user_id="User-1", prompt="where am i")
         job = await wait_terminal(service, result["job_id"])
         root = service.config.resolved_workdirs[0]
-        # <root>/<user_id>/<request_id>, user normalized + sanitized.
-        expected = os.path.join(root, "user-1", job.job_id)
+        # <root>/<user_id>/<request_id>, user kept verbatim + sanitized.
+        expected = os.path.join(root, "User-1", job.job_id)
         assert os.path.realpath(job.result) == os.path.realpath(expected)
         assert os.path.isdir(expected)  # keep: directory survives
 

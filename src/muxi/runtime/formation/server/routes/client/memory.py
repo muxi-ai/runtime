@@ -186,8 +186,8 @@ async def _run_request_pipeline(
     so the shared-scope read fan-out (``resolve_read_group_ids``) sees
     the caller's groups.
 
-    The middleware receives ``user_id`` exactly as the caller sent it;
-    the identity is lowercased and trimmed only after the middleware step.
+    The middleware receives ``user_id`` exactly as the caller sent it,
+    and the identity it returns is kept byte-for-byte.
 
     Returns:
         ``(user_id, permissions, error_response)`` -- the (possibly
@@ -218,7 +218,6 @@ async def _run_request_pipeline(
             )
             return user_id, None, JSONResponse(content=response.model_dump(), status_code=403)
         user_id = transformed["user_id"]
-    user_id = str(user_id).lower().strip()
     gbac_enforcement.set_request_groups(groups if request_middleware is not None else None)
 
     permissions = None

@@ -503,6 +503,16 @@ class TestCancelAndOrphans:
         assert service.get_job(result["job_id"], "u1") is not None
         await service.stop()
 
+    async def test_job_keeps_user_id_case(self):
+        service, _ = make_service([{"status": "processing"}])
+        result = await service.watch(
+            agent_id="agent", user_id="U024BE7LH", tool="check_status", done_when=DONE
+        )
+        assert service._jobs[result["job_id"]].user_id == "U024BE7LH"
+        assert service.get_job(result["job_id"], "u024be7lh") is None
+        assert service.get_job(result["job_id"], "U024BE7LH") is not None
+        await service.stop()
+
     async def test_stop_orphans_active_watches(self):
         service, overlord = make_service([{"status": "processing"}], interval=0.05)
         result = await service.watch(

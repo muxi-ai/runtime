@@ -6518,9 +6518,7 @@ Agent response: {raw_response}"""
             # treated as a MuxiResponse by the caller.
             return None
 
-        # Match the orchestrator's user-id normalization so denial events
-        # carry identical identities across entry points.
-        resolved_user = str(user_id).lower().strip()
+        resolved_user = str(user_id)
         try:
             permissions = gbac.resolve_request_permissions(
                 resolver,
@@ -6826,9 +6824,10 @@ Agent response: {raw_response}"""
         # (heartbeat, scheduler) traverse it identically via their
         # route_class. Fail-closed: middleware errors reject the
         # request, and rbac.fallback never applies to them. The
-        # middleware receives user_id exactly as the caller sent it, so
-        # it can normalise case-sensitive identifiers itself; the id the
-        # runtime keeps is lowercased and trimmed only after this step.
+        # middleware receives user_id exactly as the caller sent it, and
+        # the runtime keeps the id the middleware returns (or, without a
+        # middleware, the caller's id) byte-for-byte: identity
+        # normalisation is the middleware's job, never the runtime's.
         from ...services import middleware as middleware_service
         from ...services.gbac import enforcement as gbac
 
@@ -6865,7 +6864,7 @@ Agent response: {raw_response}"""
                 # previous request in this context can leak in.
                 gbac.set_request_groups(None)
         if user_id is not None:
-            user_id = str(user_id).lower().strip()
+            user_id = str(user_id)
 
         # RBAC pre-check: a request that ends up with no groups is
         # rejected (or remapped to the fallback group) BEFORE any

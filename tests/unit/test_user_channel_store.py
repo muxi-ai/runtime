@@ -102,11 +102,11 @@ class TestInboundRecording:
 
 
 class TestNormalizationAndEnumeration:
-    async def test_user_ids_are_normalized(self):
+    async def test_user_ids_are_kept_verbatim(self):
         store = _store()
-        await store.record_inbound("  RaN ", "telegram")
-        state = await store.get_state("ran")
-        assert state["last_channel"] == "telegram"
+        await store.record_inbound("RaN", "telegram")
+        assert (await store.get_state("RaN"))["last_channel"] == "telegram"
+        assert (await store.get_state("ran"))["last_channel"] is None
 
     async def test_known_users(self):
         store = _store()

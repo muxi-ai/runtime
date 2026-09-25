@@ -631,6 +631,15 @@ class TestChannels:
         state = await overlord.user_channel_store.get_state("0")
         assert state["preferred_channel"] is None
 
+    async def test_default_keeps_user_id_case(self):
+        overlord = make_overlord(multi_user=True)
+        await run_command(overlord, "/channels default chan-b", user_id="Ada@Example.com")
+        state = await overlord.user_channel_store.get_state("Ada@Example.com")
+        assert state["preferred_channel"] == "chan-b"
+        assert (await overlord.user_channel_store.get_state("ada@example.com"))[
+            "preferred_channel"
+        ] is None
+
     async def test_test_subcommand_routes_through_router(self):
         router = FakeRouter(delivered=True)
         overlord = make_overlord(router=router)
@@ -780,17 +789,22 @@ class TestIdentity:
         response = await run_command(
             overlord, "/identity link U12345 slack", user_id="ran@example.com"
         )
-        assert "Linked u12345 (slack)" in response.content
+        assert "Linked U12345 (slack)" in response.content
 
         response = await run_command(overlord, "/identity", user_id="ran@example.com")
         assert "ran@example.com (current)" in response.content
-        assert "u12345 (slack)" in response.content
+        assert "U12345 (slack)" in response.content
 
         response = await run_command(overlord, "/identity unlink U12345", user_id="ran@example.com")
-        assert "Unlinked u12345" in response.content
+        assert "Unlinked U12345" in response.content
 
         response = await run_command(overlord, "/identity", user_id="ran@example.com")
-        assert "u12345" not in response.content
+        assert "U12345" not in response.content
+
+    async def test_current_identity_keeps_case(self, sqlite_db_manager):
+        overlord = make_overlord(multi_user=True, db_manager=sqlite_db_manager)
+        response = await run_command(overlord, "/identity", user_id="Ada@Example.com")
+        assert "Your identity: Ada@Example.com" in response.content
 
     async def test_link_normalizes_mixed_case_type(self, sqlite_db_manager):
         overlord = make_overlord(multi_user=True, db_manager=sqlite_db_manager)
@@ -887,6 +901,13 @@ class TestSetupFlow:
         assert "Setup cancelled" in response.content
         # Next plain message flows through to the LLM path
         assert await run_command(overlord, "chan-a") is None
+
+    async def test_other_command_cancels_a_mixed_case_users_flow(self):
+        overlord = make_overlord(multi_user=True)
+        await run_command(overlord, "/setup", user_id="Ada@Example.com")
+        assert list(overlord._setup_flows) == ["Ada@Example.com"]
+        await run_command(overlord, "/help", user_id="Ada@Example.com")
+        assert overlord._setup_flows == {}
 
     async def test_other_command_cancels_the_flow(self):
         overlord = make_overlord()

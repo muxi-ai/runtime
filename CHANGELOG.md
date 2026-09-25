@@ -2,13 +2,21 @@
 
 ## [unreleased]
 
+### BREAKING: the runtime never changes the case of a user id
+
+The runtime no longer lowercases or trims `user_id` anywhere. The id the caller sends (or, when a request middleware is configured, the id the middleware returns) is kept byte-for-byte through chat, the memory and trigger routes, memory keys, the credentials resolver, the scheduler, notification-channel state, `/identity`, `/setup`, and coding and watch jobs. `/identity link` and `/identity unlink` store and match identifiers verbatim too.
+
+Identity normalisation is the middleware's job: an identity service such as Eunomia returns a canonical, self-identifying id (`eun_...`), and the runtime must pass identifiers through untouched so that a Slack id (`U024BE7LH`) or an API key survives intact and a formation cannot silently merge or split users by case.
+
+**Impact:** formations without a middleware now treat `Ada@x` and `ada@x` as different users. Data stored under the old lowercase ids stays under those ids, so a client that sends a mixed-case id now reaches a new, empty user. Operators who relied on case folding must normalise at the client (or in a middleware) and send the same form every time, which for existing users means the lowercase form.
+
 ### The request middleware now receives the user id as sent
 
 The chat, memory and trigger pipelines used to lowercase and trim `user_id` *before* calling the formation's request middleware, so the middleware never saw the identifier the caller actually sent. Case-sensitive identifiers could not survive that: a Slack user id such as `U024BE7LH` arrived as `u024be7lh`, and an API key used as an identifier arrived lowercased too -- neither of which an identity service that validates the Slack id format or compares keys exactly can resolve.
 
-The middleware now receives `user_id` verbatim, so it can normalise identifiers itself. The runtime still lowercases and trims the id it keeps, once, after the middleware step -- whether or not a middleware is configured. A formation without middleware ends up with exactly the same lowercase `user_id` as before; a formation with middleware keeps the lowercased form of whatever the middleware returns, as before.
+The middleware now receives `user_id` verbatim, so it can normalise identifiers itself. The runtime no longer lowercases or trims the id it keeps either; see the breaking entry above.
 
-This also fixes an inconsistency in chat: the pre-middleware lowercasing was skipped when files were attached, so a formation without middleware kept a mixed-case `user_id` for requests with attachments and a lowercase one for requests without. Both now reach the same lowercase id.
+This also fixes an inconsistency in chat: the pre-middleware lowercasing was skipped when files were attached, so a formation without middleware kept a mixed-case `user_id` for requests with attachments and a lowercase one for requests without. Both now reach the same id.
 
 ### SQLAlchemy 2.1 is supported
 
