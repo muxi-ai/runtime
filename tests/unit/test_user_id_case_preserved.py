@@ -3,8 +3,9 @@
 An email-shaped id (``Ada@Example.com``) is lowercased where it enters the
 runtime: the HTTP server's ``X-Muxi-User-ID`` header, ``Overlord.chat`` (for
 callers that do not come through HTTP), and identifiers linked to a user
-(``POST /users/identifiers``, ``/identity link``) or named in a path
-(``/users/{user_id}/channels``). Email addresses are therefore
+(``POST /users/identifiers``, ``/identity link``) or named by the user
+routes (``/users/{identifier}``, ``/users/resolve``,
+``DELETE /users/identifiers/{identifier}``, ``/users/{user_id}/channels``). Email addresses are therefore
 case-insensitive on every route, with or without a middleware. Every other
 id, such as a Slack-style ``U024BE7LH``, passes byte-for-byte. Past the entry
 point the id is never touched again: the chat orchestrator's memory key (the
@@ -217,6 +218,30 @@ async def test_identifiers_route_links_email_lowercased(db_manager, serve):
 
     assert response.status_code == 200, response.text
     assert await stored_identifiers(db_manager) == ["Employee-42", "U024BE7LH", "ada@example.com"]
+
+
+async def test_identifier_routes_look_up_email_lowercased(db_manager, serve):
+    _, muxi_user_id = await resolve_user_identifier(
+        identifier="ada@example.com",
+        formation_id=FORMATION_ID,
+        db_manager=db_manager,
+        kv_cache=None,
+    )
+    formation = SimpleNamespace(
+        formation_id=FORMATION_ID, _overlord=SimpleNamespace(db_manager=db_manager)
+    )
+
+    async with serve(formation) as client:
+        looked_up = await client.get(f"/v1/users/{USER_ID}")
+        resolved = await client.post("/v1/users/resolve", json={"identifier": USER_ID})
+        deleted = await client.delete(f"/v1/users/identifiers/{USER_ID}")
+
+    assert looked_up.status_code == 200, looked_up.text
+    assert looked_up.json()["data"]["muxi_user_id"] == muxi_user_id
+    assert resolved.status_code == 200, resolved.text
+    assert resolved.json()["data"]["muxi_user_id"] == muxi_user_id
+    assert deleted.status_code == 200, deleted.text
+    assert await stored_identifiers(db_manager) == []
 
 
 async def test_channels_route_reads_email_path_id_lowercased(serve):

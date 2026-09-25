@@ -131,7 +131,7 @@ runtime/
     └── session_id (chat grouping)
         └── request_id (single interaction with all clarifications)
   ```
-  - `user_id`: top-level isolation, kept byte-for-byte as sent (or as the request middleware returns it), "0" in single-user mode. The one exception: an email-shaped id is lowercased where it enters the runtime, before the middleware step, via `lowercase_email_user_id` in `utils/user_resolution.py` -- the HTTP server's `EmailUserIdMiddleware` (the `X-Muxi-User-ID` header), `Overlord.chat` (non-HTTP callers), and identifier linking (`/users/identifiers`, `/identity link|unlink`, `/users/{user_id}/channels`). The runtime never changes the case of any other id, nor of an id a middleware returns.
+  - `user_id`: top-level isolation, kept byte-for-byte as sent (or as the request middleware returns it), "0" in single-user mode. The one exception: an email-shaped id is lowercased where it enters the runtime, before the middleware step, via `lowercase_email_user_id` in `utils/user_resolution.py` -- the HTTP server's `EmailUserIdMiddleware` (the `X-Muxi-User-ID` header), `Overlord.chat` (non-HTTP callers), and the user routes and identifier linking (`/users/identifiers`, `/users/{identifier}`, `/users/resolve`, `/users/{user_id}/channels`, `/identity link|unlink`). The runtime never changes the case of any other id, nor of an id a middleware returns.
   - `session_id`: groups related requests into a conversation, scopes buffer memory filtering.
   - `request_id`: tracks ONE complete interaction including all clarifications; used as key for `clarification:{request_id}`.
   - **Clarification coordination** (intentional two-level lookup):

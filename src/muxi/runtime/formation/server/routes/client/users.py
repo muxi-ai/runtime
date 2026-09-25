@@ -476,6 +476,7 @@ async def delete_user_identifier(request: Request, identifier: str) -> JSONRespo
     """
     formation = request.app.state.formation
     request_id = getattr(request.state, "request_id", None)
+    identifier = lowercase_email_user_id(identifier)
 
     # Get database manager from overlord
     overlord = getattr(formation, "_overlord", None)
@@ -590,6 +591,7 @@ async def lookup_identifier(request: Request, identifier: str) -> JSONResponse:
     """
     formation = request.app.state.formation
     request_id = getattr(request.state, "request_id", None)
+    identifier = lowercase_email_user_id(identifier)
 
     try:
         # Get database manager from overlord
@@ -721,7 +723,7 @@ async def resolve_identifier(request: Request) -> JSONResponse:
 
         # Resolve identifier with creation enabled
         result = await resolve_user_identifier(
-            identifier=resolve_req.identifier,
+            identifier=lowercase_email_user_id(resolve_req.identifier),
             formation_id=formation.formation_id,
             db_manager=db_manager,
             kv_cache=kv_cache,
