@@ -11,15 +11,29 @@ Covers:
    pinning, attachment round-tripping.
 4. Transform -- the MCP plumbing: structured/text results, tool errors,
    timeouts, and transport failures all reject fail-closed.
+5. Identity hand-off -- chat, memory and trigger pipelines pass the
+   caller's user_id to the middleware verbatim and lowercase/trim only the
+   id they keep, with or without middleware and with or without files.
 """
 
 from __future__ import annotations
 
 import asyncio
 import json
+import sys
+from pathlib import Path
+from types import SimpleNamespace
 
 import pytest
+from fastapi import BackgroundTasks
+from starlette.requests import Request
 
+from muxi.runtime.datatypes.response import MuxiResponse
+from muxi.runtime.formation.overlord.input_validation import InputValidator
+from muxi.runtime.formation.overlord.overlord import Overlord
+from muxi.runtime.formation.server.routes.client.memory import _run_request_pipeline
+from muxi.runtime.formation.server.routes.client.triggers import TriggerRequest, execute_trigger
+from muxi.runtime.services.gbac import enforcement as gbac_enforcement
 from muxi.runtime.services.middleware import (
     MiddlewareConfigError,
     MiddlewareContractError,
@@ -476,3 +490,210 @@ class TestTransform:
         await mw.transform(sent)
         _, params = client.calls[0]
         assert "groups" not in params
+
+
+# ===================================================================
+# 5. Identity hand-off: raw id in, lowercased id kept
+# ===================================================================
+
+RECORDING_MIDDLEWARE = Path(__file__).parent / "fixtures" / "recording_middleware.py"
+
+
+@pytest.fixture
+async def recording_middleware(tmp_path):
+    """Start the shipped middleware template as a real stdio MCP server.
+
+    Returns ``start(rewrite_user_id=None) -> (middleware, received)``:
+    ``received()`` lists the user_ids the server was sent, verbatim.
+    """
+    started = []
+
+    async def start(rewrite_user_id=None):
+        record = tmp_path / f"received-{len(started)}.jsonl"
+        args = [str(RECORDING_MIDDLEWARE), str(record)]
+        if rewrite_user_id is not None:
+            args.append(rewrite_user_id)
+        mw = RequestMiddleware(command=sys.executable, args=tuple(args), formation_id=FORMATION_ID)
+        # Tracked before start(): a start that fails after connecting still
+        # leaves a subprocess for the teardown to stop.
+        started.append(mw)
+        await mw.start()
+
+        def received():
+            if not record.exists():
+                return []
+            return [json.loads(line) for line in record.read_text().splitlines()]
+
+        return mw, received
+
+    yield start
+    for mw in started:
+        await mw.stop()
+
+
+@pytest.fixture
+def clean_request_groups():
+    """The pipelines record request groups in a ContextVar; reset after each test."""
+    token = gbac_enforcement.set_request_groups(None)
+    yield
+    gbac_enforcement.reset_request_groups(token)
+
+
+ATTACHMENT = {"filename": "note.txt", "size": 3, "content": b"abc"}
+
+
+def make_chat_overlord(request_middleware):
+    """An Overlord with only the state chat() reads before slash-command handling.
+
+    ``_process_slash_command`` is the first step after the middleware + RBAC
+    pre-check; replacing it records the user_id the pipeline settled on and
+    ends the request there.
+    """
+    overlord = Overlord.__new__(Overlord)
+    overlord.is_multi_user = True
+    overlord.formation_id = FORMATION_ID
+    overlord.input_validator = InputValidator()
+    overlord.user_channel_store = None
+    overlord._configured_services = (
+        {"request_middleware": request_middleware} if request_middleware else {}
+    )
+    overlord.seen_user_ids = []
+
+    async def record_user_id(message, user_id, session_id):
+        overlord.seen_user_ids.append(user_id)
+        return MuxiResponse(role="assistant", content="stop")
+
+    overlord._process_slash_command = record_user_id
+    return overlord
+
+
+@pytest.mark.usefixtures("clean_request_groups")
+class TestChatIdentityHandOff:
+    @pytest.mark.parametrize("files", [None, [ATTACHMENT]], ids=["no-files", "files"])
+    @pytest.mark.parametrize("raw_id", ["U024BE7LH", "Ada@Example.com"])
+    async def test_middleware_receives_user_id_verbatim(self, recording_middleware, raw_id, files):
+        mw, received = await recording_middleware()
+        overlord = make_chat_overlord(mw)
+
+        await overlord.chat("hello", user_id=raw_id, files=files)
+
+        assert received() == [raw_id]
+        assert overlord.seen_user_ids == [raw_id.lower()]
+
+    async def test_middleware_returned_user_id_is_lowercased_and_trimmed(
+        self, recording_middleware
+    ):
+        mw, _ = await recording_middleware(rewrite_user_id="  Employee-42 ")
+        overlord = make_chat_overlord(mw)
+
+        await overlord.chat("hello", user_id="Ada@Example.com")
+
+        assert overlord.seen_user_ids == ["employee-42"]
+
+    @pytest.mark.parametrize("files", [None, [ATTACHMENT]], ids=["no-files", "files"])
+    async def test_without_middleware_user_id_is_lowercased_and_trimmed(self, files):
+        overlord = make_chat_overlord(None)
+
+        await overlord.chat("hello", user_id=" Ada@Example.com ", files=files)
+
+        assert overlord.seen_user_ids == ["ada@example.com"]
+
+
+def memory_formation(request_middleware):
+    return SimpleNamespace(
+        formation_id=FORMATION_ID,
+        request_middleware=request_middleware,
+        permission_resolver=None,
+    )
+
+
+@pytest.mark.usefixtures("clean_request_groups")
+class TestMemoryRouteIdentityHandOff:
+    async def test_middleware_receives_user_id_verbatim(self, recording_middleware):
+        mw, received = await recording_middleware()
+
+        user_id, _, error = await _run_request_pipeline(
+            memory_formation(mw), "U024BE7LH", "req-1", "/v1/memories"
+        )
+
+        assert error is None
+        assert received() == ["U024BE7LH"]
+        assert user_id == "u024be7lh"
+
+    async def test_middleware_returned_user_id_is_lowercased_and_trimmed(
+        self, recording_middleware
+    ):
+        mw, _ = await recording_middleware(rewrite_user_id="  Employee-42 ")
+
+        user_id, _, _ = await _run_request_pipeline(
+            memory_formation(mw), "Ada@Example.com", "req-1", "/v1/memories"
+        )
+
+        assert user_id == "employee-42"
+
+    async def test_without_middleware_user_id_is_lowercased_and_trimmed(self):
+        user_id, _, _ = await _run_request_pipeline(
+            memory_formation(None), " Ada@Example.com ", "req-1", "/v1/memories"
+        )
+
+        assert user_id == "ada@example.com"
+
+
+async def fire_trigger(tmp_path, raw_id, request_middleware):
+    """POST a trigger through the real route into a real Overlord.chat().
+
+    Returns the user_id the chat pipeline settled on (see make_chat_overlord).
+    """
+    (tmp_path / "triggers").mkdir(exist_ok=True)
+    (tmp_path / "triggers" / "report.md").write_text("Report\n")
+    overlord = make_chat_overlord(None)
+    formation = SimpleNamespace(
+        formation_id=FORMATION_ID,
+        request_middleware=request_middleware,
+        permission_resolver=None,
+        is_overlord_running=lambda: True,
+        get_formation_path=lambda: str(tmp_path),
+        _overlord=overlord,
+    )
+    request = Request(
+        {
+            "type": "http",
+            "http_version": "1.1",
+            "method": "POST",
+            "scheme": "http",
+            "path": "/v1/triggers/report",
+            "raw_path": b"/v1/triggers/report",
+            "query_string": b"",
+            "headers": [(b"x-muxi-user-id", raw_id.encode())],
+            "app": SimpleNamespace(state=SimpleNamespace(formation=formation)),
+        }
+    )
+    await execute_trigger(
+        "report", request, TriggerRequest(data={}, use_async=False), BackgroundTasks()
+    )
+    return overlord.seen_user_ids
+
+
+@pytest.mark.usefixtures("clean_request_groups")
+class TestTriggerRouteIdentityHandOff:
+    async def test_middleware_receives_user_id_verbatim(self, tmp_path, recording_middleware):
+        mw, received = await recording_middleware()
+
+        seen = await fire_trigger(tmp_path, "U024BE7LH", mw)
+
+        assert received() == ["U024BE7LH"]
+        assert seen == ["u024be7lh"]
+
+    async def test_middleware_returned_user_id_is_lowercased_and_trimmed(
+        self, tmp_path, recording_middleware
+    ):
+        mw, _ = await recording_middleware(rewrite_user_id="  Employee-42 ")
+
+        seen = await fire_trigger(tmp_path, "Ada@Example.com", mw)
+
+        assert seen == ["employee-42"]
+
+    async def test_without_middleware_user_id_is_lowercased(self, tmp_path):
+        seen = await fire_trigger(tmp_path, "Ada@Example.com", None)
+
+        assert seen == ["ada@example.com"]
