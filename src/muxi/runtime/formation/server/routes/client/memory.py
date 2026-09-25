@@ -31,6 +31,7 @@ from .....services.memory.scopes import (
     write_scope_target,
 )
 from .....utils.fastjson import json
+from .....utils.user_resolution import lowercase_email_user_id
 from ....background.request_tracker import RequestStatus
 from ...responses import (
     APIResponse,
@@ -186,8 +187,9 @@ async def _run_request_pipeline(
     so the shared-scope read fan-out (``resolve_read_group_ids``) sees
     the caller's groups.
 
-    The middleware receives ``user_id`` exactly as the caller sent it,
-    and the identity it returns is kept byte-for-byte.
+    The middleware receives ``user_id`` as the caller sent it, except
+    that an email-shaped id is lowercased first, and the identity it
+    returns is kept byte-for-byte.
 
     Returns:
         ``(user_id, permissions, error_response)`` -- the (possibly
@@ -197,6 +199,7 @@ async def _run_request_pipeline(
     from .....services import middleware as middleware_service
     from .....services.gbac import enforcement as gbac_enforcement
 
+    user_id = lowercase_email_user_id(user_id)
     groups = None
     request_middleware = getattr(formation, "request_middleware", None)
     if request_middleware is not None:

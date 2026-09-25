@@ -12,9 +12,10 @@ Covers:
 4. Transform -- the MCP plumbing: structured/text results, tool errors,
    timeouts, and transport failures all reject fail-closed.
 5. Identity hand-off -- chat, memory and trigger pipelines pass the
-   caller's user_id to the middleware verbatim and keep the id verbatim
-   (the middleware's, or the caller's without a middleware), with or
-   without files. The runtime never changes the case of a user id.
+   caller's user_id to the middleware verbatim, except that an
+   email-shaped id is lowercased first, and keep the resulting id
+   verbatim (the middleware's, or the caller's without a middleware),
+   with or without files. The runtime changes the case of no other id.
 """
 
 from __future__ import annotations
@@ -494,8 +495,18 @@ class TestTransform:
 
 
 # ===================================================================
-# 5. Identity hand-off: raw id in, same id kept
+# 5. Identity hand-off: raw id in (emails lowercased), same id kept
 # ===================================================================
+
+# (caller's id, id the middleware receives and the pipeline keeps): an
+# email-shaped id is lowercased; any other id passes byte-for-byte.
+HAND_OFF_IDS = [
+    ("U024BE7LH", "U024BE7LH"),
+    ("eun_usr_ada", "eun_usr_ada"),
+    ("Ada@Example.com", "ada@example.com"),
+]
+# Ids a middleware may return; the runtime keeps each verbatim, emails too.
+RETURNED_IDS = ["Employee-42", "Ada@Example.com"]
 
 RECORDING_MIDDLEWARE = Path(__file__).parent / "fixtures" / "recording_middleware.py"
 
@@ -571,31 +582,37 @@ def make_chat_overlord(request_middleware):
 @pytest.mark.usefixtures("clean_request_groups")
 class TestChatIdentityHandOff:
     @pytest.mark.parametrize("files", [None, [ATTACHMENT]], ids=["no-files", "files"])
-    @pytest.mark.parametrize("raw_id", ["U024BE7LH", "Ada@Example.com"])
-    async def test_middleware_receives_user_id_verbatim(self, recording_middleware, raw_id, files):
+    @pytest.mark.parametrize(("raw_id", "expected_id"), HAND_OFF_IDS)
+    async def test_middleware_receives_user_id(
+        self, recording_middleware, raw_id, expected_id, files
+    ):
         mw, received = await recording_middleware()
         overlord = make_chat_overlord(mw)
 
         await overlord.chat("hello", user_id=raw_id, files=files)
 
-        assert received() == [raw_id]
-        assert overlord.seen_user_ids == [raw_id]
+        assert received() == [expected_id]
+        assert overlord.seen_user_ids == [expected_id]
 
-    async def test_middleware_returned_user_id_is_kept_verbatim(self, recording_middleware):
-        mw, _ = await recording_middleware(rewrite_user_id="Employee-42")
+    @pytest.mark.parametrize("returned_id", RETURNED_IDS)
+    async def test_middleware_returned_user_id_is_kept_verbatim(
+        self, recording_middleware, returned_id
+    ):
+        mw, _ = await recording_middleware(rewrite_user_id=returned_id)
         overlord = make_chat_overlord(mw)
 
-        await overlord.chat("hello", user_id="Ada@Example.com")
+        await overlord.chat("hello", user_id="ada@example.com")
 
-        assert overlord.seen_user_ids == ["Employee-42"]
+        assert overlord.seen_user_ids == [returned_id]
 
     @pytest.mark.parametrize("files", [None, [ATTACHMENT]], ids=["no-files", "files"])
-    async def test_without_middleware_user_id_is_kept_verbatim(self, files):
+    @pytest.mark.parametrize(("raw_id", "expected_id"), HAND_OFF_IDS)
+    async def test_without_middleware_user_id(self, raw_id, expected_id, files):
         overlord = make_chat_overlord(None)
 
-        await overlord.chat("hello", user_id="Ada@Example.com", files=files)
+        await overlord.chat("hello", user_id=raw_id, files=files)
 
-        assert overlord.seen_user_ids == ["Ada@Example.com"]
+        assert overlord.seen_user_ids == [expected_id]
 
 
 def memory_formation(request_middleware):
@@ -608,32 +625,37 @@ def memory_formation(request_middleware):
 
 @pytest.mark.usefixtures("clean_request_groups")
 class TestMemoryRouteIdentityHandOff:
-    async def test_middleware_receives_user_id_verbatim(self, recording_middleware):
+    @pytest.mark.parametrize(("raw_id", "expected_id"), HAND_OFF_IDS)
+    async def test_middleware_receives_user_id(self, recording_middleware, raw_id, expected_id):
         mw, received = await recording_middleware()
 
         user_id, _, error = await _run_request_pipeline(
-            memory_formation(mw), "U024BE7LH", "req-1", "/v1/memories"
+            memory_formation(mw), raw_id, "req-1", "/v1/memories"
         )
 
         assert error is None
-        assert received() == ["U024BE7LH"]
-        assert user_id == "U024BE7LH"
+        assert received() == [expected_id]
+        assert user_id == expected_id
 
-    async def test_middleware_returned_user_id_is_kept_verbatim(self, recording_middleware):
-        mw, _ = await recording_middleware(rewrite_user_id="Employee-42")
+    @pytest.mark.parametrize("returned_id", RETURNED_IDS)
+    async def test_middleware_returned_user_id_is_kept_verbatim(
+        self, recording_middleware, returned_id
+    ):
+        mw, _ = await recording_middleware(rewrite_user_id=returned_id)
 
         user_id, _, _ = await _run_request_pipeline(
-            memory_formation(mw), "Ada@Example.com", "req-1", "/v1/memories"
+            memory_formation(mw), "ada@example.com", "req-1", "/v1/memories"
         )
 
-        assert user_id == "Employee-42"
+        assert user_id == returned_id
 
-    async def test_without_middleware_user_id_is_kept_verbatim(self):
+    @pytest.mark.parametrize(("raw_id", "expected_id"), HAND_OFF_IDS)
+    async def test_without_middleware_user_id(self, raw_id, expected_id):
         user_id, _, _ = await _run_request_pipeline(
-            memory_formation(None), "Ada@Example.com", "req-1", "/v1/memories"
+            memory_formation(None), raw_id, "req-1", "/v1/memories"
         )
 
-        assert user_id == "Ada@Example.com"
+        assert user_id == expected_id
 
 
 async def fire_trigger(tmp_path, raw_id, request_middleware):
@@ -673,24 +695,29 @@ async def fire_trigger(tmp_path, raw_id, request_middleware):
 
 @pytest.mark.usefixtures("clean_request_groups")
 class TestTriggerRouteIdentityHandOff:
-    async def test_middleware_receives_user_id_verbatim(self, tmp_path, recording_middleware):
+    @pytest.mark.parametrize(("raw_id", "expected_id"), HAND_OFF_IDS)
+    async def test_middleware_receives_user_id(
+        self, tmp_path, recording_middleware, raw_id, expected_id
+    ):
         mw, received = await recording_middleware()
 
-        seen = await fire_trigger(tmp_path, "U024BE7LH", mw)
+        seen = await fire_trigger(tmp_path, raw_id, mw)
 
-        assert received() == ["U024BE7LH"]
-        assert seen == ["U024BE7LH"]
+        assert received() == [expected_id]
+        assert seen == [expected_id]
 
+    @pytest.mark.parametrize("returned_id", RETURNED_IDS)
     async def test_middleware_returned_user_id_is_kept_verbatim(
-        self, tmp_path, recording_middleware
+        self, tmp_path, recording_middleware, returned_id
     ):
-        mw, _ = await recording_middleware(rewrite_user_id="Employee-42")
+        mw, _ = await recording_middleware(rewrite_user_id=returned_id)
 
-        seen = await fire_trigger(tmp_path, "Ada@Example.com", mw)
+        seen = await fire_trigger(tmp_path, "ada@example.com", mw)
 
-        assert seen == ["Employee-42"]
+        assert seen == [returned_id]
 
-    async def test_without_middleware_user_id_is_kept_verbatim(self, tmp_path):
-        seen = await fire_trigger(tmp_path, "Ada@Example.com", None)
+    @pytest.mark.parametrize(("raw_id", "expected_id"), HAND_OFF_IDS)
+    async def test_without_middleware_user_id(self, tmp_path, raw_id, expected_id):
+        seen = await fire_trigger(tmp_path, raw_id, None)
 
-        assert seen == ["Ada@Example.com"]
+        assert seen == [expected_id]

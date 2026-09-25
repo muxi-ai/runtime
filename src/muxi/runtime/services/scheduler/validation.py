@@ -49,8 +49,11 @@ class SchedulerInputValidator:
         r"shell=True",  # Shell execution
     ]
 
-    # Valid patterns for user IDs and formation IDs
+    # Valid patterns for formation IDs and user IDs. A user ID may be an email
+    # address, so it also admits "@" and "+". It is only ever a lookup key
+    # (bound as a query parameter), never interpolated into SQL or a shell.
     VALID_ID_PATTERN = re.compile(r"^[a-zA-Z0-9_\-\.]+$")
+    VALID_USER_ID_PATTERN = re.compile(r"[a-zA-Z0-9_\-\.@+]+")
 
     @staticmethod
     def sanitize_schedule_text(text: str) -> str:
@@ -108,10 +111,10 @@ class SchedulerInputValidator:
                 f"user_id too long (max {SchedulerInputValidator.MAX_USER_ID_LENGTH} characters)"
             )
 
-        if not SchedulerInputValidator.VALID_ID_PATTERN.match(user_id):
+        if not SchedulerInputValidator.VALID_USER_ID_PATTERN.fullmatch(user_id):
             raise ValueError(
                 "user_id contains invalid characters (only alphanumeric, underscore, hyphen, "
-                "dot allowed)"
+                "dot, @ and + allowed)"
             )
 
     @staticmethod

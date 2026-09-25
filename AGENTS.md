@@ -131,7 +131,7 @@ runtime/
     └── session_id (chat grouping)
         └── request_id (single interaction with all clarifications)
   ```
-  - `user_id`: top-level isolation, kept byte-for-byte as sent (or as the request middleware returns it; the runtime never changes its case), "0" in single-user mode.
+  - `user_id`: top-level isolation, kept byte-for-byte as sent (or as the request middleware returns it), "0" in single-user mode. The one exception: an email-shaped id is lowercased at the request entry points (chat, memory route pipeline, trigger route) before the middleware step, via `lowercase_email_user_id` in `utils/user_resolution.py`; the runtime never changes the case of any other id.
   - `session_id`: groups related requests into a conversation, scopes buffer memory filtering.
   - `request_id`: tracks ONE complete interaction including all clarifications; used as key for `clarification:{request_id}`.
   - **Clarification coordination** (intentional two-level lookup):
