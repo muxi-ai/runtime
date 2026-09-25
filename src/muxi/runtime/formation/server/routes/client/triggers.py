@@ -17,7 +17,6 @@ from .....datatypes.api import APIEventType, APIObjectType
 from .....services import observability
 from .....utils.id_generator import generate_request_id
 from .....utils.response_converter import extract_response_content
-from .....utils.user_resolution import lowercase_email_user_id
 from ....background.transformers import (
     TransformerConfig,
     deliver_via_transformer,
@@ -270,13 +269,12 @@ async def execute_trigger(
     # and may rewrite the authenticated identity; the trigger then fires
     # only when the resolved permissions allow it. Per the PRD's channel
     # table, API/webhook callers get a 403 with a generic message. The
-    # middleware receives user_id as the caller sent it, except that an
-    # email-shaped id is lowercased first, and the id it returns is kept
-    # byte-for-byte.
+    # middleware receives user_id as it reached the server (an
+    # email-shaped X-Muxi-User-ID is lowercased by EmailUserIdMiddleware;
+    # any other id is as sent), and the id it returns is kept byte-for-byte.
     from .....services import middleware as middleware_service
     from .....services.gbac import enforcement as gbac_enforcement
 
-    user_id = lowercase_email_user_id(user_id)
     groups = None
     request_middleware = getattr(formation, "request_middleware", None)
     if request_middleware is not None:

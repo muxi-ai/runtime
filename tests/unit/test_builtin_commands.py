@@ -801,6 +801,17 @@ class TestIdentity:
         response = await run_command(overlord, "/identity", user_id="ran@example.com")
         assert "U12345" not in response.content
 
+    async def test_link_and_unlink_lowercase_an_email_identifier(self, sqlite_db_manager):
+        overlord = make_overlord(multi_user=True, db_manager=sqlite_db_manager)
+
+        response = await run_command(
+            overlord, "/identity link Ada@Example.com email", user_id="U12345"
+        )
+        assert "Linked ada@example.com (email)" in response.content
+
+        response = await run_command(overlord, "/identity unlink ADA@example.COM", user_id="U12345")
+        assert "Unlinked ada@example.com" in response.content
+
     async def test_current_identity_keeps_case(self, sqlite_db_manager):
         overlord = make_overlord(multi_user=True, db_manager=sqlite_db_manager)
         response = await run_command(overlord, "/identity", user_id="Ada@Example.com")

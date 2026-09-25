@@ -4,7 +4,13 @@
 
 ### Email-address user ids are lowercased
 
-A `user_id` that is an email address is now lowercased, whole (local part and domain), when a request enters the runtime: in chat (including audio chat and internally originated requests), in the memory route pipeline, and in the trigger route, before the request middleware is called. `Ada@Example.com` and `ada@example.com` therefore reach the same user whether or not the formation declares a middleware, and a middleware receives the lowercase form. An id counts as an email address when it has exactly one `@`, a non-empty local part, a domain of two or more non-empty dot-separated labels, and no whitespace; `a@b`, `@x.com`, `a@@b.com` and `a b@c.com` are not, and are kept as sent.
+A `user_id` that is an email address is now lowercased, whole (local part and domain), where it enters the runtime, before the request middleware is called:
+
+- the HTTP server lowercases an email-shaped `X-Muxi-User-ID` header as the request arrives, so every route sees the same id (chat, memory, triggers, sessions, events, requests, credentials, artifacts, the scheduler routes, idempotency scoping);
+- `Overlord.chat` does the same for callers that do not come through HTTP (channels, the scheduler firing a job, delegation) and for the deprecated `user_id` body field;
+- identifiers linked to a user (`POST /v1/users/identifiers`, `/identity link` and `/identity unlink`) and the id in `/v1/users/{user_id}/channels` are stored and looked up the same way.
+
+`Ada@Example.com` and `ada@example.com` therefore reach the same user on every route, whether or not the formation declares a middleware, and a middleware receives the lowercase form. An id counts as an email address when it has exactly one `@`, a non-empty local part, a domain of two or more non-empty dot-separated labels, and no whitespace; `a@b`, `@x.com`, `a@@b.com` and `a b@c.com` are not, and are kept as sent.
 
 No other id changes case: a Slack id (`U024BE7LH`), an API key or an `eun_...` id still passes byte-for-byte, and the id a middleware returns is kept verbatim, email or not.
 

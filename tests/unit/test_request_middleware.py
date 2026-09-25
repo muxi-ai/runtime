@@ -13,9 +13,11 @@ Covers:
    timeouts, and transport failures all reject fail-closed.
 5. Identity hand-off -- chat, memory and trigger pipelines pass the
    caller's user_id to the middleware verbatim, except that an
-   email-shaped id is lowercased first, and keep the resulting id
-   verbatim (the middleware's, or the caller's without a middleware),
+   email-shaped id is lowercased first (by the HTTP server for the
+   X-Muxi-User-ID header, and by Overlord.chat), and keep the resulting
+   id verbatim (the middleware's, or the caller's without a middleware),
    with or without files. The runtime changes the case of no other id.
+   Memory and trigger requests go through the served app.
 """
 
 from __future__ import annotations
@@ -27,15 +29,14 @@ from pathlib import Path
 from types import SimpleNamespace
 
 import pytest
-from fastapi import BackgroundTasks
-from starlette.requests import Request
 
 from muxi.runtime.datatypes.response import MuxiResponse
 from muxi.runtime.formation.overlord.input_validation import InputValidator
 from muxi.runtime.formation.overlord.overlord import Overlord
 from muxi.runtime.formation.server.routes.client.memory import _run_request_pipeline
-from muxi.runtime.formation.server.routes.client.triggers import TriggerRequest, execute_trigger
+from muxi.runtime.services.db import Base, DatabaseManager
 from muxi.runtime.services.gbac import enforcement as gbac_enforcement
+from muxi.runtime.services.memory.events import MemoryEventService
 from muxi.runtime.services.middleware import (
     MiddlewareConfigError,
     MiddlewareContractError,
@@ -615,18 +616,67 @@ class TestChatIdentityHandOff:
         assert overlord.seen_user_ids == [expected_id]
 
 
-def memory_formation(request_middleware):
+def memory_formation(request_middleware, memory_events=None):
     return SimpleNamespace(
         formation_id=FORMATION_ID,
         request_middleware=request_middleware,
         permission_resolver=None,
+        _overlord=SimpleNamespace(memory_events=memory_events, knowledge_graph=None),
     )
+
+
+@pytest.fixture
+def memory_events(tmp_path):
+    """A real memory event log on SQLite (the substrate the provenance route reads)."""
+    manager = DatabaseManager(f"sqlite:///{tmp_path}/events.db")
+    manager.create_tables(Base.metadata)
+    yield MemoryEventService(manager, FORMATION_ID)
+    manager.engine.dispose()
+
+
+async def get_provenance(serve, formation, raw_id, event_id="evt_missing"):
+    """GET /v1/memories/provenance through the served app; the route runs the pipeline."""
+    async with serve(formation) as client:
+        return await client.get(
+            "/v1/memories/provenance",
+            params={"event_id": event_id},
+            headers={"X-Muxi-User-ID": raw_id},
+        )
 
 
 @pytest.mark.usefixtures("clean_request_groups")
 class TestMemoryRouteIdentityHandOff:
     @pytest.mark.parametrize(("raw_id", "expected_id"), HAND_OFF_IDS)
-    async def test_middleware_receives_user_id(self, recording_middleware, raw_id, expected_id):
+    async def test_middleware_receives_user_id(
+        self, serve, recording_middleware, memory_events, raw_id, expected_id
+    ):
+        mw, received = await recording_middleware()
+
+        response = await get_provenance(serve, memory_formation(mw, memory_events), raw_id)
+
+        assert response.status_code == 404, response.text
+        assert received() == [expected_id]
+
+    @pytest.mark.parametrize(("raw_id", "expected_id"), HAND_OFF_IDS)
+    async def test_without_middleware_user_id_reaches_memory_key(
+        self, serve, memory_events, raw_id, expected_id
+    ):
+        event = await memory_events.record(
+            user_id=expected_id,
+            event_type="interaction.turn",
+            payload={"user_message": "hello"},
+            source="interaction",
+        )
+
+        response = await get_provenance(
+            serve, memory_formation(None, memory_events), raw_id, event["public_id"]
+        )
+
+        assert response.status_code == 200, response.text
+        assert response.json()["data"]["event"]["event_id"] == event["public_id"]
+
+    @pytest.mark.parametrize("raw_id", [raw_id for raw_id, _ in HAND_OFF_IDS])
+    async def test_pipeline_passes_user_id_through(self, recording_middleware, raw_id):
         mw, received = await recording_middleware()
 
         user_id, _, error = await _run_request_pipeline(
@@ -634,8 +684,8 @@ class TestMemoryRouteIdentityHandOff:
         )
 
         assert error is None
-        assert received() == [expected_id]
-        assert user_id == expected_id
+        assert received() == [raw_id]
+        assert user_id == raw_id
 
     @pytest.mark.parametrize("returned_id", RETURNED_IDS)
     async def test_middleware_returned_user_id_is_kept_verbatim(
@@ -649,17 +699,9 @@ class TestMemoryRouteIdentityHandOff:
 
         assert user_id == returned_id
 
-    @pytest.mark.parametrize(("raw_id", "expected_id"), HAND_OFF_IDS)
-    async def test_without_middleware_user_id(self, raw_id, expected_id):
-        user_id, _, _ = await _run_request_pipeline(
-            memory_formation(None), raw_id, "req-1", "/v1/memories"
-        )
 
-        assert user_id == expected_id
-
-
-async def fire_trigger(tmp_path, raw_id, request_middleware):
-    """POST a trigger through the real route into a real Overlord.chat().
+async def fire_trigger(serve, tmp_path, raw_id, request_middleware):
+    """POST a trigger through the served app's real route into a real Overlord.chat().
 
     Returns the user_id the chat pipeline settled on (see make_chat_overlord).
     """
@@ -674,22 +716,13 @@ async def fire_trigger(tmp_path, raw_id, request_middleware):
         get_formation_path=lambda: str(tmp_path),
         _overlord=overlord,
     )
-    request = Request(
-        {
-            "type": "http",
-            "http_version": "1.1",
-            "method": "POST",
-            "scheme": "http",
-            "path": "/v1/triggers/report",
-            "raw_path": b"/v1/triggers/report",
-            "query_string": b"",
-            "headers": [(b"x-muxi-user-id", raw_id.encode())],
-            "app": SimpleNamespace(state=SimpleNamespace(formation=formation)),
-        }
-    )
-    await execute_trigger(
-        "report", request, TriggerRequest(data={}, use_async=False), BackgroundTasks()
-    )
+    async with serve(formation) as client:
+        response = await client.post(
+            "/v1/triggers/report",
+            json={"data": {}, "use_async": False},
+            headers={"X-Muxi-User-ID": raw_id},
+        )
+    assert response.status_code == 200, response.text
     return overlord.seen_user_ids
 
 
@@ -697,27 +730,27 @@ async def fire_trigger(tmp_path, raw_id, request_middleware):
 class TestTriggerRouteIdentityHandOff:
     @pytest.mark.parametrize(("raw_id", "expected_id"), HAND_OFF_IDS)
     async def test_middleware_receives_user_id(
-        self, tmp_path, recording_middleware, raw_id, expected_id
+        self, serve, tmp_path, recording_middleware, raw_id, expected_id
     ):
         mw, received = await recording_middleware()
 
-        seen = await fire_trigger(tmp_path, raw_id, mw)
+        seen = await fire_trigger(serve, tmp_path, raw_id, mw)
 
         assert received() == [expected_id]
         assert seen == [expected_id]
 
     @pytest.mark.parametrize("returned_id", RETURNED_IDS)
     async def test_middleware_returned_user_id_is_kept_verbatim(
-        self, tmp_path, recording_middleware, returned_id
+        self, serve, tmp_path, recording_middleware, returned_id
     ):
         mw, _ = await recording_middleware(rewrite_user_id=returned_id)
 
-        seen = await fire_trigger(tmp_path, "ada@example.com", mw)
+        seen = await fire_trigger(serve, tmp_path, "ada@example.com", mw)
 
         assert seen == [returned_id]
 
     @pytest.mark.parametrize(("raw_id", "expected_id"), HAND_OFF_IDS)
-    async def test_without_middleware_user_id(self, tmp_path, raw_id, expected_id):
-        seen = await fire_trigger(tmp_path, raw_id, None)
+    async def test_without_middleware_user_id(self, serve, tmp_path, raw_id, expected_id):
+        seen = await fire_trigger(serve, tmp_path, raw_id, None)
 
         assert seen == [expected_id]

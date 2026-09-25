@@ -14,7 +14,7 @@ from pydantic import BaseModel, Field
 
 from .....datatypes.api import APIEventType, APIObjectType
 from .....services import observability
-from .....utils.user_resolution import resolve_user_identifier
+from .....utils.user_resolution import lowercase_email_user_id, resolve_user_identifier
 from ...responses import (
     APIResponse,
     create_error_response,
@@ -65,10 +65,13 @@ def _get_channel_store(request: Request):
 
 
 def _effective_channel_user(overlord, user_id: str) -> str:
-    """Single-user formations track all channel state under user '0'."""
+    """Single-user formations track all channel state under user '0'.
+
+    An email-shaped id in the path is lowercased, as the chat path keys it.
+    """
     if overlord is not None and not getattr(overlord, "is_multi_user", True):
         return "0"
-    return user_id
+    return lowercase_email_user_id(user_id)
 
 
 @router.get(
@@ -379,6 +382,9 @@ async def associate_user_identifiers(
 
                 if not identifier:
                     continue
+                if isinstance(identifier, str):
+                    # Stored as the entry points will look it up.
+                    identifier = lowercase_email_user_id(identifier)
 
                 # Check if identifier already exists
                 result = await session.execute(

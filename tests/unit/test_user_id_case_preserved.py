@@ -1,16 +1,21 @@
 """The runtime changes the case of one kind of user id only: an email address.
 
-The request entry points lowercase an email-shaped id (``Ada@Example.com``
-becomes ``ada@example.com``) before the middleware step, so email addresses
-are case-insensitive with or without a middleware. Every other id, such as a
-Slack-style ``U024BE7LH``, passes byte-for-byte. Past the entry point the id
-is never touched again: the chat orchestrator's memory key (the
+An email-shaped id (``Ada@Example.com``) is lowercased where it enters the
+runtime: the HTTP server's ``X-Muxi-User-ID`` header, ``Overlord.chat`` (for
+callers that do not come through HTTP), and identifiers linked to a user
+(``POST /users/identifiers``, ``/identity link``) or named in a path
+(``/users/{user_id}/channels``). Email addresses are therefore
+case-insensitive on every route, with or without a middleware. Every other
+id, such as a Slack-style ``U024BE7LH``, passes byte-for-byte. Past the entry
+point the id is never touched again: the chat orchestrator's memory key (the
 ``UserIdentifier`` row that maps the external id to the internal user), the
 credentials resolver and the scheduler all keep the id they are handed
 verbatim, so nothing is silently merged downstream.
 """
 
 from __future__ import annotations
+
+from types import SimpleNamespace
 
 import pytest
 from sqlalchemy import select
@@ -21,12 +26,13 @@ from muxi.runtime.formation.credentials.resolver import Credential
 from muxi.runtime.formation.overlord.chat_orchestrator import ChatOrchestrator
 from muxi.runtime.formation.overlord.input_validation import InputValidator
 from muxi.runtime.formation.overlord.overlord import Overlord
+from muxi.runtime.formation.proactive.user_channels import UserChannelStore
 from muxi.runtime.services.db import Base, DatabaseManager
 from muxi.runtime.services.memory.long_term import User, UserIdentifier
 from muxi.runtime.services.observability.manager import ObservabilityManager
 from muxi.runtime.services.scheduler.manager import JobManager
 from muxi.runtime.services.scheduler.models import ScheduledJob, ScheduledJobAudit
-from muxi.runtime.utils.user_resolution import lowercase_email_user_id
+from muxi.runtime.utils.user_resolution import lowercase_email_user_id, resolve_user_identifier
 
 FORMATION_ID = "case-test-formation"
 USER_ID = "Ada@Example.com"
@@ -173,3 +179,55 @@ async def test_scheduler_keeps_user_id_case(db_manager):
     assert await stored_identifiers(db_manager) == [USER_ID]
     assert [job["id"] for job in await manager.get_user_jobs(USER_ID)] == [job_id]
     assert await manager.get_user_jobs(USER_ID.lower()) == []
+
+
+async def test_scheduler_route_creates_job_under_lowercased_email(db_manager, serve):
+    manager = JobManager(db_manager, formation_id=FORMATION_ID)
+    formation = SimpleNamespace(
+        formation_id=FORMATION_ID,
+        has_persistent_memory=lambda: True,
+        _overlord=SimpleNamespace(scheduler_service=SimpleNamespace(job_manager=manager)),
+    )
+
+    async with serve(formation) as client:
+        response = await client.post(
+            "/v1/scheduler/jobs",
+            json={"type": "recurring", "schedule": "0 9 * * *", "message": "daily digest"},
+            headers={"X-Muxi-Admin-Key": "admin-key", "X-Muxi-User-ID": USER_ID},
+        )
+
+    assert response.status_code == 201, response.text
+    assert await stored_identifiers(db_manager) == ["ada@example.com"]
+    assert len(await manager.get_user_jobs("ada@example.com")) == 1
+
+
+async def test_identifiers_route_links_email_lowercased(db_manager, serve):
+    _, muxi_user_id = await resolve_user_identifier(
+        identifier="U024BE7LH", formation_id=FORMATION_ID, db_manager=db_manager, kv_cache=None
+    )
+    formation = SimpleNamespace(
+        formation_id=FORMATION_ID, _overlord=SimpleNamespace(db_manager=db_manager)
+    )
+
+    async with serve(formation) as client:
+        response = await client.post(
+            "/v1/users/identifiers",
+            json={"muxi_user_id": muxi_user_id, "identifiers": [USER_ID, "Employee-42"]},
+        )
+
+    assert response.status_code == 200, response.text
+    assert await stored_identifiers(db_manager) == ["Employee-42", "U024BE7LH", "ada@example.com"]
+
+
+async def test_channels_route_reads_email_path_id_lowercased(serve):
+    store = UserChannelStore(FORMATION_ID)
+    formation = SimpleNamespace(
+        formation_id=FORMATION_ID,
+        _overlord=SimpleNamespace(is_multi_user=True, user_channel_store=store),
+    )
+
+    async with serve(formation) as client:
+        response = await client.get(f"/v1/users/{USER_ID}/channels")
+
+    assert response.status_code == 200, response.text
+    assert response.json()["data"]["user_id"] == "ada@example.com"

@@ -512,14 +512,16 @@ async def _identity_link(
     from sqlalchemy.exc import IntegrityError
 
     from ..services.memory.long_term import UserIdentifier
-    from ..utils.user_resolution import resolve_user_identifier
+    from ..utils.user_resolution import lowercase_email_user_id, resolve_user_identifier
 
-    identifier = identifier.strip()
+    # Stored as the entry points will look it up: an email address is
+    # lowercased, any other identifier is kept as given.
+    identifier = lowercase_email_user_id(identifier.strip())
     if not identifier or len(identifier) > _MAX_IDENTIFIER_LENGTH:
         return f"Invalid identifier: must be 1-{_MAX_IDENTIFIER_LENGTH} characters with no spaces."
     if identifier_type is not None:
         # Normalize the type label so "Telegram" and "telegram" render as
-        # one label in /identity listings (the identifier itself is verbatim).
+        # one label in /identity listings.
         identifier_type = identifier_type.strip().lower()
         if not identifier_type or len(identifier_type) > _MAX_IDENTIFIER_TYPE_LENGTH:
             return f"Invalid identifier type: must be 1-{_MAX_IDENTIFIER_TYPE_LENGTH} characters."
@@ -574,8 +576,9 @@ async def _identity_unlink(
     from sqlalchemy import select
 
     from ..services.memory.long_term import UserIdentifier
+    from ..utils.user_resolution import lowercase_email_user_id
 
-    identifier = identifier.strip()
+    identifier = lowercase_email_user_id(identifier.strip())
     if identifier == user:
         return "You cannot unlink the identity you are currently using."
 
