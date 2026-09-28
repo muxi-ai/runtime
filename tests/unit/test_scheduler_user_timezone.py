@@ -11,8 +11,8 @@ Jobs that carry no timezone (created before this, or through the admin API) keep
 formation's timezone, as before.
 
 Runs against a real SQLite scheduler database and a memory-only user channel store; the
-prompt rewriter is a small fake that keeps the prompt, and the job type is settled through
-the parser's cache.
+prompt rewriter is a small fake that keeps the prompt, the model (for the one-time case) a
+small fake with a fixed answer, and the job type is settled through the parser's cache.
 """
 
 from datetime import datetime
@@ -24,7 +24,6 @@ import pytz
 from muxi.runtime.formation.proactive.user_channels import UserChannelStore
 from muxi.runtime.services.db import Base, DatabaseManager
 from muxi.runtime.services.memory.long_term import User, UserIdentifier
-from muxi.runtime.services.scheduler import parser as parser_module
 from muxi.runtime.services.scheduler.models import ScheduledJob, ScheduledJobAudit
 from muxi.runtime.services.scheduler.service import SchedulerService
 
@@ -36,6 +35,18 @@ SCHEDULER_TABLES = [
     ScheduledJob.__table__,
     ScheduledJobAudit.__table__,
 ]
+
+
+class FakeLLM:
+    """Answers every prompt with a fixed reply and keeps the prompts it was given."""
+
+    def __init__(self, reply: str):
+        self.reply = reply
+        self.prompts = []
+
+    async def generate_text(self, prompt: str) -> str:
+        self.prompts.append(prompt)
+        return self.reply
 
 
 class FakeRewriter:
@@ -110,21 +121,23 @@ async def test_user_timezone_reads_and_fires_the_job_across_dst(db_manager, chan
     assert await due_job_ids(service, datetime(2026, 11, 2, 13, 0, 30)) == []
 
 
-async def test_user_timezone_reads_a_one_time_job(db_manager, channel_store, monkeypatch):
-    # Monday, September 29, 2036, 02:00 UTC: still Sunday evening in New York. Far ahead, so
-    # the job manager accepts the run time as in the future whatever the real date.
-    monkeypatch.setattr(
-        parser_module, "utc_now", lambda: pytz.UTC.localize(datetime(2036, 9, 29, 2))
-    )
+async def test_user_timezone_reads_a_one_time_job(db_manager, channel_store):
     await channel_store.set_preferences("ada", timezone=NEW_YORK)
     service = make_service(db_manager, channel_store)
+    # The model reads "tomorrow" as Monday, September 29, 2036 (far ahead, so the job
+    # manager accepts it as in the future whatever the real date), with no time given
+    service.schedule_parser.llm = FakeLLM(
+        '{"year": 2036, "month": 9, "day": 29, "hour": 0, "minute": 0, '
+        f'"timezone": "{NEW_YORK}", "time_given": false}}'
+    )
 
     job = await create(service, "ada", "remind me tomorrow to call mom", job_type="one_time")
 
-    # Monday 09:00 in New York (EDT)
+    # 09:00 in New York (EDT)
     assert job["scheduled_for"] == pytz.UTC.localize(datetime(2036, 9, 29, 13, 0))
     assert job["default_time_used"] is True
     assert job["timezone"] == NEW_YORK
+    assert f"Target timezone: {NEW_YORK}" in service.schedule_parser.llm.prompts[0]
     assert await stored_timezone(service, job["job_id"]) == NEW_YORK
 
 

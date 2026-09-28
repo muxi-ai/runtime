@@ -11,9 +11,9 @@
 - "daily", "every day", "every weekday", "every weekdays", "every weekend", "every N days";
 - "every Monday", "every mondays", "every tues and thurs", and any other day or list of days with no time (these used to go to the model);
 - "weekly" and "every week" on Monday (was Sunday), "monthly" and "every month" on the 1st ("every week" and "every month" used to go to the model);
-- one-time: "tomorrow", "next week" (the Monday of next week) and "in N days", which the model used to place at a 09:00 it was told to use.
+- one-time, a date with no time ("tomorrow", "next week", "in 3 days", in any language): the model reads the date and now reports `"time_given": false` in its JSON answer; the job then runs at `scheduler.default_time` on that date, and "next week" is the Monday of next week (the model used to be told "one week from today at 09:00"). A missing flag keeps the model's time; a flag that is not a boolean makes the answer unusable, like any other malformed field.
 
-The default applies only when the text names no time. Text that names a time the parser does not read ("every day at sunset", "every Monday after lunch") or holds anything else the default would ignore (a number, "before", "until", "weekdays" after "daily") goes to the model. The model is told the default time too. Intervals ("every 15 minutes", "every 2 hours", "hourly") never get one.
+The default applies only when the text names no time. Text that names a time the parser does not read ("every day at sunset", "every Monday after lunch") or holds anything else the default would ignore (a number, "before", "until", "weekdays" after "daily") goes to the model. The recurring model prompt is told the default time too, but a recurring model answer is a bare cron expression, so the reply cannot say whether the default was used and does not. Intervals ("every 15 minutes", "every 2 hours", "hourly") never get one.
 
 A day named outside the "every <day>" or "every <day> and <day>" phrase used to be dropped: "every monday or friday at 9am" became `0 9 * * 1`, Mondays only. That text now goes to the model, with or without a time.
 

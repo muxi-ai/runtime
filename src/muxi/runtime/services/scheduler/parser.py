@@ -112,8 +112,6 @@ _FALLBACK_INTERVAL_PATTERN = r"\b(?:every\s+(?:(?P<count>\d+)\s+)?(?P<unit>minut
 _FALLBACK_RELATIVE_PATTERN = r"\bin\s+(?P<count>\d+)\s+(?P<unit>minute|hour)s?\b"
 # "today", "tomorrow"
 _FALLBACK_DAY_PATTERN = r"\b(?:today|tomorrow)\b"
-# A one-time date with no time: "tomorrow", "next week", "in 3 days"
-_DATE_ONLY_PATTERN = r"\b(?:tomorrow|next\s+week|in\s+(?P<days>\d+)\s+days?)\b"
 # "at" left over once a schedule's phrase is removed: a time in words the patterns do not
 # read ("at sunset", "at the end of the day")
 _AT_PATTERN = r"\bat\b"
@@ -262,13 +260,11 @@ class ScheduleParser:
         job_type = await self._detect_job_type(schedule_text)
 
         if job_type == "one_time":
-            # A date with no time first, then the model for everything else
-            date_only = self._try_date_only(schedule_lower, timezone)
-            if date_only:
-                return date_only
-
             datetime_result = await self._parse_specific_datetime(schedule_text, timezone)
-            return ParsedSchedule(scheduled_for=datetime_result["scheduled_for"])
+            return ParsedSchedule(
+                scheduled_for=datetime_result["scheduled_for"],
+                default_time_used=datetime_result["default_time_used"],
+            )
 
         # Recurring: pattern matching first for common cases, then the model
         parsed = await self._try_pattern_matching(schedule_lower)
@@ -522,7 +518,8 @@ Respond with ONLY: "one_time" or "recurring"
             timezone: Target timezone for the schedule
 
         Returns:
-            Dict with job type and scheduled datetime
+            Dict with job type, scheduled datetime and ``default_time_used``: the model reported
+            that the request names no time of day, so the default time was used
 
         Raises:
             ScheduleUnavailableError: The model is unavailable or its call failed, and the
@@ -558,7 +555,7 @@ Respond with ONLY: "one_time" or "recurring"
             raise ScheduleNotUnderstoodError(f"Schedule text was rejected: {e}") from e
 
         safe_text = sanitized_text[:200] if len(sanitized_text) > 200 else sanitized_text
-        hour, minute = self.default_time
+        default_hour, default_minute = self.default_time
         prompt_template = """Parse this request into a specific date and time.
 
 Request: {request_text}
@@ -576,14 +573,18 @@ Parse the request and return ONLY a JSON object with this exact format:
     "day": 22,
     "hour": 14,
     "minute": 30,
-    "timezone": "{timezone}"
+    "timezone": "{timezone}",
+    "time_given": true
 }}
+
+"time_given" is false when the request names no time of day; then use the default time,
+{default_hour:02d}:{default_minute:02d}.
 
 Examples:
 - "tomorrow at 2pm" → tomorrow's date at 14:00
 - "next Friday at 9am" → next Friday's date at 09:00
 - "on December 25th at noon" → 2025-12-25 at 12:00
-- "next week" → the Monday of next week at {hour:02d}:{minute:02d} (the default time, used when the request names no time)
+- "next week" → the Monday of next week at {default_hour:02d}:{default_minute:02d}, time_given false
 - "in 3 days at 3:30pm" → 3 days from now at 15:30
 
 Return only valid JSON, no explanation.
@@ -625,6 +626,16 @@ Return only valid JSON, no explanation.
             if not all(field in datetime_data for field in required_fields):
                 raise ValueError("Missing required datetime fields")
 
+            # A request that names no time runs at the default time on the date read; the
+            # flag is optional, and a missing one keeps the model's time
+            time_given = datetime_data.get("time_given", True)
+            if not isinstance(time_given, bool):
+                raise ValueError("time_given is not a boolean")
+            if time_given:
+                hour, minute = datetime_data["hour"], datetime_data["minute"]
+            else:
+                hour, minute = self.default_time
+
             # Create datetime object
             target_tz = pytz.timezone(datetime_data["timezone"])
             scheduled_datetime = target_tz.localize(
@@ -632,8 +643,8 @@ Return only valid JSON, no explanation.
                     year=datetime_data["year"],
                     month=datetime_data["month"],
                     day=datetime_data["day"],
-                    hour=datetime_data["hour"],
-                    minute=datetime_data["minute"],
+                    hour=hour,
+                    minute=minute,
                 )
             )
 
@@ -645,6 +656,7 @@ Return only valid JSON, no explanation.
                 "scheduled_for": scheduled_datetime_utc,
                 "timezone": timezone,
                 "original_text": schedule_text,
+                "default_time_used": not time_given,
             }
 
         except (json.JSONDecodeError, ValueError, KeyError, TypeError) as e:
@@ -728,6 +740,7 @@ Return only valid JSON, no explanation.
             "scheduled_for": scheduled_time.astimezone(pytz.UTC),
             "timezone": timezone,
             "original_text": schedule_text,
+            "default_time_used": False,
         }
 
     def _names_other_time(self, text: str) -> bool:
@@ -738,50 +751,6 @@ Return only valid JSON, no explanation.
             or re.search(_SCHEDULE_WORDS_PATTERN, text)
             or self._extract_time_from_text(text)
             or self._extract_day_from_text(text)
-        )
-
-    def _try_date_only(self, schedule_text: str, timezone: str) -> Optional[ParsedSchedule]:
-        """
-        Read a one-time schedule that names a date and no time, at the default time:
-        "tomorrow", "next week" (its Monday) or "in N days" (N at least 1).
-
-        Refused (None) when the rest of the text names anything the rule would ignore: any
-        digit, a clock or named time, a day name, a word such as "morning", "after" or
-        "every", or an "at" ("tomorrow at sunset"). The model reads those.
-
-        Args:
-            schedule_text: Lowercase schedule text
-            timezone: The timezone the date and the default time are read in
-
-        Returns:
-            The one-time schedule, or None when the text is not a date alone
-
-        Raises:
-            ScheduleNotUnderstoodError: The rest of the text holds an unusable clock time.
-        """
-        match = re.search(_DATE_ONLY_PATTERN, schedule_text)
-        if not match:
-            return None
-        rest = _without(schedule_text, match)
-        if self._names_other_time(rest) or re.search(_AT_PATTERN, rest):
-            return None
-
-        tz = pytz.timezone(timezone)
-        today = utc_now().astimezone(tz).date()
-        if match.group("days"):
-            days = int(match.group("days"))
-            if days < 1:
-                return None
-        elif match.group(0) == "tomorrow":
-            days = 1
-        else:
-            days = 7 - today.weekday()  # the Monday of next week
-
-        date = today + timedelta(days=days)
-        hour, minute = self.default_time
-        scheduled_time = tz.localize(datetime(date.year, date.month, date.day, hour, minute))
-        return ParsedSchedule(
-            scheduled_for=scheduled_time.astimezone(pytz.UTC), default_time_used=True
         )
 
     async def _try_pattern_matching(self, schedule_text: str) -> Optional[ParsedSchedule]:

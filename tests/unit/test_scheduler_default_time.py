@@ -7,7 +7,8 @@ only where a schedule names no time:
 - recurring, once on each day named: "daily", "every day", "every weekday", "every
   weekend", "every N days", "every monday", "every mon and thu", "weekly" / "every week"
   (Monday), "monthly" / "every month" (the 1st);
-- one-time, a date alone: "tomorrow", "next week" (its Monday), "in N days".
+- one-time, a date alone ("tomorrow", "next week", "demain"): the model reads the date and
+  reports ``"time_given": false``, and the job runs at the default time on that date.
 
 An interval ("every 15 minutes", "hourly") never gets it. An interval that also names a time
 of day ("every 15 minutes ... at 9am") conflicts, so the model reads it instead of the
@@ -282,65 +283,63 @@ async def test_model_schedule_does_not_claim_the_default(parser):
 # One-time schedules without a time
 
 
+def model_answer(day: int, hour: int = 0, time_given=None, timezone: str = "UTC") -> str:
+    flag = "" if time_given is None else f', "time_given": {time_given}'
+    return (
+        f'{{"year": 2026, "month": 10, "day": {day}, "hour": {hour}, "minute": 0, '
+        f'"timezone": "{timezone}"{flag}}}'
+    )
+
+
 @pytest.mark.parametrize(
     "text, timezone, scheduled_for",
     [
-        ("tomorrow", "UTC", utc(9, 29, 8, 30)),
-        ("remind me tomorrow to call mom", "UTC", utc(9, 29, 8, 30)),
-        ("next week", "UTC", utc(10, 5, 8, 30)),
-        ("in 3 days", "UTC", utc(10, 1, 8, 30)),
-        ("in 1 day check the oven", "UTC", utc(9, 29, 8, 30)),
-        ("tomorrow", "Europe/London", utc(9, 29, 7, 30)),
-        ("next week", "America/New_York", utc(10, 5, 12, 30)),
+        ("remind me tomorrow to call mom", "UTC", utc(10, 5, 8, 30)),
+        ("next week", "Europe/London", utc(10, 5, 7, 30)),
+        ("demain", "America/New_York", utc(10, 5, 12, 30)),
     ],
 )
 async def test_date_without_a_time_runs_at_the_default(parser, text, timezone, scheduled_for):
-    parser = with_llm(as_job_type(parser, text, "one_time"), None)
+    llm = FakeLLM(reply=model_answer(5, time_given="false", timezone=timezone))
+    parser = with_llm(as_job_type(parser, text, "one_time"), llm)
 
     assert await parser.parse_schedule(text, timezone) == ParsedSchedule(
         scheduled_for=scheduled_for, default_time_used=True
     )
 
 
-async def test_date_is_the_users_local_date(monkeypatch):
-    # 02:00 UTC on Monday is still Sunday evening in New York
-    monkeypatch.setattr(parser_module, "utc_now", lambda: utc(9, 28, 2))
-    parser = ScheduleParser(default_time="8:30am")
+@pytest.mark.parametrize("time_given", ["true", None])
+async def test_date_with_a_time_keeps_it(parser, time_given):
+    text = "on monday at 3pm"
+    llm = FakeLLM(reply=model_answer(5, hour=15, time_given=time_given))
+    parser = with_llm(as_job_type(parser, text, "one_time"), llm)
 
-    tomorrow = parser._try_date_only("tomorrow", "America/New_York")
-    next_week = parser._try_date_only("next week", "America/New_York")
-
-    assert tomorrow.scheduled_for == utc(9, 28, 12, 30)
-    assert next_week.scheduled_for == utc(9, 28, 12, 30)
+    assert await parser.parse_schedule(text) == ParsedSchedule(scheduled_for=utc(10, 5, 15))
 
 
-@pytest.mark.parametrize(
-    "text",
-    [
-        "tomorrow at 3pm",
-        "tomorrow morning",
-        "tomorrow at sunset",
-        "tomorrow after lunch",
-        "tomorrow on friday",
-        "next week on tuesday",
-        "in 2 days at noon",
-        "in 0 days",
-        "next month",
-        "next friday",
-    ],
-)
-def test_date_with_anything_else_is_for_the_model(parser, text):
-    assert parser._try_date_only(text, "UTC") is None
+@pytest.mark.parametrize("time_given", ['"no"', "0", "null"])
+async def test_time_given_must_be_a_boolean(parser, time_given):
+    text = "tomorrow"
+    llm = FakeLLM(reply=model_answer(5, time_given=time_given))
+    parser = with_llm(as_job_type(parser, text, "one_time"), llm)
+
+    with pytest.raises(ScheduleNotUnderstoodError):
+        await parser.parse_schedule(text)
 
 
-async def test_one_time_model_answer_does_not_claim_the_default(parser):
+async def test_one_time_prompt_carries_the_default(parser):
+    text = "next week"
+    llm = FakeLLM(reply=model_answer(5, time_given="false"))
+
+    await with_llm(as_job_type(parser, text, "one_time"), llm).parse_schedule(text)
+
+    assert '"time_given": true' in llm.prompts[0]
+    assert "then use the default time,\n08:30" in llm.prompts[0]
+    assert "the Monday of next week at 08:30, time_given false" in llm.prompts[0]
+
+
+async def test_one_time_fallback_does_not_claim_the_default(parser):
     text = "tomorrow at 3pm"
-    llm = FakeLLM(
-        reply='{"year": 2026, "month": 9, "day": 29, "hour": 15, "minute": 0, "timezone": "UTC"}'
-    )
+    parser = with_llm(as_job_type(parser, text, "one_time"), None)
 
-    parsed = await with_llm(as_job_type(parser, text, "one_time"), llm).parse_schedule(text)
-
-    assert parsed == ParsedSchedule(scheduled_for=utc(9, 29, 15))
-    # The model is told the default time and that next week is its Monday
-    assert "the Monday of next week at 08:30" in llm.prompts[0]
+    assert await parser.parse_schedule(text) == ParsedSchedule(scheduled_for=utc(9, 29, 15))
