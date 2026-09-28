@@ -17,6 +17,7 @@ default, so the reply can say so.
 """
 
 from datetime import datetime
+from types import SimpleNamespace
 
 import pytest
 import pytz
@@ -138,6 +139,16 @@ def test_unset_key_is_valid_and_defaults_to_nine():
     assert ScheduleParser().default_time == (9, 0)
 
 
+async def test_scheduler_config_route_shows_the_default(serve):
+    formation = SimpleNamespace(formation_id="f", config={"scheduler": {"enabled": True}})
+
+    async with serve(formation) as client:
+        response = await client.get("/v1/scheduler", headers={"X-Muxi-Admin-Key": "admin-key"})
+
+    assert response.status_code == 200, response.text
+    assert response.json()["data"]["default_time"] == "09:00"
+
+
 def test_parser_refuses_a_default_that_is_not_a_clock_time():
     with pytest.raises(ValueError):
         ScheduleParser(default_time="25:00")
@@ -218,6 +229,11 @@ async def test_intervals_never_get_the_default(parser, text, cron):
         "every day until friday",
         "remind me every monday to review the 3 reports",
         "daily on weekdays",
+        # A day outside the matched phrase would be dropped
+        "every monday or friday",
+        "every monday or friday at 9am",
+        "every monday and every friday",
+        "every tues and thurs or sat",
     ],
 )
 async def test_the_model_reads_what_the_patterns_should_not_flatten(parser, text):

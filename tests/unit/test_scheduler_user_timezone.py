@@ -111,9 +111,10 @@ async def test_user_timezone_reads_and_fires_the_job_across_dst(db_manager, chan
 
 
 async def test_user_timezone_reads_a_one_time_job(db_manager, channel_store, monkeypatch):
-    # Monday, September 28, 2026, 02:00 UTC: still Sunday evening in New York
+    # Monday, September 29, 2036, 02:00 UTC: still Sunday evening in New York. Far ahead, so
+    # the job manager accepts the run time as in the future whatever the real date.
     monkeypatch.setattr(
-        parser_module, "utc_now", lambda: pytz.UTC.localize(datetime(2026, 9, 28, 2))
+        parser_module, "utc_now", lambda: pytz.UTC.localize(datetime(2036, 9, 29, 2))
     )
     await channel_store.set_preferences("ada", timezone=NEW_YORK)
     service = make_service(db_manager, channel_store)
@@ -121,7 +122,7 @@ async def test_user_timezone_reads_a_one_time_job(db_manager, channel_store, mon
     job = await create(service, "ada", "remind me tomorrow to call mom", job_type="one_time")
 
     # Monday 09:00 in New York (EDT)
-    assert job["scheduled_for"] == pytz.UTC.localize(datetime(2026, 9, 28, 13, 0))
+    assert job["scheduled_for"] == pytz.UTC.localize(datetime(2036, 9, 29, 13, 0))
     assert job["default_time_used"] is True
     assert job["timezone"] == NEW_YORK
     assert await stored_timezone(service, job["job_id"]) == NEW_YORK

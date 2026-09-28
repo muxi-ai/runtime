@@ -4,7 +4,7 @@
 
 ### Schedules without a time run at a configurable default time, and schedules are read in the user's timezone
 
-**New key: `scheduler.default_time`** (default `"09:00"`). It takes the clock forms the schedule parser reads: `"08:30"`, `"8:30am"`, `"9am"`, `"21:15"`. Any other value stops the formation from loading with an error naming the key. Quote it: YAML reads an unquoted `21:15` as the number 1275.
+**New key: `scheduler.default_time`** (default `"09:00"`). It takes the clock forms the schedule parser reads: `"08:30"`, `"8:30am"`, `"9am"`, `"21:15"`. Any other value stops the formation from loading with an error naming the key. Quote it: YAML reads an unquoted `21:15` as the number 1275. `GET /v1/scheduler` includes it among the filled-in defaults.
 
 **Behaviour change: schedules that name no time run at 09:00, not midnight.** The pattern parser gave a recurring schedule with no time a time of midnight: "every day" and "daily" became `0 0 * * *`, "every N days" `0 0 */N * *`, "weekly" Sunday at midnight and "monthly" the 1st at midnight. These schedules now run at `scheduler.default_time`:
 
@@ -14,6 +14,8 @@
 - one-time: "tomorrow", "next week" (the Monday of next week) and "in N days", which the model used to place at a 09:00 it was told to use.
 
 The default applies only when the text names no time. Text that names a time the parser does not read ("every day at sunset", "every Monday after lunch") or holds anything else the default would ignore (a number, "before", "until", "weekdays" after "daily") goes to the model. The model is told the default time too. Intervals ("every 15 minutes", "every 2 hours", "hourly") never get one.
+
+A day named outside the "every <day>" or "every <day> and <day>" phrase used to be dropped: "every monday or friday at 9am" became `0 9 * * 1`, Mondays only. That text now goes to the model, with or without a time.
 
 An interval that also names a time of day used to be flattened: "every 15 minutes starting at 9am" became `0 9 * * *`, once a day. It now goes to the model; if the model's answer is not a valid schedule, the user gets the "I didn't understand that schedule" reply.
 

@@ -826,12 +826,15 @@ Return only valid JSON, no explanation.
                 )
 
         # Several days (e.g. "every Tuesday and Thursday at 3pm"). Must be checked BEFORE the
-        # single-day pattern to avoid partial matches.
+        # single-day pattern to avoid partial matches. A day named outside the matched phrase
+        # ("every monday or friday") would be dropped, so the model reads that text.
         multi_day_pattern = rf"every\s+((?:{_DAY_NAME_PATTERN}(?:\s*(?:,|and)\s*)?)+)"
         match = re.search(multi_day_pattern, schedule_text)
         if match:
             found_days = re.findall(_DAY_NAME_PATTERN, match.group(1))
             if len(found_days) > 1:
+                if self._extract_day_from_text(_without(schedule_text, match)):
+                    return None
                 day_specs = ",".join(self.day_patterns[d] for d in found_days)
                 return self._once_a_day(schedule_text, match, f"* * {day_specs}")
 
@@ -839,6 +842,8 @@ Return only valid JSON, no explanation.
         day_pattern = rf"every\s+({_DAY_NAME_PATTERN}|\bweekdays?\b|\bweekends?\b)"
         match = re.search(day_pattern, schedule_text)
         if match:
+            if self._extract_day_from_text(_without(schedule_text, match)):
+                return None
             return self._once_a_day(
                 schedule_text, match, f"* * {self.day_patterns[match.group(1)]}"
             )
