@@ -952,7 +952,7 @@ class SchedulerService:
         original_prompt: str,
         schedule: str,
         exclusions: Optional[List[str]] = None,
-    ) -> str:
+    ) -> Dict[str, Any]:
         """
         Create a new scheduled job.
 
@@ -964,7 +964,13 @@ class SchedulerService:
             exclusions: Optional list of exclusion descriptions
 
         Returns:
-            Job ID of created job
+            The created job: ``job_id``, ``cron_expression`` (recurring, else None),
+            ``scheduled_for`` (one-time run time in UTC, else None) and ``timezone`` (the
+            timezone the schedule is read in)
+
+        Raises:
+            ScheduleUnavailableError: The schedule needs the model and the model is unavailable.
+            ScheduleNotUnderstoodError: The text is not a schedule the parser can express.
         """
         # Parse schedule (returns either cron expression or dict for one-off job)
         parse_result = await self.schedule_parser.parse_schedule(schedule, self.formation_timezone)
@@ -1034,7 +1040,12 @@ class SchedulerService:
             description=f"Scheduled job created: {title}",
         )
 
-        return job_id
+        return {
+            "job_id": job_id,
+            "cron_expression": cron_expression,
+            "scheduled_for": scheduled_for,
+            "timezone": self.formation_timezone,
+        }
 
     async def complete_job_from_webhook(
         self,

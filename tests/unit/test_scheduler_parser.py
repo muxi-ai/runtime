@@ -3,18 +3,19 @@
 Times: a written time keeps its minutes ("3:30pm" is 15:30, not "30pm"), no pattern
 reads part of a longer number ("110pm", "10:305"), and a time that is outside the
 clock (hour over 23, 12-hour hour outside 1-12, minute over 59) or is not a clock
-time at all raises ValueError, so no job is created rather than a cron with an
-impossible hour or one that a fallback silently runs at midnight. The first time
+time at all raises ScheduleNotUnderstoodError, so no job is created rather than a
+cron with an impossible hour or one that runs at some other time. The first time
 found is the schedule's; a later clock-like number in the task text is left alone.
 
 Days: a day name counts only as a whole word, in its full form, its plural or a
 common abbreviation, in any case, so "month", "friend", "sunset", "wedding" and
-"saturated" name no day.
+"saturated" name no day. The "every <day> at <time>" and "every <day> and <day> at
+<time>" patterns read the same vocabulary.
 """
 
 import pytest
 
-from muxi.runtime.services.scheduler.parser import ScheduleParser
+from muxi.runtime.services.scheduler.parser import ScheduleNotUnderstoodError, ScheduleParser
 
 
 @pytest.fixture
@@ -69,7 +70,7 @@ async def test_time_is_read_with_its_minutes(parser, text, cron):
     ],
 )
 async def test_unusable_time_refuses_the_schedule(parser, text):
-    with pytest.raises(ValueError):
+    with pytest.raises(ScheduleNotUnderstoodError):
         await parser._try_pattern_matching(text)
 
 
@@ -77,7 +78,7 @@ async def test_unusable_time_refuses_the_schedule(parser, text):
     "text", ["25:00", "13pm", "0am", "9:75am", "130pm", "110pm", "10:305", "12:5pm"]
 )
 def test_unusable_time_is_not_extracted(parser, text):
-    with pytest.raises(ValueError):
+    with pytest.raises(ScheduleNotUnderstoodError):
         parser._extract_time_from_text(text)
 
 
@@ -155,3 +156,30 @@ def test_day_names_abbreviations_and_plurals_are_days(parser, text, day):
 )
 async def test_day_names_set_the_day_of_week(parser, text, cron):
     assert await parser._try_pattern_matching(text) == cron
+
+
+@pytest.mark.parametrize(
+    "text, cron",
+    [
+        ("every tues and thurs at 3pm", "0 15 * * 2,4"),
+        ("every tuesdays and thursdays at 3pm", "0 15 * * 2,4"),
+        ("every mon, wed and fri at 8am", "0 8 * * 1,3,5"),
+        ("every sat and sun at 10:30am", "30 10 * * 6,0"),
+        ("every tuesday and thursday at 3pm", "0 15 * * 2,4"),
+        ("every mondays at 9am", "0 9 * * 1"),
+        ("every mon at 9am", "0 9 * * 1"),
+        ("every thurs at 5:15pm", "15 17 * * 4"),
+        ("every sundays at noon", "0 12 * * 0"),
+        ("every weekdays at 9am", "0 9 * * 1-5"),
+        ("every weekends at 9am", "0 9 * * 0,6"),
+    ],
+)
+async def test_every_day_patterns_read_the_shared_day_vocabulary(parser, text, cron):
+    assert await parser._try_pattern_matching(text) == cron
+
+
+@pytest.mark.parametrize(
+    "text", ["every month at 9am", "every sunny day at 9am", "every monfri at 9am"]
+)
+async def test_every_day_patterns_match_day_names_as_whole_words(parser, text):
+    assert await parser._try_pattern_matching(text) is None
