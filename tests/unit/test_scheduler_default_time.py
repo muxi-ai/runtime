@@ -334,9 +334,9 @@ async def test_one_time_prompt_carries_the_default(parser):
     await with_llm(as_job_type(parser, text, "one_time"), llm).parse_schedule(text)
 
     assert '"time_given": true' in llm.prompts[0]
-    assert "then use the default time,\n08:30" in llm.prompts[0]
-    # A time relative to now fixes the moment: it is a time given
-    assert "neither a time of day nor a time\nrelative to now" in llm.prompts[0]
+    assert "no time of day; then use the default time, 08:30" in llm.prompts[0]
+    # A day offset gets the default; an offset in hours or minutes fixes the moment
+    assert '"in 3 days" → 3 days from now at 08:30, time_given false' in llm.prompts[0]
     assert '"in 3 hours" → 3 hours from now, time_given true' in llm.prompts[0]
     assert "the Monday of next week at 08:30, time_given false" in llm.prompts[0]
 
