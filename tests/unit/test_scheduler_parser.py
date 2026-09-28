@@ -48,7 +48,7 @@ def parser():
     ],
 )
 async def test_time_is_read_with_its_minutes(parser, text, cron):
-    assert await parser._try_pattern_matching(text) == cron
+    assert (await parser._try_pattern_matching(text)).cron_expression == cron
 
 
 @pytest.mark.parametrize(
@@ -97,13 +97,14 @@ def test_long_digit_run_is_scanned_in_linear_time(parser):
     [
         ("monthly at 9am", "0 9 1 * *"),
         ("remind my friend daily at 9am", "0 9 * * *"),
-        ("every day at sunset", "0 0 * * *"),
+        ("every day at 7am until sunset", "0 7 * * *"),
+        ("every month at 9am", "0 9 1 * *"),
         ("wedding prep daily at 8am", "0 8 * * *"),
         ("saturated inbox check daily at 7am", "0 7 * * *"),
     ],
 )
 async def test_ordinary_words_pick_no_day(parser, text, cron):
-    assert await parser._try_pattern_matching(text) == cron
+    assert (await parser._try_pattern_matching(text)).cron_expression == cron
 
 
 @pytest.mark.parametrize(
@@ -155,7 +156,7 @@ def test_day_names_abbreviations_and_plurals_are_days(parser, text, day):
     ],
 )
 async def test_day_names_set_the_day_of_week(parser, text, cron):
-    assert await parser._try_pattern_matching(text) == cron
+    assert (await parser._try_pattern_matching(text)).cron_expression == cron
 
 
 @pytest.mark.parametrize(
@@ -175,11 +176,9 @@ async def test_day_names_set_the_day_of_week(parser, text, cron):
     ],
 )
 async def test_every_day_patterns_read_the_shared_day_vocabulary(parser, text, cron):
-    assert await parser._try_pattern_matching(text) == cron
+    assert (await parser._try_pattern_matching(text)).cron_expression == cron
 
 
-@pytest.mark.parametrize(
-    "text", ["every month at 9am", "every sunny day at 9am", "every monfri at 9am"]
-)
+@pytest.mark.parametrize("text", ["every sunny day at 9am", "every monfri at 9am"])
 async def test_every_day_patterns_match_day_names_as_whole_words(parser, text):
     assert await parser._try_pattern_matching(text) is None

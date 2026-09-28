@@ -15,6 +15,7 @@ import yaml
 # Import the MCP registry to get valid MCP names dynamically
 from ...services.a2a.identifiers import get_service_identifier
 from ...services.mcp.built_in import BUILTIN_MCP_REGISTRY
+from ...services.scheduler.parser import parse_clock_time
 from ...utils.fastjson import json
 
 # Pattern for detecting user credentials in configuration
@@ -3723,6 +3724,16 @@ class FormationValidator:
             timezone = scheduler_config["timezone"]
             if not isinstance(timezone, str) or not timezone.strip():
                 self.result.add_error("Scheduler 'timezone' field must be a non-empty string")
+
+        # Validate default_time field (optional, defaults to "09:00")
+        if "default_time" in scheduler_config:
+            default_time = scheduler_config["default_time"]
+            if parse_clock_time(default_time) is None:
+                self.result.add_error(
+                    "Scheduler 'default_time' must be a quoted clock time such as '09:00', "
+                    f"'8:30am', '9am' or '21:15', got {default_time!r} (YAML reads an unquoted "
+                    "21:15 as a number)"
+                )
 
         # Validate check_interval_minutes field (optional, defaults to 1)
         if "check_interval_minutes" in scheduler_config:

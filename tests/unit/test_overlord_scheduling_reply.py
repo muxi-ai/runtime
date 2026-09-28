@@ -61,7 +61,13 @@ def make_overlord(scheduler: FakeScheduler) -> Overlord:
 
 
 def recurring(cron: str, timezone: str = "UTC") -> Dict[str, Any]:
-    return {"job_id": "job_1", "cron_expression": cron, "scheduled_for": None, "timezone": timezone}
+    return {
+        "job_id": "job_1",
+        "cron_expression": cron,
+        "scheduled_for": None,
+        "timezone": timezone,
+        "default_time_used": False,
+    }
 
 
 @pytest.mark.parametrize(
@@ -121,6 +127,7 @@ def test_scheduling_branch_returns_the_handler_reply():
                 "cron_expression": None,
                 "scheduled_for": pytz.UTC.localize(datetime(2026, 9, 29, 14, 30)),
                 "timezone": "Europe/London",
+                "default_time_used": False,
             },
             "on Tuesday, September 29, 2026 at 3:30pm (Europe/London)",
         ),
@@ -150,3 +157,34 @@ async def test_success_reply_says_when_the_job_runs(streamed, job, when):
             "exclusions": [],
         }
     ]
+
+
+@pytest.mark.parametrize(
+    "job, when",
+    [
+        (
+            {**recurring("30 8 * * *"), "default_time_used": True},
+            "every day at 8:30am (UTC)",
+        ),
+        (
+            {
+                "job_id": "job_1",
+                "cron_expression": None,
+                "scheduled_for": pytz.UTC.localize(datetime(2026, 9, 29, 13, 0)),
+                "timezone": "America/New_York",
+                "default_time_used": True,
+            },
+            "on Tuesday, September 29, 2026 at 9am (America/New_York)",
+        ),
+    ],
+)
+async def test_success_reply_says_when_the_default_time_was_used(streamed, job, when):
+    overlord = make_overlord(FakeScheduler(job=job))
+
+    response = await overlord._handle_scheduling_request(MESSAGE, "user-1", 0.0)
+
+    assert response.content == (
+        f"I've created a scheduled job for you. Your request '{MESSAGE}' has been "
+        f"scheduled successfully and will run {when}. No time was given, so I used the "
+        "default time; tell me a time to change it. (Job ID: job_1)"
+    )

@@ -2,6 +2,25 @@
 
 ## [unreleased]
 
+### Schedules without a time run at a configurable default time, and schedules are read in the user's timezone
+
+**New key: `scheduler.default_time`** (default `"09:00"`). It takes the clock forms the schedule parser reads: `"08:30"`, `"8:30am"`, `"9am"`, `"21:15"`. Any other value stops the formation from loading with an error naming the key. Quote it: YAML reads an unquoted `21:15` as the number 1275.
+
+**Behaviour change: schedules that name no time run at 09:00, not midnight.** The pattern parser gave a recurring schedule with no time a time of midnight: "every day" and "daily" became `0 0 * * *`, "every N days" `0 0 */N * *`, "weekly" Sunday at midnight and "monthly" the 1st at midnight. These schedules now run at `scheduler.default_time`:
+
+- "daily", "every day", "every weekday", "every weekdays", "every weekend", "every N days";
+- "every Monday", "every mondays", "every tues and thurs", and any other day or list of days with no time (these used to go to the model);
+- "weekly" and "every week" on Monday (was Sunday), "monthly" and "every month" on the 1st ("every week" and "every month" used to go to the model);
+- one-time: "tomorrow", "next week" (the Monday of next week) and "in N days", which the model used to place at a 09:00 it was told to use.
+
+The default applies only when the text names no time. Text that names a time the parser does not read ("every day at sunset", "every Monday after lunch") or holds anything else the default would ignore (a number, "before", "until", "weekdays" after "daily") goes to the model. The model is told the default time too. Intervals ("every 15 minutes", "every 2 hours", "hourly") never get one.
+
+An interval that also names a time of day used to be flattened: "every 15 minutes starting at 9am" became `0 9 * * *`, once a day. It now goes to the model; if the model's answer is not a valid schedule, the user gets the "I didn't understand that schedule" reply.
+
+When the default time was used, the reply says so: "...will run every day at 9am (UTC). No time was given, so I used the default time; tell me a time to change it. (Job ID: ...)". `SchedulerService.create_job` returns `default_time_used` alongside `job_id`, `cron_expression`, `scheduled_for` and `timezone`. `ScheduleParser.parse_schedule` now returns a `ParsedSchedule` (`cron_expression`, `scheduled_for`, `default_time_used`) instead of a cron string or a dict.
+
+**Behaviour change: a new job's schedule is read in the user's timezone when they have set one.** A user who set a timezone with `/preferences timezone <IANA name>` (kept in the proactive user channel store) gets their scheduling requests read in that timezone; everyone else gets the formation's `scheduler.timezone`, as before. The job keeps the timezone in `job_metadata["timezone"]`, and the scheduler evaluates its cron and its exclusion rules in that timezone, daylight saving time included: "every day at 9am" for a user in `America/New_York` fires at 13:00 UTC in summer and 14:00 UTC in winter. The reply names the timezone used. Jobs without a stored timezone (every job created before this change, and jobs created through the admin API) keep running in the formation's timezone. A job replaced because its prompt changed keeps the old job's timezone.
+
 ### The scheduler no longer guesses a schedule, answers every scheduling request itself, and says when a job runs
 
 **Behaviour change:** a scheduling request whose time or day the scheduler used to fill in is now refused with a message instead of being created with a guessed time.

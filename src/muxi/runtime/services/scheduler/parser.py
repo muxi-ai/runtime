@@ -24,8 +24,9 @@ Exclusions:
 """
 
 import re
+from dataclasses import dataclass
 from datetime import datetime, timedelta
-from typing import Any, Dict, List, Optional, Tuple, Union
+from typing import Any, Dict, List, Optional, Tuple
 
 import pytz
 
@@ -46,6 +47,22 @@ class ScheduleUnavailableError(Exception):
 class ScheduleNotUnderstoodError(ValueError):
     """The text is not a schedule the parser can express, or the model's answer was not a
     valid schedule. Retrying the same text will not help; rephrasing may."""
+
+
+@dataclass(frozen=True)
+class ParsedSchedule:
+    """A parsed schedule: the cron expression of a recurring job, or the run time (UTC) of a
+    one-time job. ``default_time_used`` is True when the text named no time and the parser
+    ran the job at the default time."""
+
+    cron_expression: Optional[str] = None
+    scheduled_for: Optional[datetime] = None
+    default_time_used: bool = False
+
+
+# The time of day a schedule that names no time runs at, unless the formation sets
+# ``scheduler.default_time``
+DEFAULT_TIME = "09:00"
 
 
 # The one day vocabulary for every day-name match in this module: full names, plurals and
@@ -95,6 +112,11 @@ _FALLBACK_INTERVAL_PATTERN = r"\b(?:every\s+(?:(?P<count>\d+)\s+)?(?P<unit>minut
 _FALLBACK_RELATIVE_PATTERN = r"\bin\s+(?P<count>\d+)\s+(?P<unit>minute|hour)s?\b"
 # "today", "tomorrow"
 _FALLBACK_DAY_PATTERN = r"\b(?:today|tomorrow)\b"
+# A one-time date with no time: "tomorrow", "next week", "in 3 days"
+_DATE_ONLY_PATTERN = r"\b(?:tomorrow|next\s+week|in\s+(?P<days>\d+)\s+days?)\b"
+# "at" left over once a schedule's phrase is removed: a time in words the patterns do not
+# read ("at sunset", "at the end of the day")
+_AT_PATTERN = r"\bat\b"
 
 
 def _without(text: str, match: re.Match) -> str:
@@ -110,6 +132,17 @@ def _fallback_or_raise(result, error: Exception):
     return result
 
 
+def parse_clock_time(value: Any) -> Optional[Tuple[int, int]]:
+    """
+    Read a configured clock time, such as ``scheduler.default_time``.
+
+    Returns:
+        (hour, minute) when ``value`` is a string holding exactly one clock time in a form the
+        schedule parser reads ("08:30", "8:30am", "9am", "21:15", "21h15"), else None
+    """
+    return ScheduleParser().read_clock_time(value)
+
+
 class ScheduleParser:
     """
     Natural language schedule parser for MUXI scheduler.
@@ -118,13 +151,18 @@ class ScheduleParser:
     and generates dynamic exclusion rules for complex scheduling needs.
     """
 
-    def __init__(self, cache=None, circuit_breaker=None):
+    def __init__(self, cache=None, circuit_breaker=None, default_time: str = DEFAULT_TIME):
         """
         Initialize schedule parser.
 
         Args:
             cache: Optional SchedulerCache instance for caching results
             circuit_breaker: Optional LLMCircuitBreaker for fault tolerance
+            default_time: The clock time a schedule that names no time runs at ("09:00",
+                "8:30am")
+
+        Raises:
+            ValueError: ``default_time`` is not a clock time
         """
         self.llm = None  # Will be initialized when needed
         self.cache = cache
@@ -149,17 +187,24 @@ class ScheduleParser:
             r"(morning|noon|afternoon|evening|midnight)": self._parse_named_time,
         }
 
-        # Common frequency patterns
-        self.frequency_patterns = {
+        # Intervals through the day: the whole cron expression
+        self.interval_patterns = {
             r"every\s+(\d+)\s+minutes?": lambda m: f"*/{m.group(1)} * * * *",
             r"every\s+(\d+)\s+hours?": lambda m: f"0 */{m.group(1)} * * *",
-            r"every\s+(\d+)\s+days?": lambda m: f"0 0 */{m.group(1)} * *",
             r"every\s+hour": lambda m: "0 * * * *",
-            r"every\s+day": lambda m: "0 0 * * *",
             r"hourly": lambda m: "0 * * * *",
-            r"daily": lambda m: "0 0 * * *",
-            r"weekly": lambda m: "0 0 * * 0",
-            r"monthly": lambda m: "0 0 1 * *",
+        }
+
+        # Once on each day named: the day-of-month, month and day-of-week fields. The time is
+        # the one the text gives, else the default time.
+        self.day_frequency_patterns = {
+            r"every\s+(\d+)\s+days?": lambda m: f"*/{m.group(1)} * *",
+            r"every\s+day\b": lambda m: "* * *",
+            r"\bdaily\b": lambda m: "* * *",
+            r"every\s+week\b": lambda m: "* * 1",  # Monday
+            r"\bweekly\b": lambda m: "* * 1",
+            r"every\s+month\b": lambda m: "1 * *",
+            r"\bmonthly\b": lambda m: "1 * *",
         }
 
         # Day patterns (each key matches only as a whole word)
@@ -167,9 +212,15 @@ class ScheduleParser:
             **_DAY_NAMES,
             "weekdays": "1-5",
             "weekends": "0,6",
+            "weekday": "1-5",
+            "weekend": "0,6",
             "business days": "1-5",
             "work days": "1-5",
         }
+
+        self.default_time = self.read_clock_time(default_time)
+        if self.default_time is None:
+            raise ValueError(f"Scheduler default time is not a clock time: {default_time!r}")
 
         pass  # REMOVED: init-phase observe() call
 
@@ -189,19 +240,17 @@ class ScheduleParser:
                 return None
         return self.llm
 
-    async def parse_schedule(
-        self, schedule_text: str, timezone: str = "UTC"
-    ) -> Union[str, Dict[str, Any]]:
+    async def parse_schedule(self, schedule_text: str, timezone: str = "UTC") -> ParsedSchedule:
         """
         Parse natural language schedule into cron expression or specific datetime.
 
         Args:
             schedule_text: Natural language schedule description
-            timezone: Target timezone for the schedule
+            timezone: The timezone the schedule is read in
 
         Returns:
-            For recurring jobs: Cron expression string
-            For one-time jobs: Dict with job type and scheduled datetime
+            The cron expression of a recurring job or the run time (UTC) of a one-time job, and
+            whether the default time was used because the text named no time
 
         Raises:
             ScheduleUnavailableError: The schedule needs the model and the model is unavailable.
@@ -209,34 +258,25 @@ class ScheduleParser:
         """
         schedule_lower = schedule_text.lower().strip()
 
-        pass  # REMOVED: init-phase observe() call
-
         # First, detect if this is a one-time or recurring job
         job_type = await self._detect_job_type(schedule_text)
 
         if job_type == "one_time":
-            # Parse as specific datetime
+            # A date with no time first, then the model for everything else
+            date_only = self._try_date_only(schedule_lower, timezone)
+            if date_only:
+                return date_only
+
             datetime_result = await self._parse_specific_datetime(schedule_text, timezone)
+            return ParsedSchedule(scheduled_for=datetime_result["scheduled_for"])
 
-            pass  # REMOVED: init-phase observe() call
+        # Recurring: pattern matching first for common cases, then the model
+        parsed = await self._try_pattern_matching(schedule_lower)
+        if parsed:
+            return parsed
 
-            return datetime_result
-
-        else:
-            # Parse as recurring job (existing logic)
-            # Try pattern matching first for common cases
-            cron_expr = await self._try_pattern_matching(schedule_lower)
-
-            if cron_expr:
-                pass  # REMOVED: init-phase observe() call
-                return cron_expr
-
-            # Fall back to LLM parsing for complex cases
-            cron_expr = await self._llm_parse_schedule(schedule_text, timezone)
-
-            pass  # REMOVED: init-phase observe() call
-
-            return cron_expr
+        cron_expr = await self._llm_parse_schedule(schedule_text, timezone)
+        return ParsedSchedule(cron_expression=cron_expr)
 
     async def _detect_job_type(self, schedule_text: str) -> str:
         """
@@ -518,6 +558,7 @@ Respond with ONLY: "one_time" or "recurring"
             raise ScheduleNotUnderstoodError(f"Schedule text was rejected: {e}") from e
 
         safe_text = sanitized_text[:200] if len(sanitized_text) > 200 else sanitized_text
+        hour, minute = self.default_time
         prompt_template = """Parse this request into a specific date and time.
 
 Request: {request_text}
@@ -542,7 +583,7 @@ Examples:
 - "tomorrow at 2pm" → tomorrow's date at 14:00
 - "next Friday at 9am" → next Friday's date at 09:00
 - "on December 25th at noon" → 2025-12-25 at 12:00
-- "next week" → one week from today at 09:00 (default time)
+- "next week" → the Monday of next week at {hour:02d}:{minute:02d} (the default time, used when the request names no time)
 - "in 3 days at 3:30pm" → 3 days from now at 15:30
 
 Return only valid JSON, no explanation.
@@ -699,90 +740,144 @@ Return only valid JSON, no explanation.
             or self._extract_day_from_text(text)
         )
 
-    async def _try_pattern_matching(self, schedule_text: str) -> Optional[str]:
+    def _try_date_only(self, schedule_text: str, timezone: str) -> Optional[ParsedSchedule]:
+        """
+        Read a one-time schedule that names a date and no time, at the default time:
+        "tomorrow", "next week" (its Monday) or "in N days" (N at least 1).
+
+        Refused (None) when the rest of the text names anything the rule would ignore: any
+        digit, a clock or named time, a day name, a word such as "morning", "after" or
+        "every", or an "at" ("tomorrow at sunset"). The model reads those.
+
+        Args:
+            schedule_text: Lowercase schedule text
+            timezone: The timezone the date and the default time are read in
+
+        Returns:
+            The one-time schedule, or None when the text is not a date alone
+
+        Raises:
+            ScheduleNotUnderstoodError: The rest of the text holds an unusable clock time.
+        """
+        match = re.search(_DATE_ONLY_PATTERN, schedule_text)
+        if not match:
+            return None
+        rest = _without(schedule_text, match)
+        if self._names_other_time(rest) or re.search(_AT_PATTERN, rest):
+            return None
+
+        tz = pytz.timezone(timezone)
+        today = utc_now().astimezone(tz).date()
+        if match.group("days"):
+            days = int(match.group("days"))
+            if days < 1:
+                return None
+        elif match.group(0) == "tomorrow":
+            days = 1
+        else:
+            days = 7 - today.weekday()  # the Monday of next week
+
+        date = today + timedelta(days=days)
+        hour, minute = self.default_time
+        scheduled_time = tz.localize(datetime(date.year, date.month, date.day, hour, minute))
+        return ParsedSchedule(
+            scheduled_for=scheduled_time.astimezone(pytz.UTC), default_time_used=True
+        )
+
+    async def _try_pattern_matching(self, schedule_text: str) -> Optional[ParsedSchedule]:
         """
         Try to parse schedule using pattern matching.
+
+        A schedule that runs once on each day it names ("daily", "every monday", "weekly",
+        "every 3 days") runs at the time the text gives, else at the default time. An
+        interval ("every 15 minutes", "hourly") that also names a time of day is left to the
+        model: the two conflict.
 
         Args:
             schedule_text: Lowercase schedule text
 
         Returns:
-            Cron expression or None if no pattern matched
+            The schedule, or None if no pattern matched or the text is for the model to read
+
+        Raises:
+            ScheduleNotUnderstoodError: The time found is not a usable clock time.
         """
-        # Check frequency patterns first
-        for pattern, cron_func in self.frequency_patterns.items():
+        # Intervals through the day
+        for pattern, cron_func in self.interval_patterns.items():
             match = re.search(pattern, schedule_text)
             if match:
-                base_cron = cron_func(match)
-
-                # Check for time specification
-                time_spec = self._extract_time_from_text(schedule_text)
-                if time_spec:
-                    hour, minute = time_spec
-                    # Replace hour and minute in cron
-                    parts = base_cron.split()
-                    if len(parts) >= 2:
-                        parts[0] = str(minute)
-                        parts[1] = str(hour)
-                    base_cron = " ".join(parts)
-
-                # Check for day specification
+                if self._extract_time_from_text(schedule_text):
+                    # "every 15 minutes ... at 9am": an interval and a time of day conflict
+                    return None
+                parts = cron_func(match).split()
                 day_spec = self._extract_day_from_text(schedule_text)
                 if day_spec:
-                    parts = base_cron.split()
-                    if len(parts) >= 5:
-                        parts[4] = day_spec
-                    base_cron = " ".join(parts)
+                    parts[4] = day_spec
+                return ParsedSchedule(cron_expression=" ".join(parts))
 
-                return base_cron
+        # Once a day, week or month, or every N days
+        for pattern, days_func in self.day_frequency_patterns.items():
+            match = re.search(pattern, schedule_text)
+            if match:
+                day_of_month, month, day_of_week = days_func(match).split()
+                day_of_week = self._extract_day_from_text(schedule_text) or day_of_week
+                return self._once_a_day(
+                    schedule_text, match, f"{day_of_month} {month} {day_of_week}"
+                )
 
-        # Check for multi-day + time patterns (e.g. "every Tuesday and Thursday at 3pm")
-        # Must be checked BEFORE the single-day pattern to avoid partial matches.
-        multi_day_pattern = (
-            rf"every\s+((?:{_DAY_NAME_PATTERN}(?:\s*(?:,|and)\s*)?)+)" rf"\s+(?:at\s+)?(.+)"
-        )
+        # Several days (e.g. "every Tuesday and Thursday at 3pm"). Must be checked BEFORE the
+        # single-day pattern to avoid partial matches.
+        multi_day_pattern = rf"every\s+((?:{_DAY_NAME_PATTERN}(?:\s*(?:,|and)\s*)?)+)"
         match = re.search(multi_day_pattern, schedule_text)
         if match:
-            days_text = match.group(1)
-            time_text = match.group(2)
-            # Extract all day names from the matched group
-            found_days = re.findall(_DAY_NAME_PATTERN, days_text)
+            found_days = re.findall(_DAY_NAME_PATTERN, match.group(1))
             if len(found_days) > 1:
-                day_specs = [self.day_patterns[d] for d in found_days if d in self.day_patterns]
-                if day_specs:
-                    time_spec = self._extract_time_from_text(time_text)
-                    if time_spec:
-                        hour, minute = time_spec
-                        return f"{minute} {hour} * * {','.join(day_specs)}"
+                day_specs = ",".join(self.day_patterns[d] for d in found_days)
+                return self._once_a_day(schedule_text, match, f"* * {day_specs}")
 
-        # Check for specific day + time patterns (single day)
-        day_time_pattern = (
-            rf"every\s+({_DAY_NAME_PATTERN}|weekdays?|weekends?)" r"\s+(?:at\s+)?(.+)"
-        )
-        match = re.search(day_time_pattern, schedule_text)
+        # One day, or weekdays or weekends
+        day_pattern = rf"every\s+({_DAY_NAME_PATTERN}|\bweekdays?\b|\bweekends?\b)"
+        match = re.search(day_pattern, schedule_text)
         if match:
-            day_text = match.group(1)
-            time_text = match.group(2)
-
-            day_spec = self.day_patterns.get(day_text)
-            time_spec = self._extract_time_from_text(time_text)
-
-            if day_spec and time_spec:
-                hour, minute = time_spec
-                return f"{minute} {hour} * * {day_spec}"
-
-        # Check for daily at specific time
-        daily_time_pattern = r"(?:every\s+day|daily)\s+(?:at\s+)?(.+)"
-        match = re.search(daily_time_pattern, schedule_text)
-        if match:
-            time_text = match.group(1)
-            time_spec = self._extract_time_from_text(time_text)
-
-            if time_spec:
-                hour, minute = time_spec
-                return f"{minute} {hour} * * *"
+            return self._once_a_day(
+                schedule_text, match, f"* * {self.day_patterns[match.group(1)]}"
+            )
 
         return None
+
+    def _once_a_day(
+        self, schedule_text: str, match: re.Match, days: str
+    ) -> Optional[ParsedSchedule]:
+        """
+        The schedule that runs once on each of ``days`` (the day-of-month, month and
+        day-of-week fields), at the time the text gives, else at the default time.
+
+        When the text gives no time, the default is used only if the rest of the text (without
+        the matched schedule phrase) names nothing the default would ignore: no digit, no
+        schedule word such as "after", "between", "tonight" or "weekdays", and no "at" ("every
+        day at sunset"). Otherwise the model reads the text.
+
+        Returns:
+            The schedule, or None when the text is for the model to read
+
+        Raises:
+            ScheduleNotUnderstoodError: The time found is not a usable clock time.
+        """
+        time_spec = self._extract_time_from_text(schedule_text)
+        if time_spec:
+            hour, minute = time_spec
+            return ParsedSchedule(cron_expression=f"{minute} {hour} {days}")
+
+        rest = _without(schedule_text, match)
+        if (
+            re.search(r"\d", rest)
+            or re.search(_SCHEDULE_WORDS_PATTERN, rest)
+            or re.search(_AT_PATTERN, rest)
+        ):
+            return None
+
+        hour, minute = self.default_time
+        return ParsedSchedule(cron_expression=f"{minute} {hour} {days}", default_time_used=True)
 
     def _extract_time_from_text(self, text: str) -> Optional[Tuple[int, int]]:
         """
@@ -801,6 +896,25 @@ Return only valid JSON, no explanation.
         """
         found = self._match_time(text)
         return found[1] if found else None
+
+    def read_clock_time(self, value: Any) -> Optional[Tuple[int, int]]:
+        """
+        Read a string that is exactly one clock time: "08:30", "8:30am", "9am", "21:15",
+        "21h15". A named time ("noon"), extra words or an unusable time ("25:00") is not one.
+
+        Returns:
+            (hour, minute), or None when ``value`` is not a clock time
+        """
+        if not isinstance(value, str):
+            return None
+        text = value.strip().lower()
+        try:
+            found = self._match_time(text)
+        except ScheduleNotUnderstoodError:
+            return None
+        if not found or found[0].span() != (0, len(text)) or not re.search(r"\d", text):
+            return None
+        return found[1]
 
     def _match_time(self, text: str) -> Optional[Tuple[re.Match, Tuple[int, int]]]:
         """
@@ -934,6 +1048,7 @@ Return only valid JSON, no explanation.
             raise ScheduleNotUnderstoodError(f"Schedule text was rejected: {e}") from e
 
         safe_text = sanitized_text[:200] if len(sanitized_text) > 200 else sanitized_text
+        hour, minute = self.default_time
 
         # Enhanced prompt with better instructions and examples
         prompt_template = """You are a cron expression generator. Convert natural language schedules to cron format.
@@ -956,6 +1071,9 @@ SPECIAL CHARACTERS:
 - */N = every N units (e.g., */15 = every 15 minutes)
 - N-M = range (e.g., 1-5 = Monday to Friday)
 - N,M,O = list (e.g., 1,3,5 = Monday, Wednesday, Friday)
+
+DEFAULT TIME: a schedule that runs on certain days but names no time of day runs at {hour:02d}:{minute:02d}
+(e.g., "every Monday" → "{minute} {hour} * * 1"); "every week" runs on Monday.
 
 EXAMPLES:
 - "every day at 9am" → "0 9 * * *"
