@@ -146,6 +146,7 @@ class JobManager:
         scheduled_for: Optional[datetime] = None,
         is_recurring: bool = True,
         exclusion_rules: List[Dict[str, Any]] = None,
+        timezone: Optional[str] = None,
     ) -> str:
         """
         Create a new scheduled job (recurring or one-time).
@@ -159,6 +160,8 @@ class JobManager:
             scheduled_for: Specific datetime for one-time jobs (required if is_recurring=False)
             is_recurring: Whether this is a recurring or one-time job
             exclusion_rules: List of exclusion rules
+            timezone: The timezone the cron expression and exclusion rules are read in, kept in
+                ``job_metadata["timezone"]``; None keeps the formation's timezone
 
         Returns:
             Job ID
@@ -202,6 +205,7 @@ class JobManager:
                     cron_expression=cron_expression,
                     scheduled_for=scheduled_for,
                     exclusion_rules=exclusion_rules or [],
+                    job_metadata={"timezone": timezone} if timezone else {},
                 )
                 session.add(job)
                 session.commit()
@@ -1186,6 +1190,7 @@ class JobManager:
                     ),
                     is_recurring=current_job["is_recurring"],
                     exclusion_rules=current_job.get("exclusion_rules", []),
+                    timezone=(current_job.get("job_metadata") or {}).get("timezone"),
                 )
 
                 # 2. Delete the old job

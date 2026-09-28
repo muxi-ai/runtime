@@ -17,6 +17,7 @@ from fastapi.responses import JSONResponse
 from pydantic import BaseModel, Field
 
 from .....datatypes.api import APIEventType, APIObjectType
+from .....services.scheduler.parser import DEFAULT_TIME
 from ...idempotency import idempotent
 from ...responses import (
     APIResponse,
@@ -147,6 +148,7 @@ SCHEDULER_DEFAULTS = {
     "check_interval_minutes": 1,
     "max_concurrent_jobs": 10,
     "max_failures_before_pause": 3,
+    "default_time": DEFAULT_TIME,
 }
 
 

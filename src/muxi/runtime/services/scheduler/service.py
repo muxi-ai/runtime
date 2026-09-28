@@ -39,7 +39,7 @@ from .batch_processor import JobBatchProcessor
 from .cache import SchedulerCache
 from .circuit_breaker import LLMCircuitBreaker
 from .manager import JobManager
-from .parser import ScheduleParser
+from .parser import DEFAULT_TIME, ScheduleParser
 from .rewriter import PromptRewriter
 
 # Configure multitasking
@@ -162,7 +162,9 @@ class SchedulerService:
                 formation_llm = extraction
 
         self.schedule_parser = ScheduleParser(
-            cache=self.cache, circuit_breaker=self.llm_circuit_breaker
+            cache=self.cache,
+            circuit_breaker=self.llm_circuit_breaker,
+            default_time=self._config.get("default_time", DEFAULT_TIME),
         )
         if formation_llm:
             self.schedule_parser.llm = formation_llm
@@ -436,6 +438,9 @@ class SchedulerService:
             True if job should execute, False otherwise
         """
         try:
+            # The cron is read in the job's own timezone, daylight saving time included
+            current_time = self._in_job_timezone(job, current_time)
+
             # Check if job matches cron schedule
             cron = croniter(job["cron_expression"], current_time)
 
@@ -512,6 +517,20 @@ class SchedulerService:
         return scheduled_time > last_run
 
     @staticmethod
+    def _in_job_timezone(job: Dict[str, Any], current_time: datetime) -> datetime:
+        """
+        The current time in the timezone the job's schedule is read in.
+
+        A job stores that timezone in ``job_metadata["timezone"]`` when it is created from a
+        chat request. A job without one (created before jobs stored it, or through the admin
+        API) keeps the formation's timezone, which ``current_time`` is already in.
+        """
+        job_timezone = (job.get("job_metadata") or {}).get("timezone")
+        if not job_timezone:
+            return current_time
+        return current_time.astimezone(pytz.timezone(job_timezone))
+
+    @staticmethod
     def _parse_scheduler_timestamp(timestamp_str: str) -> datetime:
         """Parse scheduler timestamps as UTC when the stored value is naive.
 
@@ -541,6 +560,9 @@ class SchedulerService:
 
         if not exclusion_rules:
             return False  # No exclusions
+
+        # Exclusions are part of the schedule, so they are read in the job's timezone too
+        current_time = self._in_job_timezone(job, current_time)
 
         # Check each exclusion rule
         for rule in exclusion_rules:
@@ -589,22 +611,18 @@ class SchedulerService:
 
         return False  # Not excluded
 
-    def _check_complex_date_exclusion(self, pattern: str, current_time: datetime) -> bool:
+    def _check_complex_date_exclusion(self, pattern: str, local_time: datetime) -> bool:
         """
         Check if current time matches a complex date pattern.
 
         Args:
             pattern: Complex date pattern (e.g., "last_friday_of_month")
-            current_time: Current time to check
+            local_time: Current time in the job's timezone
 
         Returns:
             True if current date matches the pattern (should exclude)
         """
         try:
-            # Get current date info in formation timezone
-            tz = pytz.timezone(self.formation_timezone)
-            local_time = current_time.astimezone(tz)
-
             pattern_lower = pattern.lower()
 
             # Parse different pattern types
@@ -965,32 +983,19 @@ class SchedulerService:
 
         Returns:
             The created job: ``job_id``, ``cron_expression`` (recurring, else None),
-            ``scheduled_for`` (one-time run time in UTC, else None) and ``timezone`` (the
-            timezone the schedule is read in)
+            ``scheduled_for`` (one-time run time in UTC, else None), ``timezone`` (the
+            timezone the schedule is read in: the user's own when they have set a valid one,
+            else the formation's) and ``default_time_used`` (the schedule named no time, so
+            the default time was used)
 
         Raises:
             ScheduleUnavailableError: The schedule needs the model and the model is unavailable.
             ScheduleNotUnderstoodError: The text is not a schedule the parser can express.
         """
-        # Parse schedule (returns either cron expression or dict for one-off job)
-        parse_result = await self.schedule_parser.parse_schedule(schedule, self.formation_timezone)
-
-        # Check if it's a one-off job (dict) or recurring (string cron expression)
-        cron_expression = None
-        scheduled_for = None
-
-        if isinstance(parse_result, dict):
-            # One-off job - extract the scheduled datetime
-            if parse_result.get("job_type") == "one_time":
-                scheduled_for = parse_result.get("scheduled_for")
-                # For one-off jobs, we don't use a cron expression
-                cron_expression = None
-            else:
-                # Unexpected dict format
-                raise ValueError(f"Unexpected parse result format: {parse_result}")
-        else:
-            # Recurring job - parse_result is the cron expression
-            cron_expression = parse_result
+        schedule_timezone = await self._schedule_timezone(user_id)
+        parsed = await self.schedule_parser.parse_schedule(schedule, schedule_timezone)
+        cron_expression = parsed.cron_expression
+        scheduled_for = parsed.scheduled_for
 
         # Generate dynamic exclusion rules
         exclusion_rules = []
@@ -1012,6 +1017,7 @@ class SchedulerService:
                 scheduled_for=scheduled_for,
                 is_recurring=False,
                 exclusion_rules=exclusion_rules,
+                timezone=schedule_timezone,
             )
         else:
             # Create recurring job
@@ -1024,6 +1030,7 @@ class SchedulerService:
                 scheduled_for=None,
                 is_recurring=True,
                 exclusion_rules=exclusion_rules,
+                timezone=schedule_timezone,
             )
 
         observability.observe(
@@ -1036,6 +1043,8 @@ class SchedulerService:
                 "cron_expression": cron_expression,
                 "scheduled_for": scheduled_for.isoformat() if scheduled_for else None,
                 "is_recurring": cron_expression is not None,
+                "timezone": schedule_timezone,
+                "default_time_used": parsed.default_time_used,
             },
             description=f"Scheduled job created: {title}",
         )
@@ -1044,8 +1053,26 @@ class SchedulerService:
             "job_id": job_id,
             "cron_expression": cron_expression,
             "scheduled_for": scheduled_for,
-            "timezone": self.formation_timezone,
+            "timezone": schedule_timezone,
+            "default_time_used": parsed.default_time_used,
         }
+
+    async def _schedule_timezone(self, user_id: str) -> str:
+        """
+        The timezone a new job's schedule is read in: the user's own timezone when they have
+        set a valid one (the ``/preferences timezone`` command, kept in the proactive user
+        channel store), else the formation's ``scheduler.timezone``.
+        """
+        channel_store = getattr(self.overlord, "user_channel_store", None)
+        if channel_store is not None:
+            user_timezone = (await channel_store.get_state(user_id)).get("timezone")
+            if user_timezone:
+                try:
+                    pytz.timezone(user_timezone)
+                    return user_timezone
+                except pytz.UnknownTimeZoneError:
+                    pass
+        return self.formation_timezone
 
     async def complete_job_from_webhook(
         self,

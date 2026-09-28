@@ -3379,9 +3379,15 @@ class Overlord:
             )
 
         when = describe_schedule(job["cron_expression"], job["scheduled_for"], job["timezone"])
+        default_time_note = (
+            " No time was given, so I used the default time; tell me a time to change it."
+            if job["default_time_used"]
+            else ""
+        )
         response_msg = (
             f"I've created a scheduled job for you. Your request '{actual_message[:100]}' "
-            f"has been scheduled successfully and will run {when}. (Job ID: {job['job_id']})"
+            f"has been scheduled successfully and will run {when}.{default_time_note} "
+            f"(Job ID: {job['job_id']})"
         )
         streaming.stream(
             "completed",
