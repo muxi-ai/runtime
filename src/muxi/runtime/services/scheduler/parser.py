@@ -58,15 +58,21 @@ class ScheduleParser:
         self.cache = cache
         self.circuit_breaker = circuit_breaker
 
-        # Common time patterns. The first pattern that matches decides, so the one with
-        # minutes comes first ("3:30pm" is not "30pm").
+        # Common time patterns, most specific first; the first pattern that matches decides.
+        # A number never starts after a digit or a colon and must end at a word boundary, so
+        # no pattern reads part of a longer one ("30pm" in "3:30pm", "10pm" in "110pm",
+        # "5pm" in "12:5pm", "10:30" in "10:305").
         self.time_patterns = {
             # 12-hour format
-            r"(\d{1,2}):(\d{2})\s*(am|pm)": self._parse_12hour_minutes,
-            r"(\d{1,2})\s*(am|pm)": self._parse_12hour,
+            r"(?<![\d:])(\d{1,2}):(\d{2})\s*(am|pm)\b": self._parse_12hour_minutes,
+            r"(?<![\d:])(\d{1,2})\s*(am|pm)\b": self._parse_12hour,
             # 24-hour format
-            r"(\d{1,2}):(\d{2})": self._parse_24hour,
-            r"(\d{1,2})h(\d{2})": self._parse_24hour,
+            r"(?<![\d:])(\d{1,2}):(\d{2})\b": self._parse_24hour,
+            r"(?<![\d:])(\d{1,2})h(\d{2})\b": self._parse_24hour,
+            # Anything else clock-shaped ("130pm", "10:305", "12:5pm") is not a usable time
+            r"(?<![\d:])\d+\s*(?:am|pm)(?![a-z])|(?<![\d:])\d+:\d+|(?<![\d:])\d+h\d+": (
+                lambda match: None
+            ),
             # Named times
             r"(morning|noon|afternoon|evening|midnight)": self._parse_named_time,
         }
@@ -694,25 +700,22 @@ Return only valid JSON, no explanation.
             text: Text to extract time from
 
         Returns:
-            Tuple of (hour, minute), or None when the text holds no clock time
+            Tuple of (hour, minute), or None when the text holds no time
 
         Raises:
-            ValueError: A clock-shaped token in the text is out of range ("25:00", "13pm")
-                or is not a clock time ("130pm", "10:305"). Every such token is checked, so
-                an unusable one is never skipped in favour of another time; dropping it
-                would let a later fallback schedule the job at midnight.
+            ValueError: The time found is out of range ("25:00", "13pm") or not a clock
+                time ("130pm", "10:305"). Dropping it would let a later fallback schedule
+                the job at midnight, so the schedule is refused instead.
         """
-        for token in re.finditer(r"\d+(?::\d+)?\s*(?:am|pm)\b|\d+:\d+|\d+h\d+", text):
-            if not any(
-                (match := re.fullmatch(pattern, token.group(0))) and parser(match)
-                for pattern, parser in self.time_patterns.items()
-            ):
-                raise ValueError(f"Schedule time is not a usable clock time: {token.group(0)!r}")
-
         for pattern, parser in self.time_patterns.items():
             match = re.search(pattern, text)
             if match:
-                return parser(match)
+                time_spec = parser(match)
+                if time_spec is None:
+                    raise ValueError(
+                        f"Schedule time is not a usable clock time: {match.group(0)!r}"
+                    )
+                return time_spec
 
         return None
 
