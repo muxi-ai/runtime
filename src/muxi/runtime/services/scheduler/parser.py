@@ -38,6 +38,78 @@ from .. import observability
 from .validation import SchedulerInputValidator
 
 
+class ScheduleUnavailableError(Exception):
+    """The schedule needs the model, and the model is unavailable: not configured, erroring,
+    timing out, or behind an open circuit breaker. The same text may parse later."""
+
+
+class ScheduleNotUnderstoodError(ValueError):
+    """The text is not a schedule the parser can express, or the model's answer was not a
+    valid schedule. Retrying the same text will not help; rephrasing may."""
+
+
+# The one day vocabulary for every day-name match in this module: full names, plurals and
+# common abbreviations, each matched as a whole word.
+_DAY_NAMES = {
+    "monday": "1",
+    "tuesday": "2",
+    "wednesday": "3",
+    "thursday": "4",
+    "friday": "5",
+    "saturday": "6",
+    "sunday": "0",
+    "mondays": "1",
+    "tuesdays": "2",
+    "wednesdays": "3",
+    "thursdays": "4",
+    "fridays": "5",
+    "saturdays": "6",
+    "sundays": "0",
+    "mon": "1",
+    "tue": "2",
+    "tues": "2",
+    "wed": "3",
+    "thu": "4",
+    "thur": "4",
+    "thurs": "4",
+    "fri": "5",
+    "sat": "6",
+    "sun": "0",
+}
+_DAY_NAME_PATTERN = r"\b(?:" + "|".join(sorted(_DAY_NAMES, key=len, reverse=True)) + r")\b"
+
+# Words that name a time, a date, a window or another frequency. A no-model fallback rule
+# refuses text that still holds one of these once its own phrase is removed, because the
+# rule would silently ignore it.
+_SCHEDULE_WORDS_PATTERN = (
+    r"\b(?:today|tonight|tomorrow|every|each|daily|weekly|monthly|yearly|hourly"
+    r"|minutes?|hours?|days?|weeks?|months?|years?|weekdays?|weekends?|nights?"
+    r"|between|during|from|until|till|through|except|excluding|unless|before|after|starting"
+    r"|quarter|half|past|january|february|march|april|may|june|july|august|september"
+    r"|october|november|december)\b"
+)
+
+# "every minute", "every 15 minutes", "every hour", "every 2 hours", "hourly"
+_FALLBACK_INTERVAL_PATTERN = r"\b(?:every\s+(?:(?P<count>\d+)\s+)?(?P<unit>minute|hour)s?|hourly)\b"
+# "in 20 minutes", "in 2 hours"
+_FALLBACK_RELATIVE_PATTERN = r"\bin\s+(?P<count>\d+)\s+(?P<unit>minute|hour)s?\b"
+# "today", "tomorrow"
+_FALLBACK_DAY_PATTERN = r"\b(?:today|tomorrow)\b"
+
+
+def _without(text: str, match: re.Match) -> str:
+    """The text with the match's span replaced by a space."""
+    start, end = match.span()
+    return text[:start] + " " + text[end:]
+
+
+def _fallback_or_raise(result, error: Exception):
+    """The fallback's result, or ``error`` when the fallback could not parse the text."""
+    if result is None:
+        raise error
+    return result
+
+
 class ScheduleParser:
     """
     Natural language schedule parser for MUXI scheduler.
@@ -92,30 +164,7 @@ class ScheduleParser:
 
         # Day patterns (each key matches only as a whole word)
         self.day_patterns = {
-            "monday": "1",
-            "tuesday": "2",
-            "wednesday": "3",
-            "thursday": "4",
-            "friday": "5",
-            "saturday": "6",
-            "sunday": "0",
-            "mondays": "1",
-            "tuesdays": "2",
-            "wednesdays": "3",
-            "thursdays": "4",
-            "fridays": "5",
-            "saturdays": "6",
-            "sundays": "0",
-            "mon": "1",
-            "tue": "2",
-            "tues": "2",
-            "wed": "3",
-            "thu": "4",
-            "thur": "4",
-            "thurs": "4",
-            "fri": "5",
-            "sat": "6",
-            "sun": "0",
+            **_DAY_NAMES,
             "weekdays": "1-5",
             "weekends": "0,6",
             "business days": "1-5",
@@ -153,6 +202,10 @@ class ScheduleParser:
         Returns:
             For recurring jobs: Cron expression string
             For one-time jobs: Dict with job type and scheduled datetime
+
+        Raises:
+            ScheduleUnavailableError: The schedule needs the model and the model is unavailable.
+            ScheduleNotUnderstoodError: The text is not a schedule the parser can express.
         """
         schedule_lower = schedule_text.lower().strip()
 
@@ -420,7 +473,7 @@ Respond with ONLY: "one_time" or "recurring"
 
     async def _parse_specific_datetime(
         self, schedule_text: str, timezone: str = "UTC"
-    ) -> Optional[Dict[str, Any]]:
+    ) -> Dict[str, Any]:
         """
         Parse specific datetime for one-time jobs.
 
@@ -429,13 +482,21 @@ Respond with ONLY: "one_time" or "recurring"
             timezone: Target timezone for the schedule
 
         Returns:
-            Dict with job type and scheduled datetime, or None if parsing fails
+            Dict with job type and scheduled datetime
+
+        Raises:
+            ScheduleUnavailableError: The model is unavailable or its call failed, and the
+                fallback cannot parse the text.
+            ScheduleNotUnderstoodError: The text was rejected, or the model's answer was not
+                a valid date and time and the fallback cannot parse the text.
         """
         llm = await self._get_llm()
 
         if not llm:
-            # Fallback to basic datetime parsing
-            return self._fallback_parse_datetime(schedule_text, timezone)
+            return _fallback_or_raise(
+                self._fallback_parse_datetime(schedule_text, timezone),
+                ScheduleUnavailableError("No model is available to parse the date and time"),
+            )
 
         # Get current time in the target timezone
         tz = pytz.timezone(timezone)
@@ -454,7 +515,7 @@ Respond with ONLY: "one_time" or "recurring"
                 },
                 description=f"Schedule text sanitization failed: {e}",
             )
-            return None  # Safe fallback
+            raise ScheduleNotUnderstoodError(f"Schedule text was rejected: {e}") from e
 
         safe_text = sanitized_text[:200] if len(sanitized_text) > 200 else sanitized_text
         prompt_template = """Parse this request into a specific date and time.
@@ -487,10 +548,21 @@ Examples:
 Return only valid JSON, no explanation.
 """
 
-        response = None
         try:
             response = await llm.generate_text(prompt)
+        except Exception as e:
+            observability.observe(
+                event_type=observability.ErrorEvents.INTERNAL_ERROR,
+                level=observability.EventLevel.ERROR,
+                data={"original_text": schedule_text, "error": str(e)},
+                description=f"LLM date and time parsing failed: {e}",
+            )
+            return _fallback_or_raise(
+                self._fallback_parse_datetime(schedule_text, timezone),
+                ScheduleUnavailableError(f"The model failed to parse the date and time: {e}"),
+            )
 
+        try:
             # Clean up response - remove markdown code blocks if present
             clean_response = response.strip()
             if clean_response.startswith("```"):
@@ -534,76 +606,98 @@ Return only valid JSON, no explanation.
                 "original_text": schedule_text,
             }
 
-        except (json.JSONDecodeError, ValueError, KeyError) as e:
+        except (json.JSONDecodeError, ValueError, KeyError, TypeError) as e:
             observability.observe(
                 event_type=observability.ErrorEvents.SERIALIZATION_ERROR,
                 level=observability.EventLevel.ERROR,
                 data={
                     "service": "scheduler_parser",
                     "schedule_text": schedule_text,
-                    "response": response[:200] if response is not None else "No response",
+                    "response": str(response)[:200],
                     "error": str(e),
                     "error_type": "datetime_parsing_failed",
                 },
                 description=f"Failed to parse specific datetime from LLM response: {e}",
             )
-            return self._fallback_parse_datetime(schedule_text, timezone)
+            return _fallback_or_raise(
+                self._fallback_parse_datetime(schedule_text, timezone),
+                ScheduleNotUnderstoodError(f"The model's date and time was not usable: {e}"),
+            )
 
-    def _fallback_parse_datetime(self, schedule_text: str, timezone: str) -> Dict[str, Any]:
+    def _fallback_parse_datetime(
+        self, schedule_text: str, timezone: str
+    ) -> Optional[Dict[str, Any]]:
         """
-        Fallback datetime parsing without LLM.
+        Parse a one-time schedule without the model, only when the text fixes the moment
+        exactly. Nothing is ever filled in: a missing time or date means no schedule.
+
+        Parsed:
+        - "in N minutes" / "in N hours" (N at least 1): now plus that interval.
+        - "today at <time>" / "tomorrow at <time>", where <time> is a clock time ("3pm",
+          "3:30pm", "15:30", "21h30") or "noon", and the moment is still ahead.
+
+        Refused (None) otherwise, and also when the rest of the text still names a time, a
+        day, a date, a window or a frequency the rule would ignore: any digit, a named time
+        ("morning", "midnight"), a day name, or a word such as "next week", "every",
+        "between" or a month name.
 
         Args:
             schedule_text: Natural language schedule description
             timezone: Target timezone
 
         Returns:
-            Dict with basic datetime parsing
+            Dict with the one-time schedule, or None when the text is not one of the forms above
+
+        Raises:
+            ScheduleNotUnderstoodError: The time found is not a usable clock time ("25:00").
         """
-        schedule_lower = schedule_text.lower().strip()
+        text = schedule_text.lower().strip()
         tz = pytz.timezone(timezone)
         current_time = utc_now().astimezone(tz)
 
-        # Basic patterns for common cases
-        if "tomorrow" in schedule_lower:
-            scheduled_time = current_time + timedelta(days=1)
-            scheduled_time = scheduled_time.replace(hour=9, minute=0, second=0, microsecond=0)
-        elif "next week" in schedule_lower:
-            days_ahead = 7 - current_time.weekday()  # Days until next Monday
-            if days_ahead == 0:  # If today is Monday
-                days_ahead = 7
-            scheduled_time = current_time + timedelta(days=days_ahead)
-            scheduled_time = scheduled_time.replace(hour=9, minute=0, second=0, microsecond=0)
-        elif "next month" in schedule_lower:
-            # First day of next month
-            if current_time.month == 12:
-                scheduled_time = current_time.replace(
-                    year=current_time.year + 1,
-                    month=1,
-                    day=1,
-                    hour=9,
-                    minute=0,
-                    second=0,
-                    microsecond=0,
-                )
-            else:
-                scheduled_time = current_time.replace(
-                    month=current_time.month + 1, day=1, hour=9, minute=0, second=0, microsecond=0
-                )
+        relative = re.search(_FALLBACK_RELATIVE_PATTERN, text)
+        if relative:
+            if self._names_other_time(_without(text, relative)):
+                return None
+            count = int(relative.group("count"))
+            if count < 1:
+                return None
+            unit = "minutes" if relative.group("unit") == "minute" else "hours"
+            scheduled_time = current_time + timedelta(**{unit: count})
         else:
-            # Default to tomorrow at 9am
-            scheduled_time = current_time + timedelta(days=1)
-            scheduled_time = scheduled_time.replace(hour=9, minute=0, second=0, microsecond=0)
-
-        # Convert to UTC
-        scheduled_time_utc = scheduled_time.astimezone(pytz.UTC)
+            day = re.search(_FALLBACK_DAY_PATTERN, text)
+            if not day:
+                return None
+            rest = _without(text, day)
+            found = self._match_time(rest)
+            if not found:
+                return None
+            time_match, (hour, minute) = found
+            if not (re.search(r"\d", time_match.group(0)) or time_match.group(0) == "noon"):
+                return None  # "morning", "evening" and the like are not a clock time
+            if self._names_other_time(_without(rest, time_match)):
+                return None
+            date = current_time.date() + timedelta(days=1 if day.group(0) == "tomorrow" else 0)
+            scheduled_time = tz.localize(datetime(date.year, date.month, date.day, hour, minute))
+            if scheduled_time <= current_time:
+                return None
 
         return {
             "job_type": "one_time",
-            "scheduled_for": scheduled_time_utc,
+            "scheduled_for": scheduled_time.astimezone(pytz.UTC),
             "timezone": timezone,
             "original_text": schedule_text,
         }
+
+    def _names_other_time(self, text: str) -> bool:
+        """Whether the text names a time, day, date, window or frequency: what a fallback rule
+        would ignore if it parsed the rest of the text."""
+        return bool(
+            re.search(r"\d", text)
+            or re.search(_SCHEDULE_WORDS_PATTERN, text)
+            or self._extract_time_from_text(text)
+            or self._extract_day_from_text(text)
+        )
 
     async def _try_pattern_matching(self, schedule_text: str) -> Optional[str]:
         """
@@ -644,16 +738,15 @@ Return only valid JSON, no explanation.
 
         # Check for multi-day + time patterns (e.g. "every Tuesday and Thursday at 3pm")
         # Must be checked BEFORE the single-day pattern to avoid partial matches.
-        _day_names = "monday|tuesday|wednesday|thursday|friday|saturday|sunday"
         multi_day_pattern = (
-            rf"every\s+((?:(?:{_day_names})(?:\s*(?:,|and)\s*)?)+)" rf"\s+(?:at\s+)?(.+)"
+            rf"every\s+((?:{_DAY_NAME_PATTERN}(?:\s*(?:,|and)\s*)?)+)" rf"\s+(?:at\s+)?(.+)"
         )
         match = re.search(multi_day_pattern, schedule_text)
         if match:
             days_text = match.group(1)
             time_text = match.group(2)
             # Extract all day names from the matched group
-            found_days = re.findall(_day_names, days_text)
+            found_days = re.findall(_DAY_NAME_PATTERN, days_text)
             if len(found_days) > 1:
                 day_specs = [self.day_patterns[d] for d in found_days if d in self.day_patterns]
                 if day_specs:
@@ -664,8 +757,7 @@ Return only valid JSON, no explanation.
 
         # Check for specific day + time patterns (single day)
         day_time_pattern = (
-            r"every\s+(monday|tuesday|wednesday|thursday|friday|saturday|sunday|weekdays?|weekends?)"
-            r"\s+(?:at\s+)?(.+)"
+            rf"every\s+({_DAY_NAME_PATTERN}|weekdays?|weekends?)" r"\s+(?:at\s+)?(.+)"
         )
         match = re.search(day_time_pattern, schedule_text)
         if match:
@@ -703,19 +795,30 @@ Return only valid JSON, no explanation.
             Tuple of (hour, minute), or None when the text holds no time
 
         Raises:
-            ValueError: The time found is out of range ("25:00", "13pm") or not a clock
-                time ("130pm", "10:305"). Dropping it would let a later fallback schedule
-                the job at midnight, so the schedule is refused instead.
+            ScheduleNotUnderstoodError: The time found is out of range ("25:00", "13pm") or
+                not a clock time ("130pm", "10:305"). Dropping it would schedule the job at
+                some other time, so the schedule is refused instead.
+        """
+        found = self._match_time(text)
+        return found[1] if found else None
+
+    def _match_time(self, text: str) -> Optional[Tuple[re.Match, Tuple[int, int]]]:
+        """
+        Find the first time in text, as ``_extract_time_from_text`` does, together with the
+        match it was read from.
+
+        Raises:
+            ScheduleNotUnderstoodError: The time found is not a usable clock time.
         """
         for pattern, parser in self.time_patterns.items():
             match = re.search(pattern, text)
             if match:
                 time_spec = parser(match)
                 if time_spec is None:
-                    raise ValueError(
+                    raise ScheduleNotUnderstoodError(
                         f"Schedule time is not a usable clock time: {match.group(0)!r}"
                     )
-                return time_spec
+                return match, time_spec
 
         return None
 
@@ -798,17 +901,25 @@ Return only valid JSON, no explanation.
 
         Returns:
             Cron expression
+
+        Raises:
+            ScheduleUnavailableError: The model is unavailable or its call failed, and the
+                fallback cannot parse the text.
+            ScheduleNotUnderstoodError: The text was rejected, or the model's answer was not
+                a valid cron expression and the fallback cannot parse the text.
         """
         llm = await self._get_llm()
 
         if not llm:
-            # Fallback to pattern matching if LLM unavailable
             observability.observe(
                 event_type=observability.ErrorEvents.WARNING,
                 level=observability.EventLevel.WARNING,
                 description="LLM unavailable, using pattern fallback for schedule parsing",
             )
-            return self._fallback_parse_schedule(schedule_text)
+            return _fallback_or_raise(
+                self._fallback_parse_schedule(schedule_text),
+                ScheduleUnavailableError("No model is available to parse the schedule"),
+            )
 
         # SECURITY: Sanitize input to prevent prompt injection
         try:
@@ -820,7 +931,7 @@ Return only valid JSON, no explanation.
                 data={"schedule_text": schedule_text[:100], "error": str(e)},
                 description=f"Schedule text sanitization failed: {e}",
             )
-            return None  # Safe fallback
+            raise ScheduleNotUnderstoodError(f"Schedule text was rejected: {e}") from e
 
         safe_text = sanitized_text[:200] if len(sanitized_text) > 200 else sanitized_text
 
@@ -861,35 +972,6 @@ IMPORTANT: Return ONLY the cron expression, no explanation or additional text.
 
         try:
             response = await llm.generate_text(prompt)
-            cron_expr = response.strip()
-
-            # Clean up response (remove quotes, extra whitespace)
-            cron_expr = cron_expr.strip("'\"` \n\r")
-
-            # Validate cron expression format
-            if self._validate_cron_expression(cron_expr):
-                return cron_expr
-            else:
-                # Try to fix common issues
-                fixed_cron = self._attempt_cron_fix(cron_expr)
-                if fixed_cron and self._validate_cron_expression(fixed_cron):
-                    observability.observe(
-                        event_type=observability.SystemEvents.CRON_EXPRESSION_FIXED,
-                        level=observability.EventLevel.INFO,
-                        data={"original_cron": cron_expr, "fixed_cron": fixed_cron},
-                        description="Fixed invalid cron expression from LLM",
-                    )
-                    return fixed_cron
-
-                # Fallback to default if still invalid
-                observability.observe(
-                    event_type=observability.ErrorEvents.INTERNAL_ERROR,
-                    level=observability.EventLevel.ERROR,
-                    data={"original_text": schedule_text, "invalid_cron": cron_expr},
-                    description="LLM generated invalid cron expression",
-                )
-                return self._fallback_parse_schedule(schedule_text)
-
         except Exception as e:
             observability.observe(
                 event_type=observability.ErrorEvents.INTERNAL_ERROR,
@@ -897,7 +979,39 @@ IMPORTANT: Return ONLY the cron expression, no explanation or additional text.
                 data={"original_text": schedule_text, "error": str(e)},
                 description=f"LLM schedule parsing failed: {e}",
             )
-            return self._fallback_parse_schedule(schedule_text)
+            return _fallback_or_raise(
+                self._fallback_parse_schedule(schedule_text),
+                ScheduleUnavailableError(f"The model failed to parse the schedule: {e}"),
+            )
+
+        # Clean up response (remove quotes, extra whitespace)
+        cron_expr = str(response).strip().strip("'\"` \n\r")
+
+        # Validate cron expression format
+        if self._validate_cron_expression(cron_expr):
+            return cron_expr
+
+        # Try to fix common issues
+        fixed_cron = self._attempt_cron_fix(cron_expr)
+        if fixed_cron and self._validate_cron_expression(fixed_cron):
+            observability.observe(
+                event_type=observability.SystemEvents.CRON_EXPRESSION_FIXED,
+                level=observability.EventLevel.INFO,
+                data={"original_cron": cron_expr, "fixed_cron": fixed_cron},
+                description="Fixed invalid cron expression from LLM",
+            )
+            return fixed_cron
+
+        observability.observe(
+            event_type=observability.ErrorEvents.INTERNAL_ERROR,
+            level=observability.EventLevel.ERROR,
+            data={"original_text": schedule_text, "invalid_cron": cron_expr},
+            description="LLM generated invalid cron expression",
+        )
+        return _fallback_or_raise(
+            self._fallback_parse_schedule(schedule_text),
+            ScheduleNotUnderstoodError(f"The model's cron expression is not valid: {cron_expr!r}"),
+        )
 
     def _validate_cron_expression(self, cron_expr: str) -> bool:
         """
@@ -1197,76 +1311,43 @@ Return only valid JSON, no explanation.
         except Exception:
             return None
 
-    def _fallback_parse_schedule(self, schedule_text: str) -> str:
+    def _fallback_parse_schedule(self, schedule_text: str) -> Optional[str]:
         """
-        Fallback schedule parsing without LLM.
+        Parse a recurring schedule without the model, only when the text fixes the schedule
+        exactly. Nothing is ever filled in: a missing time or day means no schedule.
+
+        Parsed, when the text holds exactly one of these phrases:
+        - "every minute" -> ``* * * * *``; "every N minutes", N dividing 60 (1, 2, 3, 4, 5, 6,
+          10, 12, 15, 20, 30) -> ``*/N * * * *``.
+        - "every hour" / "hourly" -> ``0 * * * *``; "every N hours", N dividing 24 (1, 2, 3,
+          4, 6, 8, 12) -> ``0 */N * * *``.
+        Other counts are refused: ``*/45`` would run at :00 and :45, not every 45 minutes.
+
+        Refused (None) otherwise, and also when the rest of the text still names a time, a
+        day, a date, a window or another frequency the rule would ignore: any digit, a clock
+        or named time ("9am", "morning"), a day name, or a word such as "daily", "every",
+        "weekdays", "between", "during", "except" or a month name.
 
         Args:
             schedule_text: Natural language schedule description
 
         Returns:
-            Basic cron expression
+            Cron expression, or None when the text is not one of the forms above
         """
-        schedule_lower = schedule_text.lower().strip()
+        text = schedule_text.lower().strip()
 
-        # Very basic fallback patterns
-        fallback_patterns = {
-            "every minute": "* * * * *",
-            "every hour": "0 * * * *",
-            "every day": "0 0 * * *",
-            "daily": "0 0 * * *",
-            "every week": "0 0 * * 0",
-            "weekly": "0 0 * * 0",
-            "every month": "0 0 1 * *",
-            "monthly": "0 0 1 * *",
-        }
+        match = re.search(_FALLBACK_INTERVAL_PATTERN, text)
+        if not match or self._names_other_time(_without(text, match)):
+            return None
 
-        # Check for exact matches
-        for pattern, cron in fallback_patterns.items():
-            if pattern in schedule_lower:
-                return cron
-
-        # Extract time if present
-        time_match = re.search(r"(\d{1,2}):?(\d{2})?\s*(am|pm)?", schedule_lower)
-        if time_match:
-            hour = int(time_match.group(1))
-            minute = int(time_match.group(2)) if time_match.group(2) else 0
-            am_pm = time_match.group(3)
-
-            if am_pm:
-                if am_pm == "pm" and hour != 12:
-                    hour += 12
-                elif am_pm == "am" and hour == 12:
-                    hour = 0
-
-            # Check for day specification
-            if "daily" in schedule_lower or "every day" in schedule_lower:
-                return f"{minute} {hour} * * *"
-            elif "monday" in schedule_lower:
-                return f"{minute} {hour} * * 1"
-            elif "tuesday" in schedule_lower:
-                return f"{minute} {hour} * * 2"
-            elif "wednesday" in schedule_lower:
-                return f"{minute} {hour} * * 3"
-            elif "thursday" in schedule_lower:
-                return f"{minute} {hour} * * 4"
-            elif "friday" in schedule_lower:
-                return f"{minute} {hour} * * 5"
-            elif "saturday" in schedule_lower:
-                return f"{minute} {hour} * * 6"
-            elif "sunday" in schedule_lower:
-                return f"{minute} {hour} * * 0"
-            else:
-                return f"{minute} {hour} * * *"  # Default to daily
-
-        # Ultimate fallback - daily at 9 AM
-        observability.observe(
-            event_type=observability.ErrorEvents.WARNING,
-            level=observability.EventLevel.WARNING,
-            data={"original_text": schedule_text},
-            description="Using ultimate fallback schedule (daily at 9 AM)",
-        )
-        return "0 9 * * *"
+        count = int(match.group("count") or 1)
+        if match.group("unit") == "minute":
+            if not 1 <= count < 60 or 60 % count:
+                return None
+            return "* * * * *" if count == 1 else f"*/{count} * * * *"
+        if not 1 <= count < 24 or 24 % count:
+            return None
+        return "0 * * * *" if count == 1 else f"0 */{count} * * *"
 
     def _generate_fallback_exclusion_rule(self, description: str) -> Optional[Dict[str, Any]]:
         """

@@ -19,8 +19,16 @@ Architecture:
 
 from .manager import JobManager
 from .models import ScheduledJob
-from .parser import ScheduleParser
+from .parser import ScheduleNotUnderstoodError, ScheduleParser, ScheduleUnavailableError
 from .rewriter import PromptRewriter
 from .service import SchedulerService
 
-__all__ = ["SchedulerService", "JobManager", "ScheduleParser", "PromptRewriter", "ScheduledJob"]
+__all__ = [
+    "SchedulerService",
+    "JobManager",
+    "ScheduleParser",
+    "ScheduleNotUnderstoodError",
+    "ScheduleUnavailableError",
+    "PromptRewriter",
+    "ScheduledJob",
+]

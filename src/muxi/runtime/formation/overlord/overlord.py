@@ -139,6 +139,8 @@ from ...services.multimodal.document_converter import (
     ATTACHMENT_CONVERTIBLE_EXTENSIONS,
     convert_document_async,
 )
+from ...services.scheduler.describe import describe_schedule
+from ...services.scheduler.parser import ScheduleNotUnderstoodError, ScheduleUnavailableError
 from ...services.scheduler.service import SchedulerService
 
 # A2A models imported when needed
@@ -3308,6 +3310,90 @@ class Overlord:
             )
         except Exception:
             return False
+
+    async def _handle_scheduling_request(
+        self, actual_message: str, user_id: Any, start_time: float
+    ) -> MuxiResponse:
+        """
+        Create a scheduled job for a scheduling request and answer it directly.
+
+        Every outcome is answered here and never handed on to SOP or agent handling: an
+        agent answering a scheduling request can tell the user a job was set up when none
+        was. The success reply says when the job runs; a failure says why nothing was set up.
+        """
+        try:
+            job = await self.scheduler_service.create_job(
+                user_id=str(user_id),
+                title=f"Scheduled: {actual_message[:490]}",
+                original_prompt=actual_message,
+                schedule=actual_message,
+                exclusions=[],
+            )
+        except Exception as e:
+            if isinstance(e, ScheduleUnavailableError):
+                error_kind = "schedule_unavailable"
+                event_type = observability.ErrorEvents.SERVICE_UNAVAILABLE
+                level = observability.EventLevel.WARNING
+                response_msg = (
+                    "I couldn't set that up right now because scheduling is temporarily "
+                    "unavailable. Please try again in a few minutes."
+                )
+            elif isinstance(e, ScheduleNotUnderstoodError):
+                error_kind = "schedule_not_understood"
+                event_type = observability.ErrorEvents.VALIDATION_FAILED
+                level = observability.EventLevel.WARNING
+                response_msg = (
+                    "I didn't understand that schedule. Could you rephrase it, for example "
+                    '"every weekday at 9am"?'
+                )
+            else:
+                error_kind = "scheduler_failed"
+                event_type = observability.ErrorEvents.SERVICE_UNAVAILABLE
+                level = observability.EventLevel.ERROR
+                response_msg = (
+                    "I couldn't set that up because something went wrong while creating the "
+                    "scheduled job. Please try again."
+                )
+            observability.observe(
+                event_type=event_type,
+                level=level,
+                data={
+                    "service": "scheduler",
+                    "error": str(e),
+                    "error_type": type(e).__name__,
+                    "error_kind": error_kind,
+                    "user_id": str(user_id),
+                },
+                description=f"Scheduler service failed to create scheduled job: {e}",
+            )
+            streaming.stream(
+                "completed",
+                response_msg,
+                status="error",
+                processing_time_ms=int((time.time() - start_time) * 1000),
+            )
+            return MuxiResponse(
+                role="assistant",
+                content=response_msg,
+                metadata={"handled_by": "scheduler_service", "error_kind": error_kind},
+            )
+
+        when = describe_schedule(job["cron_expression"], job["scheduled_for"], job["timezone"])
+        response_msg = (
+            f"I've created a scheduled job for you. Your request '{actual_message[:100]}' "
+            f"has been scheduled successfully and will run {when}. (Job ID: {job['job_id']})"
+        )
+        streaming.stream(
+            "completed",
+            response_msg,
+            status="success",
+            processing_time_ms=int((time.time() - start_time) * 1000),
+        )
+        return MuxiResponse(
+            role="assistant",
+            content=response_msg,
+            metadata={"job_id": job["job_id"], "handled_by": "scheduler_service"},
+        )
 
     async def _persona_llm_call(
         self,
@@ -9278,46 +9364,9 @@ Agent response: {raw_response}"""
                     and getattr(analysis, "is_scheduling_request", False)
                     and self.scheduler_service
                 ):
-                    try:
-                        job_id = await self.scheduler_service.create_job(
-                            user_id=str(user_id),
-                            title=f"Scheduled: {actual_message[:490]}",
-                            original_prompt=actual_message,
-                            schedule=actual_message,
-                            exclusions=[],
-                        )
-
-                        response_msg = (
-                            f"I've created a scheduled job for you. Your request "
-                            f"'{actual_message[:100]}' has been scheduled successfully. "
-                            f"(Job ID: {job_id})"
-                        )
-
-                        streaming.stream(
-                            "completed",
-                            response_msg,
-                            status="success",
-                            processing_time_ms=int((time.time() - start_time) * 1000),
-                        )
-
-                        return MuxiResponse(
-                            role="assistant",
-                            content=response_msg,
-                            metadata={"job_id": job_id, "handled_by": "scheduler_service"},
-                        )
-
-                    except Exception as e:
-                        observability.observe(
-                            event_type=observability.ErrorEvents.SERVICE_UNAVAILABLE,
-                            level=observability.EventLevel.ERROR,
-                            data={
-                                "service": "scheduler",
-                                "error": str(e),
-                                "user_id": str(user_id),
-                            },
-                            description=f"Scheduler service failed to create scheduled job: {str(e)}",
-                        )
-                        # Fall through to SOP / agent handling
+                    return await self._handle_scheduling_request(
+                        actual_message, user_id, start_time
+                    )
 
                 # Check for scheduler query (list/view scheduled jobs).
                 # Same guard as above: a scheduled-execution invocation must
