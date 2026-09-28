@@ -2,6 +2,8 @@
 
 ## [unreleased]
 
+## v1.20260928.0
+
 ### Schedules without a time run at a configurable default time, and schedules are read in the user's timezone
 
 **New key: `scheduler.default_time`** (default `"09:00"`). It takes the clock forms the schedule parser reads: `"08:30"`, `"8:30am"`, `"9am"`, `"21:15"`. Any other value stops the formation from loading with an error naming the key. Quote it: YAML reads an unquoted `21:15` as the number 1275. `GET /v1/scheduler` includes it among the filled-in defaults.
