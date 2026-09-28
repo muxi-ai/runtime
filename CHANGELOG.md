@@ -1,6 +1,6 @@
 # Changelog
 
-## [unreleased]
+## v1.20260928.0
 
 ### Schedules without a time run at a configurable default time, and schedules are read in the user's timezone
 
