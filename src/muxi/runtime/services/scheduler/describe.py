@@ -148,7 +148,9 @@ def _days_on_which(day_of_month: str, month: str, day_of_week: str) -> Optional[
         if step and 1 <= int(step.group(1)) <= 31:
             # Cron restarts the count on the 1st: */3 runs on the 1st, 4th, ... 31st, then the 1st
             n = int(step.group(1))
-            return "every day" if n == 1 else f"every {n} days (counting from the 1st of each month)"
+            return (
+                "every day" if n == 1 else f"every {n} days (counting from the 1st of each month)"
+            )
         return None
     month_value = _number(month, 1, 12)
     if day is not None and month_value is not None:
