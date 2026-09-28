@@ -618,10 +618,6 @@ Return only valid JSON, no explanation.
 
                 # Check for time specification
                 time_spec = self._extract_time_from_text(schedule_text)
-                if time_spec is None and re.search(r"\d\s*(?:am|pm)\b|\d:\d|\dh\d", schedule_text):
-                    # A clock time is written but unusable ("25:00", "13pm", "130pm"): rather
-                    # than drop it and run at midnight, leave the text to the LLM parser
-                    return None
                 if time_spec:
                     hour, minute = time_spec
                     # Replace hour and minute in cron
@@ -699,13 +695,24 @@ Return only valid JSON, no explanation.
             text: Text to extract time from
 
         Returns:
-            Tuple of (hour, minute), or None when no time is found or the first time found
-            is out of range
+            Tuple of (hour, minute), or None when the text holds no clock time
+
+        Raises:
+            ValueError: A clock time is written but out of range ("25:00", "13pm") or
+                malformed ("130pm", "10:305"). Dropping it would let a later fallback
+                schedule the job at midnight, so the schedule is refused instead.
         """
         for pattern, parser in self.time_patterns.items():
             match = re.search(pattern, text)
             if match:
-                return parser(match)
+                time_spec = parser(match)
+                if time_spec is None:
+                    raise ValueError(f"Schedule time is out of range: {match.group(0)!r}")
+                return time_spec
+
+        malformed = re.search(r"\d+\s*(?:am|pm)\b|\d+:\d+|\d+h\d+", text)
+        if malformed:
+            raise ValueError(f"Schedule time is not a clock time: {malformed.group(0)!r}")
 
         return None
 

@@ -1,10 +1,10 @@
 """The schedule parser's pattern path reads clock times and day names exactly.
 
 Times: a written time keeps its minutes ("3:30pm" is 15:30, not "30pm"), a pattern
-never matches the tail of a longer number ("110pm", "10:305"), and a time outside
-the clock (hour over 23, 12-hour hour outside 1-12, minute over 59) makes the
-pattern path return None so the LLM parser handles the text instead of a cron
-with an impossible or silently dropped hour.
+never matches the tail of a longer number ("110pm", "10:305"), and a written time
+that is outside the clock (hour over 23, 12-hour hour outside 1-12, minute over 59)
+or is not a clock time at all raises ValueError, so no job is created rather than a
+cron with an impossible hour or one that a fallback silently runs at midnight.
 
 Days: a day name counts only as a whole word, in its full form, its plural or a
 common abbreviation, in any case, so "month", "friend", "sunset", "wedding" and
@@ -56,14 +56,22 @@ async def test_time_is_read_with_its_minutes(parser, text, cron):
         "daily at 110pm",
         "daily at 10:305",
         "every monday at 25:00",
+        "every tuesday and thursday at 25:00",
     ],
 )
-async def test_unusable_time_leaves_the_pattern_path(parser, text):
-    assert await parser._try_pattern_matching(text) is None
+async def test_unusable_time_refuses_the_schedule(parser, text):
+    with pytest.raises(ValueError):
+        await parser._try_pattern_matching(text)
 
 
 @pytest.mark.parametrize("text", ["25:00", "13pm", "0am", "9:75am", "130pm", "110pm", "10:305"])
 def test_unusable_time_is_not_extracted(parser, text):
+    with pytest.raises(ValueError):
+        parser._extract_time_from_text(text)
+
+
+@pytest.mark.parametrize("text", ["every day", "every 15 minutes", "every day at sunset"])
+def test_text_without_a_clock_time_has_no_time(parser, text):
     assert parser._extract_time_from_text(text) is None
 
 
