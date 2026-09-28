@@ -59,8 +59,8 @@ class ScheduleParser:
         self.circuit_breaker = circuit_breaker
 
         # Common time patterns. The first pattern that matches decides, so the ones with
-        # minutes come first; \b stops a pattern matching the tail of a longer number
-        # ("30pm" inside "3:30pm" or "130pm").
+        # minutes come first ("3:30pm" is not "30pm"); \b stops a pattern matching part of
+        # a longer number ("10pm" inside "110pm", "10:30" inside "10:305").
         self.time_patterns = {
             # 12-hour format
             r"\b(\d{1,2}):(\d{2})\s*(am|pm)\b": self._parse_12hour_minutes,
