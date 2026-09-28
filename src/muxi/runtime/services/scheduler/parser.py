@@ -58,16 +58,15 @@ class ScheduleParser:
         self.cache = cache
         self.circuit_breaker = circuit_breaker
 
-        # Common time patterns. The first pattern that matches decides, so the ones with
-        # minutes come first ("3:30pm" is not "30pm"); \b stops a pattern matching part of
-        # a longer number ("10pm" inside "110pm", "10:30" inside "10:305").
+        # Common time patterns. The first pattern that matches decides, so the one with
+        # minutes comes first ("3:30pm" is not "30pm").
         self.time_patterns = {
             # 12-hour format
-            r"\b(\d{1,2}):(\d{2})\s*(am|pm)\b": self._parse_12hour_minutes,
-            r"\b(\d{1,2})\s*(am|pm)\b": self._parse_12hour,
+            r"(\d{1,2}):(\d{2})\s*(am|pm)": self._parse_12hour_minutes,
+            r"(\d{1,2})\s*(am|pm)": self._parse_12hour,
             # 24-hour format
-            r"\b(\d{1,2}):(\d{2})\b": self._parse_24hour,
-            r"\b(\d{1,2})h(\d{2})\b": self._parse_24hour,
+            r"(\d{1,2}):(\d{2})": self._parse_24hour,
+            r"(\d{1,2})h(\d{2})": self._parse_24hour,
             # Named times
             r"(morning|noon|afternoon|evening|midnight)": self._parse_named_time,
         }
@@ -698,21 +697,22 @@ Return only valid JSON, no explanation.
             Tuple of (hour, minute), or None when the text holds no clock time
 
         Raises:
-            ValueError: A clock time is written but out of range ("25:00", "13pm") or
-                malformed ("130pm", "10:305"). Dropping it would let a later fallback
-                schedule the job at midnight, so the schedule is refused instead.
+            ValueError: A clock-shaped token in the text is out of range ("25:00", "13pm")
+                or is not a clock time ("130pm", "10:305"). Every such token is checked, so
+                an unusable one is never skipped in favour of another time; dropping it
+                would let a later fallback schedule the job at midnight.
         """
+        for token in re.finditer(r"\d+(?::\d+)?\s*(?:am|pm)\b|\d+:\d+|\d+h\d+", text):
+            if not any(
+                (match := re.fullmatch(pattern, token.group(0))) and parser(match)
+                for pattern, parser in self.time_patterns.items()
+            ):
+                raise ValueError(f"Schedule time is not a usable clock time: {token.group(0)!r}")
+
         for pattern, parser in self.time_patterns.items():
             match = re.search(pattern, text)
             if match:
-                time_spec = parser(match)
-                if time_spec is None:
-                    raise ValueError(f"Schedule time is out of range: {match.group(0)!r}")
-                return time_spec
-
-        malformed = re.search(r"\d+\s*(?:am|pm)\b|\d+:\d+|\d+h\d+", text)
-        if malformed:
-            raise ValueError(f"Schedule time is not a clock time: {malformed.group(0)!r}")
+                return parser(match)
 
         return None
 

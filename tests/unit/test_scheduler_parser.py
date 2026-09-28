@@ -1,10 +1,11 @@
 """The schedule parser's pattern path reads clock times and day names exactly.
 
-Times: a written time keeps its minutes ("3:30pm" is 15:30, not "30pm"), a pattern
-never matches the tail of a longer number ("110pm", "10:305"), and a written time
-that is outside the clock (hour over 23, 12-hour hour outside 1-12, minute over 59)
-or is not a clock time at all raises ValueError, so no job is created rather than a
-cron with an impossible hour or one that a fallback silently runs at midnight.
+Times: a written time keeps its minutes ("3:30pm" is 15:30, not "30pm"), no pattern
+reads part of a longer number ("110pm", "10:305"), and any written time that is
+outside the clock (hour over 23, 12-hour hour outside 1-12, minute over 59) or is
+not a clock time at all raises ValueError, even beside a usable time, so no job
+is created rather than a cron with an impossible hour or one that a fallback
+silently runs at midnight.
 
 Days: a day name counts only as a whole word, in its full form, its plural or a
 common abbreviation, in any case, so "month", "friend", "sunset", "wedding" and
@@ -57,6 +58,9 @@ async def test_time_is_read_with_its_minutes(parser, text, cron):
         "daily at 10:305",
         "every monday at 25:00",
         "every tuesday and thursday at 25:00",
+        "daily at 130pm in the morning",
+        "daily at 3pm and 10:305",
+        "daily at 9am and 25:00",
     ],
 )
 async def test_unusable_time_refuses_the_schedule(parser, text):
