@@ -577,8 +577,9 @@ Parse the request and return ONLY a JSON object with this exact format:
     "time_given": true
 }}
 
-"time_given" is false when the request names no time of day; then use the default time,
-{default_hour:02d}:{default_minute:02d}.
+"time_given" is false only when the request names a day but neither a time of day nor a time
+relative to now ("in 3 hours", "in 20 minutes"); then use the default time,
+{default_hour:02d}:{default_minute:02d}. Otherwise it is true.
 
 Examples:
 - "tomorrow at 2pm" → tomorrow's date at 14:00
@@ -586,6 +587,7 @@ Examples:
 - "on December 25th at noon" → 2025-12-25 at 12:00
 - "next week" → the Monday of next week at {default_hour:02d}:{default_minute:02d}, time_given false
 - "in 3 days at 3:30pm" → 3 days from now at 15:30
+- "in 3 hours" → 3 hours from now, time_given true
 
 Return only valid JSON, no explanation.
 """
