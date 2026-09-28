@@ -2,6 +2,12 @@
 
 ## [unreleased]
 
+### The schedule parser keeps the minutes of a 12-hour time and matches day names as whole words
+
+The scheduler's pattern parser tried the hour-only 12-hour pattern before the one with minutes, so "every day at 3:30pm" read "30pm" and produced hour 42 (`0 42 * * *`), and "daily at 9:15am" silently became 15:00. Times with minutes are now tried first, and a number is only read whole: never from after a digit or a colon, and only up to a word boundary, so "3:30pm" is not "30pm", "110pm" is not "10pm" and "10:305" is not "10:30". The first time found is the schedule's time. If it is outside the clock (hour over 23, a 12-hour hour outside 1-12, minute over 59) or is clock-shaped but not a clock time ("130pm", "10:305", "12:5pm"), the schedule is refused with a `ValueError`, even when a named time ("in the morning") follows, so no job is created, instead of a cron with an impossible hour or, once the time is dropped, a job that the fallback parser runs at midnight. A later clock-like number in the rest of the message ("the highlights from 25:00 of the video") is left alone. When the request came through chat, the overlord logs the error and hands the message to the agent as it does for any scheduler failure.
+
+Day names were matched as substrings, so "monthly at 9am" also ran every Monday ("mon" in "monthly"), and "friend", "sunset", "wedding" and "saturated" picked Friday, Sunday, Wednesday and Saturday. A day now counts only as a whole word, case-insensitively: its full name, its plural ("mondays") or a common abbreviation (mon, tue, tues, wed, thu, thur, thurs, fri, sat, sun). "weekdays", "weekends", "business days" and "work days" match as whole words as before.
+
 ### Email-address user ids are lowercased
 
 A `user_id` that is an email address is now lowercased, whole (local part and domain), where it enters the runtime, before the request middleware is called:

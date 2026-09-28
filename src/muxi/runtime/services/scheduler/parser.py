@@ -58,14 +58,21 @@ class ScheduleParser:
         self.cache = cache
         self.circuit_breaker = circuit_breaker
 
-        # Common time patterns
+        # Common time patterns, most specific first; the first pattern that matches decides.
+        # A number never starts after a digit or a colon and must end at a word boundary, so
+        # no pattern reads part of a longer one ("30pm" in "3:30pm", "10pm" in "110pm",
+        # "5pm" in "12:5pm", "10:30" in "10:305").
         self.time_patterns = {
             # 12-hour format
-            r"(\d{1,2})\s*(am|pm)": self._parse_12hour,
-            r"(\d{1,2}):(\d{2})\s*(am|pm)": self._parse_12hour_minutes,
+            r"(?<![\d:])(\d{1,2}):(\d{2})\s*(am|pm)\b": self._parse_12hour_minutes,
+            r"(?<![\d:])(\d{1,2})\s*(am|pm)\b": self._parse_12hour,
             # 24-hour format
-            r"(\d{1,2}):(\d{2})": self._parse_24hour,
-            r"(\d{1,2})h(\d{2})": self._parse_24hour,
+            r"(?<![\d:])(\d{1,2}):(\d{2})\b": self._parse_24hour,
+            r"(?<![\d:])(\d{1,2})h(\d{2})\b": self._parse_24hour,
+            # Anything else clock-shaped ("130pm", "10:305", "12:5pm") is not a usable time
+            r"(?<![\d:])\d+\s*(?:am|pm)(?![a-z])|(?<![\d:])\d+:\d+|(?<![\d:])\d+h\d+": (
+                lambda match: None
+            ),
             # Named times
             r"(morning|noon|afternoon|evening|midnight)": self._parse_named_time,
         }
@@ -83,7 +90,7 @@ class ScheduleParser:
             r"monthly": lambda m: "0 0 1 * *",
         }
 
-        # Day patterns
+        # Day patterns (each key matches only as a whole word)
         self.day_patterns = {
             "monday": "1",
             "tuesday": "2",
@@ -92,10 +99,20 @@ class ScheduleParser:
             "friday": "5",
             "saturday": "6",
             "sunday": "0",
+            "mondays": "1",
+            "tuesdays": "2",
+            "wednesdays": "3",
+            "thursdays": "4",
+            "fridays": "5",
+            "saturdays": "6",
+            "sundays": "0",
             "mon": "1",
             "tue": "2",
+            "tues": "2",
             "wed": "3",
             "thu": "4",
+            "thur": "4",
+            "thurs": "4",
             "fri": "5",
             "sat": "6",
             "sun": "0",
@@ -683,12 +700,22 @@ Return only valid JSON, no explanation.
             text: Text to extract time from
 
         Returns:
-            Tuple of (hour, minute) or None
+            Tuple of (hour, minute), or None when the text holds no time
+
+        Raises:
+            ValueError: The time found is out of range ("25:00", "13pm") or not a clock
+                time ("130pm", "10:305"). Dropping it would let a later fallback schedule
+                the job at midnight, so the schedule is refused instead.
         """
         for pattern, parser in self.time_patterns.items():
             match = re.search(pattern, text)
             if match:
-                return parser(match)
+                time_spec = parser(match)
+                if time_spec is None:
+                    raise ValueError(
+                        f"Schedule time is not a usable clock time: {match.group(0)!r}"
+                    )
+                return time_spec
 
         return None
 
@@ -703,16 +730,19 @@ Return only valid JSON, no explanation.
             Cron day specification or None
         """
         for day_text, day_spec in self.day_patterns.items():
-            if day_text in text:
+            # Whole words only: "mon" must not match "month", nor "fri" match "friend"
+            if re.search(rf"\b{day_text}\b", text, re.IGNORECASE):
                 return day_spec
 
         return None
 
-    def _parse_12hour(self, match) -> Tuple[int, int]:
-        """Parse 12-hour time format."""
+    def _parse_12hour(self, match) -> Optional[Tuple[int, int]]:
+        """Parse 12-hour time format; None when the hour is not 1-12."""
         hour = int(match.group(1))
         am_pm = match.group(2).lower()
 
+        if not 1 <= hour <= 12:
+            return None
         if am_pm == "pm" and hour != 12:
             hour += 12
         elif am_pm == "am" and hour == 12:
@@ -720,12 +750,15 @@ Return only valid JSON, no explanation.
 
         return hour, 0
 
-    def _parse_12hour_minutes(self, match) -> Tuple[int, int]:
-        """Parse 12-hour time format with minutes."""
+    def _parse_12hour_minutes(self, match) -> Optional[Tuple[int, int]]:
+        """Parse 12-hour time format with minutes; None when the hour is not 1-12 or the
+        minute is over 59."""
         hour = int(match.group(1))
         minute = int(match.group(2))
         am_pm = match.group(3).lower()
 
+        if not 1 <= hour <= 12 or minute > 59:
+            return None
         if am_pm == "pm" and hour != 12:
             hour += 12
         elif am_pm == "am" and hour == 12:
@@ -733,10 +766,12 @@ Return only valid JSON, no explanation.
 
         return hour, minute
 
-    def _parse_24hour(self, match) -> Tuple[int, int]:
-        """Parse 24-hour time format."""
+    def _parse_24hour(self, match) -> Optional[Tuple[int, int]]:
+        """Parse 24-hour time format; None when the hour is over 23 or the minute over 59."""
         hour = int(match.group(1))
         minute = int(match.group(2))
+        if hour > 23 or minute > 59:
+            return None
         return hour, minute
 
     def _parse_named_time(self, match) -> Tuple[int, int]:
