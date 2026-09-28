@@ -19,7 +19,7 @@ The overlord answered a scheduling request only when the job was created: on any
 - `schedule_not_understood`: "I didn't understand that schedule. Could you rephrase it, for example "every weekday at 9am"?"
 - `scheduler_failed` (any other error): "I couldn't set that up because something went wrong while creating the scheduled job. Please try again."
 
-The success reply now says when the job runs, in the timezone it was created in: "Your request '...' has been scheduled successfully and will run every Tuesday and Thursday at 3:30pm (Europe/London). (Job ID: ...)", or "on Tuesday, September 29, 2026 at 3:30pm (UTC)" for a one-time job. A cron expression the reply cannot put into words (the model can write any valid one) is shown as it is: 'on the cron schedule "5 4 * 1 2" (UTC)'.
+The success reply now says when the job runs, in the timezone it was created in: "Your request '...' has been scheduled successfully and will run every Tuesday and Thursday at 3:30pm (Europe/London). (Job ID: ...)", or "on Tuesday, September 29, 2026 at 3:30pm (UTC)" for a one-time job. A cron expression the reply cannot put into words accurately (the model can write any valid one, and a step such as `*/45` minutes does not run evenly) is shown as it is: 'on the cron schedule "5 4 * 1 2" (UTC)'.
 
 The "every <day> at <time>" and "every <day> and <day> at <time>" patterns knew only the seven full day names, so "every tues and thurs at 3pm" and "every mondays at 9am" needed the model. They now read the same day vocabulary as the rest of the parser, from one definition: full names, plurals and the abbreviations mon, tue, tues, wed, thu, thur, thurs, fri, sat and sun, as whole words. "every tues and thurs at 3pm" is `0 15 * * 2,4` and "every mondays at 9am" is `0 9 * * 1`.
 

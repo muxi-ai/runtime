@@ -43,7 +43,8 @@ def describe_schedule(
         cron_expression: The recurring job's cron expression (None for a one-time job)
         scheduled_for: The one-time job's run time; a naive value is read as UTC, as the
             scheduler stores it (None for a recurring job)
-        timezone: The timezone the job was created in
+        timezone: The timezone the job was created in; a one-time run time is shown in UTC
+            when the name is not a known timezone
 
     Returns:
         "every day at 3:30pm (UTC)", "on Tuesday, September 29, 2026 at 9am (Europe/London)",
@@ -52,7 +53,11 @@ def describe_schedule(
     if scheduled_for is not None:
         if scheduled_for.tzinfo is None:
             scheduled_for = pytz.UTC.localize(scheduled_for)
-        local = scheduled_for.astimezone(pytz.timezone(timezone))
+        try:
+            zone = pytz.timezone(timezone)
+        except pytz.UnknownTimeZoneError:
+            zone, timezone = pytz.UTC, "UTC"
+        local = scheduled_for.astimezone(zone)
         when = (
             f"on {_DAY_NAMES[local.isoweekday() % 7]}, {_MONTH_NAMES[local.month - 1]} "
             f"{local.day}, {local.year} at {_clock(local.hour, local.minute)}"
@@ -96,13 +101,13 @@ def describe_cron(cron_expression: str) -> Optional[str]:
 def _repeat_within_day(minute: str, hour: str) -> Optional[str]:
     """ "every 15 minutes", "every 2 hours", "every hour from 9am to 5pm" and the like."""
     minute_value = _number(minute, 0, 59)
-    minute_step = _step(minute, 59)
+    minute_step = _step(minute, 60)
 
     if minute_value is not None:
         past = f" at {minute_value} minutes past" if minute_value else ""
         if hour == "*":
             return "every hour" + past
-        hour_step = _step(hour, 23)
+        hour_step = _step(hour, 24)
         if hour_step is not None:
             return ("every hour" if hour_step == 1 else f"every {hour_step} hours") + past
         repeat, first_minute, last_minute = "every hour", minute_value, minute_value
@@ -139,9 +144,11 @@ def _days_on_which(day_of_month: str, month: str, day_of_week: str) -> Optional[
     if month == "*":
         if day is not None:
             return f"on the {_ordinal(day)} of every month"
-        step = _step(day_of_month, 31)
-        if step is not None:
-            return "every day" if step == 1 else f"every {step} days"
+        step = re.fullmatch(r"\*/([0-9]+)", day_of_month)
+        if step and 1 <= int(step.group(1)) <= 31:
+            # Cron restarts the count on the 1st: */3 runs on the 1st, 4th, ... 31st, then the 1st
+            n = int(step.group(1))
+            return "every day" if n == 1 else f"every {n} days (counting from the 1st of each month)"
         return None
     month_value = _number(month, 1, 12)
     if day is not None and month_value is not None:
@@ -168,10 +175,11 @@ def _number(field: str, low: int, high: int) -> Optional[int]:
     return None
 
 
-def _step(field: str, high: int) -> Optional[int]:
-    """N of a "*/N" field with N in [1, high], or None."""
+def _step(field: str, period: int) -> Optional[int]:
+    """N of a "*/N" minute or hour field when it runs evenly, every N units: N divides the
+    period (60 minutes, 24 hours). Otherwise None: ``*/45`` runs at :00 and :45."""
     match = re.fullmatch(r"\*/([0-9]+)", field)
-    if match and 1 <= int(match.group(1)) <= high:
+    if match and 1 <= int(match.group(1)) < period and period % int(match.group(1)) == 0:
         return int(match.group(1))
     return None
 

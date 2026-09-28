@@ -28,7 +28,8 @@ from muxi.runtime.services.scheduler.describe import describe_schedule
         ("0 9 22 * *", "on the 22nd of every month at 9am"),
         ("0 9 13 * *", "on the 13th of every month at 9am"),
         ("0 9 25 12 *", "every year on December 25 at 9am"),
-        ("0 0 */3 * *", "every 3 days at 12am"),
+        ("0 0 */3 * *", "every 3 days (counting from the 1st of each month) at 12am"),
+        ("0 9 */1 * *", "every day at 9am"),
         ("* * * * *", "every minute"),
         ("*/15 * * * *", "every 15 minutes"),
         ("0 * * * *", "every hour"),
@@ -54,6 +55,9 @@ def test_recurring_job_is_described_in_plain_words(cron, words):
         "0 9 * * 7",  # 7 for Sunday, outside what the parser writes
         "0 25 * * *",  # not a time
         "*/15 */2 * * *",
+        "*/45 * * * *",  # runs at :00 and :45, not every 45 minutes
+        "0 */5 * * *",  # runs at 0, 5, 10, 15, 20, then 0 again after 4 hours
+        "*/7 9-17 * * *",
         "@daily",
         "not a cron",
         "",
@@ -68,6 +72,14 @@ def test_one_time_job_is_described_in_its_timezone():
     assert (
         describe_schedule(None, scheduled_for, "Europe/London")
         == "on Tuesday, September 29, 2026 at 3:30pm (Europe/London)"
+    )
+
+
+def test_one_time_job_with_an_unknown_timezone_is_shown_in_utc():
+    scheduled_for = pytz.UTC.localize(datetime(2026, 9, 29, 14, 30))
+    assert (
+        describe_schedule(None, scheduled_for, "Mars/Base")
+        == "on Tuesday, September 29, 2026 at 2:30pm (UTC)"
     )
 
 
