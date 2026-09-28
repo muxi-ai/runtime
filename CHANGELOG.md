@@ -2,6 +2,12 @@
 
 ## [unreleased]
 
+### The schedule parser keeps the minutes of a 12-hour time and matches day names as whole words
+
+The scheduler's pattern parser tried the hour-only 12-hour pattern before the one with minutes, so "every day at 3:30pm" read "30pm" and produced hour 42 (`0 42 * * *`), and "daily at 9:15am" silently became 15:00. Times with minutes are now tried first, and every time pattern is anchored at word boundaries so it cannot match the tail of a longer number ("130pm", "10:305"). A time outside the clock (hour over 23, a 12-hour hour outside 1-12, minute over 59) or a clock-shaped token that no pattern accepts now makes the pattern parser step aside, so the LLM parser (and its cron validation) handles the text instead of producing an impossible hour or silently running at midnight.
+
+Day names were matched as substrings, so "monthly at 9am" also ran every Monday ("mon" in "monthly"), and "friend", "sunset", "wedding" and "saturated" picked Friday, Sunday, Wednesday and Saturday. A day now counts only as a whole word, case-insensitively: its full name, its plural ("mondays") or a common abbreviation (mon, tue, tues, wed, thu, thur, thurs, fri, sat, sun). "weekdays", "weekends", "business days" and "work days" match as whole words as before.
+
 ### Email-address user ids are lowercased
 
 A `user_id` that is an email address is now lowercased, whole (local part and domain), where it enters the runtime, before the request middleware is called:
