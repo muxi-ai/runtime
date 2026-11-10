@@ -16,6 +16,16 @@ The Pillow floor moves from 12.2.0 to 13.0.0. dnspython, which the runtime gets 
 
 tornado (via bokeh), setuptools (via spacy, thinc and torch) and filelock (via huggingface-hub, onellm and torch) get direct security floors: `tornado>=6.6`, `setuptools>=83.0.0` and `filelock>=4.2.1`. The build backend now also requires `setuptools>=83.0.0`. filelock 4 is a new major version; the runtime does not call it directly.
 
+### Locked development dependencies and CI actions are updated
+
+`uv.lock`, which pins the development and CI environment, moves to newer releases: aiohttp 3.14.4, authlib 1.9.5, black 26.10.1, certifi 2026.10.23, fpdf2 2.8.8, joserfc 1.7.6, msgpack 1.2.3, multidict 6.9.1, nltk 3.10.4, opentelemetry-api 1.45.1, pyasn1 0.6.5, pyjwt 2.15.0, pypdf 6.21.4, tornado 6.6.1 and urllib3 2.8.0. The Docker and SIF images install from `requirements.txt`, not `uv.lock`, so these pins do not change what the images ship.
+
+The GitHub Actions workflows use actions/setup-python 7.1.0, actions/upload-artifact 7.0.2, actions/download-artifact 8.0.2, docker/login-action 4.7.0 and pypa/gh-action-pypi-publish 1.14.3.
+
+### e2e symlinks are relative
+
+Twelve tracked e2e symlinks (`e2e/assets/files` and eleven formation `secrets.enc` links) pointed at absolute paths on one developer's machine, so they were broken in every other checkout. They now use relative paths, like the other 75 symlinks in the repository.
+
 ## v1.20260928.0
 
 ### Schedules without a time run at a configurable default time, and schedules are read in the user's timezone
