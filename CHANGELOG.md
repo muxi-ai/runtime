@@ -9,6 +9,7 @@
 The Pillow floor moves from 12.2.0 to 13.0.0. dnspython, which the runtime gets through email-validator, is now a direct dependency with a 2.9.0 floor so no install resolves to a vulnerable version. `setup.py` reads `pyproject.toml` with the standard library's `tomllib` and no longer falls back to `tomli`.
 
 tornado (via bokeh), setuptools (via spacy, thinc and torch) and filelock (via huggingface-hub, onellm and torch) get direct security floors: `tornado>=6.6`, `setuptools>=83.0.0` and `filelock>=4.2.1`. The build backend now also requires `setuptools>=83.0.0`. filelock 4 is a new major version; the runtime does not call it directly.
+
 ## v1.20260928.0
 
 ### Schedules without a time run at a configurable default time, and schedules are read in the user's timezone
