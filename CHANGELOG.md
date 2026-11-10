@@ -2,6 +2,12 @@
 
 ## [unreleased]
 
+### MCP 2 and FastMCP 4
+
+The runtime now requires `mcp>=2.3.0,<3.0.0` and `fastmcp>=4.1.7,<5.0.0`. Upgrade these together. Formation MCP configuration and tool wire formats are unchanged.
+
+SDK integrations must use snake_case model attributes such as `input_schema`, `is_error` and `mime_type`. Runtime transport responses still use camelCase protocol keys. MCP HTTP transports now use `httpx2` auth objects and exceptions; other runtime services continue using `httpx`. Streamable HTTP connection statistics no longer include `session_id`, which the new SDK does not expose.
+
 ### Python 3.10 is no longer supported; Pillow 13 and dnspython 2.9 are required
 
 **Behaviour change: the runtime needs Python 3.11 or newer.** Pillow 13.0.0 and dnspython 2.9.0 fix open security advisories, and both require Python 3.11, so `requires-python` is now `>=3.11`. Installing on Python 3.10 fails at dependency resolution. The Docker and SIF images already run Python 3.13 and are unaffected.

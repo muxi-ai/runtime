@@ -61,7 +61,7 @@ class TestMCPToolInvocation(BaseE2ETest):
                 tools = await client.list_tools()
                 sessions_tool = next((t for t in tools if t.name == "list_sessions"), None)
                 if sessions_tool:
-                    print(f"   list_sessions params: {sessions_tool.inputSchema}")
+                    print(f"   list_sessions params: {sessions_tool.input_schema}")
 
                 # Test 1: list_sessions
                 print("\n2. Calling list_sessions via MCP...")

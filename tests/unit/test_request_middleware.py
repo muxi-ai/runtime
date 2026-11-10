@@ -414,11 +414,12 @@ class TestTransform:
 
     async def test_transport_timeout_exception_labeled_timeout(self):
         """On exact integer timeouts the transport deadline can surface as
-        an httpx timeout instead of asyncio.TimeoutError -- it must still
-        be labeled reason="timeout", never a generic error."""
-        import httpx
+        an httpx2 timeout (the MCP SDK's HTTP client) instead of
+        asyncio.TimeoutError -- it must still be labeled reason="timeout",
+        never a generic error."""
+        import httpx2
 
-        mw = middleware_with(FakeClient(exc=httpx.ReadTimeout("read timed out")))
+        mw = middleware_with(FakeClient(exc=httpx2.ReadTimeout("read timed out")))
         mw.timeout_seconds = 2.0  # exact integer boundary
         with pytest.raises(MiddlewareRejectedError) as exc_info:
             await mw.transform(sent_payload())

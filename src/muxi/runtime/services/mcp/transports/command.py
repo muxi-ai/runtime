@@ -251,7 +251,7 @@ class CommandLineTransport(BaseTransport):
                 self._update_success_stats()
                 return {
                     "status": "success",
-                    "result": {"tools": [tool.model_dump() for tool in result.tools]},
+                    "result": {"tools": [tool.model_dump(by_alias=True) for tool in result.tools]},
                 }
             elif method == "tools/call":
                 tool_name = params.get("name")
@@ -260,7 +260,7 @@ class CommandLineTransport(BaseTransport):
                     self.session.call_tool(tool_name, arguments), timeout=request_timeout
                 )
                 self._update_success_stats()
-                return {"status": "success", "result": result.model_dump()}
+                return {"status": "success", "result": result.model_dump(by_alias=True)}
             elif method == "resources/list":
                 result = await asyncio.wait_for(
                     self.session.list_resources(), timeout=request_timeout
@@ -268,7 +268,9 @@ class CommandLineTransport(BaseTransport):
                 self._update_success_stats()
                 return {
                     "status": "success",
-                    "result": {"resources": [res.model_dump() for res in result.resources]},
+                    "result": {
+                        "resources": [res.model_dump(by_alias=True) for res in result.resources]
+                    },
                 }
             elif method == "prompts/list":
                 result = await asyncio.wait_for(
@@ -277,7 +279,9 @@ class CommandLineTransport(BaseTransport):
                 self._update_success_stats()
                 return {
                     "status": "success",
-                    "result": {"prompts": [prompt.model_dump() for prompt in result.prompts]},
+                    "result": {
+                        "prompts": [prompt.model_dump(by_alias=True) for prompt in result.prompts]
+                    },
                 }
             else:
                 # For other methods, use the raw streams

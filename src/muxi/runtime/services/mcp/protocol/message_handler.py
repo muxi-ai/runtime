@@ -75,30 +75,7 @@ class MCPMessageHandler:
 
         # Handle SessionMessage objects
         if isinstance(message, SessionMessage):
-            # Check if message.message is a JSONRPCMessage with a root attribute
-            if hasattr(message.message, "root"):
-                # Handle JSONRPCMessage wrapper
-                root = message.message.root
-                if isinstance(root, JSONRPCResponse):
-                    return {
-                        "status": "success",
-                        "result": root.result,
-                        "id": root.id,
-                        "jsonrpc": root.jsonrpc,
-                    }
-                elif isinstance(root, JSONRPCError):
-                    return {
-                        "status": "error",
-                        "error": {
-                            "code": root.error.code,
-                            "message": root.error.message,
-                            "data": getattr(root.error, "data", None),
-                        },
-                        "id": root.id,
-                        "jsonrpc": root.jsonrpc,
-                    }
-            # Fall back to direct handling
-            elif isinstance(message.message, JSONRPCResponse):
+            if isinstance(message.message, JSONRPCResponse):
                 return {
                     "status": "success",
                     "result": message.message.result,

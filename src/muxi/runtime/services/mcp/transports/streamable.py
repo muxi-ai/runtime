@@ -3,7 +3,7 @@
 # =============================================================================
 # Title:        MCP Streamable HTTP Transport using SDK
 # Description:  Streamable HTTP transport using official MCP SDK
-# Role:         Provides MCP protocol support via SDK streamablehttp_client
+# Role:         Provides MCP protocol support via SDK streamable_http_client
 # Usage:        Primary transport for modern MCP servers
 # Author:       Muxi Framework Team
 # =============================================================================
@@ -12,10 +12,11 @@ import asyncio
 from datetime import datetime
 from typing import Any, Dict, Optional
 
+import httpx2
 from mcp.client.session import ClientSession
 
 # MCP SDK imports
-from mcp.client.streamable_http import streamablehttp_client
+from mcp.client.streamable_http import streamable_http_client
 
 from ... import observability
 from ..protocol.message_handler import MCPMessageHandler
@@ -28,6 +29,10 @@ from .base import (
     MCPTimeoutError,
 )
 
+# How long the server may keep a response stream silent. Matches the read
+# timeout the SDK's own default client uses for streamable HTTP.
+SSE_READ_TIMEOUT_SECONDS = 300.0
+
 
 class StreamableHTTPTransport(BaseTransport):
     """MCP Streamable HTTP transport using official SDK."""
@@ -39,7 +44,7 @@ class StreamableHTTPTransport(BaseTransport):
         self.session: Any = None
         self.read_stream: Any = None
         self.write_stream: Any = None
-        self.get_session_id: Any = None
+        self.http_client: Optional[httpx2.AsyncClient] = None
         self.client_context: Any = None
         pass  # REMOVED: init-phase observe() call
         # Log auth config safely without exposing sensitive data
@@ -100,22 +105,24 @@ class StreamableHTTPTransport(BaseTransport):
             return data
 
     async def connect(self) -> bool:
-        """Connect using MCP SDK streamablehttp_client."""
+        """Connect using MCP SDK streamable_http_client."""
         if self.connected:
             return True
 
         try:
-            # Convert auth dict to httpx.Auth
-            httpx_auth = create_httpx_auth(self.auth)
+            # The SDK takes auth and timeouts from the httpx2 client it is given;
+            # it does not close a client it did not create, so _cleanup does.
+            self.http_client = httpx2.AsyncClient(
+                auth=create_httpx_auth(self.auth),
+                timeout=httpx2.Timeout(self.request_timeout, read=SSE_READ_TIMEOUT_SECONDS),
+            )
 
             # Store the context manager itself (like command transport)
-            self.client_context = streamablehttp_client(
-                url=self.url, auth=httpx_auth, timeout=self.request_timeout
-            )
+            self.client_context = streamable_http_client(self.url, http_client=self.http_client)
 
             # Enter context and get streams
             # Timeout protects against SDK hanging on auth errors (e.g. 401)
-            self.read_stream, self.write_stream, self.get_session_id = await asyncio.wait_for(
+            self.read_stream, self.write_stream = await asyncio.wait_for(
                 self.client_context.__aenter__(), timeout=self.request_timeout
             )
 
@@ -203,7 +210,7 @@ class StreamableHTTPTransport(BaseTransport):
                 self._update_success_stats()
                 return {
                     "status": "success",
-                    "result": {"tools": [tool.model_dump() for tool in result.tools]},
+                    "result": {"tools": [tool.model_dump(by_alias=True) for tool in result.tools]},
                 }
             elif method == "tools/call":
                 tool_name = params.get("name")
@@ -213,7 +220,7 @@ class StreamableHTTPTransport(BaseTransport):
                 )
                 # Convert to expected format
                 self._update_success_stats()
-                return {"status": "success", "result": result.model_dump()}
+                return {"status": "success", "result": result.model_dump(by_alias=True)}
             elif method == "resources/list":
                 result = await asyncio.wait_for(
                     self.session.list_resources(), timeout=request_timeout
@@ -221,7 +228,9 @@ class StreamableHTTPTransport(BaseTransport):
                 self._update_success_stats()
                 return {
                     "status": "success",
-                    "result": {"resources": [res.model_dump() for res in result.resources]},
+                    "result": {
+                        "resources": [res.model_dump(by_alias=True) for res in result.resources]
+                    },
                 }
             elif method == "prompts/list":
                 result = await asyncio.wait_for(
@@ -230,7 +239,9 @@ class StreamableHTTPTransport(BaseTransport):
                 self._update_success_stats()
                 return {
                     "status": "success",
-                    "result": {"prompts": [prompt.model_dump() for prompt in result.prompts]},
+                    "result": {
+                        "prompts": [prompt.model_dump(by_alias=True) for prompt in result.prompts]
+                    },
                 }
             else:
                 if not isinstance(method, str):
@@ -266,7 +277,7 @@ class StreamableHTTPTransport(BaseTransport):
     async def _cleanup(self):
         """Proper cleanup in same async context.
 
-        Uses a timeout because the MCP SDK's streamablehttp_client async
+        Uses a timeout because the MCP SDK's streamable_http_client async
         generator can hang indefinitely during teardown when the connection
         was interrupted by an auth error (401) or network failure.
 
@@ -310,11 +321,18 @@ class StreamableHTTPTransport(BaseTransport):
                 finally:
                     self.client_context = None
 
+            if self.http_client:
+                try:
+                    await asyncio.wait_for(self.http_client.aclose(), timeout=5.0)
+                except (Exception, asyncio.TimeoutError):
+                    pass
+                finally:
+                    self.http_client = None
+
         finally:
             self.connected = False
             self.read_stream = None
             self.write_stream = None
-            self.get_session_id = None
 
     async def disconnect(self) -> bool:
         """Disconnect from MCP server."""
@@ -345,14 +363,5 @@ class StreamableHTTPTransport(BaseTransport):
                 "has_active_session": self.session is not None,
             }
         )
-
-        # Add session ID if available
-        if self.get_session_id:
-            try:
-                session_id = self.get_session_id()
-                if session_id:
-                    base_stats["session_id"] = session_id
-            except Exception:
-                pass
 
         return base_stats

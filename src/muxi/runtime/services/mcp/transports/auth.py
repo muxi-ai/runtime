@@ -3,18 +3,18 @@
 # =============================================================================
 # Title:        MCP Transport Authentication Utilities
 # Description:  Shared authentication classes and utilities for MCP transports
-# Role:         Provides httpx.Auth implementations for various auth types
+# Role:         Provides httpx2.Auth implementations for various auth types
 # Usage:        Used by HTTP-based MCP transports for authentication
 # Author:       Muxi Framework Team
 # =============================================================================
 
 from typing import Any, Dict, Optional
 
-import httpx
+import httpx2
 
 
-class BearerAuth(httpx.Auth):
-    """Bearer token authentication for httpx."""
+class BearerAuth(httpx2.Auth):
+    """Bearer token authentication for httpx2."""
 
     def __init__(self, token: str):
         self.token = token
@@ -24,8 +24,8 @@ class BearerAuth(httpx.Auth):
         yield request
 
 
-class ApiKeyAuth(httpx.Auth):
-    """API key authentication for httpx."""
+class ApiKeyAuth(httpx2.Auth):
+    """API key authentication for httpx2."""
 
     def __init__(self, key: str, header_name: Optional[str] = None):
         self.key = key
@@ -36,8 +36,8 @@ class ApiKeyAuth(httpx.Auth):
         yield request
 
 
-class HeadersAuth(httpx.Auth):
-    """Static request headers authentication for httpx.
+class HeadersAuth(httpx2.Auth):
+    """Static request headers authentication for httpx2.
 
     Injects a fixed set of headers into every request. Used by the
     formation ``middleware:`` block, whose http transport declares raw
@@ -53,9 +53,9 @@ class HeadersAuth(httpx.Auth):
         yield request
 
 
-def create_httpx_auth(auth_config: Optional[Dict[str, Any]]) -> Optional[httpx.Auth]:
+def create_httpx_auth(auth_config: Optional[Dict[str, Any]]) -> Optional[httpx2.Auth]:
     """
-    Convert auth config dictionary to httpx.Auth object.
+    Convert auth config dictionary to an httpx2.Auth object (the MCP SDK's HTTP client).
 
     Args:
         auth_config: Authentication configuration dictionary with:
@@ -67,7 +67,7 @@ def create_httpx_auth(auth_config: Optional[Dict[str, Any]]) -> Optional[httpx.A
             - headers: Header name/value mapping (for headers auth)
 
     Returns:
-        httpx.Auth object or None if no auth config provided
+        httpx2.Auth object or None if no auth config provided
 
     Raises:
         ValueError: If auth config is invalid or missing required fields
@@ -103,7 +103,7 @@ def create_httpx_auth(auth_config: Optional[Dict[str, Any]]) -> Optional[httpx.A
         if not password or not isinstance(password, str):
             raise ValueError("Basic auth requires a 'password' field")
 
-        return httpx.BasicAuth(username=username, password=password)
+        return httpx2.BasicAuth(username=username, password=password)
 
     elif auth_type == "api_key":
         key = auth_config.get("key")
