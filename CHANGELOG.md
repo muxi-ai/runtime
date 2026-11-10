@@ -2,6 +2,8 @@
 
 ## [unreleased]
 
+## v1.20261110.0
+
 ### MCP 2 and FastMCP 4
 
 The runtime now requires `mcp>=2.3.0,<3.0.0` and `fastmcp>=4.1.7,<5.0.0`. Upgrade these together. Formation MCP configuration and tool wire formats are unchanged.
