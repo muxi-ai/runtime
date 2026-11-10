@@ -13,16 +13,7 @@ import subprocess
 import sys
 import os
 
-# For reading pyproject.toml
-try:
-    import tomllib  # Python 3.11+
-except ImportError:
-    try:
-        import tomli as tomllib  # Python 3.10 with tomli installed
-    except ImportError:
-        print("ERROR: tomli is required for Python < 3.11")
-        print("Install it with: pip install tomli")
-        sys.exit(1)
+import tomllib
 
 
 def download_spacy_model():
@@ -105,7 +96,7 @@ author = authors[0]["name"] if authors else "MUXI Team"
 author_email = authors[0]["email"] if authors else "dev@muxi.org"
 install_requires = project_config.get("dependencies", [])
 extras_require = project_config.get("optional-dependencies", {})
-python_requires = project_config.get("requires-python", ">=3.10")
+python_requires = project_config.get("requires-python", ">=3.11")
 classifiers = project_config.get("classifiers", [])
 urls = project_config.get("urls", {})
 

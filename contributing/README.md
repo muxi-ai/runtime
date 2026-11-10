@@ -63,7 +63,7 @@ MUXI Runtime is the **execution engine** for AI agent formations. It's the core 
 
 ### Prerequisites
 
-- Python 3.10+
+- Python 3.11+
 - OpenAI API key (or other LLM provider)
 
 ### Development Setup

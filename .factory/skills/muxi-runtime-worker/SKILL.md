@@ -63,7 +63,7 @@ For integration tests (marked `@pytest.mark.slow @pytest.mark.integration`):
 ### 3. Implement
 
 1. Edit in the narrowest scope that satisfies the `fulfills` contract. Do not "improve" unrelated code while you're in the file.
-2. Preserve existing patterns (line length 100, Python 3.10+ syntax, relative imports within the package, `isort --profile=black`).
+2. Preserve existing patterns (line length 100, Python 3.11+ syntax, relative imports within the package, `isort --profile=black`).
 3. If the feature involves ripgrep-sweep cleanup, the edits are done when the sweep returns zero hits. Don't declare done before that.
 4. If a file isn't in the mission's AGENTS.md scope list, STOP and return to orchestrator. Don't silently expand scope.
 
@@ -73,8 +73,6 @@ For integration tests (marked `@pytest.mark.slow @pytest.mark.integration`):
 2. Run `ruff check src/`, `black --check src/`, `isort --check src/` on every file you edited. Fix before committing. (Not required on every feature, but required before the Quality-gate feature.)
 3. For ripgrep-sweep assertions: run the EXACT command from the Evidence field and capture the result. Zero hits = pass.
 4. For integration-test features: run the integration test once. If HF download takes too long for your budget, note the expected latency and proceed — the validator will re-run it later.
-
-**Python 3.10 tomllib note:** The stdlib `tomllib` module was added in Python 3.11. If you're running validation-contract evidence commands on a Python 3.10 interpreter, substitute `import tomli as tomllib` at the top of your inline script. `tomli` is a baseline dependency via `pip` and is available in the dev environment.
 
 ### 5. Commit
 

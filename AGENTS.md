@@ -59,7 +59,7 @@ runtime/
 ```
 
 ## Development Standards
-- **Language & style**: target Python 3.10+, adopt async I/O where throughput improves, format with Black (line length 100) and isort (`profile=black`), lint with Ruff & Flake8 (line length 120), keep naming snake_case/PascalCase as appropriate.
+- **Language & style**: target Python 3.11+, adopt async I/O where throughput improves, format with Black (line length 100) and isort (`profile=black`), lint with Ruff & Flake8 (line length 120), keep naming snake_case/PascalCase as appropriate.
 - **Testing discipline**: map fast logic to `tests/unit`, service seams to `tests/integration`, end-to-end flows to `e2e/tests`; rely on deterministic data or fixtures from `tests/fixtures`; structure tests with arrange/act/assert and meaningful failure output.
 - **Workflow basics**: branch naming `feature/<topic>` or `fix/<issue>`, commits are descriptive, PRs stay small with rationale, logs/screenshots, links, and pytest evidence.
 - **Code review loop**: keep CodeRabbit running, revisit its output after significant edits, and iterate until the report is clean.

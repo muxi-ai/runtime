@@ -12,7 +12,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        python-version: ['3.10', '3.11', '3.12']
+        python-version: ['3.11', '3.12']
         os: [ubuntu-latest]
 
     runs-on: ${{ matrix.os }}
@@ -181,7 +181,6 @@ jobs:
           echo "RC Build Complete!"
           echo ""
           echo "All checks passed:"
-          echo "  - Python 3.10 tests"
           echo "  - Python 3.11 tests"
           echo "  - Python 3.12 tests"
           echo "  - Docker build"

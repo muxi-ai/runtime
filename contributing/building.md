@@ -5,7 +5,7 @@ Guide for building MUXI Runtime artifacts (Docker images, SIF containers, PyPI p
 ## Prerequisites
 
 - Docker (for Docker and SIF builds)
-- Python 3.10+ (for PyPI builds)
+- Python 3.11+ (for PyPI builds)
 - Apptainer or Singularity (for SIF builds; optional — `sif.sh` falls back to a Docker-wrapped converter)
 
 ## Build Scripts

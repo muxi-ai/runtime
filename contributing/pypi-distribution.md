@@ -31,7 +31,7 @@ Files controlled by `MANIFEST.in` - see that file for inclusion/exclusion rules.
 ### 1. Python Environment
 
 ```bash
-# Ensure you have Python 3.10+
+# Ensure you have Python 3.11+
 python3 --version
 
 # Install build tools (if not already installed)
@@ -240,16 +240,6 @@ echo "0.20251029.1" > src/muxi/.version
 ## 🛠️ Troubleshooting
 
 ### Build Fails
-
-**Problem:** `ModuleNotFoundError: No module named 'tomli'`
-
-**Solution:**
-```bash
-pip install tomli  # For Python 3.10
-# Python 3.11+ has tomllib built-in
-```
-
----
 
 **Problem:** `error: invalid command 'bdist_wheel'`
 
