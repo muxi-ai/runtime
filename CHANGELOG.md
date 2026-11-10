@@ -1,6 +1,6 @@
 # Changelog
 
-## [unreleased]
+## v1.20261110.0
 
 ### MCP 2 and FastMCP 4
 
