@@ -254,15 +254,7 @@ class ChatOrchestrator:
 
             return result
 
-        # Create task with context propagation (Python 3.10 compatible)
-        processing_task = None
-
-        def create_task_with_context():
-            nonlocal processing_task
-            processing_task = asyncio.create_task(delayed_process())
-            return processing_task
-
-        current_context.run(create_task_with_context)
+        processing_task = asyncio.create_task(delayed_process(), context=current_context)
 
         # Yield events from the stream; cancel processing on client disconnect
         terminal_event_seen = False

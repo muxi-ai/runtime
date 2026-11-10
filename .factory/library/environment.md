@@ -38,5 +38,5 @@ Environment variables, external dependencies, and setup notes for this mission.
 ## Platform notes
 
 - macOS darwin 24.6.0 (user's host) — Apple Silicon, ONNX via CoreML
-- MUXI runtime targets Python 3.10+ per `pyproject.toml`
+- MUXI runtime targets Python 3.11+ per `pyproject.toml`
 - Editable install: `/Users/ran/Projects/muxi/code/runtime/` and `/Users/ran/Projects/muxi/code/onellm/` both `pip install -e .`

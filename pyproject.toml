@@ -11,7 +11,7 @@ authors = [
 description = "Production-ready runtime for building and orchestrating intelligent multi-agent AI systems"
 readme = "README.md"
 license = {text = "Elastic License 2.0"}
-requires-python = ">=3.10"
+requires-python = ">=3.11"
 keywords = [
     "ai", "agents", "llm", "multi-agent", "orchestration", "mcp",
     "onellm", "formation", "runtime", "framework", "chatgpt",
@@ -25,7 +25,6 @@ classifiers = [
     "Topic :: Scientific/Engineering :: Artificial Intelligence",
     "Topic :: Software Development :: Libraries :: Python Modules",
     "Programming Language :: Python :: 3",
-    "Programming Language :: Python :: 3.10",
     "Programming Language :: Python :: 3.11",
     "Programming Language :: Python :: 3.12",
     "Programming Language :: Python :: 3.13",
@@ -40,9 +39,6 @@ classifiers = [
     "Typing :: Typed",
 ]
 dependencies = [
-    # Build dependencies for setup.py
-    "tomli>=2.4.1;python_version<'3.11'",  # For reading pyproject.toml in setup.py
-
     # Core dependencies
     "orjson>=3.11.9",
     "pyyaml>=6.0.3",
@@ -107,7 +103,7 @@ dependencies = [
     "presidio-anonymizer>=2.2",
 
     # Image processing dependencies
-    "Pillow>=12.2.0",  # PIL/Pillow for image processing
+    "Pillow>=13.0.0",  # PIL/Pillow for image processing; 13.0.0 fixes the open decoder/DoS security advisories
     "pdf2image>=1.17.0",  # Convert PDF pages to images (requires Poppler)
 
     # LLM Package
@@ -195,6 +191,7 @@ dependencies = [
     "cryptography>=49.0.0",  # Encryption for secrets manager
     "PyJWT>=2.13.0",  # CVE-2026-32597: accepts unknown crit headers; fixed in 2.12.0
     "pyasn1>=0.6.3",  # CVE-2026-30922: unbounded recursion DoS; fixed in 0.6.3
+    "dnspython>=2.9.0",  # Transitive via email-validator; floor pinned for the high-severity advisory fixed in 2.9.0
     "msgpack>=1.2.0",  # Message pack format for observability
     "multitasking>=0.0.13",  # Multi-threading utilities; >=0.0.13 required for set_daemon() opt-in (prevents interpreter-exit hang on long-lived @task workers)
     "nanoid>=2.0.0",  # Nano ID generation
@@ -307,7 +304,7 @@ where = ["src"]
 
 [tool.black]
 line-length = 100
-target-version = ["py310", "py311", "py312", "py313"]
+target-version = ["py311", "py312", "py313"]
 include = '\.pyi?$'
 exclude = '''
 /(
@@ -328,7 +325,7 @@ line_length = 100
 combine_as_imports = true
 
 [tool.mypy]
-python_version = "3.10"
+python_version = "3.11"
 warn_return_any = true
 warn_unused_configs = true
 disallow_untyped_defs = true
@@ -343,7 +340,7 @@ warn_unreachable = true
 strict_optional = true
 
 [tool.ruff]
-target-version = "py310"
+target-version = "py311"
 line-length = 100
 src = ["src", "tests"]
 exclude = [
@@ -374,7 +371,7 @@ ignore = [
     "B028",   # no stacklevel in warnings (low priority)
     "B034",   # re.sub keyword args (existing pattern)
     "B904",   # raise without from (too noisy)
-    "B905",   # zip without strict (python 3.10+ feature)
+    "B905",   # zip without strict (existing pattern)
     "C400",   # unnecessary generator (style preference)
     "C401",   # unnecessary generator for set (style preference)
     "C403",   # list comprehension to set (style preference)

@@ -2,6 +2,11 @@
 
 ## [unreleased]
 
+### Python 3.10 is no longer supported; Pillow 13 and dnspython 2.9 are required
+
+**Behaviour change: the runtime needs Python 3.11 or newer.** Pillow 13.0.0 and dnspython 2.9.0 fix open security advisories, and both require Python 3.11, so `requires-python` is now `>=3.11`. Installing on Python 3.10 fails at dependency resolution. The Docker and SIF images already run Python 3.13 and are unaffected.
+
+The Pillow floor moves from 12.2.0 to 13.0.0. dnspython, which the runtime gets through email-validator, is now a direct dependency with a 2.9.0 floor so no install resolves to a vulnerable version. `setup.py` reads `pyproject.toml` with the standard library's `tomllib` and no longer falls back to `tomli`.
 ## v1.20260928.0
 
 ### Schedules without a time run at a configurable default time, and schedules are read in the user's timezone
