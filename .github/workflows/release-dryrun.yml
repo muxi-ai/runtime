@@ -451,7 +451,7 @@ jobs:
             docker://${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:${VERSION}-amd64
 
       - name: Upload SIF artifact
-        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v4
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v4
         with:
           name: sif-amd64
           path: muxi-runtime-${{ needs.version.outputs.version }}-linux-amd64.sif
@@ -506,7 +506,7 @@ jobs:
             docker://${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:${VERSION}-arm64
 
       - name: Upload SIF artifact
-        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v4
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v4
         with:
           name: sif-arm64
           path: muxi-runtime-${{ needs.version.outputs.version }}-linux-arm64.sif
@@ -568,7 +568,7 @@ jobs:
             docker://${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:${VERSION}-pytorch-amd64
 
       - name: Upload SIF artifact
-        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v4
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v4
         with:
           name: sif-pytorch-amd64
           path: muxi-runtime-${{ needs.version.outputs.version }}-pytorch-linux-amd64.sif
@@ -623,7 +623,7 @@ jobs:
             docker://${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:${VERSION}-pytorch-arm64
 
       - name: Upload SIF artifact
-        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v4
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v4
         with:
           name: sif-pytorch-arm64
           path: muxi-runtime-${{ needs.version.outputs.version }}-pytorch-linux-arm64.sif
