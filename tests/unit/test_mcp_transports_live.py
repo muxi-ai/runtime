@@ -14,7 +14,11 @@ from pathlib import Path
 
 import pytest
 
-from muxi.runtime.services.mcp.transports import MCPConnectionError, MCPTimeoutError
+from muxi.runtime.services.mcp.transports import (
+    MCPConnectionError,
+    MCPRequestError,
+    MCPTimeoutError,
+)
 from muxi.runtime.services.mcp.transports.command import CommandLineTransport
 from muxi.runtime.services.mcp.transports.http_sse import HTTPSSETransport
 from muxi.runtime.services.mcp.transports.streamable import StreamableHTTPTransport
@@ -108,7 +112,6 @@ class TestStreamableHTTPTransport:
             await _exercise(transport)
         finally:
             await transport.disconnect()
-        assert transport.http_client is None
         assert not transport.is_connected
 
     async def test_bearer_auth_reaches_server(self, http_server):
@@ -122,13 +125,70 @@ class TestStreamableHTTPTransport:
         finally:
             await transport.disconnect()
 
-    async def test_unreachable_server_raises_connection_error(self):
-        transport = StreamableHTTPTransport(
-            f"http://127.0.0.1:{_free_port()}/mcp", request_timeout=3
-        )
-        with pytest.raises(MCPConnectionError):
+
+HTTP_TRANSPORTS = [
+    pytest.param(StreamableHTTPTransport, "http", "mcp", id="streamable_http"),
+    pytest.param(HTTPSSETransport, "sse", "sse", id="http_sse"),
+]
+
+
+def _assert_caller_not_cancelled() -> None:
+    # Since Python 3.12 a failure inside the SDK's task group could cancel the
+    # task that entered it; the caller must come out with no pending cancel.
+    assert asyncio.current_task().cancelling() == 0
+
+
+class TestHTTPSessionLifecycle:
+    @pytest.mark.parametrize("transport_cls, server_kind, path", HTTP_TRANSPORTS)
+    async def test_unreachable_server_raises_connection_error(
+        self, transport_cls, server_kind, path
+    ):
+        transport = transport_cls(f"http://127.0.0.1:{_free_port()}/{path}", request_timeout=3)
+        with pytest.raises(MCPConnectionError, match="All connection attempts failed"):
             await transport.connect()
-        assert transport.http_client is None
+        _assert_caller_not_cancelled()
+        await asyncio.sleep(0)
+        assert not transport.is_connected
+
+    @pytest.mark.parametrize("transport_cls, server_kind, path", HTTP_TRANSPORTS)
+    async def test_server_exit_mid_session_leaves_caller_running(
+        self, transport_cls, server_kind, path
+    ):
+        port = _free_port()
+        process = subprocess.Popen(
+            [sys.executable, str(SERVER), server_kind, str(port)],
+            stdout=subprocess.DEVNULL,
+            stderr=subprocess.DEVNULL,
+        )
+        try:
+            await _wait_for_port(port, process)
+            transport = transport_cls(f"http://127.0.0.1:{port}/{path}", request_timeout=10)
+            await transport.connect()
+            process.terminate()
+            process.wait(timeout=10)
+
+            with pytest.raises((MCPRequestError, MCPTimeoutError)):
+                await transport.send_request({"method": "tools/list", "params": {}}, timeout=3)
+            _assert_caller_not_cancelled()
+            await asyncio.sleep(0)
+            await transport.disconnect()
+            assert not transport.is_connected
+        finally:
+            if process.poll() is None:
+                process.terminate()
+                process.wait(timeout=10)
+
+    @pytest.mark.parametrize("transport_cls, server_kind, path", HTTP_TRANSPORTS)
+    async def test_disconnect_from_another_task(
+        self, http_server, transport_cls, server_kind, path
+    ):
+        url = await http_server(server_kind)
+        transport = transport_cls(f"{url}/{path}", request_timeout=10)
+        await asyncio.create_task(transport.connect())
+        assert transport.is_connected
+        await asyncio.create_task(transport.disconnect())
+        assert not transport.is_connected
+        _assert_caller_not_cancelled()
 
 
 class TestHTTPSSETransport:
