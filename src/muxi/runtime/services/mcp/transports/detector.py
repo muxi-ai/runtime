@@ -293,7 +293,7 @@ class TransportDetector:
         """
         Test Streamable HTTP transport using direct HTTP communication.
 
-        NOTE: Does not use broken MCP SDK streamablehttp_client.
+        Probes directly without opening an MCP SDK session.
 
         Args:
             url: The MCP server URL to test

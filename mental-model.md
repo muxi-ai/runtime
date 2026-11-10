@@ -2379,6 +2379,18 @@ MCP (Model Context Protocol) enables agents to access external tools via standar
 2. **HTTP SSE** (fallback): Server-sent events
 3. **Stdio** (command-line): Subprocess communication
 
+### MCP SDK compatibility
+
+The runtime uses MCP 2 and FastMCP 4. SDK model attributes are snake_case
+(`input_schema`, `is_error`, `mime_type`, `structured_content`, `meta`).
+Transport responses use `model_dump(by_alias=True)` to keep protocol keys
+such as `inputSchema`, `isError`, `structuredContent` and `_meta`.
+`streamable_http_client` yields two streams and accepts a caller-owned
+`httpx2.AsyncClient`; the transport closes that client on cleanup. MCP auth
+objects and transport exceptions use `httpx2`, not the separate `httpx`
+package used by other services. Streamable stats no longer expose a session ID.
+The zero-buffer stream-close workaround remains necessary.
+
 ### Service Architecture
 
 **Path:** `services/mcp/service.py`

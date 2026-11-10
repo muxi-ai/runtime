@@ -7,7 +7,7 @@ cascade each have something distinct to act on. Responses are canned --
 the tests only assert on tool *visibility*, not behaviour.
 """
 
-from mcp.server.fastmcp import FastMCP
+from fastmcp import FastMCP
 
 mcp = FastMCP("records")
 

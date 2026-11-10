@@ -75,7 +75,7 @@ class ModernProtocolFeatures:
             blob = resource.get("blob")
         else:
             uri = getattr(resource, "uri", None)
-            mime_type = getattr(resource, "mimeType", None)
+            mime_type = getattr(resource, "mime_type", None)
             text = getattr(resource, "text", None)
             blob = getattr(resource, "blob", None)
 
@@ -200,18 +200,18 @@ class ModernProtocolFeatures:
                 "content": content_text,
                 "isError": result.get("isError", False),
                 "links": result.get("links", []),
-                "_meta": result.get("meta") or {},
+                "_meta": result.get("_meta") or {},
                 "structured_content": (
                     result.get("structuredContent") or result.get("structured_content") or {}
                 ),
                 "type": "structured",
             }
 
-        if hasattr(result, "content") and hasattr(result, "isError"):
-            # Handle _meta attribute carefully to avoid mock objects
-            meta_attr = getattr(result, "_meta", None)
+        if hasattr(result, "content") and hasattr(result, "is_error"):
+            # Handle meta attribute carefully to avoid mock objects
+            meta_attr = getattr(result, "meta", None)
             if meta_attr is None or (hasattr(meta_attr, "_mock_name")):
-                # Handle case where _meta doesn't exist or is a mock
+                # Handle case where meta doesn't exist or is a mock
                 meta_value = {}
             else:
                 meta_value = meta_attr
@@ -221,14 +221,10 @@ class ModernProtocolFeatures:
 
             return {
                 "content": content_text,
-                "isError": getattr(result, "isError", False),
+                "isError": getattr(result, "is_error", False),
                 "links": getattr(result, "links", []),
                 "_meta": meta_value,
-                "structured_content": (
-                    getattr(result, "structuredContent", None)
-                    or getattr(result, "structured_content", None)
-                    or {}
-                ),
+                "structured_content": getattr(result, "structured_content", None) or {},
                 "type": "structured",
             }
 

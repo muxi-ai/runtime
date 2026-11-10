@@ -35,7 +35,7 @@ import os
 import re
 from typing import Any, Dict, Optional, Tuple
 
-import httpx
+import httpx2
 
 from .. import observability
 from ..mcp.handler import MCPServerClient
@@ -357,7 +357,7 @@ class RequestMiddleware:
             )
         except MiddlewareRejectedError:
             raise
-        except (asyncio.TimeoutError, TimeoutError, httpx.TimeoutException) as e:
+        except (asyncio.TimeoutError, TimeoutError, httpx2.TimeoutException) as e:
             raise MiddlewareRejectedError(
                 "timeout", f"middleware did not answer within {self.timeout_seconds}s"
             ) from e
