@@ -2,6 +2,8 @@
 
 ## [unreleased]
 
+Require MCP 1.30.0 and FastMCP 3.4.10 or newer to fix the open MCP, FastMCP and fastmcp-slim security advisories. Keep MCP below 2 and FastMCP below 4 until the transport SDK migration lands.
+
 ### Python 3.10 is no longer supported; Pillow 13 and dnspython 2.9 are required
 
 **Behaviour change: the runtime needs Python 3.11 or newer.** Pillow 13.0.0 and dnspython 2.9.0 fix open security advisories, and both require Python 3.11, so `requires-python` is now `>=3.11`. Installing on Python 3.10 fails at dependency resolution. The Docker and SIF images already run Python 3.13 and are unaffected.

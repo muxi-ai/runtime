@@ -57,8 +57,9 @@ dependencies = [
     # httpx2-based client (breaking API change); keep <2.0.0 until the proper
     # 2.x migration (httpx2 client, TransportStreams, new
     # streamable_http_client signature) lands - see #331/#332.
-    "mcp>=1.27.2,<2.0.0",
-    "fastmcp>=3.4.2",  # MCP server generation from FastAPI app
+    "mcp>=1.30.0,<2.0.0",
+    # FastMCP 4 requires MCP 2.x; upgrade both in the SDK migration.
+    "fastmcp>=3.4.10,<4.0.0",  # MCP server generation from FastAPI app
 
     # File processing and utilities
     "aiofiles>=25.1.0",
