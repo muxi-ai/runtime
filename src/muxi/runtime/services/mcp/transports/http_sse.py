@@ -9,111 +9,40 @@
 # =============================================================================
 
 import asyncio
+from contextlib import AbstractAsyncContextManager
 from datetime import datetime
-from typing import Any, Dict, Optional
-
-from mcp.client.session import ClientSession
+from typing import Any, Dict, Optional, Tuple
 
 # MCP SDK imports
 from mcp.client.sse import sse_client
 
-from ... import observability
 from ..protocol.message_handler import MCPMessageHandler
 from .auth import create_httpx_auth
-from .base import (
-    BaseTransport,
-    CancellationToken,
-    MCPConnectionError,
-    MCPRequestError,
-    MCPTimeoutError,
-)
+from .base import CancellationToken, MCPConnectionError, MCPRequestError, MCPTimeoutError
+from .sdk_session import SDKSessionTransport
 
 
-class HTTPSSETransport(BaseTransport):
+class HTTPSSETransport(SDKSessionTransport):
     """MCP HTTP+SSE transport using official SDK."""
+
+    transport_type = "http_sse"
 
     def __init__(self, url: str, request_timeout: int = 30, auth: Optional[Any] = None):
         """Initialize MCP SDK HTTP+SSE transport."""
         super().__init__(url, request_timeout, auth)
         self.message_handler = MCPMessageHandler()
-        self.session: Any = None
-        self.client_context: Any = None
-        self.read_stream: Any = None
-        self.write_stream: Any = None
         pass  # REMOVED: init-phase observe() call
         # Log auth config safely without exposing sensitive data
         if auth:
             pass  # REMOVED: init-phase observe() call
 
-    async def connect(self) -> bool:
-        """Connect using MCP SDK sse_client."""
-        if self.connected:
-            return True
-
-        try:
-            # Convert auth dict to httpx2.Auth
-            httpx_auth = create_httpx_auth(self.auth)
-
-            # Store the context manager itself (like command transport)
-            self.client_context = sse_client(
-                url=self.url,
-                auth=httpx_auth,
-                timeout=self.request_timeout,
-                sse_read_timeout=max(self.request_timeout, 60),
-            )
-
-            # Enter context and get streams
-            self.read_stream, self.write_stream = await asyncio.wait_for(
-                self.client_context.__aenter__(), timeout=self.request_timeout
-            )
-
-            # Create session for high-level operations
-            self.session = ClientSession(self.read_stream, self.write_stream)
-            await asyncio.wait_for(self.session.__aenter__(), timeout=self.request_timeout)
-
-            # Initialize the connection
-            await asyncio.wait_for(self.session.initialize(), timeout=self.request_timeout)
-
-            self.connected = True
-            self.connect_time = datetime.now()
-            self.last_activity = datetime.now()
-
-            pass  # REMOVED: init-phase observe() call
-            return True
-
-        except asyncio.TimeoutError as e:
-            observability.observe(
-                event_type=observability.SystemEvents.MCP_SERVER_CONNECTION_FAILED,
-                level=observability.EventLevel.ERROR,
-                data={
-                    "service": "mcp",
-                    "transport": "http_sse",
-                    "action": "connect_timeout",
-                    "url": self.url,
-                    "timeout": self.request_timeout,
-                },
-                description=f"Connection timed out after {self.request_timeout}s: {self.url}",
-            )
-            await self._cleanup()
-            raise MCPConnectionError(
-                f"Connection to {self.url} timed out after {self.request_timeout}s"
-            ) from e
-        except Exception as e:
-            observability.observe(
-                event_type=observability.SystemEvents.MCP_SERVER_CONNECTION_FAILED,
-                level=observability.EventLevel.ERROR,
-                data={
-                    "service": "mcp",
-                    "transport": "http_sse",
-                    "action": "connect_failed",
-                    "url": self.url,
-                    "error": str(e),
-                },
-                description=f"Connection failed: {e}",
-            )
-            # Clean up any partially created resources
-            await self._cleanup()
-            raise MCPConnectionError(f"Failed to connect to {self.url}: {e}") from e
+    def _open_streams(self) -> AbstractAsyncContextManager[Tuple[Any, Any]]:
+        return sse_client(
+            url=self.url,
+            auth=create_httpx_auth(self.auth),
+            timeout=self.request_timeout,
+            sse_read_timeout=max(self.request_timeout, 60),
+        )
 
     def _update_success_stats(self) -> None:
         """Update request/response statistics after a successful call."""
@@ -213,57 +142,6 @@ class HTTPSSETransport(BaseTransport):
         except Exception as e:
             self.connection_stats["errors_encountered"] += 1
             raise MCPRequestError(f"Request failed: {e}") from e
-
-    async def _cleanup(self):
-        """Proper cleanup in same async context.
-
-        Workaround for modelcontextprotocol/python-sdk#1805:
-        Close read/write streams BEFORE exiting the SDK contexts so that
-        internal tasks blocked on zero-buffer stream send() receive
-        ClosedResourceError and exit cooperatively, preventing the AnyIO
-        _deliver_cancellation busy-loop that causes 90%+ idle CPU.
-        """
-        try:
-            # Close streams first to unblock SDK-internal tasks (sdk#1805 workaround).
-            for stream in (self.read_stream, self.write_stream):
-                if stream is not None:
-                    try:
-                        await stream.aclose()
-                    except Exception:
-                        pass
-
-            # Close session
-            if self.session:
-                try:
-                    await self.session.__aexit__(None, None, None)
-                except Exception:
-                    pass
-                finally:
-                    self.session = None
-
-            # Then close client context
-            if self.client_context:
-                try:
-                    await self.client_context.__aexit__(None, None, None)
-                except Exception:
-                    pass
-                finally:
-                    self.client_context = None
-
-        finally:
-            self.connected = False
-            self.read_stream = None
-            self.write_stream = None
-
-    async def disconnect(self) -> bool:
-        """Disconnect from MCP server."""
-        await self._cleanup()
-        return True
-
-    @property
-    def is_connected(self) -> bool:
-        """Check if transport is connected."""
-        return self.connected and self.session is not None
 
     def get_connection_stats(self) -> Dict[str, Any]:
         """

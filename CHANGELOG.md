@@ -1,12 +1,14 @@
 # Changelog
 
-## [unreleased]
+## v1.20261110.0
 
 ### MCP 2 and FastMCP 4
 
 The runtime now requires `mcp>=2.3.0,<3.0.0` and `fastmcp>=4.1.7,<5.0.0`. Upgrade these together. Formation MCP configuration and tool wire formats are unchanged.
 
 SDK integrations must use snake_case model attributes such as `input_schema`, `is_error` and `mime_type`. Runtime transport responses still use camelCase protocol keys. MCP HTTP transports now use `httpx2` auth objects and exceptions; other runtime services continue using `httpx`. Streamable HTTP connection statistics no longer include `session_id`, which the new SDK does not expose.
+
+The streamable HTTP and HTTP+SSE transports now keep the SDK client and session open in one dedicated task, as the stdio transport already did. With mcp 2 on Python 3.12 and newer, a streamable HTTP server that could not be reached cancelled the task that called `connect()` (formation startup or a request handler) instead of raising `MCPConnectionError`. Connection failures now raise `MCPConnectionError` naming the cause, and a server that fails mid-session ends only that session. The connect timeout (`request_timeout`) now covers the whole handshake; it used to apply separately to each of its three steps.
 
 ### Python 3.10 is no longer supported; Pillow 13 and dnspython 2.9 are required
 

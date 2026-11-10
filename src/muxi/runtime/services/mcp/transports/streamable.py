@@ -9,43 +9,34 @@
 # =============================================================================
 
 import asyncio
+from contextlib import asynccontextmanager
 from datetime import datetime
-from typing import Any, Dict, Optional
+from typing import Any, AsyncIterator, Dict, Optional, Tuple
 
 import httpx2
-from mcp.client.session import ClientSession
 
 # MCP SDK imports
 from mcp.client.streamable_http import streamable_http_client
 
-from ... import observability
 from ..protocol.message_handler import MCPMessageHandler
 from .auth import create_httpx_auth
-from .base import (
-    BaseTransport,
-    CancellationToken,
-    MCPConnectionError,
-    MCPRequestError,
-    MCPTimeoutError,
-)
+from .base import CancellationToken, MCPConnectionError, MCPRequestError, MCPTimeoutError
+from .sdk_session import SDKSessionTransport
 
 # How long the server may keep a response stream silent. Matches the read
 # timeout the SDK's own default client uses for streamable HTTP.
 SSE_READ_TIMEOUT_SECONDS = 300.0
 
 
-class StreamableHTTPTransport(BaseTransport):
+class StreamableHTTPTransport(SDKSessionTransport):
     """MCP Streamable HTTP transport using official SDK."""
+
+    transport_type = "streamable_http"
 
     def __init__(self, url: str, request_timeout: int = 30, auth: Optional[Any] = None):
         """Initialize MCP SDK streamable HTTP transport."""
         super().__init__(url, request_timeout, auth)
         self.message_handler = MCPMessageHandler()
-        self.session: Any = None
-        self.read_stream: Any = None
-        self.write_stream: Any = None
-        self.http_client: Optional[httpx2.AsyncClient] = None
-        self.client_context: Any = None
         pass  # REMOVED: init-phase observe() call
         # Log auth config safely without exposing sensitive data
         if auth:
@@ -104,76 +95,19 @@ class StreamableHTTPTransport(BaseTransport):
             # Primitive values (str, int, bool, etc.) - return as-is
             return data
 
-    async def connect(self) -> bool:
-        """Connect using MCP SDK streamable_http_client."""
-        if self.connected:
-            return True
-
-        try:
-            # The SDK takes auth and timeouts from the httpx2 client it is given;
-            # it does not close a client it did not create, so _cleanup does.
-            self.http_client = httpx2.AsyncClient(
-                auth=create_httpx_auth(self.auth),
-                timeout=httpx2.Timeout(self.request_timeout, read=SSE_READ_TIMEOUT_SECONDS),
-            )
-
-            # Store the context manager itself (like command transport)
-            self.client_context = streamable_http_client(self.url, http_client=self.http_client)
-
-            # Enter context and get streams
-            # Timeout protects against SDK hanging on auth errors (e.g. 401)
-            self.read_stream, self.write_stream = await asyncio.wait_for(
-                self.client_context.__aenter__(), timeout=self.request_timeout
-            )
-
-            # Create session for high-level operations
-            self.session = ClientSession(self.read_stream, self.write_stream)
-            await asyncio.wait_for(self.session.__aenter__(), timeout=self.request_timeout)
-
-            # Initialize the connection
-            await asyncio.wait_for(self.session.initialize(), timeout=self.request_timeout)
-
-            self.connected = True
-            self.connect_time = datetime.now()
-            self.last_activity = datetime.now()
-
-            pass  # REMOVED: init-phase observe() call
-            return True
-
-        except asyncio.TimeoutError as e:
-            observability.observe(
-                event_type=observability.SystemEvents.MCP_SERVER_CONNECTION_FAILED,
-                level=observability.EventLevel.ERROR,
-                data={
-                    "service": "mcp",
-                    "transport": "streamable_http",
-                    "action": "connect_timeout",
-                    "url": self.url,
-                    "timeout": self.request_timeout,
-                },
-                description=f"Connection timed out after {self.request_timeout}s: {self.url}",
-            )
-            await self._cleanup()
-            raise MCPConnectionError(
-                f"Connection to {self.url} timed out after {self.request_timeout}s"
-            ) from e
-
-        except Exception as e:
-            observability.observe(
-                event_type=observability.SystemEvents.MCP_SERVER_CONNECTION_FAILED,
-                level=observability.EventLevel.ERROR,
-                data={
-                    "service": "mcp",
-                    "transport": "streamable_http",
-                    "action": "connect_failed",
-                    "url": self.url,
-                    "error": str(e),
-                },
-                description=f"Connection failed: {e}",
-            )
-            # Clean up any partially created resources
-            await self._cleanup()
-            raise MCPConnectionError(f"Failed to connect to {self.url}: {e}") from e
+    @asynccontextmanager
+    async def _open_streams(self) -> AsyncIterator[Tuple[Any, Any]]:
+        # The SDK takes auth and timeouts from the httpx2 client it is given
+        # and does not close a client it did not create.
+        async with httpx2.AsyncClient(
+            auth=create_httpx_auth(self.auth),
+            timeout=httpx2.Timeout(self.request_timeout, read=SSE_READ_TIMEOUT_SECONDS),
+        ) as http_client:
+            async with streamable_http_client(self.url, http_client=http_client) as (
+                read_stream,
+                write_stream,
+            ):
+                yield read_stream, write_stream
 
     def _update_success_stats(self) -> None:
         """Update request/response statistics after a successful call."""
@@ -273,76 +207,6 @@ class StreamableHTTPTransport(BaseTransport):
         except Exception as e:
             self.connection_stats["errors_encountered"] += 1
             raise MCPRequestError(f"Request failed: {e}") from e
-
-    async def _cleanup(self):
-        """Proper cleanup in same async context.
-
-        Uses a timeout because the MCP SDK's streamable_http_client async
-        generator can hang indefinitely during teardown when the connection
-        was interrupted by an auth error (401) or network failure.
-
-        Workaround for modelcontextprotocol/python-sdk#1805:
-        Close read/write streams BEFORE exiting the SDK contexts so that
-        internal tasks blocked on zero-buffer stream send() receive
-        ClosedResourceError and exit cooperatively, preventing the AnyIO
-        _deliver_cancellation busy-loop that causes 90%+ idle CPU.
-        """
-        import asyncio
-
-        try:
-            # Close streams first to unblock SDK-internal tasks (sdk#1805 workaround).
-            # This must happen before session/context __aexit__ which calls
-            # tg.cancel_scope.cancel() -- otherwise blocked send() calls
-            # cause AnyIO to spin in _deliver_cancellation.
-            for stream in (self.read_stream, self.write_stream):
-                if stream is not None:
-                    try:
-                        await stream.aclose()
-                    except Exception:
-                        pass
-
-            # Close session
-            if self.session:
-                try:
-                    await asyncio.wait_for(self.session.__aexit__(None, None, None), timeout=5.0)
-                except (Exception, asyncio.TimeoutError):
-                    pass
-                finally:
-                    self.session = None
-
-            # Then close client context (this is where the SDK can hang)
-            if self.client_context:
-                try:
-                    await asyncio.wait_for(
-                        self.client_context.__aexit__(None, None, None), timeout=5.0
-                    )
-                except (Exception, asyncio.TimeoutError):
-                    pass
-                finally:
-                    self.client_context = None
-
-            if self.http_client:
-                try:
-                    await asyncio.wait_for(self.http_client.aclose(), timeout=5.0)
-                except (Exception, asyncio.TimeoutError):
-                    pass
-                finally:
-                    self.http_client = None
-
-        finally:
-            self.connected = False
-            self.read_stream = None
-            self.write_stream = None
-
-    async def disconnect(self) -> bool:
-        """Disconnect from MCP server."""
-        await self._cleanup()
-        return True
-
-    @property
-    def is_connected(self) -> bool:
-        """Check if transport is connected."""
-        return self.connected and self.session is not None
 
     def get_connection_stats(self) -> Dict[str, Any]:
         """
