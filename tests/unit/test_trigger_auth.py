@@ -15,7 +15,6 @@ import base64
 import hashlib
 import hmac
 import json
-import os
 import sys
 import threading
 import time
@@ -24,6 +23,7 @@ from pathlib import Path
 from types import SimpleNamespace
 
 import httpx
+import psutil
 import pytest
 
 from muxi.runtime.formation.background.transformers import parse_trigger_frontmatter
@@ -330,16 +330,18 @@ async def test_timeout_stops_the_scripts_helpers_too(tmp_path):
 
     assert not await call_trigger_auth("stripe", str(script), _scope(), b"{}")
 
+    # Running, not merely present: an unreaped zombie still has a pid.
     helper_pid = int(pid_file.read_text())
     deadline = time.time() + 5
     while time.time() < deadline:
         try:
-            os.kill(helper_pid, 0)
-        except ProcessLookupError:
+            if psutil.Process(helper_pid).status() == psutil.STATUS_ZOMBIE:
+                break
+        except psutil.NoSuchProcess:
             break
         time.sleep(0.1)
     else:
-        os.kill(helper_pid, 9)
+        psutil.Process(helper_pid).kill()
         pytest.fail("the timed-out script's helper process was left running")
 
 
