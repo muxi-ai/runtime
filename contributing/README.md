@@ -144,6 +144,7 @@ runtime/
 | [proactiveness-config.md](proactiveness-config.md) | Formation config reference: `proactive:`, `commands:` |
 | [soul-documents.md](soul-documents.md) | Overlord soul document guide and starter template |
 | [request-middleware.md](request-middleware.md) | Formation config reference: `rbac:`, `middleware:` (group memberships via MCP middleware) |
+| [trigger-auth.md](trigger-auth.md) | Trigger frontmatter `auth:`: per-trigger checks for webhook providers that cannot send the client key |
 
 ## Key Concepts for Contributors
 

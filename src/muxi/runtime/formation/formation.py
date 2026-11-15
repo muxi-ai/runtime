@@ -223,6 +223,10 @@ class Formation:
         self._request_middleware = None
         self._rbac_prepared = False
 
+        # Per-trigger auth: {trigger name: script path or URL} from the
+        # triggers/*.md 'auth:' values, built once by _initialize_services
+        self._triggers_with_own_auth: Optional[Dict[str, str]] = None
+
         # Coding delegation (populated by _setup_coding from the top-level
         # coding: block; None means the feature stays inert)
         self._coding_config = None
@@ -1358,6 +1362,13 @@ class Formation:
         if self._request_middleware is not None:
             await self._request_middleware.start()
 
+        # 8c. Per-trigger auth: scan triggers/*.md once for 'auth:'. Fails
+        # fast on a missing or non-executable script, a URL with no HTTP
+        # response, or a value that is neither. Only 'auth' is read; any
+        # other frontmatter problem stays a call-time error.
+        if self._triggers_with_own_auth is None:
+            self._triggers_with_own_auth = await self._load_triggers_with_own_auth()
+
         # 9. Initialize clarification configuration
         initialize_clarification_config(self)
 
@@ -1712,6 +1723,33 @@ class Formation:
     def request_middleware(self):
         """The formation's RequestMiddleware, or None when not declared."""
         return self._request_middleware
+
+    async def _load_triggers_with_own_auth(self) -> Dict[str, str]:
+        """Build the per-trigger auth map, failing the load on a bad 'auth:' value."""
+        from .server.trigger_auth import TriggerAuthConfigError, load_triggers_with_own_auth
+
+        formation_dir = self._formation_path
+        if not formation_dir:
+            return {}
+        if os.path.isfile(formation_dir):
+            formation_dir = os.path.dirname(formation_dir)
+        try:
+            return await load_triggers_with_own_auth(Path(formation_dir))
+        except TriggerAuthConfigError as e:
+            raise ConfigurationValidationError(
+                [f"Invalid trigger auth: {e}"],
+                {
+                    "suggestion": (
+                        "Point 'auth:' at an executable script (relative to the "
+                        "formation directory) or a reachable http(s) URL"
+                    ),
+                },
+            ) from e
+
+    @property
+    def triggers_with_own_auth(self) -> Dict[str, str]:
+        """{trigger name: script path or URL} for triggers that declare 'auth:'."""
+        return self._triggers_with_own_auth or {}
 
     def _setup_coding(self) -> None:
         """
