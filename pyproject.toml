@@ -11,7 +11,7 @@ authors = [
 description = "Production-ready runtime for building and orchestrating intelligent multi-agent AI systems"
 readme = "README.md"
 license = {text = "Elastic License 2.0"}
-requires-python = ">=3.11"
+requires-python = ">=3.12"
 keywords = [
     "ai", "agents", "llm", "multi-agent", "orchestration", "mcp",
     "onellm", "formation", "runtime", "framework", "chatgpt",
@@ -25,7 +25,6 @@ classifiers = [
     "Topic :: Scientific/Engineering :: Artificial Intelligence",
     "Topic :: Software Development :: Libraries :: Python Modules",
     "Programming Language :: Python :: 3",
-    "Programming Language :: Python :: 3.11",
     "Programming Language :: Python :: 3.12",
     "Programming Language :: Python :: 3.13",
     "Programming Language :: Python :: 3.14",
@@ -192,6 +191,7 @@ dependencies = [
     "tornado>=6.6",  # Transitive via bokeh; floor pinned for the security advisories fixed in 6.6
     "setuptools>=83.0.0",  # Transitive via spacy/thinc/torch; security floor
     "filelock>=4.2.1",  # Transitive via huggingface-hub/onellm/torch; floor pinned for the security advisories fixed in 4.2.1
+    "soupsieve>=4.0.0",  # Transitive via beautifulsoup4; floor pinned for the ReDoS and DoS advisories fixed in 4.0.0
     "msgpack>=1.2.0",  # Message pack format for observability
     "multitasking>=0.0.13",  # Multi-threading utilities; >=0.0.13 required for set_daemon() opt-in (prevents interpreter-exit hang on long-lived @task workers)
     "nanoid>=2.0.0",  # Nano ID generation
@@ -304,7 +304,7 @@ where = ["src"]
 
 [tool.black]
 line-length = 100
-target-version = ["py311", "py312", "py313"]
+target-version = ["py312", "py313"]
 include = '\.pyi?$'
 exclude = '''
 /(
@@ -325,7 +325,7 @@ line_length = 100
 combine_as_imports = true
 
 [tool.mypy]
-python_version = "3.11"
+python_version = "3.12"
 warn_return_any = true
 warn_unused_configs = true
 disallow_untyped_defs = true
@@ -340,7 +340,7 @@ warn_unreachable = true
 strict_optional = true
 
 [tool.ruff]
-target-version = "py311"
+target-version = "py312"
 line-length = 100
 src = ["src", "tests"]
 exclude = [

@@ -31,7 +31,7 @@ Files controlled by `MANIFEST.in` - see that file for inclusion/exclusion rules.
 ### 1. Python Environment
 
 ```bash
-# Ensure you have Python 3.11+
+# Ensure you have Python 3.12+
 python3 --version
 
 # Install build tools (if not already installed)

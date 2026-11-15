@@ -63,7 +63,7 @@ For integration tests (marked `@pytest.mark.slow @pytest.mark.integration`):
 ### 3. Implement
 
 1. Edit in the narrowest scope that satisfies the `fulfills` contract. Do not "improve" unrelated code while you're in the file.
-2. Preserve existing patterns (line length 100, Python 3.11+ syntax, relative imports within the package, `isort --profile=black`).
+2. Preserve existing patterns (line length 100, Python 3.12+ syntax, relative imports within the package, `isort --profile=black`).
 3. If the feature involves ripgrep-sweep cleanup, the edits are done when the sweep returns zero hits. Don't declare done before that.
 4. If a file isn't in the mission's AGENTS.md scope list, STOP and return to orchestrator. Don't silently expand scope.
 

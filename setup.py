@@ -96,7 +96,7 @@ author = authors[0]["name"] if authors else "MUXI Team"
 author_email = authors[0]["email"] if authors else "dev@muxi.org"
 install_requires = project_config.get("dependencies", [])
 extras_require = project_config.get("optional-dependencies", {})
-python_requires = project_config.get("requires-python", ">=3.11")
+python_requires = project_config.get("requires-python", ">=3.12")
 classifiers = project_config.get("classifiers", [])
 urls = project_config.get("urls", {})
 
