@@ -47,7 +47,7 @@ The body after a pass:
 | A JSON object | the object as-is |
 | Anything else (form-encoded, plain text, a JSON array, empty) | `{"body": "<the body as text>"}` |
 
-A caller holding the client key can always call an `auth` trigger the normal way, with a `{"data": ...}` body. That is how replays and scheduled catch-ups reach it: a stored provider event cannot pass a signature check twice.
+A caller holding the client key can always call an `auth` trigger the normal way, with a `{"data": ...}` body: a request that already carries the real key skips the check and goes through untouched, with its own session, user and `use_async`. That is how replays and scheduled catch-ups reach it: a stored provider event cannot pass a signature check twice.
 
 ## The check
 
@@ -65,7 +65,7 @@ Both kinds receive the same JSON:
 
 Header names are lowercase. A repeated header arrives as one comma-joined value.
 
-- **Script:** the runtime executes it with the JSON on stdin and the runtime's environment, which is how the script gets its signing secret. Exit code 0 passes; any other code fails. Its stdout and stderr are discarded.
+- **Script:** the runtime executes it with the JSON on stdin and the runtime's environment, which is how the script gets its signing secret. Exit code 0 passes; any other code fails. Its stdout and stderr are discarded. It runs in its own process group, and a timeout kills the whole group.
 - **URL:** the runtime POSTs the JSON. A 2xx response passes; anything else fails.
 
 The check fails closed: an error, a timeout (2 seconds, fixed) or an unreachable target is a fail. A fail is logged as `error.authentication.failed` with the trigger name and the failure kind (`exit_code`, `http_status`, `timeout`, `error`); the event never carries headers or body.

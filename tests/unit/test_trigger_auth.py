@@ -15,6 +15,7 @@ import base64
 import hashlib
 import hmac
 import json
+import os
 import sys
 import threading
 import time
@@ -317,6 +318,31 @@ async def test_script_over_two_seconds_fails(scripts):
     assert time.monotonic() - started < 4
 
 
+async def test_timeout_stops_the_scripts_helpers_too(tmp_path):
+    pid_file = tmp_path / "helper.pid"
+    script = _script(
+        tmp_path / "auth" / "spawns.py",
+        "import subprocess, sys, time\n"
+        f"helper = subprocess.Popen([sys.executable, '-c', 'import time; time.sleep(30)'])\n"
+        f"open({str(pid_file)!r}, 'w').write(str(helper.pid))\n"
+        "time.sleep(30)",
+    )
+
+    assert not await call_trigger_auth("stripe", str(script), _scope(), b"{}")
+
+    helper_pid = int(pid_file.read_text())
+    deadline = time.time() + 5
+    while time.time() < deadline:
+        try:
+            os.kill(helper_pid, 0)
+        except ProcessLookupError:
+            break
+        time.sleep(0.1)
+    else:
+        os.kill(helper_pid, 9)
+        pytest.fail("the timed-out script's helper process was left running")
+
+
 async def test_script_receives_exact_body_bytes(scripts, monkeypatch):
     monkeypatch.setenv("TRIGGER_AUTH_UNIT_SECRET", SECRET)
     body = b'{"id": "evt_1",  "amount":\t100}\n'
@@ -441,6 +467,16 @@ async def test_pass_wraps_any_other_body_as_text(scripts, body, data):
 async def test_pass_reads_a_chunked_body_whole(scripts):
     seen = await _through_middleware(scripts["allow"], _scope(), None, chunks=[b'{"a": ', b"1}"])
     assert json.loads(seen["body"]) == {"data": {"a": 1}}
+
+
+async def test_real_client_key_skips_the_check_and_keeps_todays_request(scripts):
+    # Both checks would pass: the caller's own keyed request must not be rewrapped.
+    headers = {"X-Muxi-Client-Key": CLIENT_KEY, "X-Muxi-User-Id": "u1"}
+    body = b'{"data": {"message": "replayed"}, "session_id": "s1", "use_async": false}'
+    seen = await _through_middleware(scripts["allow"], _scope(headers=headers), body)
+
+    assert seen["headers"] == {"x-muxi-client-key": CLIENT_KEY, "x-muxi-user-id": "u1"}
+    assert seen["body"] == body
 
 
 async def test_fail_changes_nothing(scripts):

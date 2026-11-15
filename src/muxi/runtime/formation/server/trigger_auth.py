@@ -15,6 +15,9 @@ that map:
   - On fail it changes nothing, so the unchanged client-key dependency
     rejects the request (no key) or admits it (the caller's own key).
 
+A caller that already sends the real client key skips the check and keeps
+today's path untouched (its ``{"data": ...}`` body, session and user).
+
 The middleware never builds a response itself. Formations with no ``auth``
 line never get the middleware at all.
 """
@@ -23,6 +26,8 @@ import asyncio
 import base64
 import json
 import os
+import secrets
+import signal
 from pathlib import Path
 from typing import Any, Dict, List, Optional
 
@@ -185,17 +190,22 @@ def _auth_input(trigger: str, scope: Scope, body: bytes) -> bytes:
 
 async def _run_script(path: str, auth_input: bytes) -> Optional[Dict[str, Any]]:
     """Exec the script with the input on stdin; exit 0 passes."""
+    # Its own process group, so a timeout also stops any helpers it started.
     process = await asyncio.create_subprocess_exec(
         path,
         stdin=asyncio.subprocess.PIPE,
         stdout=asyncio.subprocess.DEVNULL,
         stderr=asyncio.subprocess.DEVNULL,
+        start_new_session=True,
     )
     try:
         await process.communicate(auth_input)
     finally:
         if process.returncode is None:  # cancelled by the timeout
-            process.kill()
+            try:
+                os.killpg(process.pid, signal.SIGKILL)
+            except ProcessLookupError:
+                pass
             await process.wait()
     if process.returncode == 0:
         return None
@@ -296,9 +306,19 @@ class TriggerAuthMiddleware:
             return None
         return name
 
+    def _has_client_key(self, scope: Scope) -> bool:
+        """Whether the caller already sends the formation's real client key."""
+        # The first value, as the client-key dependency reads it.
+        sent = next((v for k, v in scope["headers"] if k == b"x-muxi-client-key"), None)
+        return (
+            bool(self.client_key)
+            and sent is not None
+            and secrets.compare_digest(sent, self.client_key.encode("latin-1"))
+        )
+
     async def __call__(self, scope: Scope, receive: Receive, send: Send) -> None:
         name = self._mapped_trigger(scope)
-        if name is None:
+        if name is None or self._has_client_key(scope):
             await self.app(scope, receive, send)
             return
 
