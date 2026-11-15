@@ -111,7 +111,18 @@ _ALLOWED_METHODS = {"GET", "POST", "PUT", "PATCH", "DELETE"}
 _ALLOWED_AUTH_TYPES = {"bearer", "basic", "header"}
 _ALLOWED_FORMATS = {"text", "markdown", "html"}
 
-_ALLOWED_FRONTMATTER_KEYS = {"name", "type", "webhook", "transformer", "parse", "model", "channel"}
+# 'auth' (per-trigger auth) is validated once at formation load and enforced
+# by the server's TriggerAuthMiddleware; the trigger route only allows it.
+_ALLOWED_FRONTMATTER_KEYS = {
+    "name",
+    "type",
+    "webhook",
+    "transformer",
+    "parse",
+    "model",
+    "channel",
+    "auth",
+}
 
 # Bundled dormant channel templates shipped with the runtime (payload formats
 # only, no URLs). Formation-local transformers/<name>.yaml shadows a bundled
