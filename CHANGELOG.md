@@ -2,6 +2,8 @@
 
 ## [unreleased]
 
+## v1.20261115.0
+
 ### Python 3.11 is no longer supported; soupsieve 4 is required
 
 **Behaviour change: the runtime needs Python 3.12 or newer.** `requires-python` is now `>=3.12`, so installing on Python 3.11 fails at dependency resolution. The Docker and SIF images already run Python 3.13 and are unaffected. CI now tests Python 3.12 and 3.13.
