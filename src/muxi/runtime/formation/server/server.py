@@ -346,6 +346,19 @@ class FormationServer:
             allow_headers=["*"],
         )
 
+        # 1b. Per-trigger auth, in front of the routes and inside the
+        # tracking and error-handling layers below. Only formations with an
+        # 'auth:' trigger get this layer.
+        triggers_with_own_auth = getattr(self.formation, "triggers_with_own_auth", None)
+        if triggers_with_own_auth:
+            from .trigger_auth import TriggerAuthMiddleware
+
+            app.add_middleware(
+                TriggerAuthMiddleware,
+                triggers_with_own_auth=triggers_with_own_auth,
+                client_key=self.client_key,
+            )
+
         # Import and add custom middleware
         from .middleware import (
             APILoggingMiddleware,
