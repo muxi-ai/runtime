@@ -2,6 +2,12 @@
 
 ## [unreleased]
 
+### Python 3.11 is no longer supported; soupsieve 4 is required
+
+**Behaviour change: the runtime needs Python 3.12 or newer.** `requires-python` is now `>=3.12`, so installing on Python 3.11 fails at dependency resolution. The Docker and SIF images already run Python 3.13 and are unaffected. CI now tests Python 3.12 and 3.13.
+
+soupsieve, which the runtime gets through beautifulsoup4, gets a direct security floor of `soupsieve>=4.0.0`. That release fixes four advisories, two high and two medium: denial of service from crafted CSS selectors (exponential ReDoS, deep recursion) and slow matching of `:has()` and descendant selectors against untrusted HTML. The runtime never compiles CSS selectors, so it was not exposed. soupsieve 3.0.2 and later require Python 3.11.5 or newer, which is why the Python floor moves.
+
 ### Triggers can name their own auth check, so webhook providers can call them without the client key
 
 **New trigger frontmatter key: `auth`**, a script path (relative to the formation directory) or an http(s) URL. A provider such as Stripe or HubSpot cannot send the client key; it proves who it is with its own signature header. A trigger that declares `auth` runs that check on `POST /v1/triggers/{name}` before the client-key check.
