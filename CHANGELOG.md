@@ -1,6 +1,6 @@
 # Changelog
 
-## [unreleased]
+## v1.20261115.0
 
 ### Python 3.11 is no longer supported; soupsieve 4 is required
 
